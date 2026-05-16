@@ -1,0 +1,32 @@
+name: Adapter request
+description: Request support for a new vector store, RAG, observability, agent, MCP, or cache system.
+labels: ["adapter", "triage"]
+body:
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: The product or framework you want an adapter for.
+    validations:
+      required: true
+  - type: dropdown
+    id: family
+    attributes:
+      label: Adapter family
+      options:
+        - Vector store
+        - RAG pipeline
+        - Observability
+        - Agent framework
+        - MCP
+        - Cache
+        - Model / fine-tune
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Link the system's API docs; note any multi-tenant or namespace features relevant to leakage testing.
+    validations:
+      required: true

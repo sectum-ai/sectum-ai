@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# Phase 0 skeleton: builds the workspace distributions and uploads them as
+# artifacts. PyPI trusted publishing, SBOM generation, and Sigstore artifact
+# signing (CLAUDE.md section 17) are added in a later phase.
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build all workspace packages
+        run: uv build --all-packages
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

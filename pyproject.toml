@@ -1,0 +1,85 @@
+# Sectum AI - uv workspace root.
+#
+# This is a virtual workspace root: it has no [project] table and is not itself
+# a publishable package. It ties the packages/* distributions together for
+# development and holds shared tooling configuration.
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "pre-commit>=4.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "UP",      # pyupgrade
+    "B",       # flake8-bugbear
+    "C4",      # flake8-comprehensions
+    "SIM",     # flake8-simplify
+    "TID",     # flake8-tidy-imports
+    "PTH",     # flake8-use-pathlib
+    "RUF",     # ruff-specific rules
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sectum"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = [
+    "packages/core/src",
+    "packages/spec/src",
+    "packages/probes/src",
+    "packages/adapters/src",
+    "packages/evidence/src",
+]
+files = [
+    "packages/core/src",
+    "packages/spec/src",
+    "packages/probes/src",
+    "packages/adapters/src",
+    "packages/evidence/src",
+    "tests",
+]
+pretty = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+markers = [
+    "integration: requires docker-compose backends (see tests/integration)",
+    "live: requires live cloud credentials; skipped unless explicitly enabled",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["sectum"]
+
+[tool.coverage.report]
+show_missing = true
+# NOTE: the 85% coverage gate (CLAUDE.md section 15) activates in Phase 1, once
+# the substrate has source code to cover. Enabling it against the empty Phase 0
+# skeleton would fail CI.
+# fail_under = 85
+
+[tool.codespell]
+ignore-words-list = "sectum"
+skip = ".git,.venv,uv.lock"

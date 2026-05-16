@@ -1,0 +1,5 @@
+# Sectum AI - code ownership.
+#
+# TODO: replace the placeholder below with the real maintainer GitHub handle or
+# team before enabling required CODEOWNERS review in branch protection.
+* @sectum-ai/maintainers

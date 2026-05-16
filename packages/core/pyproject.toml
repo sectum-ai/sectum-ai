@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sectum-ai"
+version = "0.0.0"
+description = "Sectum AI - multi-tenant AI verification: core substrate runner and the sectum CLI."
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Sectum AI" }]
+keywords = ["ai-security", "multi-tenant", "rag", "llm", "verification"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "typer>=0.12",
+]
+
+[project.scripts]
+sectum = "sectum.cli.app:app"
+
+[project.urls]
+Homepage = "https://sectum.ai"
+Documentation = "https://docs.sectum.ai"
+Repository = "https://github.com/sectum-ai/sectum-ai"
+Changelog = "https://github.com/sectum-ai/sectum-ai/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src/sectum"]
+sources = ["src"]

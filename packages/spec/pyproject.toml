@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sectum-ai-spec"
+version = "0.0.0"
+description = "Sectum AI - Pydantic data models and JSON Schema for the verification spec."
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Sectum AI" }]
+keywords = ["ai-security", "multi-tenant", "schema", "verification"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "pydantic>=2.9",
+]
+
+[project.urls]
+Homepage = "https://sectum.ai"
+Repository = "https://github.com/sectum-ai/sectum-ai"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src/sectum"]
+sources = ["src"]

@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a defect in a Sectum AI package.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Do not report security vulnerabilities here —
+        see SECURITY.md for private disclosure.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Output of `uv run sectum --version`, or the commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options:
+        - sectum-ai (core / CLI)
+        - sectum-ai-spec
+        - sectum-ai-probes
+        - sectum-ai-adapters
+        - sectum-ai-evidence
+        - unsure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal, deterministic reproduction. Do not include real customer data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and Python version (`uv run python --version`).
+    validations:
+      required: false

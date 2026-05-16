@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (private disclosure)
+    url: https://github.com/sectum-ai/sectum-ai/security/policy
+    about: Never report vulnerabilities in a public issue. Use private disclosure.
+  - name: Questions and discussion
+    url: https://github.com/sectum-ai/sectum-ai/discussions
+    about: Ask questions and discuss ideas in GitHub Discussions.
