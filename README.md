@@ -1,0 +1,82 @@
+# Sectum AI
+
+**Multi-tenant AI verification.** Sectum provisions synthetic tenants on an AI
+stack, seeds them with cryptographic canary markers, runs benign and adversarial
+probes from each tenant's session, and detects cross-tenant data leakage across
+every surface — producing tamper-evident, control-mapped evidence that an
+auditor accepts.
+
+> **Status: pre-alpha.** This repository is at Phase 0 (repository foundation)
+> of its build plan. The packages are scaffolded but not yet functional — there
+> is no working CLI yet. See the build plan in [CLAUDE.md](CLAUDE.md) section 14.
+
+## The problem
+
+Multi-tenant AI systems universally claim "tenant A's data cannot reach tenant
+B." That claim is rarely verified, and published research shows it fails
+routinely:
+
+- **OWASP LLM08:2025 — Vector and Embedding Weaknesses** names multi-tenant
+  context leakage a top-10 LLM risk.
+- **Retrieval Pivot Attacks in Hybrid RAG** (arXiv, 2026): 95.4% of *benign*
+  queries triggered cross-tenant leakage via shared organic entities.
+- **Silent Leaks** (arXiv 2505.15420): 91% extraction efficiency via benign
+  queries, with no prompt injection required.
+
+No product verifies multi-tenant isolation across the full AI surface. Sectum
+does.
+
+## What Sectum is not
+
+Sectum is not a firewall, a runtime guardrail, a generalist LLM red-team tool, a
+GRC platform, or a SOC 2 readiness tool. It does not remediate — it verifies and
+attests.
+
+## Open Sectum vs Sectum Cloud
+
+|  | Open Sectum (this repo) | Sectum Cloud |
+|---|---|---|
+| License | Apache-2.0 | Commercial |
+| Marker substrate, attack catalog, adapters | Yes | Yes |
+| Evidence chain + independent `sectum verify` | Yes | Yes |
+| Hosted attestation, registry, scheduled runs | — | Yes |
+| Regression baselines, dashboard | — | Yes |
+| Auditor-grade engagement + branded packs | — | Yes |
+
+The evidence layer is fully open source — anyone can independently verify a
+Sectum evidence pack. See
+[ADR-0002](docs/adr/0002-evidence-layer-oss-boundary.md).
+
+## Repository layout
+
+A `uv` workspace of five publishable packages:
+
+| Package (PyPI) | Import | Purpose |
+|---|---|---|
+| `sectum-ai` | `sectum` (+ `sectum.cli`) | Core substrate runner and the `sectum` CLI |
+| `sectum-ai-spec` | `sectum.spec` | Pydantic data models and JSON Schema |
+| `sectum-ai-probes` | `sectum.probes` | The multi-tenant leakage attack catalog |
+| `sectum-ai-adapters` | `sectum.adapters` | Connectors to real systems |
+| `sectum-ai-evidence` | `sectum.evidence` | Evidence chain, verification, audit packs |
+
+## Quickstart
+
+The `sectum` CLI quickstart lands in Phase 3 of the build plan. To work on the
+repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Documentation, security, contributing
+
+- Engineering specification and build plan: [CLAUDE.md](CLAUDE.md)
+- Architecture decisions: [docs/adr/](docs/adr/)
+- Security policy and private disclosure: [SECURITY.md](SECURITY.md)
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## References
+
+- OWASP LLM08:2025 — Vector and Embedding Weaknesses
+- Retrieval Pivot Attacks in Hybrid RAG (arXiv, 2026)
+- Silent Leaks (arXiv 2505.15420)
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).

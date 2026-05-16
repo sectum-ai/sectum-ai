@@ -1,0 +1,41 @@
+# Pre-commit hooks for Sectum AI.
+# Install with: uv run pre-commit install
+# Refresh pinned revisions with: uv run pre-commit autoupdate
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict, workspace)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
