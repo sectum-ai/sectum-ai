@@ -6,7 +6,7 @@ Accepted (2026-05-16).
 
 ## Context
 
-CLAUDE.md section 3 mandates that Sectum ships as five PyPI distributions that
+The engineering spec, section 3 mandates that Sectum ships as five PyPI distributions that
 share a single `sectum` import namespace. Section 12 sketches a package tree that
 includes a separate `packages/cli/` directory and an `__init__.py` directly under
 `core`'s `src/sectum/`.
@@ -41,9 +41,9 @@ scaffolded:
 
 ## Consequences
 
-- This deviates from the file tree drawn in CLAUDE.md section 12 (no `cli/`
+- This deviates from the file tree drawn in the engineering spec, section 12 (no `cli/`
   directory; no top-level `sectum/__init__.py`). This ADR records that deviation
-  per CLAUDE.md section 1.2.
+  per the engineering spec, section 1.2.
 - `import sectum` resolves to an empty namespace; all code lives under a
   subpackage (`sectum.cli`, `sectum.spec`, and so on).
 - `core` and the CLI version and release together, which matches their intended

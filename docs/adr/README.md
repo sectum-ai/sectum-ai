@@ -10,3 +10,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 |---|---|---|
 | [0001](0001-monorepo-packaging-layout.md) | Monorepo packaging layout | Accepted |
 | [0002](0002-evidence-layer-oss-boundary.md) | The evidence layer is fully open source | Accepted |
+| [0003](0003-deterministic-substrate.md) | Substrate artifacts are pure functions of the seed | Accepted |

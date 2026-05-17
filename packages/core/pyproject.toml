@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "typer>=0.12",
+    "sectum-ai-spec",
 ]
 
 [project.scripts]
@@ -29,6 +30,9 @@ Homepage = "https://sectum.ai"
 Documentation = "https://docs.sectum.ai"
 Repository = "https://github.com/sectum-ai/sectum-ai"
 Changelog = "https://github.com/sectum-ai/sectum-ai/blob/main/CHANGELOG.md"
+
+[tool.uv.sources]
+sectum-ai-spec = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/sectum"]
