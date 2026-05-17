@@ -17,11 +17,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Security",
 ]
-dependencies = []
+dependencies = [
+    "sectum-ai-spec",
+]
 
 [project.urls]
 Homepage = "https://sectum.ai"
 Repository = "https://github.com/sectum-ai/sectum-ai"
+
+[tool.uv.sources]
+sectum-ai-spec = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/sectum"]

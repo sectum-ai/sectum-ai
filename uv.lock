@@ -670,6 +670,12 @@ requires-dist = [
 name = "sectum-ai-adapters"
 version = "0.0.0"
 source = { editable = "packages/adapters" }
+dependencies = [
+    { name = "sectum-ai-spec" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "sectum-ai-spec", editable = "packages/spec" }]
 
 [[package]]
 name = "sectum-ai-evidence"
@@ -680,6 +686,12 @@ source = { editable = "packages/evidence" }
 name = "sectum-ai-probes"
 version = "0.0.0"
 source = { editable = "packages/probes" }
+dependencies = [
+    { name = "sectum-ai-spec" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "sectum-ai-spec", editable = "packages/spec" }]
 
 [[package]]
 name = "sectum-ai-spec"
