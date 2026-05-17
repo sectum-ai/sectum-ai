@@ -6,7 +6,7 @@ Accepted (2026-05-16).
 
 ## Context
 
-Sectum's second product anchor (CLAUDE.md section 1.3) is auditor-acceptable,
+Sectum's second product anchor (the engineering spec, section 1.3) is auditor-acceptable,
 tamper-evident evidence. The `sectum-ai-evidence` package has four planned
 modules: `chain.py` (canonicalize, hash, RFC 3161 timestamp, Sigstore Rekor),
 `verify.py` (the `sectum verify` command), `controls.py` (compliance control
@@ -20,7 +20,7 @@ public monorepo, and which belong in the private `platform` repository?
 The entire evidence layer is open source in the public monorepo. All four modules
 ship under Apache-2.0.
 
-- **`verify.py` — open source.** CLAUDE.md section 8.2 requires that third parties
+- **`verify.py` — open source.** The engineering spec, section 8.2 requires that third parties
   can independently verify an evidence pack. An attestation that only the vendor's
   tool can check is worthless; independent verification is the point.
 - **`chain.py` — open source.** The BYOC deployment mode (section 5, shipping in

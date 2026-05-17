@@ -38,7 +38,7 @@ jobs:
         run: uv run mypy
 
       - name: Tests
-        run: uv run pytest
+        run: uv run pytest --cov=sectum --cov-report=term-missing
 
   secret-scan:
     name: Secret scan

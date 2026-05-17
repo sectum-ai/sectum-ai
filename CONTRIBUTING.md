@@ -41,7 +41,7 @@ uv run pre-commit install   # enable git hooks
   with no hidden global state.
 - **Never commit secrets** or customer data. Secret scanning (gitleaks) runs in
   pre-commit and CI and will block the change.
-- New runtime dependencies must be justified against CLAUDE.md section 13.
+- New runtime dependencies must be justified against the engineering spec, section 13.
 
 ## Commit signing
 

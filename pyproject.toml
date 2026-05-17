@@ -41,6 +41,7 @@ known-first-party = ["sectum"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+plugins = ["pydantic.mypy"]
 namespace_packages = true
 explicit_package_bases = true
 mypy_path = [
@@ -75,10 +76,7 @@ source = ["sectum"]
 
 [tool.coverage.report]
 show_missing = true
-# NOTE: the 85% coverage gate (CLAUDE.md section 15) activates in Phase 1, once
-# the substrate has source code to cover. Enabling it against the empty Phase 0
-# skeleton would fail CI.
-# fail_under = 85
+fail_under = 85
 
 [tool.codespell]
 ignore-words-list = "sectum"

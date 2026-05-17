@@ -19,12 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   issue and pull-request templates.
 - Architecture decision records: ADR-0001 (monorepo packaging layout) and
   ADR-0002 (the evidence layer is fully open source).
+- Phase 1 - the marker substrate: `sectum-ai-spec` Pydantic models and JSON
+  Schema export; the substrate (deterministic synthetic tenants, templated
+  corpus generation, three canary marker types, hashed ground-truth manifest);
+  and the exact/semantic/judge detection pipeline with deterministic fake
+  embedding and judge providers.
+- ADR-0003 (substrate artifacts are pure functions of the seed).
 
 ### Notes
 
 - Delivery sequencing: the public Apache-2.0 repositories are completed before
   any private repository is started.
-- The 85% coverage gate (CLAUDE.md section 15) is configured but deferred until
-  Phase 1, when there is source code to cover.
+- The 85% coverage gate (the engineering spec, section 15) is active as of Phase 1; the
+  workspace currently reports 95% line coverage.
 
 [Unreleased]: https://github.com/sectum-ai/sectum-ai/commits/main

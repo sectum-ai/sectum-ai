@@ -1,7 +1,7 @@
 """Entry point for the ``sectum`` command-line interface.
 
 This is a Phase 0 skeleton. The full command set (init, seed, probe, report,
-verify, erasure, baseline, adapters) is specified in CLAUDE.md section 10 and
+verify, erasure, baseline, adapters) is specified in the engineering spec, section 10 and
 lands in Phase 3.
 """
 

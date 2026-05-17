@@ -1,0 +1,30 @@
+"""Canonical serialization and hashing for Sectum AI models.
+
+Hashes are computed over a canonical JSON form (sorted keys, no insignificant
+whitespace) so the same logical content always yields the same digest. This is
+the foundation of the reproducibility contract (the engineering spec, section 6.5) and the
+evidence chain (the engineering spec, section 8).
+"""
+
+import hashlib
+import json
+from typing import Any
+
+from pydantic import BaseModel
+
+
+def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
+    """Serialize an object to canonical JSON bytes: sorted keys, UTF-8, compact."""
+    data: Any = obj.model_dump(mode="json") if isinstance(obj, BaseModel) else obj
+    text = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return text.encode("utf-8")
+
+
+def sha256_hex(data: bytes) -> str:
+    """Return the hex-encoded SHA-256 digest of ``data``."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def canonical_hash(obj: BaseModel | dict[str, Any] | list[Any]) -> str:
+    """Return the SHA-256 hex digest of an object's canonical JSON form."""
+    return sha256_hex(to_canonical_json(obj))

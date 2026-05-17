@@ -8,7 +8,7 @@ auditor accepts.
 
 > **Status: pre-alpha.** This repository is at Phase 0 (repository foundation)
 > of its build plan. The packages are scaffolded but not yet functional — there
-> is no working CLI yet. See the build plan in [CLAUDE.md](CLAUDE.md) section 14.
+> is no working CLI yet.
 
 ## The problem
 
@@ -66,7 +66,6 @@ repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation, security, contributing
 
-- Engineering specification and build plan: [CLAUDE.md](CLAUDE.md)
 - Architecture decisions: [docs/adr/](docs/adr/)
 - Security policy and private disclosure: [SECURITY.md](SECURITY.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)

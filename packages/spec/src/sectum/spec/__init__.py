@@ -1,1 +1,53 @@
 """Sectum AI data models and JSON Schema (the ``sectum.spec`` namespace package)."""
+
+from sectum.spec.enums import FindingStatus, MarkerType, Severity, Surface
+from sectum.spec.hashing import canonical_hash, sha256_hex, to_canonical_json
+from sectum.spec.models import (
+    SCHEMA_VERSION,
+    ControlMapping,
+    CorpusDocument,
+    EvidencePack,
+    Finding,
+    GroundTruthManifest,
+    Marker,
+    Observation,
+    PlantedLocation,
+    ProbeStep,
+    RunMetrics,
+    RunResult,
+    Scenario,
+    SectumModel,
+    SharedEntity,
+    Substrate,
+    SyntheticTenantSpec,
+)
+from sectum.spec.schema import json_schemas, write_json_schemas
+
+__all__ = [
+    "SCHEMA_VERSION",
+    "ControlMapping",
+    "CorpusDocument",
+    "EvidencePack",
+    "Finding",
+    "FindingStatus",
+    "GroundTruthManifest",
+    "Marker",
+    "MarkerType",
+    "Observation",
+    "PlantedLocation",
+    "ProbeStep",
+    "RunMetrics",
+    "RunResult",
+    "Scenario",
+    "SectumModel",
+    "Severity",
+    "SharedEntity",
+    "Substrate",
+    "Surface",
+    "SyntheticTenantSpec",
+    "canonical_hash",
+    "json_schemas",
+    "sha256_hex",
+    "to_canonical_json",
+    "write_json_schemas",
+]

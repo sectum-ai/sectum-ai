@@ -65,5 +65,5 @@ remediate before public disclosure.
 The Sectum threat model — trust boundaries, handling of the ground-truth
 manifest, and what is explicitly out of scope (no remediation, no runtime
 protection) — will be published at `docs/threat-model.md`, planned for Phase 4
-of the build plan (CLAUDE.md section 14). Until then, this policy is the
+of the build plan (the engineering spec, section 14). Until then, this policy is the
 authoritative security contact.

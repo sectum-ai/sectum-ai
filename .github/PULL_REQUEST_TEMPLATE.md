@@ -15,5 +15,5 @@
 - [ ] `uv run pytest` passes; new behavior is covered by tests
 - [ ] Public APIs have type hints and docstrings
 - [ ] No secrets or customer data committed
-- [ ] Change respects the scope anchors (CLAUDE.md section 1.3)
+- [ ] Change respects the scope anchors (the engineering spec, section 1.3)
 - [ ] Docs, CHANGELOG, and ADRs updated as needed

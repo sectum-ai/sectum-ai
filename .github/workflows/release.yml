@@ -10,7 +10,7 @@ permissions:
 
 # Phase 0 skeleton: builds the workspace distributions and uploads them as
 # artifacts. PyPI trusted publishing, SBOM generation, and Sigstore artifact
-# signing (CLAUDE.md section 17) are added in a later phase.
+# signing (the engineering spec, section 17) are added in a later phase.
 jobs:
   build:
     name: Build distributions
