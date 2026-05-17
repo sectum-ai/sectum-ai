@@ -20,6 +20,14 @@ from sectum.adapters.base import (
     VectorHit,
     VectorStoreAdapter,
 )
+from sectum.adapters.fakes import (
+    FakeAgent,
+    FakeCache,
+    FakeMCP,
+    FakeObservability,
+    FakeRAGPipeline,
+    FakeVectorStore,
+)
 
 __all__ = [
     "Adapter",
@@ -29,6 +37,12 @@ __all__ = [
     "AgentResult",
     "CacheAdapter",
     "Capability",
+    "FakeAgent",
+    "FakeCache",
+    "FakeMCP",
+    "FakeObservability",
+    "FakeRAGPipeline",
+    "FakeVectorStore",
     "MCPAdapter",
     "McpResult",
     "ObservabilityAdapter",
