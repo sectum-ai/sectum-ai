@@ -65,14 +65,25 @@ class FakeVectorStore(VectorStoreAdapter):
     """A deterministic in-memory vector store.
 
     With ``shared_index=True`` it models a single index shared across tenants:
-    a query from one tenant can surface another tenant's documents. The default
-    is per-tenant isolation.
+    a query from one tenant can surface another tenant's documents. With
+    ``soft_delete=True`` a ``delete`` call is acknowledged but leaves the
+    vectors orphaned and still queryable. Both default to off.
     """
 
-    def __init__(self, name: str = "fake-vector", *, shared_index: bool = False) -> None:
+    def __init__(
+        self,
+        name: str = "fake-vector",
+        *,
+        shared_index: bool = False,
+        soft_delete: bool = False,
+    ) -> None:
         scope = Capability.SHARED_INDEX if shared_index else Capability.PER_TENANT_NAMESPACE
-        super().__init__(name, frozenset({Capability.SOFT_DELETE, scope}))
+        capabilities = {scope}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
         self._shared_index = shared_index
+        self._soft_delete = soft_delete
         self._documents: dict[UUID, list[CorpusDocument]] = {}
 
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
@@ -90,6 +101,10 @@ class FakeVectorStore(VectorStoreAdapter):
         return _rank(text, candidates, k)
 
     def delete(self, tenant: UUID) -> None:
+        # A soft-delete store acknowledges the request but leaves the vectors
+        # orphaned and still queryable - the residue Class 11 is built to catch.
+        if self._soft_delete:
+            return
         self._documents.pop(tenant, None)
 
     def list_namespaces(self) -> list[str]:

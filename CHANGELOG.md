@@ -32,8 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vector-store adapters verified against docker-compose backends.
 - Phase 3 (in progress) - the attack catalog: the scenario runner; the Class 1
   direct-tenant-boundary probe; the Class 2 flagship organic-entity-bleed RAG
-  probe with the Retrieval-Pivot Rate metric; and the Class 4
-  semantic-cache-contamination probe.
+  probe with the Retrieval-Pivot Rate metric; the Class 4
+  semantic-cache-contamination probe; and the Class 11 GDPR Article 17
+  erasure-verification wedge.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 

@@ -14,6 +14,7 @@ from sectum.probes.detection import (
     JudgeVerdict,
     confirmed_findings,
 )
+from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
 from sectum.probes.semantic_cache import SemanticCacheProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
@@ -21,6 +22,8 @@ from sectum.probes.tenant_boundary import TenantBoundaryProbe
 __all__ = [
     "DetectionPipeline",
     "EmbeddingProvider",
+    "ErasureProbe",
+    "ErasureReport",
     "FakeEmbeddingProvider",
     "FakeJudge",
     "Judge",
@@ -29,6 +32,7 @@ __all__ = [
     "ProbeRegistry",
     "RagEntityBleedProbe",
     "SemanticCacheProbe",
+    "SurfaceErasure",
     "TenantBoundaryProbe",
     "confirmed_findings",
 ]
