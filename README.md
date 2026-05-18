@@ -6,9 +6,10 @@ probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
 auditor accepts.
 
-> **Status: pre-alpha.** This repository is at Phase 0 (repository foundation)
-> of its build plan. The packages are scaffolded but not yet functional — there
-> is no working CLI yet.
+> **Status: pre-alpha.** Phases 0–2 of the build plan are complete: the marker
+> substrate, the leak-detection pipeline, the adapter SDK (with live pgvector
+> and Chroma adapters), and the probe interface. Phase 3 — the attack catalog
+> and the evidence chain — is in progress.
 
 ## The problem
 
