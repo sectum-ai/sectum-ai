@@ -70,6 +70,11 @@ module = ["chromadb", "chromadb.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
+[[tool.mypy.overrides]]
+# reportlab ships no type information; treat it as opaque.
+module = ["reportlab", "reportlab.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
