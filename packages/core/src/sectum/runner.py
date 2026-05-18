@@ -4,7 +4,7 @@ The engineering spec section 12 places the runner in core; with ADR-0004 the
 package graph stays acyclic (core depends on probes, never the reverse).
 """
 
-from sectum.adapters import VectorStoreAdapter
+from sectum.adapters import CacheAdapter, VectorStoreAdapter
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
@@ -15,9 +15,16 @@ StepResult = tuple[ProbeStep, list[Finding]]
 class Runner:
     """Runs a probe end to end: plan, execute each step via adapters, detect."""
 
-    def __init__(self, substrate: Substrate, *, vector: VectorStoreAdapter | None = None) -> None:
+    def __init__(
+        self,
+        substrate: Substrate,
+        *,
+        vector: VectorStoreAdapter | None = None,
+        cache: CacheAdapter | None = None,
+    ) -> None:
         self._substrate = substrate
         self._vector = vector
+        self._cache = cache
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
@@ -34,6 +41,10 @@ class Runner:
     def _execute(self, step: ProbeStep) -> Observation:
         if step.action == "vector.query":
             return self._vector_query(step)
+        if step.action == "cache.set":
+            return self._cache_set(step)
+        if step.action == "cache.get":
+            return self._cache_get(step)
         raise ValueError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
@@ -45,6 +56,22 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.VECTOR_DB,
             raw_response="\n".join(hit.content for hit in hits),
+        )
+
+    def _cache_set(self, step: ProbeStep) -> Observation:
+        if self._cache is None:
+            raise ValueError("a cache.set step needs a cache adapter")
+        self._cache.set(step.actor_tenant_id, step.payload["key"], step.payload["value"])
+        return Observation(step_id=step.step_id, surface=Surface.SEMANTIC_CACHE, raw_response="")
+
+    def _cache_get(self, step: ProbeStep) -> Observation:
+        if self._cache is None:
+            raise ValueError("a cache.get step needs a cache adapter")
+        value = self._cache.get(step.actor_tenant_id, step.payload["key"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.SEMANTIC_CACHE,
+            raw_response=value or "",
         )
 
 

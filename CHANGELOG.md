@@ -31,8 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite; the `sectum adapters` CLI command; and live pgvector and Chroma
   vector-store adapters verified against docker-compose backends.
 - Phase 3 (in progress) - the attack catalog: the scenario runner; the Class 1
-  direct-tenant-boundary probe; and the Class 2 flagship organic-entity-bleed
-  RAG probe with the Retrieval-Pivot Rate metric.
+  direct-tenant-boundary probe; the Class 2 flagship organic-entity-bleed RAG
+  probe with the Retrieval-Pivot Rate metric; and the Class 4
+  semantic-cache-contamination probe.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 
