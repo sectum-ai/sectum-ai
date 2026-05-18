@@ -6,7 +6,7 @@ Accepted (2026-05-16).
 
 ## Context
 
-Sectum's second product anchor (the engineering spec, section 1.3) is auditor-acceptable,
+Sectum AI's second product anchor (the engineering spec, section 1.3) is auditor-acceptable,
 tamper-evident evidence. The `sectum-ai-evidence` package has four planned
 modules: `chain.py` (canonicalize, hash, RFC 3161 timestamp, Sigstore Rekor),
 `verify.py` (the `sectum verify` command), `controls.py` (compliance control

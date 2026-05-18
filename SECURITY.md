@@ -1,7 +1,7 @@
 # Security Policy
 
 Sectum AI is a security product. We hold our own code to the standard we ask of
-the systems we verify. Thank you for helping keep Sectum and its users safe.
+the systems we verify. Thank you for helping keep Sectum AI and its users safe.
 
 ## Reporting a vulnerability
 
@@ -50,7 +50,7 @@ In scope: the packages in this repository — `sectum-ai`, `sectum-ai-spec`,
 evidence-chain verification path (`sectum verify`).
 
 Out of scope: third-party dependencies (report those upstream), and any system
-that Sectum is *pointed at* during a verification run — those belong to their
+that Sectum AI is *pointed at* during a verification run — those belong to their
 own owners and operators.
 
 ## Safe harbor
@@ -62,7 +62,7 @@ remediate before public disclosure.
 
 ## Threat model
 
-The Sectum threat model — trust boundaries, handling of the ground-truth
+The Sectum AI threat model — trust boundaries, handling of the ground-truth
 manifest, and what is explicitly out of scope (no remediation, no runtime
 protection) — will be published at `docs/threat-model.md`, planned for Phase 4
 of the build plan (the engineering spec, section 14). Until then, this policy is the

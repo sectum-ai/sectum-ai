@@ -1,6 +1,6 @@
 # Sectum AI
 
-**Multi-tenant AI verification.** Sectum provisions synthetic tenants on an AI
+**Multi-tenant AI verification.** Sectum AI provisions synthetic tenants on an AI
 stack, seeds them with cryptographic canary markers, runs benign and adversarial
 probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
@@ -23,18 +23,18 @@ routinely:
 - **Silent Leaks** (arXiv 2505.15420): 91% extraction efficiency via benign
   queries, with no prompt injection required.
 
-No product verifies multi-tenant isolation across the full AI surface. Sectum
-does.
+No product verifies multi-tenant isolation across the full AI surface.
+Sectum AI does.
 
-## What Sectum is not
+## What Sectum AI is not
 
-Sectum is not a firewall, a runtime guardrail, a generalist LLM red-team tool, a
+Sectum AI is not a firewall, a runtime guardrail, a generalist LLM red-team tool, a
 GRC platform, or a SOC 2 readiness tool. It does not remediate — it verifies and
 attests.
 
-## Open Sectum vs Sectum Cloud
+## Open Sectum AI vs Sectum AI Cloud
 
-|  | Open Sectum (this repo) | Sectum Cloud |
+|  | Open Sectum AI (this repo) | Sectum AI Cloud |
 |---|---|---|
 | License | Apache-2.0 | Commercial |
 | Marker substrate, attack catalog, adapters | Yes | Yes |
@@ -44,7 +44,7 @@ attests.
 | Auditor-grade engagement + branded packs | — | Yes |
 
 The evidence layer is fully open source — anyone can independently verify a
-Sectum evidence pack. See
+Sectum AI evidence pack. See
 [ADR-0002](docs/adr/0002-evidence-layer-oss-boundary.md).
 
 ## Repository layout

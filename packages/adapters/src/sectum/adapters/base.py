@@ -86,7 +86,7 @@ class McpResult(_AdapterValue):
 
 
 class Adapter(ABC):
-    """Base for every Sectum adapter.
+    """Base for every Sectum AI adapter.
 
     Concrete adapters inherit ``family`` from their family base class and pass a
     name and capability set to ``__init__``.

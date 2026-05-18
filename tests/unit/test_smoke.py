@@ -1,4 +1,4 @@
-"""Smoke test: every Sectum distribution imports under the shared namespace."""
+"""Smoke test: every Sectum AI distribution imports under the shared namespace."""
 
 import sectum.adapters
 import sectum.cli.app
