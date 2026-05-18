@@ -10,14 +10,17 @@ from sectum.evidence.chain import (
     build_evidence_pack,
     run_digest,
 )
+from sectum.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
 from sectum.evidence.verify import Check, VerificationResult, verify_pack
 
 __all__ = [
+    "COVERAGE_DISCLAIMER",
     "Check",
     "LocalTimestamper",
     "Timestamper",
     "VerificationResult",
     "build_evidence_pack",
+    "control_mappings",
     "run_digest",
     "verify_pack",
 ]

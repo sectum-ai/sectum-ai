@@ -37,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   erasure-verification wedge.
 - Phase 3 (in progress) - the evidence chain: tamper-evident evidence packs
   (`build_evidence_pack`) and independent verification (`verify_pack`), with a
-  pluggable timestamper.
+  pluggable timestamper; and the compliance-control mappings (SOC 2, ISO 27001,
+  GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP).
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 
