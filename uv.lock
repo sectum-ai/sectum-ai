@@ -22,7 +22,7 @@ dev = [
     { name = "chromadb-client", specifier = ">=0.5" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pre-commit", specifier = ">=4.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.8" },
@@ -1401,7 +1401,7 @@ pgvector = [
 [package.metadata]
 requires-dist = [
     { name = "chromadb-client", marker = "extra == 'chroma'", specifier = ">=0.5" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'pgvector'", specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'pgvector'", specifier = ">=3.3.4" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
 ]
 provides-extras = ["pgvector", "chroma"]
