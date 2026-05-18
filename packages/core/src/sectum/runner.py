@@ -5,8 +5,11 @@ package graph stays acyclic (core depends on probes, never the reverse).
 """
 
 from sectum.adapters import VectorStoreAdapter
-from sectum.probes import Probe
+from sectum.probes import Probe, confirmed_findings
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
+
+StepResult = tuple[ProbeStep, list[Finding]]
+"""One planned step paired with the findings it produced."""
 
 
 class Runner:
@@ -16,13 +19,17 @@ class Runner:
         self._substrate = substrate
         self._vector = vector
 
-    def run(self, probe: Probe) -> list[Finding]:
-        """Plan the probe, execute every step, and return all findings."""
-        findings: list[Finding] = []
+    def run_per_step(self, probe: Probe) -> list[StepResult]:
+        """Plan and run the probe, pairing each step with the findings it produced."""
+        results: list[StepResult] = []
         for step in probe.plan(self._substrate):
             observation = self._execute(step)
-            findings.extend(probe.detect(step, observation, self._substrate))
-        return findings
+            results.append((step, probe.detect(step, observation, self._substrate)))
+        return results
+
+    def run(self, probe: Probe) -> list[Finding]:
+        """Plan the probe, execute every step, and return all findings."""
+        return [finding for _, findings in self.run_per_step(probe) for finding in findings]
 
     def _execute(self, step: ProbeStep) -> Observation:
         if step.action == "vector.query":
@@ -39,3 +46,15 @@ class Runner:
             surface=Surface.VECTOR_DB,
             raw_response="\n".join(hit.content for hit in hits),
         )
+
+
+def retrieval_pivot_rate(step_results: list[StepResult]) -> float:
+    """Fraction of benign steps that surfaced a confirmed cross-tenant leak.
+
+    The Class 2 headline metric, the Retrieval-Pivot Rate (the engineering spec,
+    section 7).
+    """
+    if not step_results:
+        return 0.0
+    pivoted = sum(1 for _, findings in step_results if confirmed_findings(findings))
+    return pivoted / len(step_results)
