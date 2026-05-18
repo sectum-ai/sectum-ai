@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 3 (in progress) - the CLI: `sectum seed` provisions the substrate,
   `sectum probe` runs the probe suite (recording findings and the
   Retrieval-Pivot Rate), `sectum report` assembles the evidence pack (JSON and
-  PDF), and `sectum verify` independently verifies it.
+  PDF), `sectum verify` independently verifies it, and `sectum erasure` runs
+  the GDPR Article 17 erasure-verification workflow into an attestation pack.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 

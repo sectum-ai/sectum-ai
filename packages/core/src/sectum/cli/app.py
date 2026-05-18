@@ -1,12 +1,13 @@
 """Entry point for the ``sectum`` command-line interface (the engineering spec, section 10).
 
-Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``, and
-``verify``. The remaining commands (init, erasure, baseline) follow.
+Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
+``verify``, and ``erasure``. The remaining commands (init, baseline) follow.
 """
 
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 import typer
 
@@ -26,6 +27,7 @@ from sectum.evidence import (
     verify_pack,
 )
 from sectum.probes import (
+    ErasureProbe,
     Probe,
     RagEntityBleedProbe,
     SemanticCacheProbe,
@@ -120,6 +122,18 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     for finding in findings:
         counts[finding.probe_id] = counts.get(finding.probe_id, 0) + 1
     return counts
+
+
+def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
+    """Resolve a target tenant by display name, defaulting to the first tenant."""
+    if name is None:
+        return substrate.tenants[0].tenant_id
+    for tenant in substrate.tenants:
+        if tenant.display_name.lower() == name.lower():
+            return tenant.tenant_id
+    available = ", ".join(tenant.display_name for tenant in substrate.tenants)
+    typer.echo(f"unknown tenant '{name}'; available: {available}", err=True)
+    raise typer.Exit(code=3)
 
 
 @app.command()
@@ -222,6 +236,64 @@ def verify(
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
     typer.echo("VERIFIED: the evidence pack is intact")
+
+
+@app.command()
+def erasure(
+    target_tenant: Annotated[
+        str | None, typer.Option("--target-tenant", help="Tenant display name.")
+    ] = None,
+    soft_delete: Annotated[
+        bool, typer.Option("--soft-delete", help="Model a store that fails erasure.")
+    ] = False,
+    workdir: Annotated[
+        Path, typer.Option(help="Directory holding the seeded substrate.")
+    ] = _DEFAULT_WORKDIR,
+) -> None:
+    """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
+    substrate = _load_substrate(workdir)
+    target = _resolve_target(substrate, target_tenant)
+    store = FakeVectorStore(soft_delete=soft_delete)
+    for tenant in substrate.tenants:
+        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+        store.upsert(tenant.tenant_id, documents)
+
+    started = datetime.now(UTC)
+    report = ErasureProbe(substrate, vector=store).run(target)
+    finished = datetime.now(UTC)
+
+    run = RunResult(
+        run_id=f"erasure-{target.hex[:8]}",
+        scenario_hash=canonical_hash(substrate.scenario),
+        manifest_hash=canonical_hash(substrate.manifest),
+        started_at=started,
+        finished_at=finished,
+        probe_versions={ErasureProbe.id: __version__},
+        findings=report.findings,
+        metrics=RunMetrics(
+            confirmed_findings=len(report.findings),
+            erasure_residue={
+                surface.surface.value: surface.residual_after for surface in report.surfaces
+            },
+        ),
+    )
+    pack = build_evidence_pack(run, substrate.manifest, control_mappings=control_mappings())
+    json_path = workdir / "erasure-evidence.json"
+    json_path.write_text(pack.model_dump_json(indent=2))
+    pdf_path = workdir / "erasure-attestation.pdf"
+    render_audit_pack(pack, pdf_path)
+
+    for surface in report.surfaces:
+        verdict = "ERASED" if surface.erased else "RESIDUAL DATA"
+        typer.echo(
+            f"{surface.surface.value}: {surface.markers_before} markers before, "
+            f"{surface.residual_after} after -> {verdict}"
+        )
+    typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
+    if not report.erased:
+        typer.echo("ERASURE FAILED: residual data remains.", err=True)
+        raise typer.Exit(code=2)
+    typer.echo("ERASURE VERIFIED: no residual data.")
 
 
 if __name__ == "__main__":  # pragma: no cover
