@@ -15,6 +15,7 @@ dev = [
     "pytest-cov>=5.0",
     "pre-commit>=4.0",
     "psycopg[binary]>=3.2",
+    "chromadb-client>=0.5",
 ]
 
 [tool.ruff]
@@ -61,6 +62,13 @@ files = [
     "tests",
 ]
 pretty = true
+
+[[tool.mypy.overrides]]
+# Treat the chromadb client as opaque: its embedding-argument types are far
+# stricter than this adapter needs, and the adapter's own API is fully typed.
+module = ["chromadb", "chromadb.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

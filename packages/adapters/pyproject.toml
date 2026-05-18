@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 pgvector = ["psycopg[binary]>=3.2"]
+chroma = ["chromadb-client>=0.5"]
 
 [project.urls]
 Homepage = "https://sectum.ai"
