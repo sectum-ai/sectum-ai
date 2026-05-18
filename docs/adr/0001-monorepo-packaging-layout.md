@@ -6,7 +6,7 @@ Accepted (2026-05-16).
 
 ## Context
 
-The engineering spec, section 3 mandates that Sectum ships as five PyPI distributions that
+The engineering spec, section 3 mandates that Sectum AI ships as five PyPI distributions that
 share a single `sectum` import namespace. Section 12 sketches a package tree that
 includes a separate `packages/cli/` directory and an `__init__.py` directly under
 `core`'s `src/sectum/`.

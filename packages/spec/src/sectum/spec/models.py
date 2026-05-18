@@ -17,7 +17,7 @@ SCHEMA_VERSION = "0.1.0"
 
 
 class SectumModel(BaseModel):
-    """Base model for all Sectum schemas: immutable, rejects unknown fields."""
+    """Base model for all Sectum AI schemas: immutable, rejects unknown fields."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

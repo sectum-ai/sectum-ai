@@ -42,7 +42,7 @@ def main(
         bool,
         typer.Option(
             "--version",
-            help="Show the Sectum CLI version and exit.",
+            help="Show the Sectum AI CLI version and exit.",
             callback=_version_callback,
             is_eager=True,
         ),
