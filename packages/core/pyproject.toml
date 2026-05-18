@@ -22,6 +22,7 @@ dependencies = [
     "sectum-ai-spec",
     "sectum-ai-adapters",
     "sectum-ai-probes",
+    "sectum-ai-evidence",
 ]
 
 [project.scripts]
@@ -37,6 +38,7 @@ Changelog = "https://github.com/sectum-ai/sectum-ai/blob/main/CHANGELOG.md"
 sectum-ai-spec = { workspace = true }
 sectum-ai-adapters = { workspace = true }
 sectum-ai-probes = { workspace = true }
+sectum-ai-evidence = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/sectum"]

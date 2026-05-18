@@ -1524,6 +1524,7 @@ version = "0.0.0"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "sectum-ai-adapters" },
+    { name = "sectum-ai-evidence" },
     { name = "sectum-ai-probes" },
     { name = "sectum-ai-spec" },
     { name = "typer" },
@@ -1532,6 +1533,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
+    { name = "sectum-ai-evidence", editable = "packages/evidence" },
     { name = "sectum-ai-probes", editable = "packages/probes" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "typer", specifier = ">=0.12" },

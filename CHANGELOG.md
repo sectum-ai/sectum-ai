@@ -40,9 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pluggable timestamper; the compliance-control mappings (SOC 2, ISO 27001,
   GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP); and the audit-pack PDF renderer
   (`render_audit_pack`).
-- Phase 3 (in progress) - the CLI: `sectum seed` provisions the substrate and
-  `sectum probe` runs the probe suite, recording the findings and the
-  Retrieval-Pivot Rate.
+- Phase 3 (in progress) - the CLI: `sectum seed` provisions the substrate,
+  `sectum probe` runs the probe suite (recording findings and the
+  Retrieval-Pivot Rate), `sectum report` assembles the evidence pack (JSON and
+  PDF), and `sectum verify` independently verifies it.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 

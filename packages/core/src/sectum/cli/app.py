@@ -1,7 +1,7 @@
 """Entry point for the ``sectum`` command-line interface (the engineering spec, section 10).
 
-Implemented: ``--version``, ``adapters``, ``seed``, and ``probe``. The remaining
-commands (init, report, verify, erasure, baseline) follow.
+Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``, and
+``verify``. The remaining commands (init, erasure, baseline) follow.
 """
 
 from datetime import UTC, datetime
@@ -19,6 +19,12 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
+from sectum.evidence import (
+    build_evidence_pack,
+    control_mappings,
+    render_audit_pack,
+    verify_pack,
+)
 from sectum.probes import (
     Probe,
     RagEntityBleedProbe,
@@ -27,7 +33,14 @@ from sectum.probes import (
     confirmed_findings,
 )
 from sectum.runner import Runner, StepResult, retrieval_pivot_rate
-from sectum.spec import Finding, RunMetrics, RunResult, Substrate, canonical_hash
+from sectum.spec import (
+    EvidencePack,
+    Finding,
+    RunMetrics,
+    RunResult,
+    Substrate,
+    canonical_hash,
+)
 from sectum.substrate import build_substrate, default_scenario
 
 __version__ = "0.0.0"
@@ -91,6 +104,15 @@ def _load_substrate(workdir: Path) -> Substrate:
         typer.echo(f"no substrate at {path}; run 'sectum seed' first", err=True)
         raise typer.Exit(code=3)
     return Substrate.model_validate_json(path.read_text())
+
+
+def _load_run(workdir: Path) -> RunResult:
+    """Load the recorded run from ``workdir``, or exit with a config error."""
+    path = workdir / "run.json"
+    if not path.exists():
+        typer.echo(f"no run at {path}; run 'sectum probe' first", err=True)
+        raise typer.Exit(code=3)
+    return RunResult.model_validate_json(path.read_text())
 
 
 def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
@@ -164,6 +186,42 @@ def probe(
     typer.echo(f"run recorded -> {path}")
     if confirmed:
         raise typer.Exit(code=2)
+
+
+@app.command()
+def report(
+    workdir: Annotated[
+        Path, typer.Option(help="Directory holding the substrate and run.")
+    ] = _DEFAULT_WORKDIR,
+) -> None:
+    """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
+    substrate = _load_substrate(workdir)
+    run = _load_run(workdir)
+    pack = build_evidence_pack(run, substrate.manifest, control_mappings=control_mappings())
+    json_path = workdir / "evidence.json"
+    json_path.write_text(pack.model_dump_json(indent=2))
+    pdf_path = workdir / "audit-pack.pdf"
+    render_audit_pack(pack, pdf_path)
+    typer.echo(f"evidence pack -> {json_path}")
+    typer.echo(f"audit pack -> {pdf_path}")
+
+
+@app.command()
+def verify(
+    pack: Annotated[Path, typer.Argument(help="Path to an evidence.json pack.")],
+) -> None:
+    """Independently verify a tamper-evident evidence pack."""
+    if not pack.exists():
+        typer.echo(f"no evidence pack at {pack}", err=True)
+        raise typer.Exit(code=3)
+    evidence = EvidencePack.model_validate_json(pack.read_text())
+    result = verify_pack(evidence)
+    for check in result.checks:
+        typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    if not result.passed:
+        typer.echo("VERIFICATION FAILED", err=True)
+        raise typer.Exit(code=4)
+    typer.echo("VERIFIED: the evidence pack is intact")
 
 
 if __name__ == "__main__":  # pragma: no cover
