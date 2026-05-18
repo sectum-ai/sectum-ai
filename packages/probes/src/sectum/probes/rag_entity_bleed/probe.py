@@ -18,7 +18,7 @@ class RagEntityBleedProbe:
     owasp_llm = "LLM08:2025"
     atlas_techniques: tuple[str, ...] = ()
     nist_rmf: tuple[str, ...] = ()
-    surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB, Surface.RAG_PIPELINE)
+    surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:

@@ -1,8 +1,8 @@
-# ADR-0005: Examples are named for the attack class, not for a metric value
+# ADR-0005 - Examples are named for the attack class, not for a metric value
 
 ## Status
 
-Accepted
+Accepted (2026-05-18).
 
 ## Context
 

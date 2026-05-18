@@ -321,7 +321,8 @@ def erasure(
         )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
     if report.erased:
-        typer.echo("ERASURE VERIFIED: no residual data.")
+        scanned = ", ".join(surface.surface.value for surface in report.surfaces)
+        typer.echo(f"ERASURE VERIFIED: no residual marker on {scanned}.")
         return
     if any(surface.residual_after > 0 for surface in report.surfaces):
         typer.echo("ERASURE FAILED: residual data remains.", err=True)

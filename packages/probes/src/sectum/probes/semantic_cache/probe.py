@@ -1,9 +1,13 @@
 """Class 4 - semantic-cache contamination (the engineering spec, section 7).
 
-Prime a cache entry as one tenant, with an answer that carries that tenant's
-hard canary, then issue the same (semantically normalized) query as every other
-tenant. If the cache key space is not tenant-scoped, the second tenant is served
-the first tenant's cached answer - a cross-tenant leak.
+A semantic cache collapses semantically-near queries onto a single stored
+entry, so two tenants asking near-identical questions can land on the same
+cache key. This probe primes such an entry as one tenant - with an answer
+carrying that tenant's hard canary - then reads it from every other tenant's
+session. If the cache key space is not tenant-scoped, the other tenants are
+served the first tenant's cached answer: a cross-tenant leak. The probe
+verifies cache-key tenancy; the embedding-similarity matching that produces a
+shared entry is assumed, not modelled by the in-memory fake.
 """
 
 from sectum.probes.detection import DetectionPipeline

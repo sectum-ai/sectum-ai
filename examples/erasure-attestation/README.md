@@ -20,10 +20,15 @@ A Data Protection Officer needs evidence, not assurances.
 
 1. **`sectum seed`** provisions the marker substrate.
 2. **`sectum erasure --target-tenant "Acme Robotics"`** confirms the tenant's
-   canary markers are present, triggers erasure, re-scans every configured
-   surface for residual markers, and writes an **attestation pack**:
+   canary markers are present in the vector store, triggers erasure, re-scans
+   the vector store for residual markers, and writes an **attestation pack**:
    `erasure-attestation.pdf` (for the DPO) and `erasure-evidence.json`.
 3. **`sectum verify`** independently re-checks the attestation's integrity.
+
+Phase 3 verifies erasure on the **vector store**. The other surfaces named
+above — logs, caches, fine-tuning sets, backups, derived indexes — are part of
+the erasure roadmap and are wired in later phases; the attestation always
+states which surfaces it covers.
 
 ## Run it
 
@@ -39,17 +44,19 @@ Against a store that hard-deletes, every marker is gone after erasure and the
 run reports:
 
 ```
-ERASURE VERIFIED: no residual data.
+vector_db: 2 markers before, 0 after -> ERASED
+ERASURE VERIFIED: no residual marker on vector_db.
 ```
 
 `sectum verify` then confirms the attestation pack is intact.
 
 ## See a failing erasure
 
-Model a store that only soft-deletes — the common, silent Article 17 failure:
+After `./run.sh` has populated `out/`, model a store that only soft-deletes —
+the common, silent Article 17 failure — from this directory:
 
 ```sh
-sectum erasure --workdir out --soft-delete
+uv run sectum erasure --workdir out --soft-delete
 ```
 
 The residual markers are itemized per surface, the run reports `ERASURE FAILED`,
