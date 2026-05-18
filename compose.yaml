@@ -16,3 +16,10 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # No healthcheck: the chroma image lacks a reliable in-container probe, so the
+  # integration-test fixture retries the connection instead.
+  chroma:
+    image: chromadb/chroma:1.5.9
+    ports:
+      - "8001:8000"

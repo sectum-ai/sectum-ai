@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the exact/semantic/judge detection pipeline with deterministic fake
   embedding and judge providers.
 - ADR-0003 (substrate artifacts are pure functions of the seed).
+- Phase 2 - the adapter SDK and probe interface: six adapter family interfaces
+  with a capability model and registry; the `Probe` protocol and registry;
+  deterministic in-memory fake adapters for every family with a contract test
+  suite; the `sectum adapters` CLI command; and live pgvector and Chroma
+  vector-store adapters verified against docker-compose backends.
 
 ### Notes
 
