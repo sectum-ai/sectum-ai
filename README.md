@@ -6,10 +6,11 @@ probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
 auditor accepts.
 
-> **Status: pre-alpha.** Phases 0–2 of the build plan are complete: the marker
+> **Status: pre-alpha.** Phases 0–3 of the build plan are complete: the marker
 > substrate, the leak-detection pipeline, the adapter SDK (with live pgvector
-> and Chroma adapters), and the probe interface. Phase 3 — the attack catalog
-> and the evidence chain — is in progress.
+> and Chroma adapters), the probe interface, the Class 1/2/4/11 attack catalog,
+> the tamper-evident evidence chain, and the `sectum` CLI. Phase 4 — the killer
+> demo, the remaining probes, and the documentation site — is next.
 
 ## The problem
 
@@ -62,8 +63,30 @@ A `uv` workspace of five publishable packages:
 
 ## Quickstart
 
-The `sectum` CLI quickstart lands in Phase 3 of the build plan. To work on the
-repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Run the flagship demo — the organic entity-bleed Retrieval Pivot — end to end
+([`uv`](https://docs.astral.sh/uv/) is the only prerequisite):
+
+```sh
+git clone https://github.com/sectum-ai/sectum-ai
+cd sectum-ai
+./examples/retrieval-pivot/run.sh
+```
+
+It seeds a four-tenant marker substrate, probes a deliberately leaky shared
+vector index, assembles a tamper-evident evidence pack, and independently
+verifies it. See [`examples/`](examples/) for this and the GDPR Article 17
+erasure-attestation walkthrough.
+
+Or drive the `sectum` CLI directly:
+
+```sh
+uv run sectum seed   --workdir .sectum
+uv run sectum probe  --workdir .sectum
+uv run sectum report --workdir .sectum
+uv run sectum verify .sectum/evidence.json
+```
+
+To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation, security, contributing
 

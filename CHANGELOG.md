@@ -30,22 +30,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deterministic in-memory fake adapters for every family with a contract test
   suite; the `sectum adapters` CLI command; and live pgvector and Chroma
   vector-store adapters verified against docker-compose backends.
-- Phase 3 (in progress) - the attack catalog: the scenario runner; the Class 1
+- Phase 3 - the attack catalog: the scenario runner; the Class 1
   direct-tenant-boundary probe; the Class 2 flagship organic-entity-bleed RAG
-  probe with the Retrieval-Pivot Rate metric; the Class 4
-  semantic-cache-contamination probe; and the Class 11 GDPR Article 17
-  erasure-verification wedge.
-- Phase 3 (in progress) - the evidence chain: tamper-evident evidence packs
+  probe, whose substrate plants every canary in a shared-entity pivot document
+  so benign cross-tenant queries reproduce the Retrieval Pivot, with the
+  Retrieval-Pivot Rate metric; the Class 4 semantic-cache-contamination probe;
+  and the Class 11 GDPR Article 17 erasure-verification wedge.
+- Phase 3 - the evidence chain: tamper-evident evidence packs
   (`build_evidence_pack`) and independent verification (`verify_pack`), with a
   pluggable timestamper; the compliance-control mappings (SOC 2, ISO 27001,
   GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP); and the audit-pack PDF renderer
   (`render_audit_pack`).
-- Phase 3 (in progress) - the CLI: `sectum seed` provisions the substrate,
-  `sectum probe` runs the probe suite (recording findings and the
-  Retrieval-Pivot Rate), `sectum report` assembles the evidence pack (JSON and
-  PDF), `sectum verify` independently verifies it, `sectum erasure` runs the
-  GDPR Article 17 erasure-verification workflow into an attestation pack, and
-  `sectum init` scaffolds a starter `sectum.yaml` config.
+- Phase 3 - the CLI: `sectum seed` provisions the substrate, `sectum probe`
+  runs the probe suite (recording findings and the Retrieval-Pivot Rate),
+  `sectum report` assembles the evidence pack (JSON and PDF), `sectum verify`
+  independently verifies it, `sectum erasure` runs the GDPR Article 17
+  erasure-verification workflow into an attestation pack, and `sectum init`
+  scaffolds a starter `sectum.yaml` config.
+- Phase 3 - end-to-end examples: `examples/retrieval-pivot` (the flagship
+  Class 2 walkthrough, from seeding through a verified evidence pack) and
+  `examples/erasure-attestation` (the Class 11 erasure-verification wedge).
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 

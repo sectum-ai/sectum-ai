@@ -1,8 +1,19 @@
 """Deterministic synthetic corpus generation (the engineering spec, section 6.2).
 
 Corpora are templated and seeded so the same scenario always produces a
-byte-identical corpus. Shared organic entities are woven in as leakage bait, and
-each tenant's markers are planted into document bodies, titles, and metadata.
+byte-identical corpus.
+
+Each tenant owns one *pivot document* per canary marker. A pivot document names
+a shared organic entity in its body and carries the marker in that same body.
+Because every shared entity is covered by a pivot document in every tenant, a
+benign query naming that entity retrieves the foreign tenants' pivot documents -
+this is the Retrieval Pivot condition the flagship Class 2 probe reproduces (the
+engineering spec, sections 4 and 7). The marker rides along in the retrieved
+text, so the detection pipeline confirms the leak.
+
+The remaining *filler documents* round out the corpus. They carry no markers;
+some mention shared entities organically, which gives the substrate realistic
+same-tenant retrieval competition.
 """
 
 import random
@@ -42,6 +53,8 @@ _LOCAL_VENDORS: tuple[str, ...] = (
     "Riverbend Partners",
     "Summit Freight",
 )
+# Filler-document templates. Filler documents carry no markers; some mention
+# shared entities organically, which makes retrieval competition realistic.
 _TEMPLATES: dict[str, str] = {
     "hr_record": (
         "Employee {person} completed the quarterly {industry} review. Manager "
@@ -64,7 +77,33 @@ _TEMPLATES: dict[str, str] = {
         "roadmap discussion, including {compliance} readiness. Actions logged."
     ),
 }
-_MARKER_FIELDS: tuple[str, ...] = ("body", "metadata", "title")
+# Pivot-document templates, keyed by shared-entity kind. Each names its shared
+# entity in the body so a benign query for that entity retrieves the document,
+# and ends with the marker so the detection pipeline confirms the leak.
+_PIVOT_TEMPLATES: dict[str, str] = {
+    "person": (
+        "Internal {label} for the {industry} team. Primary point of contact: "
+        "{entity}. Reference: {marker}."
+    ),
+    "vendor": (
+        "Procurement {label} covering the active engagement with vendor "
+        "{entity}. Reference: {marker}."
+    ),
+    "compliance_term": (
+        "Compliance {label}: {entity} controls were reviewed for the "
+        "{industry} program. Reference: {marker}."
+    ),
+    "amount": (
+        "Finance {label}. Booked value {entity} against the {industry} "
+        "account. Reference: {marker}."
+    ),
+    "date": (
+        "Operations {label} logged on {entity} for the {industry} workstream. Reference: {marker}."
+    ),
+}
+_GENERIC_PIVOT_TEMPLATE = (
+    "Internal {label} referencing {entity} in the {industry} corpus. Reference: {marker}."
+)
 
 
 def _slot_values(
@@ -73,7 +112,7 @@ def _slot_values(
     rng: random.Random,
     index: int,
 ) -> dict[str, str]:
-    """Resolve template slots, mixing shared organic entities with local values."""
+    """Resolve filler-template slots, mixing shared organic entities with local values."""
     use_shared = index % 2 == 0
     if index % 3 == 0 and "person" in shared:
         person = shared["person"][0]
@@ -106,6 +145,40 @@ def _slot_values(
     }
 
 
+def _pivot_content(doc_type: str, entity: SharedEntity, marker: Marker, industry: str) -> str:
+    """Render a pivot document's body: a shared entity plus a planted marker."""
+    template = _PIVOT_TEMPLATES.get(entity.kind, _GENERIC_PIVOT_TEMPLATE)
+    return template.format(
+        label=doc_type.replace("_", " "),
+        entity=entity.value,
+        marker=marker.plaintext,
+        industry=industry,
+    )
+
+
+def _pivot_assignments(
+    markers: list[Marker], shared_entities: tuple[SharedEntity, ...], size: int
+) -> dict[int, tuple[Marker, SharedEntity]]:
+    """Map document indices to the (marker, shared entity) each pivot document carries.
+
+    Markers are spread across the corpus, one per shared entity in round-robin
+    order. The spread is collision-free whenever ``size >= len(markers)``, which
+    holds for every realistic corpus profile.
+    """
+    if not shared_entities or not markers:
+        return {}
+    assignments: dict[int, tuple[Marker, SharedEntity]] = {}
+    used: set[int] = set()
+    for marker_index, marker in enumerate(markers):
+        doc_index = (marker_index * size) // len(markers)
+        while doc_index in used:
+            doc_index = (doc_index + 1) % size
+        used.add(doc_index)
+        entity = shared_entities[marker_index % len(shared_entities)]
+        assignments[doc_index] = (marker, entity)
+    return assignments
+
+
 def generate_corpus(
     tenant_spec: SyntheticTenantSpec,
     rng: random.Random,
@@ -122,33 +195,27 @@ def generate_corpus(
         shared.setdefault(entity.kind, []).append(entity.value)
 
     size = tenant_spec.corpus_size
-    plantings: dict[int, list[tuple[Marker, str]]] = {}
-    for marker_index, marker in enumerate(markers):
-        doc_index = (marker_index * 5 + 2) % size
-        field = _MARKER_FIELDS[marker_index % len(_MARKER_FIELDS)]
-        plantings.setdefault(doc_index, []).append((marker, field))
+    short_id = tenant_spec.tenant_id.hex[:8]
+    pivots = _pivot_assignments(markers, shared_entities, size)
 
     locations: dict[str, list[PlantedLocation]] = {marker.marker_id: [] for marker in markers}
     documents: list[CorpusDocument] = []
-    short_id = tenant_spec.tenant_id.hex[:8]
 
     for index in range(size):
         doc_type = _DOC_TYPES[index % len(_DOC_TYPES)]
         doc_id = f"doc-{short_id}-{index:04d}"
         title = f"{doc_type.replace('_', ' ').title()} #{index:04d}"
-        content = _TEMPLATES[doc_type].format(**_slot_values(tenant_spec, shared, rng, index))
         metadata: dict[str, str] = {"doc_type": doc_type, "tenant": tenant_spec.display_name}
-        marker_ids: list[str] = []
 
-        for marker, field in plantings.get(index, []):
-            marker_ids.append(marker.marker_id)
-            locations[marker.marker_id].append(PlantedLocation(doc_id=doc_id, field=field))
-            if field == "body":
-                content = f"{content}\nReference: {marker.plaintext}"
-            elif field == "title":
-                title = f"{title} - {marker.plaintext}"
-            else:
-                metadata[f"ref:{marker.marker_id}"] = marker.plaintext
+        pivot = pivots.get(index)
+        if pivot is not None:
+            marker, entity = pivot
+            content = _pivot_content(doc_type, entity, marker, tenant_spec.industry)
+            locations[marker.marker_id].append(PlantedLocation(doc_id=doc_id, field="body"))
+            marker_ids: tuple[str, ...] = (marker.marker_id,)
+        else:
+            content = _TEMPLATES[doc_type].format(**_slot_values(tenant_spec, shared, rng, index))
+            marker_ids = ()
 
         documents.append(
             CorpusDocument(
@@ -158,7 +225,7 @@ def generate_corpus(
                 title=title,
                 content=content,
                 metadata=metadata,
-                marker_ids=tuple(marker_ids),
+                marker_ids=marker_ids,
             )
         )
     return documents, locations

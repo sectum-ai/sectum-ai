@@ -19,7 +19,9 @@ def test_benign_queries_pivot_across_tenants_on_a_shared_index() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     store = _seeded_store(substrate, shared_index=True)
     results = Runner(substrate, vector=store).run_per_step(RagEntityBleedProbe())
-    assert retrieval_pivot_rate(results) > 0.0
+    # A single shared index has no tenant isolation: every benign shared-entity
+    # query retrieves foreign pivot documents, so the rate is a full 1.0.
+    assert retrieval_pivot_rate(results) == 1.0
     confirmed = [finding for _, findings in results for finding in confirmed_findings(findings)]
     assert confirmed
     assert all(f.owner_tenant_id != f.observed_in_tenant_id for f in confirmed)
