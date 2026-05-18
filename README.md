@@ -91,6 +91,7 @@ To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Documentation, security, contributing
 
 - Architecture decisions: [docs/adr/](docs/adr/)
+- Threat model: [docs/threat-model.md](docs/threat-model.md)
 - Security policy and private disclosure: [SECURITY.md](SECURITY.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 

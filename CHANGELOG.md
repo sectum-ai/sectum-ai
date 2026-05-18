@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agent tool-call hijacking probe (the MCP confused-deputy and token-passthrough
   sub-probes) over an extended `FakeMCP`. Both probes join the `sectum probe`
   suite.
+- Phase 4 (in progress) - the threat model: `docs/threat-model.md` records the
+  trust boundaries, the assets (the ground-truth manifest, evidence packs), the
+  deployment modes, and Sectum AI's explicit non-goals.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
