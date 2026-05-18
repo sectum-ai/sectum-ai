@@ -21,6 +21,9 @@ dependencies = [
     "sectum-ai-spec",
 ]
 
+[project.optional-dependencies]
+pgvector = ["psycopg[binary]>=3.2"]
+
 [project.urls]
 Homepage = "https://sectum.ai"
 Repository = "https://github.com/sectum-ai/sectum-ai"
