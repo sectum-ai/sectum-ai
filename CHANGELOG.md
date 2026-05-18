@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   probe with the Retrieval-Pivot Rate metric; the Class 4
   semantic-cache-contamination probe; and the Class 11 GDPR Article 17
   erasure-verification wedge.
+- Phase 3 (in progress) - the evidence chain: tamper-evident evidence packs
+  (`build_evidence_pack`) and independent verification (`verify_pack`), with a
+  pluggable timestamper.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 
