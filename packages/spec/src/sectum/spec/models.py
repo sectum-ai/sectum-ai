@@ -141,14 +141,13 @@ class Observation(SectumModel):
 # --- Findings ---------------------------------------------------------------
 
 
-class Finding(BaseModel):
+class Finding(SectumModel):
     """A detected cross-tenant leakage result (the engineering spec, section 9).
 
-    Not frozen: a finding's status may be downgraded from confirmed to
-    unverified by the false-positive control (the engineering spec, section 6.4).
+    Frozen like every other aggregate model. The detection pipeline classifies
+    each finding as confirmed or unverified - the false-positive control (the
+    engineering spec, section 6.4) - when it constructs the finding.
     """
-
-    model_config = ConfigDict(extra="forbid")
 
     finding_id: str
     probe_id: str

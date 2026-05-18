@@ -182,6 +182,10 @@ class DetectionPipeline:
         observation_tokens = _tokenize(text)
         for marker in self._foreign(observed_in_tenant, MarkerType.ENTITY_CANARY):
             similarity = self._best_window_similarity(observation_tokens, marker)
+            # The threshold gates which candidates reach the judge. With the
+            # deterministic fake providers the judge (a full marker-phrase
+            # match) is the binding test; the threshold becomes the real
+            # calibration knob once a production embedding model is configured.
             if similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
