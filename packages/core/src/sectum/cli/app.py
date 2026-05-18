@@ -215,6 +215,7 @@ def probe(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
+        adapter_versions={vector.name: __version__, cache.name: __version__},
         probe_versions={instance.id: __version__ for instance in _SUITE},
         findings=findings,
         metrics=RunMetrics(
@@ -299,6 +300,7 @@ def erasure(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
+        adapter_versions={store.name: __version__},
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
         metrics=RunMetrics(
