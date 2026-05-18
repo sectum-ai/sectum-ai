@@ -7,7 +7,7 @@ side-effecting only through adapters.
 
 from typing import Protocol, runtime_checkable
 
-from sectum.spec import Finding, Observation, ProbeStep, Scenario, Substrate, Surface
+from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 
 @runtime_checkable
@@ -22,8 +22,11 @@ class Probe(Protocol):
     surfaces: tuple[Surface, ...]
     requires_adapters: tuple[str, ...]
 
-    def plan(self, scenario: Scenario) -> list[ProbeStep]:
-        """Deterministically produce the steps (queries or actions) to run."""
+    def plan(self, substrate: Substrate) -> list[ProbeStep]:
+        """Deterministically produce the steps (queries or actions) to run.
+
+        Takes the full substrate (ADR-0004) so manifest-grounded probes can plan.
+        """
         ...
 
     def detect(

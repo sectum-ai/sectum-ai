@@ -1,12 +1,8 @@
 """Unit tests for the exact/semantic/judge detection pipeline."""
 
+from sectum.probes import DetectionPipeline, confirmed_findings
 from sectum.spec import MarkerType, Severity, Substrate, Surface
-from sectum.substrate import (
-    DetectionPipeline,
-    build_substrate,
-    confirmed_findings,
-    default_scenario,
-)
+from sectum.substrate import build_substrate, default_scenario
 
 
 def _substrate() -> Substrate:
