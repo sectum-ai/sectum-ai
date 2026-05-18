@@ -14,6 +14,7 @@ from sectum.probes.detection import (
     JudgeVerdict,
     confirmed_findings,
 )
+from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "JudgeVerdict",
     "Probe",
     "ProbeRegistry",
+    "RagEntityBleedProbe",
     "TenantBoundaryProbe",
     "confirmed_findings",
 ]
