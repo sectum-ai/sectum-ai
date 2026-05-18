@@ -12,3 +12,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0002](0002-evidence-layer-oss-boundary.md) | The evidence layer is fully open source | Accepted |
 | [0003](0003-deterministic-substrate.md) | Substrate artifacts are pure functions of the seed | Accepted |
 | [0004](0004-detection-pipeline-placement.md) | Probe architecture: detection placement and the plan signature | Accepted |
+| [0005](0005-examples-named-by-attack-class.md) | Examples are named for the attack class, not a metric value | Accepted |

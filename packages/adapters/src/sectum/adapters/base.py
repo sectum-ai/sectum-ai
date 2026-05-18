@@ -119,6 +119,15 @@ class VectorStoreAdapter(Adapter):
         """Return the top-``k`` matches for ``text`` in ``tenant``'s scope."""
 
     @abstractmethod
+    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+        """Fetch one document by id from ``tenant``'s reachable scope, or ``None``.
+
+        A direct object lookup - the Class 1 BOLA primitive - distinct from the
+        similarity ``query``: a tenant-isolated store returns ``None`` for
+        another tenant's ``doc_id``; a shared index returns the document.
+        """
+
+    @abstractmethod
     def delete(self, tenant: UUID) -> None:
         """Delete all of a tenant's documents."""
 

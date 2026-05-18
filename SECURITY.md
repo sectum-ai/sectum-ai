@@ -33,12 +33,12 @@ prefer to remain anonymous, and agree a disclosure timeline with you.
 
 ## Supported versions
 
-Sectum AI is pre-release. Until the first stable release, only the `main`
+Sectum AI is pre-alpha. Until the first stable release, only the `main`
 branch receives security fixes.
 
 | Version | Supported |
 |---|---|
-| `main` (pre-release) | Yes |
+| `main` (pre-alpha) | Yes |
 | Tagged releases | Not yet — no stable release exists |
 
 This table will be updated when the first stable version ships.

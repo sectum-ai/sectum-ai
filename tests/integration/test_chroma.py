@@ -85,3 +85,13 @@ def test_chroma_delete_and_list_namespaces(store: ChromaVectorStore) -> None:
     assert any("sectum-it" in name for name in store.list_namespaces())
     store.delete(_TENANT_A)
     assert store.query(_TENANT_A, "alpha", k=10) == []
+
+
+def test_chroma_fetch_by_id_is_tenant_scoped(store: ChromaVectorStore) -> None:
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    hit = store.fetch(_TENANT_A, "a-1")
+    assert hit is not None
+    assert hit.doc_id == "a-1"
+    assert store.fetch(_TENANT_A, "missing") is None
+    # an isolated store denies another tenant's document id
+    assert store.fetch(_TENANT_B, "a-1") is None

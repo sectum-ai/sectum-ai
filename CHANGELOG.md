@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `examples/erasure-attestation` (the Class 11 erasure-verification wedge).
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
+- ADR-0005 (examples are named for the attack class, not a metric value).
 
 ### Notes
 

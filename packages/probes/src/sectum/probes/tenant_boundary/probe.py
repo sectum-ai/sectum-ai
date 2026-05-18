@@ -1,8 +1,9 @@
 """Class 1 - direct tenant boundary fetch (the engineering spec, section 7).
 
-From one tenant's session, attempt to retrieve another tenant's documents and
-detect any cross-tenant canary leak. This is the table-stakes probe: it verifies
-negative authorization across the tenant boundary.
+From one tenant's session, attempt to fetch another tenant's documents directly
+by id (a BOLA-style probe) and detect any cross-tenant canary leak. This is the
+table-stakes probe: it verifies negative authorization across the tenant
+boundary.
 """
 
 from sectum.probes.detection import DetectionPipeline
@@ -21,17 +22,13 @@ class TenantBoundaryProbe:
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan, for every hard-canary document, a query from each other tenant."""
-        documents = {document.doc_id: document for document in substrate.documents}
+        """Plan, for every hard-canary document, a direct fetch from each other tenant."""
         tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
                 continue
             for location in marker.planted_locations:
-                document = documents.get(location.doc_id)
-                if document is None:
-                    continue
                 for observer in tenant_ids:
                     if observer == marker.owner_tenant_id:
                         continue
@@ -40,8 +37,8 @@ class TenantBoundaryProbe:
                             step_id=f"{self.id}-{len(steps):04d}",
                             probe_id=self.id,
                             actor_tenant_id=observer,
-                            action="vector.query",
-                            payload={"query": document.title, "k": "10"},
+                            action="vector.fetch",
+                            payload={"doc_id": location.doc_id},
                         )
                     )
         return steps

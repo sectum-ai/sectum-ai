@@ -89,16 +89,29 @@ class FakeVectorStore(VectorStoreAdapter):
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
         self._documents.setdefault(tenant, []).extend(documents)
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+    def _scope(self, tenant: UUID) -> list[tuple[UUID, CorpusDocument]]:
+        """The (owner, document) pairs reachable from ``tenant``'s session."""
         if self._shared_index:
-            candidates = [
+            return [
                 (owner, document)
                 for owner, documents in self._documents.items()
                 for document in documents
             ]
-        else:
-            candidates = [(tenant, document) for document in self._documents.get(tenant, [])]
-        return _rank(text, candidates, k)
+        return [(tenant, document) for document in self._documents.get(tenant, [])]
+
+    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+        return _rank(text, self._scope(tenant), k)
+
+    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+        for owner, document in self._scope(tenant):
+            if document.doc_id == doc_id:
+                return VectorHit(
+                    doc_id=document.doc_id,
+                    tenant_id=owner,
+                    score=1.0,
+                    content=document.content,
+                )
+        return None
 
     def delete(self, tenant: UUID) -> None:
         # A soft-delete store acknowledges the request but leaves the vectors

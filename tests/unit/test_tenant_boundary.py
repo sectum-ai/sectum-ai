@@ -30,11 +30,12 @@ def test_isolated_index_has_no_tenant_boundary_leak() -> None:
     assert confirmed_findings(findings) == []
 
 
-def test_probe_plans_only_cross_tenant_query_steps() -> None:
+def test_probe_plans_only_cross_tenant_fetch_steps() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     steps = TenantBoundaryProbe().plan(substrate)
     assert steps
     tenant_ids = {tenant.tenant_id for tenant in substrate.tenants}
     for step in steps:
-        assert step.action == "vector.query"
+        assert step.action == "vector.fetch"
         assert step.actor_tenant_id in tenant_ids
+        assert "doc_id" in step.payload

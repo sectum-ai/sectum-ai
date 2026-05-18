@@ -41,6 +41,8 @@ class Runner:
     def _execute(self, step: ProbeStep) -> Observation:
         if step.action == "vector.query":
             return self._vector_query(step)
+        if step.action == "vector.fetch":
+            return self._vector_fetch(step)
         if step.action == "cache.set":
             return self._cache_set(step)
         if step.action == "cache.get":
@@ -56,6 +58,16 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.VECTOR_DB,
             raw_response="\n".join(hit.content for hit in hits),
+        )
+
+    def _vector_fetch(self, step: ProbeStep) -> Observation:
+        if self._vector is None:
+            raise ValueError("a vector.fetch step needs a vector adapter")
+        hit = self._vector.fetch(step.actor_tenant_id, step.payload["doc_id"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.VECTOR_DB,
+            raw_response=hit.content if hit is not None else "",
         )
 
     def _cache_set(self, step: ProbeStep) -> Observation:

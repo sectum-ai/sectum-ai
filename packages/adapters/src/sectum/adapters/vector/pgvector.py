@@ -79,6 +79,17 @@ class PgVectorStore(VectorStoreAdapter):
             for doc_id, content, score in rows
         ]
 
+    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+        with psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                f"SELECT content FROM {self._table} WHERE tenant = %s AND doc_id = %s",
+                (str(tenant), doc_id),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return VectorHit(doc_id=doc_id, tenant_id=tenant, score=1.0, content=str(row[0]))
+
     def delete(self, tenant: UUID) -> None:
         with psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
             cur.execute(f"DELETE FROM {self._table} WHERE tenant = %s", (str(tenant),))

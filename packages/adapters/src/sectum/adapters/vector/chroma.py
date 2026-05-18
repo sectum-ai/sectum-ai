@@ -73,6 +73,17 @@ class ChromaVectorStore(VectorStoreAdapter):
             for doc_id, content, distance in zip(ids, documents, distances, strict=True)
         ]
 
+    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+        collection = self._client.get_or_create_collection(
+            self._collection_name(tenant), embedding_function=None
+        )
+        result = collection.get(ids=[doc_id])
+        ids = result["ids"]
+        if not ids:
+            return None
+        documents = result["documents"] or [""]
+        return VectorHit(doc_id=ids[0], tenant_id=tenant, score=1.0, content=documents[0])
+
     def delete(self, tenant: UUID) -> None:
         name = self._collection_name(tenant)
         if name in {collection.name for collection in self._client.list_collections()}:

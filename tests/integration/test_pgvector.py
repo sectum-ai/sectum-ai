@@ -74,3 +74,13 @@ def test_pgvector_delete_and_list_namespaces(store: PgVectorStore) -> None:
     assert str(_TENANT_A) in store.list_namespaces()
     store.delete(_TENANT_A)
     assert store.query(_TENANT_A, "alpha", k=10) == []
+
+
+def test_pgvector_fetch_by_id_is_tenant_scoped(store: PgVectorStore) -> None:
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    hit = store.fetch(_TENANT_A, "a-1")
+    assert hit is not None
+    assert hit.doc_id == "a-1"
+    assert store.fetch(_TENANT_A, "missing") is None
+    # an isolated store denies another tenant's document id
+    assert store.fetch(_TENANT_B, "a-1") is None

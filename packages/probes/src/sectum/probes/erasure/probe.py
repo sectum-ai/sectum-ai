@@ -26,8 +26,22 @@ class SurfaceErasure:
 
     @property
     def erased(self) -> bool:
-        """True when no marker survived the erasure on this surface."""
-        return self.residual_after == 0
+        """True when a baseline was established and no marker survived erasure.
+
+        A surface with no markers before erasure yields no baseline, so its
+        erasure cannot be attested - ``erased`` is ``False`` rather than
+        vacuously ``True``.
+        """
+        return self.markers_before > 0 and self.residual_after == 0
+
+    @property
+    def verdict(self) -> str:
+        """A human-readable verdict: ERASED, RESIDUAL DATA, or NO BASELINE."""
+        if self.markers_before == 0:
+            return "NO BASELINE"
+        if self.residual_after == 0:
+            return "ERASED"
+        return "RESIDUAL DATA"
 
 
 @dataclass(frozen=True)
@@ -40,8 +54,8 @@ class ErasureReport:
 
     @property
     def erased(self) -> bool:
-        """True when every surface is clear of the target tenant's markers."""
-        return all(surface.erased for surface in self.surfaces)
+        """True when every surface established a baseline and is now clear."""
+        return bool(self.surfaces) and all(surface.erased for surface in self.surfaces)
 
 
 class ErasureProbe:

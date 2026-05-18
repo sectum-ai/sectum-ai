@@ -315,16 +315,23 @@ def erasure(
     render_audit_pack(pack, pdf_path)
 
     for surface in report.surfaces:
-        verdict = "ERASED" if surface.erased else "RESIDUAL DATA"
         typer.echo(
             f"{surface.surface.value}: {surface.markers_before} markers before, "
-            f"{surface.residual_after} after -> {verdict}"
+            f"{surface.residual_after} after -> {surface.verdict}"
         )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
-    if not report.erased:
+    if report.erased:
+        typer.echo("ERASURE VERIFIED: no residual data.")
+        return
+    if any(surface.residual_after > 0 for surface in report.surfaces):
         typer.echo("ERASURE FAILED: residual data remains.", err=True)
         raise typer.Exit(code=2)
-    typer.echo("ERASURE VERIFIED: no residual data.")
+    typer.echo(
+        "ERASURE INCONCLUSIVE: the target tenant's markers were not found, "
+        "so erasure cannot be attested.",
+        err=True,
+    )
+    raise typer.Exit(code=3)
 
 
 @app.command()

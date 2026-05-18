@@ -102,6 +102,29 @@ def test_vector_store_delete_removes_a_tenant() -> None:
     assert store.query(_TENANT_A, "alpha", k=10) == []
 
 
+def test_vector_store_fetch_returns_one_document_by_id() -> None:
+    store = FakeVectorStore()
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    hit = store.fetch(_TENANT_A, "a-1")
+    assert hit is not None
+    assert hit.doc_id == "a-1"
+    assert store.fetch(_TENANT_A, "no-such-doc") is None
+
+
+def test_isolated_vector_store_fetch_denies_a_cross_tenant_id() -> None:
+    store = FakeVectorStore()
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    assert store.fetch(_TENANT_B, "a-1") is None
+
+
+def test_shared_index_vector_store_fetch_crosses_tenants() -> None:
+    store = FakeVectorStore(shared_index=True)
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    hit = store.fetch(_TENANT_B, "a-1")
+    assert hit is not None
+    assert hit.tenant_id == _TENANT_A
+
+
 def test_cache_tenant_scoping_is_capability_honest() -> None:
     isolated = FakeCache(tenant_scoped=True)
     assert isinstance(isolated, CacheAdapter)

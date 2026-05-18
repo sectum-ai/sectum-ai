@@ -42,3 +42,15 @@ def test_erasure_leaves_other_tenants_untouched() -> None:
     store = _seeded_store(substrate, soft_delete=False)
     ErasureProbe(substrate, vector=store).run(target)
     assert store.query(other, "record", k=10)
+
+
+def test_erasure_is_inconclusive_without_a_baseline() -> None:
+    """An empty store yields no pre-erasure baseline, so erasure cannot be attested."""
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = FakeVectorStore()  # never populated: nothing to establish a baseline
+    report = ErasureProbe(substrate, vector=store).run(target)
+    assert report.surfaces[0].markers_before == 0
+    assert report.surfaces[0].verdict == "NO BASELINE"
+    assert not report.erased
+    assert report.findings == ()

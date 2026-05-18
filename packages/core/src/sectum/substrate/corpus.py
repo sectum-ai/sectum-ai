@@ -161,19 +161,19 @@ def _pivot_assignments(
 ) -> dict[int, tuple[Marker, SharedEntity]]:
     """Map document indices to the (marker, shared entity) each pivot document carries.
 
-    Markers are spread across the corpus, one per shared entity in round-robin
-    order. The spread is collision-free whenever ``size >= len(markers)``, which
-    holds for every realistic corpus profile.
+    Markers are spread evenly across the corpus, one per shared entity in
+    round-robin order.
     """
     if not shared_entities or not markers:
         return {}
+    if size < len(markers):
+        raise ValueError(
+            f"corpus_size ({size}) must be at least the markers-per-tenant count "
+            f"({len(markers)}) so every marker gets its own pivot document"
+        )
     assignments: dict[int, tuple[Marker, SharedEntity]] = {}
-    used: set[int] = set()
     for marker_index, marker in enumerate(markers):
         doc_index = (marker_index * size) // len(markers)
-        while doc_index in used:
-            doc_index = (doc_index + 1) % size
-        used.add(doc_index)
         entity = shared_entities[marker_index % len(shared_entities)]
         assignments[doc_index] = (marker, entity)
     return assignments
