@@ -15,6 +15,7 @@ from sectum.probes.detection import (
     confirmed_findings,
 )
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
+from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
 from sectum.probes.semantic_cache import SemanticCacheProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
@@ -28,6 +29,7 @@ __all__ = [
     "FakeJudge",
     "Judge",
     "JudgeVerdict",
+    "LoraCrossTenantProbe",
     "Probe",
     "ProbeRegistry",
     "RagEntityBleedProbe",

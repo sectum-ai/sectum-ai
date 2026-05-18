@@ -16,6 +16,7 @@ from sectum.adapters import (
     FakeAgent,
     FakeCache,
     FakeMCP,
+    FakeModel,
     FakeObservability,
     FakeRAGPipeline,
     FakeVectorStore,
@@ -28,6 +29,7 @@ from sectum.evidence import (
 )
 from sectum.probes import (
     ErasureProbe,
+    LoraCrossTenantProbe,
     Probe,
     RagEntityBleedProbe,
     SemanticCacheProbe,
@@ -49,7 +51,12 @@ __version__ = "0.0.0"
 
 _DEFAULT_WORKDIR = Path(".sectum")
 _DEFAULT_CONFIG = Path("sectum.yaml")
-_SUITE: tuple[Probe, ...] = (TenantBoundaryProbe(), RagEntityBleedProbe(), SemanticCacheProbe())
+_SUITE: tuple[Probe, ...] = (
+    TenantBoundaryProbe(),
+    RagEntityBleedProbe(),
+    SemanticCacheProbe(),
+    LoraCrossTenantProbe(),
+)
 
 _CONFIG_TEMPLATE = """\
 # Sectum AI configuration - see https://docs.sectum.ai
@@ -122,6 +129,7 @@ def list_adapters() -> None:
         FakeAgent(),
         FakeMCP(),
         FakeCache(),
+        FakeModel(),
     ):
         registry.register(fake)
     typer.echo(f"{'ADAPTER':<22}{'FAMILY':<18}CAPABILITIES")
@@ -193,10 +201,11 @@ def probe(
     substrate = _load_substrate(workdir)
     vector = FakeVectorStore(shared_index=True)
     cache = FakeCache(tenant_scoped=False)
+    model = FakeModel(adapter_bleed=True)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         vector.upsert(tenant.tenant_id, documents)
-    runner = Runner(substrate, vector=vector, cache=cache)
+    runner = Runner(substrate, vector=vector, cache=cache, model=model)
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
@@ -215,7 +224,11 @@ def probe(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
-        adapter_versions={vector.name: __version__, cache.name: __version__},
+        adapter_versions={
+            vector.name: __version__,
+            cache.name: __version__,
+            model.name: __version__,
+        },
         probe_versions={instance.id: __version__ for instance in _SUITE},
         findings=findings,
         metrics=RunMetrics(

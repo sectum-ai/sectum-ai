@@ -20,6 +20,7 @@ from sectum.adapters.base import (
     Capability,
     MCPAdapter,
     McpResult,
+    ModelAdapter,
     ObservabilityAdapter,
     RagAnswer,
     RAGPipelineAdapter,
@@ -230,3 +231,35 @@ class FakeCache(CacheAdapter):
 
     def keys(self) -> list[str]:
         return sorted(self._store)
+
+
+class FakeModel(ModelAdapter):
+    """A deterministic in-memory model with per-tenant adapters.
+
+    With ``adapter_bleed=True`` one tenant's adapter influences another
+    tenant's inference - the weight-bleed condition Class 9 is built to catch.
+    With it off, a tenant's inference draws only on that tenant's own adapter.
+    """
+
+    def __init__(self, name: str = "fake-model", *, adapter_bleed: bool = False) -> None:
+        scope = Capability.SHARED_WEIGHTS if adapter_bleed else Capability.PER_TENANT_ADAPTER
+        super().__init__(name, frozenset({scope}))
+        self._adapter_bleed = adapter_bleed
+        self._adapters: dict[UUID, list[str]] = {}
+
+    def train_adapter(self, tenant: UUID, texts: Sequence[str]) -> None:
+        self._adapters.setdefault(tenant, []).extend(texts)
+
+    def infer(self, tenant: UUID, prompt: str) -> str:
+        # The model "recalls" memorized adapter text that overlaps the prompt.
+        # With weight bleed it recalls across every tenant's adapter, not just
+        # the caller's - so a foreign tenant's memorized canary surfaces.
+        prompt_tokens = _tokens(prompt)
+        if self._adapter_bleed:
+            corpus = [text for texts in self._adapters.values() for text in texts]
+        else:
+            corpus = list(self._adapters.get(tenant, []))
+        recalled = [text for text in corpus if prompt_tokens & _tokens(text)]
+        if not recalled:
+            return "the adapter recalled nothing for this prompt"
+        return " ".join(recalled)

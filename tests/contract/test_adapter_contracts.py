@@ -15,10 +15,12 @@ from sectum.adapters import (
     FakeAgent,
     FakeCache,
     FakeMCP,
+    FakeModel,
     FakeObservability,
     FakeRAGPipeline,
     FakeVectorStore,
     MCPAdapter,
+    ModelAdapter,
     ObservabilityAdapter,
     RAGPipelineAdapter,
     VectorStoreAdapter,
@@ -50,6 +52,7 @@ def _all_fakes() -> list[Adapter]:
         FakeAgent(),
         FakeMCP(),
         FakeCache(),
+        FakeModel(),
     ]
 
 
@@ -72,6 +75,7 @@ def test_each_fake_belongs_to_the_expected_family() -> None:
     assert FakeAgent().family is AdapterFamily.AGENT
     assert FakeMCP().family is AdapterFamily.MCP
     assert FakeCache().family is AdapterFamily.CACHE
+    assert FakeModel().family is AdapterFamily.MODEL
 
 
 def test_isolated_vector_store_does_not_leak_across_tenants() -> None:
@@ -136,6 +140,22 @@ def test_cache_tenant_scoping_is_capability_honest() -> None:
     assert not shared.supports(Capability.TENANT_SCOPED_KEYS)
     shared.set(_TENANT_A, "key", "secret-a")
     assert shared.get(_TENANT_B, "key") == "secret-a"
+
+
+def test_isolated_model_keeps_adapters_per_tenant() -> None:
+    model = FakeModel()
+    assert isinstance(model, ModelAdapter)
+    assert model.supports(Capability.PER_TENANT_ADAPTER)
+    model.train_adapter(_TENANT_A, ["alpha adapter fact"])
+    assert "alpha" in model.infer(_TENANT_A, "recall the adapter fact")
+    assert "alpha" not in model.infer(_TENANT_B, "recall the adapter fact")
+
+
+def test_weight_bleed_model_leaks_adapters_across_tenants() -> None:
+    model = FakeModel(adapter_bleed=True)
+    assert model.supports(Capability.SHARED_WEIGHTS)
+    model.train_adapter(_TENANT_A, ["alpha adapter fact"])
+    assert "alpha" in model.infer(_TENANT_B, "recall the adapter fact")
 
 
 def test_rag_pipeline_retrieves_indexed_context() -> None:

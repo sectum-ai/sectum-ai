@@ -28,6 +28,7 @@ class AdapterFamily(StrEnum):
     AGENT = "agent"
     MCP = "mcp"
     CACHE = "cache"
+    MODEL = "model"
 
 
 class Capability(StrEnum):
@@ -39,6 +40,8 @@ class Capability(StrEnum):
     TENANT_SCOPED_KEYS = "tenant_scoped_keys"
     TRACE_SEARCH = "trace_search"
     TOOL_INVOCATION = "tool_invocation"
+    PER_TENANT_ADAPTER = "per_tenant_adapter"
+    SHARED_WEIGHTS = "shared_weights"
 
 
 class _AdapterValue(BaseModel):
@@ -200,6 +203,24 @@ class CacheAdapter(Adapter):
     @abstractmethod
     def keys(self) -> list[str]:
         """List every raw cache key, across all tenants."""
+
+
+class ModelAdapter(Adapter):
+    """Adapter for an inference model with per-tenant fine-tunes or adapters.
+
+    Class 9 uses this to verify that one tenant's adapter does not influence
+    another tenant's inference (the engineering spec, section 7).
+    """
+
+    family = AdapterFamily.MODEL
+
+    @abstractmethod
+    def train_adapter(self, tenant: UUID, texts: Sequence[str]) -> None:
+        """Fit or attach ``tenant``'s per-tenant adapter on ``texts``."""
+
+    @abstractmethod
+    def infer(self, tenant: UUID, prompt: str) -> str:
+        """Run inference for ``tenant`` and return the completion."""
 
 
 class AdapterRegistry:

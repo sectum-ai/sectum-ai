@@ -4,7 +4,7 @@ The engineering spec section 12 places the runner in core; with ADR-0004 the
 package graph stays acyclic (core depends on probes, never the reverse).
 """
 
-from sectum.adapters import CacheAdapter, VectorStoreAdapter
+from sectum.adapters import CacheAdapter, ModelAdapter, VectorStoreAdapter
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
@@ -21,10 +21,12 @@ class Runner:
         *,
         vector: VectorStoreAdapter | None = None,
         cache: CacheAdapter | None = None,
+        model: ModelAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._cache = cache
+        self._model = model
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
@@ -47,6 +49,10 @@ class Runner:
             return self._cache_set(step)
         if step.action == "cache.get":
             return self._cache_get(step)
+        if step.action == "model.train":
+            return self._model_train(step)
+        if step.action == "model.infer":
+            return self._model_infer(step)
         raise ValueError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
@@ -84,6 +90,22 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.SEMANTIC_CACHE,
             raw_response=value or "",
+        )
+
+    def _model_train(self, step: ProbeStep) -> Observation:
+        if self._model is None:
+            raise ValueError("a model.train step needs a model adapter")
+        self._model.train_adapter(step.actor_tenant_id, [step.payload["text"]])
+        return Observation(step_id=step.step_id, surface=Surface.MODEL_ADAPTER, raw_response="")
+
+    def _model_infer(self, step: ProbeStep) -> Observation:
+        if self._model is None:
+            raise ValueError("a model.infer step needs a model adapter")
+        response = self._model.infer(step.actor_tenant_id, step.payload["prompt"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.MODEL_ADAPTER,
+            raw_response=response,
         )
 
 
