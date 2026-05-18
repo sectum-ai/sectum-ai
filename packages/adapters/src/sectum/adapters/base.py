@@ -42,6 +42,7 @@ class Capability(StrEnum):
     TOOL_INVOCATION = "tool_invocation"
     PER_TENANT_ADAPTER = "per_tenant_adapter"
     SHARED_WEIGHTS = "shared_weights"
+    TENANT_SCOPED_TOOLS = "tenant_scoped_tools"
 
 
 class _AdapterValue(BaseModel):

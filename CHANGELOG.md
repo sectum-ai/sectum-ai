@@ -50,9 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 3 - end-to-end examples: `examples/retrieval-pivot` (the flagship
   Class 2 walkthrough, from seeding through a verified evidence pack) and
   `examples/erasure-attestation` (the Class 11 erasure-verification wedge).
-- Phase 4 (in progress) - the model/adapter layer: a `ModelAdapter` adapter
-  family with a deterministic `FakeModel`, and the Class 9 LoRA / adapter
-  cross-tenant-influence probe wired into the `sectum probe` suite.
+- Phase 4 (in progress) - the model/adapter layer and the agent surface: a
+  `ModelAdapter` adapter family with a deterministic `FakeModel`; the Class 9
+  LoRA / adapter cross-tenant-influence probe; and the Class 7 cross-tenant
+  agent tool-call hijacking probe (the MCP confused-deputy and token-passthrough
+  sub-probes) over an extended `FakeMCP`. Both probes join the `sectum probe`
+  suite.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

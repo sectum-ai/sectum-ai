@@ -193,6 +193,29 @@ def test_mcp_lists_and_invokes_tools() -> None:
         mcp.invoke(_TENANT_A, "missing", {})
 
 
+def test_isolated_mcp_keeps_tool_calls_tenant_scoped() -> None:
+    mcp = FakeMCP()
+    assert mcp.supports(Capability.TENANT_SCOPED_TOOLS)
+    mcp.provision(_TENANT_A, "res-1", "alpha resource")
+    assert mcp.invoke(_TENANT_B, "lookup", {"key": "res-1"}).output == ""
+    assert mcp.invoke(_TENANT_A, "lookup", {"key": "res-1"}).output == "alpha resource"
+
+
+def test_mcp_confused_deputy_resolves_keys_across_tenants() -> None:
+    mcp = FakeMCP(confused_deputy=True)
+    assert not mcp.supports(Capability.TENANT_SCOPED_TOOLS)
+    mcp.provision(_TENANT_A, "res-1", "alpha resource")
+    assert mcp.invoke(_TENANT_B, "lookup", {"key": "res-1"}).output == "alpha resource"
+
+
+def test_mcp_token_passthrough_acts_as_the_token_tenant() -> None:
+    mcp = FakeMCP(token_passthrough=True)
+    mcp.provision(_TENANT_A, "res-1", "alpha resource")
+    assert mcp.invoke(_TENANT_B, "lookup", {"key": "res-1"}).output == ""
+    carried = mcp.invoke(_TENANT_B, "lookup", {"key": "res-1", "token": str(_TENANT_A)})
+    assert carried.output == "alpha resource"
+
+
 def test_adapter_registry_registers_lists_and_rejects_duplicates() -> None:
     registry = AdapterRegistry()
     store = FakeVectorStore()

@@ -28,6 +28,7 @@ from sectum.evidence import (
     verify_pack,
 )
 from sectum.probes import (
+    AgentToolHijackProbe,
     ErasureProbe,
     LoraCrossTenantProbe,
     Probe,
@@ -40,6 +41,7 @@ from sectum.runner import Runner, StepResult, retrieval_pivot_rate
 from sectum.spec import (
     EvidencePack,
     Finding,
+    MarkerType,
     RunMetrics,
     RunResult,
     Substrate,
@@ -56,6 +58,7 @@ _SUITE: tuple[Probe, ...] = (
     RagEntityBleedProbe(),
     SemanticCacheProbe(),
     LoraCrossTenantProbe(),
+    AgentToolHijackProbe(),
 )
 
 _CONFIG_TEMPLATE = """\
@@ -202,10 +205,18 @@ def probe(
     vector = FakeVectorStore(shared_index=True)
     cache = FakeCache(tenant_scoped=False)
     model = FakeModel(adapter_bleed=True)
+    mcp = FakeMCP(confused_deputy=True, token_passthrough=True)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         vector.upsert(tenant.tenant_id, documents)
-    runner = Runner(substrate, vector=vector, cache=cache, model=model)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            mcp.provision(
+                marker.owner_tenant_id,
+                marker.marker_id,
+                f"MCP resource. Reference: {marker.plaintext}",
+            )
+    runner = Runner(substrate, vector=vector, cache=cache, model=model, mcp=mcp)
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
@@ -228,6 +239,7 @@ def probe(
             vector.name: __version__,
             cache.name: __version__,
             model.name: __version__,
+            mcp.name: __version__,
         },
         probe_versions={instance.id: __version__ for instance in _SUITE},
         findings=findings,

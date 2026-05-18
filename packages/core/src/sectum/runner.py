@@ -4,7 +4,7 @@ The engineering spec section 12 places the runner in core; with ADR-0004 the
 package graph stays acyclic (core depends on probes, never the reverse).
 """
 
-from sectum.adapters import CacheAdapter, ModelAdapter, VectorStoreAdapter
+from sectum.adapters import CacheAdapter, MCPAdapter, ModelAdapter, VectorStoreAdapter
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
@@ -22,11 +22,13 @@ class Runner:
         vector: VectorStoreAdapter | None = None,
         cache: CacheAdapter | None = None,
         model: ModelAdapter | None = None,
+        mcp: MCPAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._cache = cache
         self._model = model
+        self._mcp = mcp
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
@@ -53,6 +55,8 @@ class Runner:
             return self._model_train(step)
         if step.action == "model.infer":
             return self._model_infer(step)
+        if step.action == "mcp.invoke":
+            return self._mcp_invoke(step)
         raise ValueError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
@@ -106,6 +110,17 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.MODEL_ADAPTER,
             raw_response=response,
+        )
+
+    def _mcp_invoke(self, step: ProbeStep) -> Observation:
+        if self._mcp is None:
+            raise ValueError("an mcp.invoke step needs an MCP adapter")
+        arguments = {key: value for key, value in step.payload.items() if key != "tool"}
+        result = self._mcp.invoke(step.actor_tenant_id, step.payload["tool"], arguments)
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.MCP,
+            raw_response=result.output,
         )
 
 

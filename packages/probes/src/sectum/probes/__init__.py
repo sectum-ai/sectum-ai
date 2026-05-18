@@ -4,6 +4,7 @@ This is the ``sectum.probes`` namespace package (the engineering spec, section
 7). It also hosts the leak-detection pipeline (see ADR-0004).
 """
 
+from sectum.probes.agent_tool_hijack import AgentToolHijackProbe
 from sectum.probes.base import Probe, ProbeRegistry
 from sectum.probes.detection import (
     DetectionPipeline,
@@ -21,6 +22,7 @@ from sectum.probes.semantic_cache import SemanticCacheProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
+    "AgentToolHijackProbe",
     "DetectionPipeline",
     "EmbeddingProvider",
     "ErasureProbe",

@@ -190,10 +190,38 @@ class FakeAgent(AgentAdapter):
 
 
 class FakeMCP(MCPAdapter):
-    """A deterministic in-memory MCP server exposing two tools."""
+    """A deterministic in-memory MCP server exposing an ``echo`` and a ``lookup`` tool.
 
-    def __init__(self, name: str = "fake-mcp") -> None:
-        super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
+    The ``lookup`` tool resolves a key to a tenant resource. Two independent
+    flaws can be switched on, both caught by Class 7:
+
+    - ``confused_deputy=True``: ``lookup`` resolves keys across every tenant's
+      resources - the server has lost the caller's tenant scope.
+    - ``token_passthrough=True``: ``lookup`` honours a caller-supplied ``token``
+      argument and acts as whatever tenant the token names (the Asana-class
+      pattern).
+
+    With both off the server is tenant-scoped and reports that capability.
+    """
+
+    def __init__(
+        self,
+        name: str = "fake-mcp",
+        *,
+        confused_deputy: bool = False,
+        token_passthrough: bool = False,
+    ) -> None:
+        capabilities = {Capability.TOOL_INVOCATION}
+        if not confused_deputy and not token_passthrough:
+            capabilities.add(Capability.TENANT_SCOPED_TOOLS)
+        super().__init__(name, frozenset(capabilities))
+        self._confused_deputy = confused_deputy
+        self._token_passthrough = token_passthrough
+        self._resources: dict[UUID, dict[str, str]] = {}
+
+    def provision(self, tenant: UUID, key: str, value: str) -> None:
+        """Store a tenant resource the ``lookup`` tool can resolve (test helper)."""
+        self._resources.setdefault(tenant, {})[key] = value
 
     def list_tools(self) -> list[str]:
         return list(_MCP_TOOLS)
@@ -203,7 +231,28 @@ class FakeMCP(MCPAdapter):
             raise ValueError(f"unknown tool: {tool}")
         if tool == "echo":
             return McpResult(tool=tool, output=arguments.get("text", ""))
-        return McpResult(tool=tool, output=f"tenant {tenant} lookup: {arguments.get('key', '')}")
+        return McpResult(tool=tool, output=self._lookup(tenant, arguments))
+
+    def _lookup(self, tenant: UUID, arguments: dict[str, str]) -> str:
+        key = arguments.get("key", "")
+        if self._confused_deputy:
+            scopes = list(self._resources.values())
+        else:
+            scopes = [self._resources.get(self._effective_tenant(tenant, arguments), {})]
+        for resources in scopes:
+            if key in resources:
+                return resources[key]
+        return ""
+
+    def _effective_tenant(self, tenant: UUID, arguments: dict[str, str]) -> UUID:
+        # Token passthrough: the server trusts a caller-supplied token instead
+        # of the authenticated caller, so a foreign token reaches a foreign scope.
+        if self._token_passthrough and "token" in arguments:
+            try:
+                return UUID(arguments["token"])
+            except ValueError:
+                return tenant
+        return tenant
 
 
 class FakeCache(CacheAdapter):
