@@ -36,3 +36,29 @@ def test_an_unmeasured_retrieval_pivot_rate_counts_as_zero() -> None:
     baseline = RunMetrics(confirmed_findings=1, retrieval_pivot_rate=None)
     current = RunMetrics(confirmed_findings=1, retrieval_pivot_rate=None)
     assert not compare_metrics(baseline, current).regressed
+
+
+def test_a_higher_side_channel_effect_size_is_a_regression() -> None:
+    baseline = RunMetrics(side_channel_effect_sizes={"acme->globex": 0.2})
+    current = RunMetrics(side_channel_effect_sizes={"acme->globex": 9.4})
+    comparison = compare_metrics(baseline, current)
+    assert comparison.regressed
+    delta = next(
+        d for d in comparison.deltas if d.name == "side_channel_effect_sizes[acme->globex]"
+    )
+    assert delta.regressed
+
+
+def test_new_erasure_residue_is_a_regression() -> None:
+    baseline = RunMetrics(erasure_residue={"vector_db": 0})
+    current = RunMetrics(erasure_residue={"vector_db": 3})
+    assert compare_metrics(baseline, current).regressed
+
+
+def test_unchanged_leakage_metrics_are_not_a_regression() -> None:
+    metrics = RunMetrics(
+        confirmed_findings=4,
+        erasure_residue={"vector_db": 2},
+        side_channel_effect_sizes={"acme->globex": 9.4},
+    )
+    assert not compare_metrics(metrics, metrics).regressed

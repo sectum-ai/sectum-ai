@@ -7,6 +7,7 @@ confirmed findings after an embedding-model or prompt change (the engineering
 spec, sections 10 and 14).
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum.spec import RunMetrics
@@ -38,13 +39,30 @@ class BaselineComparison:
         return any(delta.regressed for delta in self.deltas)
 
 
+def _dict_deltas(
+    label: str, baseline: Mapping[str, float], current: Mapping[str, float]
+) -> list[MetricDelta]:
+    """A MetricDelta per key across both mappings; a key absent on a side is 0.0."""
+    return [
+        MetricDelta(
+            name=f"{label}[{key}]",
+            baseline=float(baseline.get(key, 0.0)),
+            current=float(current.get(key, 0.0)),
+        )
+        for key in sorted(set(baseline) | set(current))
+    ]
+
+
 def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineComparison:
     """Compare a later run's metrics to a baseline; flag every metric that worsened.
 
-    For each headline metric, higher means more leakage, so an increase is a
-    regression. A Retrieval-Pivot Rate that was not measured counts as ``0.0``.
+    Higher means more leakage for every metric, so an increase is a regression.
+    Confirmed findings and the Retrieval-Pivot Rate are compared directly; the
+    per-surface erasure residue and the per-pair side-channel effect sizes are
+    compared key by key. A Retrieval-Pivot Rate that was not measured, or a key
+    absent on one side, counts as ``0.0``.
     """
-    deltas = (
+    deltas: list[MetricDelta] = [
         MetricDelta(
             name="confirmed_findings",
             baseline=float(baseline.confirmed_findings),
@@ -55,5 +73,15 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             baseline=baseline.retrieval_pivot_rate or 0.0,
             current=current.retrieval_pivot_rate or 0.0,
         ),
+    ]
+    deltas.extend(
+        _dict_deltas("erasure_residue", baseline.erasure_residue, current.erasure_residue)
     )
-    return BaselineComparison(deltas=deltas)
+    deltas.extend(
+        _dict_deltas(
+            "side_channel_effect_sizes",
+            baseline.side_channel_effect_sizes,
+            current.side_channel_effect_sizes,
+        )
+    )
+    return BaselineComparison(deltas=tuple(deltas))
