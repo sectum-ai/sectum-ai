@@ -15,11 +15,13 @@ from sectum.adapters import (
     FakeAgent,
     FakeCache,
     FakeMCP,
+    FakeMemory,
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
     FakeVectorStore,
     MCPAdapter,
+    MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
     RAGPipelineAdapter,
@@ -53,6 +55,7 @@ def _all_fakes() -> list[Adapter]:
         FakeMCP(),
         FakeCache(),
         FakeModel(),
+        FakeMemory(),
     ]
 
 
@@ -76,6 +79,7 @@ def test_each_fake_belongs_to_the_expected_family() -> None:
     assert FakeMCP().family is AdapterFamily.MCP
     assert FakeCache().family is AdapterFamily.CACHE
     assert FakeModel().family is AdapterFamily.MODEL
+    assert FakeMemory().family is AdapterFamily.MEMORY
 
 
 def test_isolated_vector_store_does_not_leak_across_tenants() -> None:
@@ -156,6 +160,23 @@ def test_weight_bleed_model_leaks_adapters_across_tenants() -> None:
     assert model.supports(Capability.SHARED_WEIGHTS)
     model.train_adapter(_TENANT_A, ["alpha adapter fact"])
     assert "alpha" in model.infer(_TENANT_B, "recall the adapter fact")
+
+
+def test_isolated_memory_keeps_recall_per_tenant() -> None:
+    memory = FakeMemory()
+    assert isinstance(memory, MemoryAdapter)
+    assert memory.supports(Capability.PER_TENANT_MEMORY)
+    memory.remember(_TENANT_A, "alpha memory note")
+    assert memory.recall(_TENANT_A, "recall the note")
+    assert memory.recall(_TENANT_B, "recall the note") == []
+
+
+def test_shared_memory_leaks_recall_across_tenants() -> None:
+    memory = FakeMemory(shared_memory=True)
+    assert memory.supports(Capability.SHARED_MEMORY)
+    memory.remember(_TENANT_A, "alpha memory note")
+    leaked = memory.recall(_TENANT_B, "recall the note")
+    assert any("alpha" in entry for entry in leaked)
 
 
 def test_rag_pipeline_retrieves_indexed_context() -> None:

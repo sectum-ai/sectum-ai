@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 5 (in progress) - the regression-baseline engine: `sectum baseline`
   saves a run's headline metrics, and `--compare` flags any later run whose
   metrics regressed (more confirmed findings, or a higher Retrieval-Pivot Rate).
+- Phase 5 (in progress) - Class 8, the persistent memory contamination probe,
+  over a new `MemoryAdapter` adapter family with a deterministic `FakeMemory`.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

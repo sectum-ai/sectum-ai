@@ -20,6 +20,7 @@ from sectum.adapters.base import (
     Capability,
     MCPAdapter,
     McpResult,
+    MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
     RagAnswer,
@@ -314,3 +315,29 @@ class FakeModel(ModelAdapter):
         if not recalled:
             return "the adapter recalled nothing for this prompt"
         return " ".join(recalled)
+
+
+class FakeMemory(MemoryAdapter):
+    """A deterministic in-memory long-term memory store.
+
+    With ``shared_memory=True`` a recall spans every tenant's memory - the
+    cross-tenant memory contamination Class 8 is built to catch. With it off, a
+    tenant recalls only its own memory.
+    """
+
+    def __init__(self, name: str = "fake-memory", *, shared_memory: bool = False) -> None:
+        scope = Capability.SHARED_MEMORY if shared_memory else Capability.PER_TENANT_MEMORY
+        super().__init__(name, frozenset({scope}))
+        self._shared_memory = shared_memory
+        self._entries: dict[UUID, list[str]] = {}
+
+    def remember(self, tenant: UUID, text: str) -> None:
+        self._entries.setdefault(tenant, []).append(text)
+
+    def recall(self, tenant: UUID, query: str) -> list[str]:
+        query_tokens = _tokens(query)
+        if self._shared_memory:
+            corpus = [text for entries in self._entries.values() for text in entries]
+        else:
+            corpus = list(self._entries.get(tenant, []))
+        return [text for text in corpus if query_tokens & _tokens(text)]

@@ -31,6 +31,7 @@ nav:
       - Class 2 - Organic entity-bleed RAG: attack-catalog/class-02-rag-entity-bleed.md
       - Class 4 - Semantic-cache contamination: attack-catalog/class-04-semantic-cache.md
       - Class 7 - Agent tool-call hijacking: attack-catalog/class-07-agent-tool-hijack.md
+      - Class 8 - Persistent memory contamination: attack-catalog/class-08-memory-contamination.md
       - Class 9 - LoRA cross-tenant influence: attack-catalog/class-09-lora-cross-tenant.md
       - Class 11 - GDPR Article 17 erasure: attack-catalog/class-11-erasure.md
   - Evidence chain: evidence-chain.md

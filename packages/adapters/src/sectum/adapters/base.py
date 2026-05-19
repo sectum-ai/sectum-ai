@@ -29,6 +29,7 @@ class AdapterFamily(StrEnum):
     MCP = "mcp"
     CACHE = "cache"
     MODEL = "model"
+    MEMORY = "memory"
 
 
 class Capability(StrEnum):
@@ -43,6 +44,8 @@ class Capability(StrEnum):
     PER_TENANT_ADAPTER = "per_tenant_adapter"
     SHARED_WEIGHTS = "shared_weights"
     TENANT_SCOPED_TOOLS = "tenant_scoped_tools"
+    PER_TENANT_MEMORY = "per_tenant_memory"
+    SHARED_MEMORY = "shared_memory"
 
 
 class _AdapterValue(BaseModel):
@@ -222,6 +225,24 @@ class ModelAdapter(Adapter):
     @abstractmethod
     def infer(self, tenant: UUID, prompt: str) -> str:
         """Run inference for ``tenant`` and return the completion."""
+
+
+class MemoryAdapter(Adapter):
+    """Adapter for a long-term or agent memory store.
+
+    Class 8 uses this to verify that one tenant's stored memory does not surface
+    in another tenant's session (the engineering spec, section 7).
+    """
+
+    family = AdapterFamily.MEMORY
+
+    @abstractmethod
+    def remember(self, tenant: UUID, text: str) -> None:
+        """Persist ``text`` in ``tenant``'s memory store."""
+
+    @abstractmethod
+    def recall(self, tenant: UUID, query: str) -> list[str]:
+        """Return memory entries ``tenant`` can recall for ``query``."""
 
 
 class AdapterRegistry:

@@ -4,7 +4,13 @@ The engineering spec section 12 places the runner in core; with ADR-0004 the
 package graph stays acyclic (core depends on probes, never the reverse).
 """
 
-from sectum.adapters import CacheAdapter, MCPAdapter, ModelAdapter, VectorStoreAdapter
+from sectum.adapters import (
+    CacheAdapter,
+    MCPAdapter,
+    MemoryAdapter,
+    ModelAdapter,
+    VectorStoreAdapter,
+)
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
@@ -23,12 +29,14 @@ class Runner:
         cache: CacheAdapter | None = None,
         model: ModelAdapter | None = None,
         mcp: MCPAdapter | None = None,
+        memory: MemoryAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._cache = cache
         self._model = model
         self._mcp = mcp
+        self._memory = memory
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
@@ -57,6 +65,10 @@ class Runner:
             return self._model_infer(step)
         if step.action == "mcp.invoke":
             return self._mcp_invoke(step)
+        if step.action == "memory.write":
+            return self._memory_write(step)
+        if step.action == "memory.recall":
+            return self._memory_recall(step)
         raise ValueError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
@@ -121,6 +133,22 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.MCP,
             raw_response=result.output,
+        )
+
+    def _memory_write(self, step: ProbeStep) -> Observation:
+        if self._memory is None:
+            raise ValueError("a memory.write step needs a memory adapter")
+        self._memory.remember(step.actor_tenant_id, step.payload["text"])
+        return Observation(step_id=step.step_id, surface=Surface.AGENT_MEMORY, raw_response="")
+
+    def _memory_recall(self, step: ProbeStep) -> Observation:
+        if self._memory is None:
+            raise ValueError("a memory.recall step needs a memory adapter")
+        recalled = self._memory.recall(step.actor_tenant_id, step.payload["query"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.AGENT_MEMORY,
+            raw_response="\n".join(recalled),
         )
 
 

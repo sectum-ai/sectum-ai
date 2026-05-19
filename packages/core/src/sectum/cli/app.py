@@ -16,6 +16,7 @@ from sectum.adapters import (
     FakeAgent,
     FakeCache,
     FakeMCP,
+    FakeMemory,
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
@@ -32,6 +33,7 @@ from sectum.probes import (
     AgentToolHijackProbe,
     ErasureProbe,
     LoraCrossTenantProbe,
+    MemoryContamProbe,
     Probe,
     RagEntityBleedProbe,
     SemanticCacheProbe,
@@ -61,6 +63,7 @@ _SUITE: tuple[Probe, ...] = (
     SemanticCacheProbe(),
     LoraCrossTenantProbe(),
     AgentToolHijackProbe(),
+    MemoryContamProbe(),
 )
 
 _CONFIG_TEMPLATE = """\
@@ -135,6 +138,7 @@ def list_adapters() -> None:
         FakeMCP(),
         FakeCache(),
         FakeModel(),
+        FakeMemory(),
     ):
         registry.register(fake)
     typer.echo(f"{'ADAPTER':<22}{'FAMILY':<18}CAPABILITIES")
@@ -218,6 +222,7 @@ def probe(
     cache = FakeCache(tenant_scoped=False)
     model = FakeModel(adapter_bleed=True)
     mcp = FakeMCP(confused_deputy=True, token_passthrough=True)
+    memory = FakeMemory(shared_memory=True)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         vector.upsert(tenant.tenant_id, documents)
@@ -228,7 +233,7 @@ def probe(
                 marker.marker_id,
                 f"MCP resource. Reference: {marker.plaintext}",
             )
-    runner = Runner(substrate, vector=vector, cache=cache, model=model, mcp=mcp)
+    runner = Runner(substrate, vector=vector, cache=cache, model=model, mcp=mcp, memory=memory)
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
@@ -252,6 +257,7 @@ def probe(
             cache.name: __version__,
             model.name: __version__,
             mcp.name: __version__,
+            memory.name: __version__,
         },
         probe_versions={instance.id: __version__ for instance in suite},
         findings=findings,
