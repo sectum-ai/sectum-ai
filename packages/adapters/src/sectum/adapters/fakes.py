@@ -236,6 +236,8 @@ class FakeMCP(MCPAdapter):
     def _lookup(self, tenant: UUID, arguments: dict[str, str]) -> str:
         key = arguments.get("key", "")
         if self._confused_deputy:
+            # Resource keys are globally unique (marker ids), so resolving
+            # across every tenant's resources is unambiguous and order-free.
             scopes = list(self._resources.values())
         else:
             scopes = [self._resources.get(self._effective_tenant(tenant, arguments), {})]

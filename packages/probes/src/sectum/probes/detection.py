@@ -115,6 +115,24 @@ def confirmed_findings(findings: Iterable[Finding]) -> list[Finding]:
     return [finding for finding in findings if finding.status is FindingStatus.CONFIRMED]
 
 
+def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
+    """Collapse findings that share a finding id, keeping the first occurrence.
+
+    The same cross-tenant leak - a marker observed in a tenant - can be detected
+    by more than one probe step: a confused-deputy and a token-passthrough
+    lookup that both resolve the same resource, or repeated adapter recalls.
+    Each detection builds an identical Finding; the run record keeps one.
+    """
+    seen: set[str] = set()
+    unique: list[Finding] = []
+    for finding in findings:
+        if finding.finding_id in seen:
+            continue
+        seen.add(finding.finding_id)
+        unique.append(finding)
+    return unique
+
+
 class DetectionPipeline:
     """Applies exact then semantic then judge detection against a substrate."""
 
@@ -230,7 +248,11 @@ class DetectionPipeline:
         evidence: str,
     ) -> Finding:
         return Finding(
-            finding_id=f"finding-{marker.marker_id}-{observed_in_tenant.hex[:8]}",
+            # Keyed by probe as well as marker and observer: the same marker
+            # reaching the same tenant on two surfaces (say a vector store and a
+            # model adapter) is two distinct findings, while repeated detections
+            # within one probe collapse under dedupe_findings.
+            finding_id=f"finding-{probe_id}-{marker.marker_id}-{observed_in_tenant.hex[:8]}",
             probe_id=probe_id,
             severity=severity,
             confidence=confidence,

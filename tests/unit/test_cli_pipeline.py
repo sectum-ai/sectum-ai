@@ -56,6 +56,14 @@ def test_probe_rejects_an_unknown_probe_id(tmp_path: Path) -> None:
     assert result.exit_code == 3
 
 
+def test_probe_records_no_duplicate_finding_ids(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    run = json.loads((tmp_path / "run.json").read_text())
+    finding_ids = [finding["finding_id"] for finding in run["findings"]]
+    assert finding_ids
+    assert len(finding_ids) == len(set(finding_ids))
+
+
 def test_report_builds_an_evidence_pack_and_pdf(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])

@@ -14,6 +14,7 @@ from sectum.probes.detection import (
     Judge,
     JudgeVerdict,
     confirmed_findings,
+    dedupe_findings,
 )
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
@@ -39,4 +40,5 @@ __all__ = [
     "SurfaceErasure",
     "TenantBoundaryProbe",
     "confirmed_findings",
+    "dedupe_findings",
 ]

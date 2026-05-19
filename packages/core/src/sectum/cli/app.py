@@ -36,6 +36,7 @@ from sectum.probes import (
     SemanticCacheProbe,
     TenantBoundaryProbe,
     confirmed_findings,
+    dedupe_findings,
 )
 from sectum.runner import Runner, StepResult, retrieval_pivot_rate
 from sectum.spec import (
@@ -234,7 +235,7 @@ def probe(
         step_results.extend(runner.run_per_step(probe_instance))
     finished = datetime.now(UTC)
 
-    findings = tuple(finding for _, group in step_results for finding in group)
+    findings = tuple(dedupe_findings(finding for _, group in step_results for finding in group))
     confirmed = confirmed_findings(findings)
     bleed_steps = [
         result for result in step_results if result[0].probe_id == RagEntityBleedProbe.id
