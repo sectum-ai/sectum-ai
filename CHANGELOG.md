@@ -64,6 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adapters, the ADRs, and the threat model, with a build-and-deploy workflow.
 - Phase 4 - the `sectum probe --probe` filter to run a single
   probe, and the `examples/mcp-tenant-boundary` Class 7 walkthrough.
+- Phase 5 (in progress) - the regression-baseline engine: `sectum baseline`
+  saves a run's headline metrics, and `--compare` flags any later run whose
+  metrics regressed (more confirmed findings, or a higher Retrieval-Pivot Rate).
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

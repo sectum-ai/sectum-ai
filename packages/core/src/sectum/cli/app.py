@@ -1,7 +1,7 @@
 """Entry point for the ``sectum`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, and ``init``. ``baseline`` (Phase 5) follows.
+``verify``, ``erasure``, ``init``, and ``baseline``.
 """
 
 from datetime import UTC, datetime
@@ -21,6 +21,7 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
+from sectum.baseline import compare_metrics
 from sectum.evidence import (
     build_evidence_pack,
     control_mappings,
@@ -389,6 +390,43 @@ def init(
         raise typer.Exit(code=3)
     output.write_text(_CONFIG_TEMPLATE)
     typer.echo(f"wrote {output}")
+
+
+@app.command()
+def baseline(
+    workdir: Annotated[
+        Path, typer.Option(help="Directory holding the recorded run.")
+    ] = _DEFAULT_WORKDIR,
+    save: Annotated[
+        bool, typer.Option("--save", help="Save the current run's metrics as the baseline.")
+    ] = False,
+    compare: Annotated[
+        bool,
+        typer.Option("--compare", help="Compare the current run against the saved baseline."),
+    ] = False,
+) -> None:
+    """Save a regression baseline from the current run, or compare against it."""
+    run = _load_run(workdir)
+    baseline_path = workdir / "baseline.json"
+    if save:
+        baseline_path.write_text(run.metrics.model_dump_json(indent=2))
+        typer.echo(f"baseline saved -> {baseline_path}")
+        return
+    if not compare:
+        typer.echo("pass --save to record a baseline or --compare to check against it", err=True)
+        raise typer.Exit(code=3)
+    if not baseline_path.exists():
+        typer.echo(f"no baseline at {baseline_path}; run 'sectum baseline --save' first", err=True)
+        raise typer.Exit(code=3)
+    saved = RunMetrics.model_validate_json(baseline_path.read_text())
+    comparison = compare_metrics(saved, run.metrics)
+    for delta in comparison.deltas:
+        verdict = "REGRESSED" if delta.regressed else "ok"
+        typer.echo(f"[{verdict}] {delta.name}: {delta.baseline:g} -> {delta.current:g}")
+    if comparison.regressed:
+        typer.echo("BASELINE REGRESSION: a metric moved in the worse direction.", err=True)
+        raise typer.Exit(code=2)
+    typer.echo("no regression against the baseline")
 
 
 if __name__ == "__main__":  # pragma: no cover

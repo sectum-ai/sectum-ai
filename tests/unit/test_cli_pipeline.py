@@ -6,6 +6,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from sectum.cli.app import app
+from sectum.spec import RunMetrics
 
 _runner = CliRunner()
 
@@ -62,6 +63,33 @@ def test_probe_records_no_duplicate_finding_ids(tmp_path: Path) -> None:
     finding_ids = [finding["finding_id"] for finding in run["findings"]]
     assert finding_ids
     assert len(finding_ids) == len(set(finding_ids))
+
+
+def test_baseline_saves_and_compares_clean_against_an_unchanged_run(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    saved = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
+    assert saved.exit_code == 0
+    assert (tmp_path / "baseline.json").exists()
+    same = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert same.exit_code == 0
+    assert "no regression" in same.output
+
+
+def test_baseline_compare_flags_an_injected_regression(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    # a baseline taken from a then-clean stack: no leaks, no retrieval pivot
+    (tmp_path / "baseline.json").write_text(
+        RunMetrics(confirmed_findings=0, retrieval_pivot_rate=0.0).model_dump_json()
+    )
+    result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 2
+    assert "REGRESSION" in result.output
+
+
+def test_baseline_compare_without_a_saved_baseline_fails(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 3
 
 
 def test_report_builds_an_evidence_pack_and_pdf(tmp_path: Path) -> None:
