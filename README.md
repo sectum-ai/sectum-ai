@@ -6,12 +6,13 @@ probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
 auditor accepts.
 
-> **Status: pre-alpha.** Phases 0–4 of the build plan are complete: the marker
-> substrate, the leak-detection pipeline, the adapter SDK (with live pgvector
-> and Chroma adapters), the probe interface, the Class 1/2/4/7/9/11 attack
-> catalog, the tamper-evident evidence chain, the `sectum` CLI, a mkdocs
-> documentation site, and the threat model. Phase 5 — the remaining attack
-> classes and the regression-baseline engine — is next.
+> **Status: pre-alpha.** Phases 0–4 of the build plan are complete and Phase 5
+> — the final attack classes and the regression-baseline engine — is in
+> progress. The build spans the marker substrate, the leak-detection pipeline,
+> the adapter SDK (with live pgvector and Chroma adapters), the probe interface,
+> the full Class 1–11 attack catalog, the tamper-evident evidence chain, the
+> regression-baseline engine, the `sectum` CLI, a mkdocs documentation site, and
+> the threat model.
 
 ## The problem
 
@@ -42,8 +43,8 @@ attests.
 | License | Apache-2.0 | Commercial |
 | Marker substrate, attack catalog, adapters | Yes | Yes |
 | Evidence chain + independent `sectum verify` | Yes | Yes |
-| Hosted attestation, registry, scheduled runs | — | Yes |
-| Regression baselines, dashboard | — | Yes |
+| Regression-baseline engine (`sectum baseline`) | Yes | Yes |
+| Hosted attestation, registry, scheduled runs, dashboard | — | Yes |
 | Auditor-grade engagement + branded packs | — | Yes |
 
 The evidence layer is fully open source — anyone can independently verify a
