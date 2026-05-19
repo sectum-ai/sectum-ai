@@ -95,6 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   searches a tenant's traces for a marker over an Arize Phoenix server, with
   each tenant mapped to its own Phoenix project; verified against a
   docker-compose backend.
+- Phase 5 - the live HTTP agent adapter (`HttpAgent`): a generic connector
+  that runs a tenant's task over a JSON HTTP API and surfaces the agent's tool
+  calls, so an agent framework is reachable without a framework-specific SDK;
+  standard-library only.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
