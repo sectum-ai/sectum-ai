@@ -99,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that runs a tenant's task over a JSON HTTP API and surfaces the agent's tool
   calls, so an agent framework is reachable without a framework-specific SDK;
   standard-library only.
+- Phase 5 - the live MCP client adapter (`StdioMCPClient`): a generic Model
+  Context Protocol client that launches a stdio MCP server, lists its tools,
+  and invokes them; a generic MCP call carries no tenant identity unless a
+  tenant-scoping argument is configured.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

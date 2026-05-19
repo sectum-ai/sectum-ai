@@ -19,6 +19,7 @@ dev = [
     "weaviate-client>=4.9",
     "redis>=5",
     "arize-phoenix-client>=2",
+    "mcp>=1",
 ]
 docs = [
     "mkdocs-material>=9.5",

@@ -33,7 +33,10 @@ space Class 4 is built to catch. The Phoenix observability adapter maps each
 tenant to its own project, so a trace search is scoped to that tenant. The
 HTTP RAG and HTTP agent adapters reach a retrieval pipeline or an agent
 framework over a small JSON API, so any backend that adopts their
-request/response contract works without a backend-specific SDK. The vector,
-cache, and observability adapters are verified against docker-compose backends.
+request/response contract works without a backend-specific SDK. The MCP client
+speaks the Model Context Protocol to a stdio server; a generic MCP call carries
+no tenant identity, which is the confused-deputy gap Class 7 examines. The
+vector, cache, and observability adapters are verified against docker-compose
+backends.
 
 Run `sectum adapters` to list the installed adapters and their capabilities.
