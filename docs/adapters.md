@@ -25,11 +25,13 @@ weight bleed, a confused-deputy MCP — so a probe can be exercised against both
 leaky and an isolated stack and the contract suite can confirm a fake reports
 its capabilities honestly.
 
-Live adapters implement the same family interface and are verified against
-docker-compose backends. The pgvector, Chroma, and Weaviate vector stores are
-tenant-isolated and add a `fetch`-by-id primitive alongside similarity `query`.
-The Redis cache prefixes its keys and tenant-scopes them by default;
-constructing it with `tenant_scoped=False` models the shared key space Class 4
-is built to catch.
+Live adapters implement the same family interface. The pgvector, Chroma, and
+Weaviate vector stores are tenant-isolated and add a `fetch`-by-id primitive
+alongside similarity `query`. The Redis cache prefixes its keys and
+tenant-scopes them by default; `tenant_scoped=False` models the shared key
+space Class 4 is built to catch. The HTTP RAG adapter answers a tenant's query
+over a small JSON API, reaching any pipeline that adopts its request/response
+contract without a backend-specific SDK. The vector and cache adapters are
+verified against docker-compose backends.
 
 Run `sectum adapters` to list the installed adapters and their capabilities.

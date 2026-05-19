@@ -88,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each tenant maps to its own Weaviate collection, created with self-provided
   vectors and deterministic object ids so an upsert stays idempotent; verified
   against a docker-compose backend.
+- Phase 5 - the live HTTP RAG adapter (`HttpRAGPipeline`): a generic connector
+  that answers a tenant's query over a JSON HTTP API, so a retrieval pipeline
+  is reachable without a backend-specific SDK; standard-library only.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
