@@ -17,6 +17,9 @@ dev = [
     "psycopg[binary]>=3.3.4",
     "chromadb-client>=0.5",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+]
 
 [tool.ruff]
 line-length = 100

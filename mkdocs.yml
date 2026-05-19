@@ -1,0 +1,53 @@
+site_name: Sectum AI
+site_description: Multi-tenant AI verification.
+site_url: https://docs.sectum.ai
+repo_url: https://github.com/sectum-ai/sectum-ai
+repo_name: sectum-ai/sectum-ai
+copyright: Apache-2.0
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Attack catalog:
+      - Overview: attack-catalog/index.md
+      - Class 1 - Direct tenant boundary fetch: attack-catalog/class-01-tenant-boundary.md
+      - Class 2 - Organic entity-bleed RAG: attack-catalog/class-02-rag-entity-bleed.md
+      - Class 4 - Semantic-cache contamination: attack-catalog/class-04-semantic-cache.md
+      - Class 7 - Agent tool-call hijacking: attack-catalog/class-07-agent-tool-hijack.md
+      - Class 9 - LoRA cross-tenant influence: attack-catalog/class-09-lora-cross-tenant.md
+      - Class 11 - GDPR Article 17 erasure: attack-catalog/class-11-erasure.md
+  - Evidence chain: evidence-chain.md
+  - Compliance mappings: compliance-mappings.md
+  - Adapters: adapters.md
+  - Threat model: threat-model.md
+  - Architecture decisions:
+      - Overview: adr/README.md
+      - adr/0001-monorepo-packaging-layout.md
+      - adr/0002-evidence-layer-oss-boundary.md
+      - adr/0003-deterministic-substrate.md
+      - adr/0004-detection-pipeline-placement.md
+      - adr/0005-examples-named-by-attack-class.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences

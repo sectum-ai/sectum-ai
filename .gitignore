@@ -10,6 +10,9 @@ build/
 dist/
 *.whl
 
+# mkdocs build output
+site/
+
 # uv / virtual environments
 .venv/
 venv/

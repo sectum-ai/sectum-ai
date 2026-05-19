@@ -93,5 +93,5 @@ evidence pack leave it; raw retrieved content stays on-box.
 
 ## Reporting a vulnerability in Sectum AI
 
-See [SECURITY.md](../SECURITY.md). Do not open a public issue for a security
-vulnerability in Sectum AI itself.
+See [SECURITY.md](https://github.com/sectum-ai/sectum-ai/blob/main/SECURITY.md).
+Do not open a public issue for a security vulnerability in Sectum AI itself.
