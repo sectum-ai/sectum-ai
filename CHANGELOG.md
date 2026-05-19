@@ -81,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statistical timing test (a Cohen's d effect size over many trials) that
   detects a shared KV prefix cache; the model adapter gains a `measure_latency`
   method, and the run metrics record per-pair side-channel effect sizes.
+- Phase 5 - the live Redis cache adapter (`RedisCache`): a key-prefixed,
+  tenant-scoped cache over a Redis server, verified against a docker-compose
+  backend; it joins pgvector and Chroma as the third live adapter.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

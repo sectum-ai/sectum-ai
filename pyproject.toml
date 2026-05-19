@@ -16,6 +16,7 @@ dev = [
     "pre-commit>=4.0",
     "psycopg[binary]>=3.3.4",
     "chromadb-client>=0.5",
+    "redis>=5",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -78,6 +79,13 @@ follow_imports = "skip"
 module = ["reportlab", "reportlab.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# redis-py's command return types are broad runtime unions; treat the client
+# as opaque - the Redis adapter's own API is fully typed.
+module = ["redis", "redis.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
@@ -92,7 +100,10 @@ branch = true
 source = ["sectum"]
 # Live adapters are exercised by docker-backed integration tests, not the unit
 # suite; exclude them so the gate measures unit-tested code.
-omit = ["*/sectum/adapters/vector/*"]
+omit = [
+    "*/sectum/adapters/vector/*",
+    "*/sectum/adapters/cache/*",
+]
 
 [tool.coverage.report]
 show_missing = true
