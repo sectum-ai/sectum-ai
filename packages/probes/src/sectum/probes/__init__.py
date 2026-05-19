@@ -16,6 +16,7 @@ from sectum.probes.detection import (
     confirmed_findings,
     dedupe_findings,
 )
+from sectum.probes.embedding_inversion import EmbeddingInversionProbe
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.memory_contam import MemoryContamProbe
@@ -26,6 +27,7 @@ from sectum.probes.tenant_boundary import TenantBoundaryProbe
 __all__ = [
     "AgentToolHijackProbe",
     "DetectionPipeline",
+    "EmbeddingInversionProbe",
     "EmbeddingProvider",
     "ErasureProbe",
     "ErasureReport",

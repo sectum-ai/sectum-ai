@@ -31,6 +31,7 @@ from sectum.evidence import (
 )
 from sectum.probes import (
     AgentToolHijackProbe,
+    EmbeddingInversionProbe,
     ErasureProbe,
     LoraCrossTenantProbe,
     MemoryContamProbe,
@@ -64,6 +65,7 @@ _SUITE: tuple[Probe, ...] = (
     LoraCrossTenantProbe(),
     AgentToolHijackProbe(),
     MemoryContamProbe(),
+    EmbeddingInversionProbe(),
 )
 
 _CONFIG_TEMPLATE = """\

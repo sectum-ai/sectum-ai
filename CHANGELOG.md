@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metrics regressed (more confirmed findings, or a higher Retrieval-Pivot Rate).
 - Phase 5 (in progress) - Class 8, the persistent memory contamination probe,
   over a new `MemoryAdapter` adapter family with a deterministic `FakeMemory`.
+- Phase 5 (in progress) - Class 6, the embedding-inversion probe: a
+  partial-fragment query reconstructs a foreign entity canary from a shared
+  index.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

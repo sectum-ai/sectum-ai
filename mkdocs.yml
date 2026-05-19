@@ -30,6 +30,7 @@ nav:
       - Class 1 - Direct tenant boundary fetch: attack-catalog/class-01-tenant-boundary.md
       - Class 2 - Organic entity-bleed RAG: attack-catalog/class-02-rag-entity-bleed.md
       - Class 4 - Semantic-cache contamination: attack-catalog/class-04-semantic-cache.md
+      - Class 6 - Embedding inversion: attack-catalog/class-06-embedding-inversion.md
       - Class 7 - Agent tool-call hijacking: attack-catalog/class-07-agent-tool-hijack.md
       - Class 8 - Persistent memory contamination: attack-catalog/class-08-memory-contamination.md
       - Class 9 - LoRA cross-tenant influence: attack-catalog/class-09-lora-cross-tenant.md
