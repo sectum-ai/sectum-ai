@@ -29,6 +29,7 @@ nav:
       - Overview: attack-catalog/index.md
       - Class 1 - Direct tenant boundary fetch: attack-catalog/class-01-tenant-boundary.md
       - Class 2 - Organic entity-bleed RAG: attack-catalog/class-02-rag-entity-bleed.md
+      - Class 3 - Adversarial RAG poisoning: attack-catalog/class-03-rag-poisoning.md
       - Class 4 - Semantic-cache contamination: attack-catalog/class-04-semantic-cache.md
       - Class 6 - Embedding inversion: attack-catalog/class-06-embedding-inversion.md
       - Class 7 - Agent tool-call hijacking: attack-catalog/class-07-agent-tool-hijack.md

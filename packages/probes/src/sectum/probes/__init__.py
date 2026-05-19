@@ -22,6 +22,7 @@ from sectum.probes.ikea_extraction import IkeaExtractionProbe
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.memory_contam import MemoryContamProbe
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
+from sectum.probes.rag_poisoning import RagPoisoningProbe
 from sectum.probes.semantic_cache import SemanticCacheProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
 
@@ -42,6 +43,7 @@ __all__ = [
     "Probe",
     "ProbeRegistry",
     "RagEntityBleedProbe",
+    "RagPoisoningProbe",
     "SemanticCacheProbe",
     "SurfaceErasure",
     "TenantBoundaryProbe",

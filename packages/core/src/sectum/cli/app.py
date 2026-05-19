@@ -38,6 +38,7 @@ from sectum.probes import (
     MemoryContamProbe,
     Probe,
     RagEntityBleedProbe,
+    RagPoisoningProbe,
     SemanticCacheProbe,
     TenantBoundaryProbe,
     confirmed_findings,
@@ -68,6 +69,7 @@ _SUITE: tuple[Probe, ...] = (
     MemoryContamProbe(),
     EmbeddingInversionProbe(),
     IkeaExtractionProbe(),
+    RagPoisoningProbe(),
 )
 
 _CONFIG_TEMPLATE = """\

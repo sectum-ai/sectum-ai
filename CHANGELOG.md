@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   index.
 - Phase 5 (in progress) - Class 10, the IKEA-style implicit benign extraction
   probe: a multi-turn sequence of benign queries that extracts foreign content.
+- Phase 5 (in progress) - Class 3, the adversarial RAG poisoning probe: a
+  planted lure document pivots a tenant's canary into others' retrieval; the
+  runner gains a `vector.upsert` action.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

@@ -12,7 +12,7 @@ from sectum.adapters import (
     VectorStoreAdapter,
 )
 from sectum.probes import Probe, confirmed_findings
-from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
+from sectum.spec import CorpusDocument, Finding, Observation, ProbeStep, Substrate, Surface
 
 StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
@@ -55,6 +55,8 @@ class Runner:
             return self._vector_query(step)
         if step.action == "vector.fetch":
             return self._vector_fetch(step)
+        if step.action == "vector.upsert":
+            return self._vector_upsert(step)
         if step.action == "cache.set":
             return self._cache_set(step)
         if step.action == "cache.get":
@@ -91,6 +93,19 @@ class Runner:
             surface=Surface.VECTOR_DB,
             raw_response=hit.content if hit is not None else "",
         )
+
+    def _vector_upsert(self, step: ProbeStep) -> Observation:
+        if self._vector is None:
+            raise ValueError("a vector.upsert step needs a vector adapter")
+        document = CorpusDocument(
+            doc_id=step.payload["doc_id"],
+            tenant_id=step.actor_tenant_id,
+            doc_type="poison",
+            title=step.payload["doc_id"],
+            content=step.payload["content"],
+        )
+        self._vector.upsert(step.actor_tenant_id, [document])
+        return Observation(step_id=step.step_id, surface=Surface.VECTOR_DB, raw_response="")
 
     def _cache_set(self, step: ProbeStep) -> Observation:
         if self._cache is None:
