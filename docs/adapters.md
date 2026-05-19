@@ -14,7 +14,8 @@ capabilities it needs and an adapter reports its isolation posture honestly.
 | Agent | Run a task as a tenant. |
 | MCP | Enumerate and invoke Model Context Protocol tools within a tenant scope. |
 | Cache | Read and write cache entries; report key tenancy. |
-| Model | Train per-tenant adapters and run inference. |
+| Model | Train per-tenant adapters, run inference, and measure inference latency. |
+| Memory | Write and recall long-term agent-memory entries for a tenant. |
 
 ## Fakes and live adapters
 
