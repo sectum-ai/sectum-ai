@@ -38,6 +38,24 @@ def test_probe_without_a_seeded_substrate_fails_cleanly(tmp_path: Path) -> None:
     assert result.exit_code == 3
 
 
+def test_probe_can_run_a_single_probe(tmp_path: Path) -> None:
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["probe", "--workdir", str(tmp_path), "--probe", "agent-tool-hijack"]
+    )
+    assert result.exit_code == 2
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert set(run["probe_versions"]) == {"agent-tool-hijack"}
+    # the Retrieval-Pivot Rate is a Class 2 metric; it is unset when Class 2 did not run
+    assert run["metrics"]["retrieval_pivot_rate"] is None
+
+
+def test_probe_rejects_an_unknown_probe_id(tmp_path: Path) -> None:
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "no-such-probe"])
+    assert result.exit_code == 3
+
+
 def test_report_builds_an_evidence_pack_and_pdf(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])

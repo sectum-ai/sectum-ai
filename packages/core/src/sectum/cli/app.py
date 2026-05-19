@@ -199,9 +199,19 @@ def probe(
     workdir: Annotated[
         Path, typer.Option(help="Directory holding the seeded substrate.")
     ] = _DEFAULT_WORKDIR,
+    only: Annotated[
+        str | None, typer.Option("--probe", help="Run only the probe with this id.")
+    ] = None,
 ) -> None:
     """Run the probe suite against the seeded demo stack and record the findings."""
     substrate = _load_substrate(workdir)
+    suite = _SUITE
+    if only is not None:
+        suite = tuple(instance for instance in _SUITE if instance.id == only)
+        if not suite:
+            available = ", ".join(instance.id for instance in _SUITE)
+            typer.echo(f"unknown probe '{only}'; available: {available}", err=True)
+            raise typer.Exit(code=3)
     vector = FakeVectorStore(shared_index=True)
     cache = FakeCache(tenant_scoped=False)
     model = FakeModel(adapter_bleed=True)
@@ -220,7 +230,7 @@ def probe(
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
-    for probe_instance in _SUITE:
+    for probe_instance in suite:
         step_results.extend(runner.run_per_step(probe_instance))
     finished = datetime.now(UTC)
 
@@ -241,17 +251,18 @@ def probe(
             model.name: __version__,
             mcp.name: __version__,
         },
-        probe_versions={instance.id: __version__ for instance in _SUITE},
+        probe_versions={instance.id: __version__ for instance in suite},
         findings=findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
-            retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps),
+            retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps) if bleed_steps else None,
             per_probe_findings=_per_probe_counts(confirmed),
         ),
     )
     path = workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
-    typer.echo(f"ran {len(_SUITE)} probes: {len(confirmed)} confirmed cross-tenant findings")
+    plural = "" if len(suite) == 1 else "s"
+    typer.echo(f"ran {len(suite)} probe{plural}: {len(confirmed)} confirmed cross-tenant findings")
     if run.metrics.retrieval_pivot_rate is not None:
         typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
     typer.echo(f"run recorded -> {path}")
