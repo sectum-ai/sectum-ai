@@ -50,19 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 3 - end-to-end examples: `examples/retrieval-pivot` (the flagship
   Class 2 walkthrough, from seeding through a verified evidence pack) and
   `examples/erasure-attestation` (the Class 11 erasure-verification wedge).
-- Phase 4 (in progress) - the model/adapter layer and the agent surface: a
+- Phase 4 - the model/adapter layer and the agent surface: a
   `ModelAdapter` adapter family with a deterministic `FakeModel`; the Class 9
   LoRA / adapter cross-tenant-influence probe; and the Class 7 cross-tenant
   agent tool-call hijacking probe (the MCP confused-deputy and token-passthrough
   sub-probes) over an extended `FakeMCP`. Both probes join the `sectum probe`
   suite.
-- Phase 4 (in progress) - the threat model: `docs/threat-model.md` records the
+- Phase 4 - the threat model: `docs/threat-model.md` records the
   trust boundaries, the assets (the ground-truth manifest, evidence packs), the
   deployment modes, and Sectum AI's explicit non-goals.
-- Phase 4 (in progress) - a mkdocs-material documentation site: a page per
+- Phase 4 - a mkdocs-material documentation site: a page per
   implemented attack class, plus the evidence chain, compliance mappings, the
   adapters, the ADRs, and the threat model, with a build-and-deploy workflow.
-- Phase 4 (in progress) - the `sectum probe --probe` filter to run a single
+- Phase 4 - the `sectum probe --probe` filter to run a single
   probe, and the `examples/mcp-tenant-boundary` Class 7 walkthrough.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).

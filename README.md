@@ -6,11 +6,12 @@ probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
 auditor accepts.
 
-> **Status: pre-alpha.** Phases 0–3 of the build plan are complete: the marker
+> **Status: pre-alpha.** Phases 0–4 of the build plan are complete: the marker
 > substrate, the leak-detection pipeline, the adapter SDK (with live pgvector
-> and Chroma adapters), the probe interface, the Class 1/2/4/11 attack catalog,
-> the tamper-evident evidence chain, and the `sectum` CLI. Phase 4 — the killer
-> demo, the remaining probes, and the documentation site — is next.
+> and Chroma adapters), the probe interface, the Class 1/2/4/7/9/11 attack
+> catalog, the tamper-evident evidence chain, the `sectum` CLI, a mkdocs
+> documentation site, and the threat model. Phase 5 — the remaining attack
+> classes and the regression-baseline engine — is next.
 
 ## The problem
 
