@@ -49,3 +49,10 @@ services:
     ports:
       - "8082:8080"
       - "50052:50051"
+
+  # Phoenix serves its UI, query API, and OTLP-HTTP trace ingest on 6006.
+  # No healthcheck: the integration-test fixture retries the connection instead.
+  phoenix:
+    image: arizephoenix/phoenix:version-15.11.0
+    ports:
+      - "6007:6006"

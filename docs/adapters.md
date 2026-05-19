@@ -29,9 +29,11 @@ Live adapters implement the same family interface. The pgvector, Chroma, and
 Weaviate vector stores are tenant-isolated and add a `fetch`-by-id primitive
 alongside similarity `query`. The Redis cache prefixes its keys and
 tenant-scopes them by default; `tenant_scoped=False` models the shared key
-space Class 4 is built to catch. The HTTP RAG adapter answers a tenant's query
-over a small JSON API, reaching any pipeline that adopts its request/response
-contract without a backend-specific SDK. The vector and cache adapters are
-verified against docker-compose backends.
+space Class 4 is built to catch. The Phoenix observability adapter maps each
+tenant to its own project, so a trace search is scoped to that tenant. The HTTP
+RAG adapter answers a tenant's query over a small JSON API, reaching any
+pipeline that adopts its request/response contract without a backend-specific
+SDK. The vector, cache, and observability adapters are verified against
+docker-compose backends.
 
 Run `sectum adapters` to list the installed adapters and their capabilities.

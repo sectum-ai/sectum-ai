@@ -18,6 +18,7 @@ dev = [
     "chromadb-client>=0.5",
     "weaviate-client>=4.9",
     "redis>=5",
+    "arize-phoenix-client>=2",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -111,6 +112,7 @@ source = ["sectum"]
 omit = [
     "*/sectum/adapters/vector/*",
     "*/sectum/adapters/cache/*",
+    "*/sectum/adapters/observability/*",
 ]
 
 [tool.coverage.report]

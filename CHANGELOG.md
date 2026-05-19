@@ -91,6 +91,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 5 - the live HTTP RAG adapter (`HttpRAGPipeline`): a generic connector
   that answers a tenant's query over a JSON HTTP API, so a retrieval pipeline
   is reachable without a backend-specific SDK; standard-library only.
+- Phase 5 - the live Phoenix observability adapter (`PhoenixObservability`):
+  searches a tenant's traces for a marker over an Arize Phoenix server, with
+  each tenant mapped to its own Phoenix project; verified against a
+  docker-compose backend.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

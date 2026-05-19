@@ -8,7 +8,7 @@ auditor accepts.
 
 > **Status: pre-alpha.** All six phases of the build plan (0–5) are complete:
 > the marker substrate, the leak-detection pipeline, the adapter SDK (with live
-> pgvector, Chroma, Weaviate, Redis, and HTTP RAG adapters), the probe
+> adapters for vector stores, caches, observability, and RAG), the probe
 > interface, the full Class 1–11 attack catalog, the tamper-evident evidence
 > chain, the regression-baseline engine, the `sectum` CLI, a mkdocs
 > documentation site, and the threat model.
