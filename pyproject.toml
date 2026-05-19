@@ -16,6 +16,7 @@ dev = [
     "pre-commit>=4.0",
     "psycopg[binary]>=3.3.4",
     "chromadb-client>=0.5",
+    "weaviate-client>=4.9",
     "redis>=5",
 ]
 docs = [
@@ -83,6 +84,13 @@ ignore_missing_imports = true
 # redis-py's command return types are broad runtime unions; treat the client
 # as opaque - the Redis adapter's own API is fully typed.
 module = ["redis", "redis.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# weaviate-client types its sync methods with return unions that also cover the
+# async client; treat the package as opaque - the adapter's own API is typed.
+module = ["weaviate", "weaviate.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

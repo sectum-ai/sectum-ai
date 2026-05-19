@@ -33,3 +33,19 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # The v4 Weaviate client needs both the HTTP (8080) and gRPC (50051) ports.
+  # No healthcheck: the image ships no shell or curl, so the integration-test
+  # fixture retries the connection instead.
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.28.4
+    command: ["--host", "0.0.0.0", "--port", "8080", "--scheme", "http"]
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      QUERY_DEFAULTS_LIMIT: "25"
+      CLUSTER_HOSTNAME: "node1"
+    ports:
+      - "8082:8080"
+      - "50052:50051"

@@ -84,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 5 - the live Redis cache adapter (`RedisCache`): a key-prefixed,
   tenant-scoped cache over a Redis server, verified against a docker-compose
   backend; it joins pgvector and Chroma as the third live adapter.
+- Phase 5 - the live Weaviate vector-store adapter (`WeaviateVectorStore`):
+  each tenant maps to its own Weaviate collection, created with self-provided
+  vectors and deterministic object ids so an upsert stays idempotent; verified
+  against a docker-compose backend.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

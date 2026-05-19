@@ -26,7 +26,7 @@ leaky and an isolated stack and the contract suite can confirm a fake reports
 its capabilities honestly.
 
 Live adapters implement the same family interface and are verified against
-docker-compose backends. The pgvector and Chroma vector stores are
+docker-compose backends. The pgvector, Chroma, and Weaviate vector stores are
 tenant-isolated and add a `fetch`-by-id primitive alongside similarity `query`.
 The Redis cache prefixes its keys and tenant-scopes them by default;
 constructing it with `tenant_scoped=False` models the shared key space Class 4
