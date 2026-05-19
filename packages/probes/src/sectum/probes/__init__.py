@@ -18,6 +18,7 @@ from sectum.probes.detection import (
 )
 from sectum.probes.embedding_inversion import EmbeddingInversionProbe
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
+from sectum.probes.ikea_extraction import IkeaExtractionProbe
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.memory_contam import MemoryContamProbe
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
@@ -33,6 +34,7 @@ __all__ = [
     "ErasureReport",
     "FakeEmbeddingProvider",
     "FakeJudge",
+    "IkeaExtractionProbe",
     "Judge",
     "JudgeVerdict",
     "LoraCrossTenantProbe",

@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 5 (in progress) - Class 6, the embedding-inversion probe: a
   partial-fragment query reconstructs a foreign entity canary from a shared
   index.
+- Phase 5 (in progress) - Class 10, the IKEA-style implicit benign extraction
+  probe: a multi-turn sequence of benign queries that extracts foreign content.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

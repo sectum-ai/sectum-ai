@@ -33,6 +33,7 @@ from sectum.probes import (
     AgentToolHijackProbe,
     EmbeddingInversionProbe,
     ErasureProbe,
+    IkeaExtractionProbe,
     LoraCrossTenantProbe,
     MemoryContamProbe,
     Probe,
@@ -66,6 +67,7 @@ _SUITE: tuple[Probe, ...] = (
     AgentToolHijackProbe(),
     MemoryContamProbe(),
     EmbeddingInversionProbe(),
+    IkeaExtractionProbe(),
 )
 
 _CONFIG_TEMPLATE = """\
