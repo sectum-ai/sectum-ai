@@ -30,7 +30,7 @@ from sectum.adapters.base import (
     VectorHit,
     VectorStoreAdapter,
 )
-from sectum.spec import CorpusDocument
+from sectum.spec import AdapterError, CorpusDocument
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _MCP_TOOLS = ("echo", "lookup")
@@ -230,7 +230,7 @@ class FakeMCP(MCPAdapter):
 
     def invoke(self, tenant: UUID, tool: str, arguments: dict[str, str]) -> McpResult:
         if tool not in _MCP_TOOLS:
-            raise ValueError(f"unknown tool: {tool}")
+            raise AdapterError(f"unknown tool: {tool}")
         if tool == "echo":
             return McpResult(tool=tool, output=arguments.get("text", ""))
         return McpResult(tool=tool, output=self._lookup(tenant, arguments))

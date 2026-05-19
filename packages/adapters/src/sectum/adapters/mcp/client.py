@@ -22,6 +22,7 @@ from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
 from sectum.adapters.base import Capability, MCPAdapter, McpResult
+from sectum.spec import AdapterError
 
 
 class StdioMCPClient(MCPAdapter):
@@ -67,5 +68,5 @@ class StdioMCPClient(MCPAdapter):
             result = await session.call_tool(tool, dict(call_arguments))
         output = "".join(block.text for block in result.content if isinstance(block, TextContent))
         if result.isError:
-            raise ValueError(f"MCP tool {tool!r} failed: {output}")
+            raise AdapterError(f"MCP tool {tool!r} failed: {output}")
         return McpResult(tool=tool, output=output)

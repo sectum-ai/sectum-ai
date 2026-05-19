@@ -18,7 +18,14 @@ same-tenant retrieval competition.
 
 import random
 
-from sectum.spec import CorpusDocument, Marker, PlantedLocation, SharedEntity, SyntheticTenantSpec
+from sectum.spec import (
+    ConfigError,
+    CorpusDocument,
+    Marker,
+    PlantedLocation,
+    SharedEntity,
+    SyntheticTenantSpec,
+)
 
 _DOC_TYPES: tuple[str, ...] = (
     "hr_record",
@@ -167,7 +174,7 @@ def _pivot_assignments(
     if not shared_entities or not markers:
         return {}
     if size < len(markers):
-        raise ValueError(
+        raise ConfigError(
             f"corpus_size ({size}) must be at least the markers-per-tenant count "
             f"({len(markers)}) so every marker gets its own pivot document"
         )

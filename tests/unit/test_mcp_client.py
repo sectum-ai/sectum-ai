@@ -12,6 +12,7 @@ import pytest
 
 from sectum.adapters.base import Capability
 from sectum.adapters.mcp.client import StdioMCPClient
+from sectum.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 _STUB = str(Path(__file__).parent / "mcp_server_stub.py")
@@ -46,5 +47,5 @@ def test_mcp_forwards_the_tenant_when_configured() -> None:
 
 
 def test_mcp_raises_on_a_failed_tool_call() -> None:
-    with pytest.raises(ValueError, match="failed"):
+    with pytest.raises(AdapterError, match="failed"):
         _client().invoke(_TENANT, "nonexistent", {})

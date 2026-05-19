@@ -12,7 +12,15 @@ from sectum.adapters import (
     VectorStoreAdapter,
 )
 from sectum.probes import Probe, confirmed_findings
-from sectum.spec import CorpusDocument, Finding, Observation, ProbeStep, Substrate, Surface
+from sectum.spec import (
+    AdapterError,
+    CorpusDocument,
+    Finding,
+    Observation,
+    ProbeStep,
+    Substrate,
+    Surface,
+)
 
 StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
@@ -75,7 +83,7 @@ class Runner:
 
     def _vector_query(self, step: ProbeStep) -> Observation:
         if self._vector is None:
-            raise ValueError("a vector.query step needs a vector adapter")
+            raise AdapterError("a vector.query step needs a vector adapter")
         k = int(step.payload.get("k", "5"))
         hits = self._vector.query(step.actor_tenant_id, step.payload["query"], k)
         return Observation(
@@ -86,7 +94,7 @@ class Runner:
 
     def _vector_fetch(self, step: ProbeStep) -> Observation:
         if self._vector is None:
-            raise ValueError("a vector.fetch step needs a vector adapter")
+            raise AdapterError("a vector.fetch step needs a vector adapter")
         hit = self._vector.fetch(step.actor_tenant_id, step.payload["doc_id"])
         return Observation(
             step_id=step.step_id,
@@ -96,7 +104,7 @@ class Runner:
 
     def _vector_upsert(self, step: ProbeStep) -> Observation:
         if self._vector is None:
-            raise ValueError("a vector.upsert step needs a vector adapter")
+            raise AdapterError("a vector.upsert step needs a vector adapter")
         document = CorpusDocument(
             doc_id=step.payload["doc_id"],
             tenant_id=step.actor_tenant_id,
@@ -109,13 +117,13 @@ class Runner:
 
     def _cache_set(self, step: ProbeStep) -> Observation:
         if self._cache is None:
-            raise ValueError("a cache.set step needs a cache adapter")
+            raise AdapterError("a cache.set step needs a cache adapter")
         self._cache.set(step.actor_tenant_id, step.payload["key"], step.payload["value"])
         return Observation(step_id=step.step_id, surface=Surface.SEMANTIC_CACHE, raw_response="")
 
     def _cache_get(self, step: ProbeStep) -> Observation:
         if self._cache is None:
-            raise ValueError("a cache.get step needs a cache adapter")
+            raise AdapterError("a cache.get step needs a cache adapter")
         value = self._cache.get(step.actor_tenant_id, step.payload["key"])
         return Observation(
             step_id=step.step_id,
@@ -125,13 +133,13 @@ class Runner:
 
     def _model_train(self, step: ProbeStep) -> Observation:
         if self._model is None:
-            raise ValueError("a model.train step needs a model adapter")
+            raise AdapterError("a model.train step needs a model adapter")
         self._model.train_adapter(step.actor_tenant_id, [step.payload["text"]])
         return Observation(step_id=step.step_id, surface=Surface.MODEL_ADAPTER, raw_response="")
 
     def _model_infer(self, step: ProbeStep) -> Observation:
         if self._model is None:
-            raise ValueError("a model.infer step needs a model adapter")
+            raise AdapterError("a model.infer step needs a model adapter")
         response = self._model.infer(step.actor_tenant_id, step.payload["prompt"])
         return Observation(
             step_id=step.step_id,
@@ -141,7 +149,7 @@ class Runner:
 
     def _mcp_invoke(self, step: ProbeStep) -> Observation:
         if self._mcp is None:
-            raise ValueError("an mcp.invoke step needs an MCP adapter")
+            raise AdapterError("an mcp.invoke step needs an MCP adapter")
         arguments = {key: value for key, value in step.payload.items() if key != "tool"}
         result = self._mcp.invoke(step.actor_tenant_id, step.payload["tool"], arguments)
         return Observation(
@@ -152,13 +160,13 @@ class Runner:
 
     def _memory_write(self, step: ProbeStep) -> Observation:
         if self._memory is None:
-            raise ValueError("a memory.write step needs a memory adapter")
+            raise AdapterError("a memory.write step needs a memory adapter")
         self._memory.remember(step.actor_tenant_id, step.payload["text"])
         return Observation(step_id=step.step_id, surface=Surface.AGENT_MEMORY, raw_response="")
 
     def _memory_recall(self, step: ProbeStep) -> Observation:
         if self._memory is None:
-            raise ValueError("a memory.recall step needs a memory adapter")
+            raise AdapterError("a memory.recall step needs a memory adapter")
         recalled = self._memory.recall(step.actor_tenant_id, step.payload["query"])
         return Observation(
             step_id=step.step_id,

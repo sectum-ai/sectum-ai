@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 
+from sectum.spec import ConfigError
 from sectum.substrate import build_substrate, default_scenario
 
 _EXPECTED_TENANTS = (
@@ -57,5 +58,5 @@ def test_every_marker_rides_in_a_shared_entity_document() -> None:
 
 def test_corpus_smaller_than_the_marker_count_is_rejected() -> None:
     """A corpus too small to give every marker its own pivot document is rejected."""
-    with pytest.raises(ValueError, match="markers-per-tenant"):
+    with pytest.raises(ConfigError, match="markers-per-tenant"):
         build_substrate(default_scenario(seed=1, corpus_size=3))

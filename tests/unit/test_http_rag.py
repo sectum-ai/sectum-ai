@@ -13,6 +13,7 @@ from uuid import UUID
 import pytest
 
 from sectum.adapters.rag.http import HttpRAGPipeline
+from sectum.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 
@@ -81,17 +82,17 @@ def test_http_rag_sends_configured_headers(rag_url: str) -> None:
 
 
 def test_http_rag_rejects_a_non_http_url() -> None:
-    with pytest.raises(ValueError, match="http"):
+    with pytest.raises(AdapterError, match="http"):
         HttpRAGPipeline("file:///etc/passwd")
 
 
 def test_http_rag_rejects_a_non_object_response(rag_url: str) -> None:
     rag = HttpRAGPipeline(rag_url + "badresponse")
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(AdapterError, match="JSON object"):
         rag.ask(_TENANT, "anything")
 
 
 def test_http_rag_rejects_a_non_object_retrieved_item(rag_url: str) -> None:
     rag = HttpRAGPipeline(rag_url + "baditem")
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(AdapterError, match="JSON object"):
         rag.ask(_TENANT, "anything")

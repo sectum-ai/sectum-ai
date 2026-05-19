@@ -13,7 +13,7 @@ from uuid import UUID
 import psycopg
 
 from sectum.adapters.base import Capability, VectorHit, VectorStoreAdapter
-from sectum.spec import CorpusDocument
+from sectum.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""
@@ -32,7 +32,7 @@ class PgVectorStore(VectorStoreAdapter):
         table: str = "sectum_vectors",
     ) -> None:
         if not table.isidentifier():
-            raise ValueError(f"invalid table name: {table!r}")
+            raise AdapterError(f"invalid table name: {table!r}")
         super().__init__(name, frozenset({Capability.PER_TENANT_NAMESPACE}))
         self._dsn = dsn
         self._embed = embed

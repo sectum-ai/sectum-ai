@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from sectum.adapters.base import RagAnswer, RAGPipelineAdapter, VectorHit
+from sectum.spec import AdapterError
 
 
 class HttpRAGPipeline(RAGPipelineAdapter):
@@ -38,7 +39,7 @@ class HttpRAGPipeline(RAGPipelineAdapter):
         timeout: float = 30.0,
     ) -> None:
         if urlparse(url).scheme not in ("http", "https"):
-            raise ValueError(f"url must be an http(s) URL: {url!r}")
+            raise AdapterError(f"url must be an http(s) URL: {url!r}")
         super().__init__(name)
         self._url = url
         self._headers = dict(headers) if headers else {}
@@ -55,7 +56,7 @@ class HttpRAGPipeline(RAGPipelineAdapter):
         with urllib.request.urlopen(request, timeout=self._timeout) as response:
             body = json.loads(response.read())
         if not isinstance(body, dict):
-            raise ValueError(f"RAG response must be a JSON object, got {type(body).__name__}")
+            raise AdapterError(f"RAG response must be a JSON object, got {type(body).__name__}")
         retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
         return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
 
@@ -63,7 +64,7 @@ class HttpRAGPipeline(RAGPipelineAdapter):
     def _hit(tenant: UUID, item: object) -> VectorHit:
         """Parse one retrieved item from the response into a ``VectorHit``."""
         if not isinstance(item, dict):
-            raise ValueError(f"retrieved item must be a JSON object, got {type(item).__name__}")
+            raise AdapterError(f"retrieved item must be a JSON object, got {type(item).__name__}")
         return VectorHit(
             doc_id=str(item.get("doc_id", "")),
             tenant_id=tenant,

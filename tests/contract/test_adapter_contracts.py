@@ -27,7 +27,7 @@ from sectum.adapters import (
     RAGPipelineAdapter,
     VectorStoreAdapter,
 )
-from sectum.spec import CorpusDocument
+from sectum.spec import AdapterError, CorpusDocument
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
@@ -227,7 +227,7 @@ def test_mcp_lists_and_invokes_tools() -> None:
     assert isinstance(mcp, MCPAdapter)
     assert "echo" in mcp.list_tools()
     assert mcp.invoke(_TENANT_A, "echo", {"text": "hello"}).output == "hello"
-    with pytest.raises(ValueError, match="unknown tool"):
+    with pytest.raises(AdapterError, match="unknown tool"):
         mcp.invoke(_TENANT_A, "missing", {})
 
 

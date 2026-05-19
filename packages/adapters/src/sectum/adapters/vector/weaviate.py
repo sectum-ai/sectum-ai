@@ -19,7 +19,7 @@ from weaviate.classes.query import MetadataQuery
 from weaviate.util import generate_uuid5
 
 from sectum.adapters.base import Capability, VectorHit, VectorStoreAdapter
-from sectum.spec import CorpusDocument
+from sectum.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""
@@ -39,7 +39,7 @@ class WeaviateVectorStore(VectorStoreAdapter):
         prefix: str = "Sectum",
     ) -> None:
         if not (prefix.isalnum() and prefix[:1].isupper()):
-            raise ValueError(
+            raise AdapterError(
                 f"prefix must be alphanumeric and start with an uppercase letter: {prefix!r}"
             )
         super().__init__(name, frozenset({Capability.PER_TENANT_NAMESPACE}))

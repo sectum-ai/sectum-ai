@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from sectum.adapters.base import AgentAdapter, AgentResult, Capability
+from sectum.spec import AdapterError
 
 
 class HttpAgent(AgentAdapter):
@@ -37,7 +38,7 @@ class HttpAgent(AgentAdapter):
         timeout: float = 30.0,
     ) -> None:
         if urlparse(url).scheme not in ("http", "https"):
-            raise ValueError(f"url must be an http(s) URL: {url!r}")
+            raise AdapterError(f"url must be an http(s) URL: {url!r}")
         super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
         self._url = url
         self._headers = dict(headers) if headers else {}
@@ -54,6 +55,6 @@ class HttpAgent(AgentAdapter):
         with urllib.request.urlopen(request, timeout=self._timeout) as response:
             body = json.loads(response.read())
         if not isinstance(body, dict):
-            raise ValueError(f"agent response must be a JSON object, got {type(body).__name__}")
+            raise AdapterError(f"agent response must be a JSON object, got {type(body).__name__}")
         tool_calls = tuple(str(call) for call in body.get("tool_calls", []))
         return AgentResult(output=str(body.get("output", "")), tool_calls=tool_calls)

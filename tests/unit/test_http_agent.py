@@ -13,6 +13,7 @@ from uuid import UUID
 import pytest
 
 from sectum.adapters.agent.http import HttpAgent
+from sectum.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 
@@ -79,11 +80,11 @@ def test_http_agent_defaults_tool_calls_to_empty(agent_url: str) -> None:
 
 
 def test_http_agent_rejects_a_non_http_url() -> None:
-    with pytest.raises(ValueError, match="http"):
+    with pytest.raises(AdapterError, match="http"):
         HttpAgent("file:///etc/passwd")
 
 
 def test_http_agent_rejects_a_non_object_response(agent_url: str) -> None:
     agent = HttpAgent(agent_url + "badresponse")
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(AdapterError, match="JSON object"):
         agent.run(_TENANT, "anything")

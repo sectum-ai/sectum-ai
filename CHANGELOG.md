@@ -103,6 +103,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Context Protocol client that launches a stdio MCP server, lists its tools,
   and invokes them; a generic MCP call carries no tenant identity unless a
   tenant-scoping argument is configured.
+- The typed `SectumError` exception hierarchy (`ConfigError`, `AdapterError`,
+  `EvidenceError`, `DetectionError`) in `sectum-ai-spec` (the engineering spec,
+  section 16); the adapter, runner, and substrate error conditions now raise
+  the typed errors instead of a bare `ValueError`.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
