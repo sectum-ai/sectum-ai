@@ -10,6 +10,7 @@ the classes below are implemented today.
 | [2 — Organic entity-bleed RAG](class-02-rag-entity-bleed.md) | `rag-entity-bleed` | vector DB |
 | [3 — Adversarial RAG poisoning](class-03-rag-poisoning.md) | `rag-poisoning` | vector DB |
 | [4 — Semantic-cache contamination](class-04-semantic-cache.md) | `semantic-cache-contamination` | semantic cache |
+| [5 — KV-cache timing side channel](class-05-kv-cache-timing.md) | `kv-cache-timing` | KV cache |
 | [6 — Embedding inversion across tenants](class-06-embedding-inversion.md) | `embedding-inversion` | vector DB |
 | [7 — Agent tool-call hijacking](class-07-agent-tool-hijack.md) | `agent-tool-hijack` | MCP |
 | [8 — Persistent memory contamination](class-08-memory-contamination.md) | `memory-contamination` | agent memory |
@@ -19,5 +20,6 @@ the classes below are implemented today.
 
 Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses**.
 
-Class 5 is on the roadmap. Class 12 — the tamper-evident audit chain — is the
-cross-cutting [evidence chain](../evidence-chain.md).
+All eleven adversarial attack classes are implemented. Class 12 — the
+tamper-evident audit chain — is the cross-cutting
+[evidence chain](../evidence-chain.md).

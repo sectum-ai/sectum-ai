@@ -46,6 +46,7 @@ class Capability(StrEnum):
     TENANT_SCOPED_TOOLS = "tenant_scoped_tools"
     PER_TENANT_MEMORY = "per_tenant_memory"
     SHARED_MEMORY = "shared_memory"
+    SHARED_PREFIX_CACHE = "shared_prefix_cache"
 
 
 class _AdapterValue(BaseModel):
@@ -225,6 +226,13 @@ class ModelAdapter(Adapter):
     @abstractmethod
     def infer(self, tenant: UUID, prompt: str) -> str:
         """Run inference for ``tenant`` and return the completion."""
+
+    @abstractmethod
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        """Return the inference latency in milliseconds for ``prompt``.
+
+        Class 5 uses this to detect a KV prefix-cache timing side channel.
+        """
 
 
 class MemoryAdapter(Adapter):

@@ -162,6 +162,23 @@ def test_weight_bleed_model_leaks_adapters_across_tenants() -> None:
     assert "alpha" in model.infer(_TENANT_B, "recall the adapter fact")
 
 
+def test_model_prefix_cache_speeds_up_a_warmed_prefix() -> None:
+    model = FakeModel(prefix_cache=True)
+    assert model.supports(Capability.SHARED_PREFIX_CACHE)
+    cold = model.measure_latency(_TENANT_A, "shared-session-prefix probe one")
+    model.infer(_TENANT_B, "shared-session-prefix warm-up")
+    warm = model.measure_latency(_TENANT_A, "shared-session-prefix probe two")
+    # the prefix warmed by tenant B is measurably faster for tenant A
+    assert warm < cold
+
+
+def test_model_without_prefix_cache_does_not_speed_up() -> None:
+    model = FakeModel()
+    assert not model.supports(Capability.SHARED_PREFIX_CACHE)
+    model.infer(_TENANT_B, "shared-session-prefix warm-up")
+    assert model.measure_latency(_TENANT_A, "shared-session-prefix probe two") >= 100.0
+
+
 def test_isolated_memory_keeps_recall_per_tenant() -> None:
     memory = FakeMemory()
     assert isinstance(memory, MemoryAdapter)

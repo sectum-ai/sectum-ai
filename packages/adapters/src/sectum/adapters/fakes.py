@@ -9,6 +9,7 @@ The fakes are consolidated in this module for now; per-family modules
 (``vector/pgvector.py`` and so on) are introduced alongside the live adapters.
 """
 
+import hashlib
 import re
 from collections.abc import Sequence
 from uuid import UUID
@@ -286,23 +287,41 @@ class FakeCache(CacheAdapter):
 
 
 class FakeModel(ModelAdapter):
-    """A deterministic in-memory model with per-tenant adapters.
+    """A deterministic in-memory model with per-tenant adapters and a prefix cache.
 
     With ``adapter_bleed=True`` one tenant's adapter influences another
     tenant's inference - the weight-bleed condition Class 9 is built to catch.
-    With it off, a tenant's inference draws only on that tenant's own adapter.
+    With ``prefix_cache=True`` the model keeps a KV prefix cache shared across
+    tenants: a prompt whose prefix was recently seen returns faster, the timing
+    side channel Class 5 is built to catch. Both default to off.
     """
 
-    def __init__(self, name: str = "fake-model", *, adapter_bleed: bool = False) -> None:
+    _BASE_LATENCY_MS = 100.0
+    _CACHE_HIT_SPEEDUP_MS = 60.0
+
+    def __init__(
+        self,
+        name: str = "fake-model",
+        *,
+        adapter_bleed: bool = False,
+        prefix_cache: bool = False,
+    ) -> None:
         scope = Capability.SHARED_WEIGHTS if adapter_bleed else Capability.PER_TENANT_ADAPTER
-        super().__init__(name, frozenset({scope}))
+        capabilities = {scope}
+        if prefix_cache:
+            capabilities.add(Capability.SHARED_PREFIX_CACHE)
+        super().__init__(name, frozenset(capabilities))
         self._adapter_bleed = adapter_bleed
+        self._prefix_cache = prefix_cache
         self._adapters: dict[UUID, list[str]] = {}
+        self._warmed_prefixes: set[str] = set()
 
     def train_adapter(self, tenant: UUID, texts: Sequence[str]) -> None:
         self._adapters.setdefault(tenant, []).extend(texts)
 
     def infer(self, tenant: UUID, prompt: str) -> str:
+        # Running a prompt warms the shared prefix cache for whoever asks next.
+        self._warmed_prefixes.add(self._prefix(prompt))
         # The model "recalls" memorized adapter text that overlaps the prompt.
         # With weight bleed it recalls across every tenant's adapter, not just
         # the caller's - so a foreign tenant's memorized canary surfaces.
@@ -315,6 +334,29 @@ class FakeModel(ModelAdapter):
         if not recalled:
             return "the adapter recalled nothing for this prompt"
         return " ".join(recalled)
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        """Return a deterministic inference latency in milliseconds.
+
+        A shared prefix cache returns a recently-seen prefix faster, so a
+        prompt that shares a prefix with another tenant's warmed prompt is
+        measurably quicker - the side channel. The jitter is keyed on the
+        prompt's last token, so a probe's paired primed and control trials
+        carry a paired noise term and the no-cache control has zero net signal.
+        """
+        tokens = prompt.split()
+        jitter_key = tokens[-1] if tokens else prompt
+        digest = hashlib.sha256(jitter_key.encode("utf-8")).digest()
+        jitter = float(int.from_bytes(digest[:2], "big") % 16)
+        latency = self._BASE_LATENCY_MS + jitter
+        if self._prefix_cache and self._prefix(prompt) in self._warmed_prefixes:
+            latency -= self._CACHE_HIT_SPEEDUP_MS
+        return latency
+
+    @staticmethod
+    def _prefix(prompt: str) -> str:
+        """The cache-key prefix of a prompt: its leading characters."""
+        return prompt[:20]
 
 
 class FakeMemory(MemoryAdapter):

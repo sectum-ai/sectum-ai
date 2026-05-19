@@ -19,6 +19,7 @@ from sectum.probes.detection import (
 from sectum.probes.embedding_inversion import EmbeddingInversionProbe
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
 from sectum.probes.ikea_extraction import IkeaExtractionProbe
+from sectum.probes.kv_cache_timing import KvCacheTimingProbe, KvCacheTimingReport, TimingSignal
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.memory_contam import MemoryContamProbe
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
@@ -38,6 +39,8 @@ __all__ = [
     "IkeaExtractionProbe",
     "Judge",
     "JudgeVerdict",
+    "KvCacheTimingProbe",
+    "KvCacheTimingReport",
     "LoraCrossTenantProbe",
     "MemoryContamProbe",
     "Probe",
@@ -47,6 +50,7 @@ __all__ = [
     "SemanticCacheProbe",
     "SurfaceErasure",
     "TenantBoundaryProbe",
+    "TimingSignal",
     "confirmed_findings",
     "dedupe_findings",
 ]

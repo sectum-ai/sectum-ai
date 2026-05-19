@@ -48,7 +48,7 @@ isolation. Every benign cross-tenant query retrieves a foreign canary, so the
 headline **Retrieval-Pivot Rate is 100%**:
 
 ```
-ran 9 probes: 243 confirmed cross-tenant findings
+ran 10 probes: 255 confirmed cross-tenant findings
 retrieval-pivot rate: 100%
 ```
 

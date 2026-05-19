@@ -77,6 +77,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 5 (in progress) - Class 3, the adversarial RAG poisoning probe: a
   planted lure document pivots a tenant's canary into others' retrieval; the
   runner gains a `vector.upsert` action.
+- Phase 5 (in progress) - Class 5, the KV-cache timing side-channel probe: a
+  statistical timing test (a Cohen's d effect size over many trials) that
+  detects a shared KV prefix cache; the model adapter gains a `measure_latency`
+  method, and the run metrics record per-pair side-channel effect sizes.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

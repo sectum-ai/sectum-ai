@@ -34,6 +34,7 @@ from sectum.probes import (
     EmbeddingInversionProbe,
     ErasureProbe,
     IkeaExtractionProbe,
+    KvCacheTimingProbe,
     LoraCrossTenantProbe,
     MemoryContamProbe,
     Probe,
@@ -218,15 +219,17 @@ def probe(
     """Run the probe suite against the seeded demo stack and record the findings."""
     substrate = _load_substrate(workdir)
     suite = _SUITE
+    run_kv_timing = True
     if only is not None:
-        suite = tuple(instance for instance in _SUITE if instance.id == only)
-        if not suite:
-            available = ", ".join(instance.id for instance in _SUITE)
-            typer.echo(f"unknown probe '{only}'; available: {available}", err=True)
+        available = [instance.id for instance in _SUITE] + [KvCacheTimingProbe.id]
+        if only not in available:
+            typer.echo(f"unknown probe '{only}'; available: {', '.join(available)}", err=True)
             raise typer.Exit(code=3)
+        suite = tuple(instance for instance in _SUITE if instance.id == only)
+        run_kv_timing = only == KvCacheTimingProbe.id
     vector = FakeVectorStore(shared_index=True)
     cache = FakeCache(tenant_scoped=False)
-    model = FakeModel(adapter_bleed=True)
+    model = FakeModel(adapter_bleed=True, prefix_cache=True)
     mcp = FakeMCP(confused_deputy=True, token_passthrough=True)
     memory = FakeMemory(shared_memory=True)
     for tenant in substrate.tenants:
@@ -245,9 +248,12 @@ def probe(
     step_results: list[StepResult] = []
     for probe_instance in suite:
         step_results.extend(runner.run_per_step(probe_instance))
+    kv_report = KvCacheTimingProbe(substrate, model=model).run() if run_kv_timing else None
     finished = datetime.now(UTC)
 
-    findings = tuple(dedupe_findings(finding for _, group in step_results for finding in group))
+    suite_findings = [finding for _, group in step_results for finding in group]
+    kv_findings = list(kv_report.findings) if kv_report is not None else []
+    findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
     bleed_steps = [
         result for result in step_results if result[0].probe_id == RagEntityBleedProbe.id
@@ -265,18 +271,23 @@ def probe(
             mcp.name: __version__,
             memory.name: __version__,
         },
-        probe_versions={instance.id: __version__ for instance in suite},
+        probe_versions={
+            **{instance.id: __version__ for instance in suite},
+            **({KvCacheTimingProbe.id: __version__} if run_kv_timing else {}),
+        },
         findings=findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps) if bleed_steps else None,
             per_probe_findings=_per_probe_counts(confirmed),
+            side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
         ),
     )
     path = workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
-    plural = "" if len(suite) == 1 else "s"
-    typer.echo(f"ran {len(suite)} probe{plural}: {len(confirmed)} confirmed cross-tenant findings")
+    probe_count = len(suite) + (1 if run_kv_timing else 0)
+    plural = "" if probe_count == 1 else "s"
+    typer.echo(f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings")
     if run.metrics.retrieval_pivot_rate is not None:
         typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
     typer.echo(f"run recorded -> {path}")
