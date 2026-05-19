@@ -64,20 +64,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adapters, the ADRs, and the threat model, with a build-and-deploy workflow.
 - Phase 4 - the `sectum probe --probe` filter to run a single
   probe, and the `examples/mcp-tenant-boundary` Class 7 walkthrough.
-- Phase 5 (in progress) - the regression-baseline engine: `sectum baseline`
+- Phase 5 - the regression-baseline engine: `sectum baseline`
   saves a run's headline metrics, and `--compare` flags any later run whose
   metrics regressed (more confirmed findings, or a higher Retrieval-Pivot Rate).
-- Phase 5 (in progress) - Class 8, the persistent memory contamination probe,
+- Phase 5 - Class 8, the persistent memory contamination probe,
   over a new `MemoryAdapter` adapter family with a deterministic `FakeMemory`.
-- Phase 5 (in progress) - Class 6, the embedding-inversion probe: a
+- Phase 5 - Class 6, the embedding-inversion probe: a
   partial-fragment query reconstructs a foreign entity canary from a shared
   index.
-- Phase 5 (in progress) - Class 10, the IKEA-style implicit benign extraction
+- Phase 5 - Class 10, the IKEA-style implicit benign extraction
   probe: a multi-turn sequence of benign queries that extracts foreign content.
-- Phase 5 (in progress) - Class 3, the adversarial RAG poisoning probe: a
+- Phase 5 - Class 3, the adversarial RAG poisoning probe: a
   planted lure document pivots a tenant's canary into others' retrieval; the
   runner gains a `vector.upsert` action.
-- Phase 5 (in progress) - Class 5, the KV-cache timing side-channel probe: a
+- Phase 5 - Class 5, the KV-cache timing side-channel probe: a
   statistical timing test (a Cohen's d effect size over many trials) that
   detects a shared KV prefix cache; the model adapter gains a `measure_latency`
   method, and the run metrics record per-pair side-channel effect sizes.
