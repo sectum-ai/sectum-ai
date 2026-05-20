@@ -26,7 +26,14 @@ from sectum.adapters import (
     FakeVectorStore,
 )
 from sectum.baseline import compare_metrics
-from sectum.config import AdapterConfig, SectumConfig, build_adapters, load_config
+from sectum.config import (
+    AdapterConfig,
+    SectumConfig,
+    build_adapters,
+    build_observability,
+    build_vector_store,
+    load_config,
+)
 from sectum.evidence import (
     build_evidence_pack,
     control_mappings,
@@ -90,6 +97,9 @@ _DEMO_CONFIG = SectumConfig(
         "model": AdapterConfig(kind="fake", adapter_bleed=True, prefix_cache=True),
         "mcp": AdapterConfig(kind="fake", confused_deputy=True, token_passthrough=True),
         "memory": AdapterConfig(kind="fake", shared_memory=True),
+        "rag": AdapterConfig(kind="fake"),
+        "observability": AdapterConfig(kind="fake"),
+        "agent": AdapterConfig(kind="fake"),
     }
 )
 
@@ -129,6 +139,15 @@ adapters:
   memory:
     kind: fake
     shared_memory: true      # demo leak: long-term memory crosses tenants
+  rag:
+    kind: fake               # fake | http
+    # url: http://localhost:8080/rag
+  observability:
+    kind: fake               # fake | phoenix
+    # base_url: http://localhost:6006
+  agent:
+    kind: fake               # fake | http
+    # url: http://localhost:8080/agent
 
 # Evidence-chain anchoring. The local timestamper is the development default;
 # production configures an RFC 3161 TSA and a Sigstore Rekor instance.
@@ -464,23 +483,29 @@ def erasure(
     ] = None,
 ) -> None:
     """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
-    loaded = load_config(config) if config is not None else SectumConfig()
+    if config is not None:
+        loaded = load_config(config)
+        fake_default = AdapterConfig(kind="fake")
+    else:
+        loaded = SectumConfig()
+        fake_default = AdapterConfig(kind="fake", soft_delete=soft_delete)
     if workdir is None:
         workdir = loaded.workdir
     substrate = _load_substrate(workdir)
     target = _resolve_target(substrate, target_tenant)
-    store = FakeVectorStore(soft_delete=soft_delete)
-    obs = FakeObservability(soft_delete=soft_delete)
+    store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
+    obs = build_observability(loaded.adapters.get("observability", fake_default))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
-    for marker in substrate.manifest.markers:
-        if marker.marker_type is MarkerType.HARD_CANARY:
-            obs.record(
-                marker.owner_tenant_id,
-                "sectum-erasure",
-                f"trace recording marker {marker.plaintext}",
-            )
+    if isinstance(obs, FakeObservability):
+        for marker in substrate.manifest.markers:
+            if marker.marker_type is MarkerType.HARD_CANARY:
+                obs.record(
+                    marker.owner_tenant_id,
+                    "sectum-erasure",
+                    f"trace recording marker {marker.plaintext}",
+                )
 
     started = datetime.now(UTC)
     report = ErasureProbe(substrate, vector=store, observability=obs).run(target)

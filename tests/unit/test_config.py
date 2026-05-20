@@ -217,6 +217,16 @@ def test_resolve_secret_raises_when_neither_key_is_present() -> None:
         _resolve_secret({}, "dsn", "dsn_env")
 
 
+def test_resolve_secret_raises_when_env_name_is_empty() -> None:
+    with pytest.raises(ConfigError, match="must name an environment variable"):
+        _resolve_secret({"dsn_env": ""}, "dsn", "dsn_env")
+
+
+def test_resolve_secret_raises_when_direct_value_is_empty() -> None:
+    with pytest.raises(ConfigError, match="must not be empty"):
+        _resolve_secret({"dsn": ""}, "dsn", "dsn_env")
+
+
 def test_build_vector_store_pgvector_requires_a_dsn() -> None:
     with pytest.raises(ConfigError, match="missing 'dsn' or 'dsn_env'"):
         build_vector_store(AdapterConfig(kind="pgvector"))

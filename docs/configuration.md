@@ -143,8 +143,10 @@ export SECTUM_PGVECTOR_DSN=postgresql://user:pass@host/db
 sectum probe --config sectum.yaml
 ```
 
-A missing environment variable produces a `ConfigError` (`environment
-variable not set: SECTUM_PGVECTOR_DSN`) and the CLI exits with code 3.
+A missing or empty environment variable produces a `ConfigError`
+(`environment variable 'SECTUM_PGVECTOR_DSN' is unset or empty`) and the CLI
+exits with code 3. An empty inline value (`dsn: ""`) or an empty env-var name
+(`dsn_env: ""`) is rejected the same way at parse time.
 
 ## Example: switching to live pgvector
 

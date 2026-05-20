@@ -49,3 +49,18 @@ def test_erasure_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
     assert result.exit_code == 0
     assert (workdir / "erasure-evidence.json").exists()
+
+
+def test_erasure_uses_the_configs_soft_delete_setting(tmp_path: Path) -> None:
+    """A config with soft-delete fakes drives the erasure failure (exit 2)."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\n"
+        "adapters:\n"
+        "  vector_store: {kind: fake, soft_delete: true}\n"
+        "  observability: {kind: fake, soft_delete: true}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    assert result.exit_code == 2
+    assert "ERASURE FAILED" in result.output

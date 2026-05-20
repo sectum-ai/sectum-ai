@@ -94,7 +94,7 @@ class Runner:
             return self._observability_search(step)
         if step.action == "agent.run":
             return self._agent_run(step)
-        raise ValueError(f"runner cannot execute action: {step.action!r}")
+        raise AdapterError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
         if self._vector is None:
