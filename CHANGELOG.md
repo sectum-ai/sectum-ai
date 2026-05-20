@@ -111,6 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   codes: an `EvidenceError` exits 4, and other typed errors exit 3, replacing
   the traceback that used to surface from a `seed`, `probe`, `erasure`, or
   `report` invocation.
+- A typed `sectum.yaml` configuration loader in `sectum.config`: pydantic
+  models for the scenario, adapter, and evidence blocks, and a `load_config`
+  function that raises `ConfigError` on a missing file, malformed YAML, or an
+  invalid schema. `sectum seed` accepts `--config sectum.yaml` and reads its
+  scenario seed and workdir from the file; explicit `--seed`/`--workdir` flags
+  override the config.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

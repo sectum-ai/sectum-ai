@@ -20,6 +20,7 @@ dev = [
     "redis>=5",
     "arize-phoenix-client>=2",
     "mcp>=1",
+    "types-pyyaml>=6",
 ]
 docs = [
     "mkdocs-material>=9.5",

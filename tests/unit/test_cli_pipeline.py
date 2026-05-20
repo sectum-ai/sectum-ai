@@ -24,6 +24,29 @@ def test_seed_writes_a_substrate(tmp_path: Path) -> None:
     assert substrate["documents"]
 
 
+def test_seed_reads_workdir_and_seed_from_a_config(tmp_path: Path) -> None:
+    workdir = tmp_path / "from-config"
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"scenario:\n  seed: 1\nworkdir: {workdir}\n")
+    result = _runner.invoke(app, ["seed", "--config", str(config_path)])
+    assert result.exit_code == 0
+    assert (workdir / "substrate.json").exists()
+
+
+def test_seed_explicit_flag_overrides_a_config_value(tmp_path: Path) -> None:
+    config_workdir = tmp_path / "from-config"
+    explicit_workdir = tmp_path / "from-flag"
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"workdir: {config_workdir}\n")
+    result = _runner.invoke(
+        app,
+        ["seed", "--config", str(config_path), "--workdir", str(explicit_workdir)],
+    )
+    assert result.exit_code == 0
+    assert (explicit_workdir / "substrate.json").exists()
+    assert not config_workdir.exists()
+
+
 def test_probe_records_a_run_and_exits_two_on_confirmed_leaks(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])

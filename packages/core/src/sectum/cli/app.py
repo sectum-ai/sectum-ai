@@ -25,6 +25,7 @@ from sectum.adapters import (
     FakeVectorStore,
 )
 from sectum.baseline import compare_metrics
+from sectum.config import SectumConfig, load_config
 from sectum.evidence import (
     build_evidence_pack,
     control_mappings,
@@ -220,13 +221,20 @@ def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
 @app.command()
 @_handle_typed_errors
 def seed(
-    scenario_seed: Annotated[int, typer.Option("--seed", help="Scenario seed.")] = 2026,
-    workdir: Annotated[Path, typer.Option(help="Directory for run artifacts.")] = _DEFAULT_WORKDIR,
+    scenario_seed: Annotated[int | None, typer.Option("--seed", help="Scenario seed.")] = None,
+    workdir: Annotated[Path | None, typer.Option(help="Directory for run artifacts.")] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+    ] = None,
 ) -> None:
     """Provision synthetic tenants, generate corpora, and plant canary markers."""
-    substrate = build_substrate(default_scenario(seed=scenario_seed))
-    workdir.mkdir(parents=True, exist_ok=True)
-    path = workdir / "substrate.json"
+    loaded = load_config(config) if config is not None else SectumConfig()
+    effective_seed = scenario_seed if scenario_seed is not None else loaded.scenario.seed
+    effective_workdir = workdir if workdir is not None else loaded.workdir
+    substrate = build_substrate(default_scenario(seed=effective_seed))
+    effective_workdir.mkdir(parents=True, exist_ok=True)
+    path = effective_workdir / "substrate.json"
     path.write_text(substrate.model_dump_json(indent=2))
     typer.echo(
         f"seeded {len(substrate.tenants)} tenants and "
