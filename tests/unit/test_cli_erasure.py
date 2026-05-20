@@ -64,3 +64,15 @@ def test_erasure_uses_the_configs_soft_delete_setting(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
     assert result.exit_code == 2
     assert "ERASURE FAILED" in result.output
+
+
+def test_erasure_warns_when_soft_delete_is_combined_with_config(tmp_path: Path) -> None:
+    """--soft-delete is ignored when --config is given; a warning is emitted."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"workdir: {tmp_path}\n")
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path), "--soft-delete"])
+    # --soft-delete is dropped, so the run uses the config's default (hard-delete fake)
+    # and exits 0; the warning tells the user the flag was ignored
+    assert result.exit_code == 0
+    assert "--soft-delete is ignored" in result.output

@@ -232,3 +232,26 @@ def test_probe_with_max_concurrency_still_exits_two_against_the_demo(tmp_path: P
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--max-concurrency", "4"])
     assert result.exit_code == 2
+
+
+def test_probe_single_probe_filter_runs_serially_under_max_concurrency(tmp_path: Path) -> None:
+    """A --probe filter that selects a single probe stays serial regardless of
+    --max-concurrency (the thread pool is only worth its overhead for suite > 1).
+    """
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        [
+            "probe",
+            "--workdir",
+            str(tmp_path),
+            "--probe",
+            "agent-tool-hijack",
+            "--max-concurrency",
+            "4",
+        ],
+    )
+    # the single-probe filter + concurrent flag still completes without error
+    assert result.exit_code == 2
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert set(run["probe_versions"]) == {"agent-tool-hijack"}

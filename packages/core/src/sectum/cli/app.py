@@ -472,7 +472,14 @@ def erasure(
         str | None, typer.Option("--target-tenant", help="Tenant display name.")
     ] = None,
     soft_delete: Annotated[
-        bool, typer.Option("--soft-delete", help="Model a store that fails erasure.")
+        bool,
+        typer.Option(
+            "--soft-delete",
+            help=(
+                "Model a store that fails erasure. Ignored when --config is given; "
+                "set 'soft_delete: true' on the adapter in the config instead."
+            ),
+        ),
     ] = False,
     workdir: Annotated[
         Path | None, typer.Option(help="Directory holding the seeded substrate.")
