@@ -93,3 +93,11 @@ def test_runner_agent_run_without_an_agent_adapter_raises_adapter_error() -> Non
     runner = Runner(substrate)
     with pytest.raises(AdapterError, match="needs an agent"):
         runner._execute(_step(substrate.tenants[0].tenant_id, "agent.run", {"task": "x"}))
+
+
+def test_runner_unknown_action_raises_adapter_error() -> None:
+    """An unsupported action ID is a typed AdapterError so the CLI exits 3 cleanly."""
+    substrate = _substrate()
+    runner = Runner(substrate)
+    with pytest.raises(AdapterError, match="cannot execute action"):
+        runner._execute(_step(substrate.tenants[0].tenant_id, "not.an.action", {}))

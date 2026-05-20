@@ -227,6 +227,14 @@ def test_resolve_secret_raises_when_direct_value_is_empty() -> None:
         _resolve_secret({"dsn": ""}, "dsn", "dsn_env")
 
 
+def test_resolve_secret_raises_when_env_var_is_set_to_empty_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SECTUM_TEST_DSN", "")
+    with pytest.raises(ConfigError, match="unset or empty"):
+        _resolve_secret({"dsn_env": "SECTUM_TEST_DSN"}, "dsn", "dsn_env")
+
+
 def test_build_vector_store_pgvector_requires_a_dsn() -> None:
     with pytest.raises(ConfigError, match="missing 'dsn' or 'dsn_env'"):
         build_vector_store(AdapterConfig(kind="pgvector"))

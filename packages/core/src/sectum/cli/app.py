@@ -363,7 +363,7 @@ def probe(
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
-    if max_concurrency > 1:
+    if max_concurrency > 1 and len(suite) > 1:
         with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
             futures = [executor.submit(runner.run_per_step, instance) for instance in suite]
             for future in futures:
@@ -486,6 +486,12 @@ def erasure(
     if config is not None:
         loaded = load_config(config)
         fake_default = AdapterConfig(kind="fake")
+        if soft_delete:
+            typer.echo(
+                "warning: --soft-delete is ignored when --config is given; "
+                "set 'soft_delete: true' on the adapter in the config instead.",
+                err=True,
+            )
     else:
         loaded = SectumConfig()
         fake_default = AdapterConfig(kind="fake", soft_delete=soft_delete)
@@ -546,9 +552,13 @@ def erasure(
     if any(surface.residual_after > 0 for surface in report.surfaces):
         typer.echo("ERASURE FAILED: residual data remains.", err=True)
         raise typer.Exit(code=2)
+    no_baseline = [
+        surface.surface.value for surface in report.surfaces if surface.markers_before == 0
+    ]
     typer.echo(
-        "ERASURE INCONCLUSIVE: the target tenant's markers were not found, "
-        "so erasure cannot be attested.",
+        f"ERASURE INCONCLUSIVE: no baseline on {', '.join(no_baseline)} - "
+        "the target tenant's markers were not found on those surfaces, so "
+        "erasure cannot be attested.",
         err=True,
     )
     raise typer.Exit(code=3)
