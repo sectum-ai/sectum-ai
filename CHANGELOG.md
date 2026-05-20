@@ -107,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `EvidenceError`, `DetectionError`) in `sectum-ai-spec` (the engineering spec,
   section 16); the adapter, runner, and substrate error conditions now raise
   the typed errors instead of a bare `ValueError`.
+- The CLI maps typed `SectumError`s to the engineering-spec section-10 exit
+  codes: an `EvidenceError` exits 4, and other typed errors exit 3, replacing
+  the traceback that used to surface from a `seed`, `probe`, `erasure`, or
+  `report` invocation.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

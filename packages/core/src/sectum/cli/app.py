@@ -4,6 +4,8 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 ``verify``, ``erasure``, ``init``, and ``baseline``.
 """
 
+import functools
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -47,11 +49,13 @@ from sectum.probes import (
 )
 from sectum.runner import Runner, StepResult, retrieval_pivot_rate
 from sectum.spec import (
+    EvidenceError,
     EvidencePack,
     Finding,
     MarkerType,
     RunMetrics,
     RunResult,
+    SectumError,
     Substrate,
     canonical_hash,
 )
@@ -109,6 +113,28 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _handle_typed_errors[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    """Translate a ``SectumError`` raised inside a command into the section-10 exit code.
+
+    An ``EvidenceError`` exits with code 4 (evidence verification failure); any
+    other ``SectumError`` exits with code 3 (config/adapter error). Other
+    exceptions propagate unchanged.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return func(*args, **kwargs)
+        except EvidenceError as error:
+            typer.echo(f"{type(error).__name__}: {error}", err=True)
+            raise typer.Exit(code=4) from error
+        except SectumError as error:
+            typer.echo(f"{type(error).__name__}: {error}", err=True)
+            raise typer.Exit(code=3) from error
+
+    return wrapper
 
 
 def _version_callback(value: bool) -> None:
@@ -192,6 +218,7 @@ def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
 
 
 @app.command()
+@_handle_typed_errors
 def seed(
     scenario_seed: Annotated[int, typer.Option("--seed", help="Scenario seed.")] = 2026,
     workdir: Annotated[Path, typer.Option(help="Directory for run artifacts.")] = _DEFAULT_WORKDIR,
@@ -208,6 +235,7 @@ def seed(
 
 
 @app.command()
+@_handle_typed_errors
 def probe(
     workdir: Annotated[
         Path, typer.Option(help="Directory holding the seeded substrate.")
@@ -296,6 +324,7 @@ def probe(
 
 
 @app.command()
+@_handle_typed_errors
 def report(
     workdir: Annotated[
         Path, typer.Option(help="Directory holding the substrate and run.")
@@ -332,6 +361,7 @@ def verify(
 
 
 @app.command()
+@_handle_typed_errors
 def erasure(
     target_tenant: Annotated[
         str | None, typer.Option("--target-tenant", help="Tenant display name.")
