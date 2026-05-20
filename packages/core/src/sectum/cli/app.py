@@ -371,10 +371,17 @@ def probe(
 @_handle_typed_errors
 def report(
     workdir: Annotated[
-        Path, typer.Option(help="Directory holding the substrate and run.")
-    ] = _DEFAULT_WORKDIR,
+        Path | None, typer.Option(help="Directory holding the substrate and run.")
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+    ] = None,
 ) -> None:
     """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
     substrate = _load_substrate(workdir)
     run = _load_run(workdir)
     pack = build_evidence_pack(run, substrate.manifest, control_mappings=control_mappings())
@@ -414,10 +421,17 @@ def erasure(
         bool, typer.Option("--soft-delete", help="Model a store that fails erasure.")
     ] = False,
     workdir: Annotated[
-        Path, typer.Option(help="Directory holding the seeded substrate.")
-    ] = _DEFAULT_WORKDIR,
+        Path | None, typer.Option(help="Directory holding the seeded substrate.")
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+    ] = None,
 ) -> None:
     """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
     substrate = _load_substrate(workdir)
     target = _resolve_target(substrate, target_tenant)
     store = FakeVectorStore(soft_delete=soft_delete)
@@ -492,8 +506,8 @@ def init(
 @app.command()
 def baseline(
     workdir: Annotated[
-        Path, typer.Option(help="Directory holding the recorded run.")
-    ] = _DEFAULT_WORKDIR,
+        Path | None, typer.Option(help="Directory holding the recorded run.")
+    ] = None,
     save: Annotated[
         bool, typer.Option("--save", help="Save the current run's metrics as the baseline.")
     ] = False,
@@ -501,8 +515,15 @@ def baseline(
         bool,
         typer.Option("--compare", help="Compare the current run against the saved baseline."),
     ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+    ] = None,
 ) -> None:
     """Save a regression baseline from the current run, or compare against it."""
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
     run = _load_run(workdir)
     baseline_path = workdir / "baseline.json"
     if save:

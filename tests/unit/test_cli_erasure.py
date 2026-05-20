@@ -39,3 +39,13 @@ def test_erasure_rejects_an_unknown_tenant(tmp_path: Path) -> None:
         app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", "Nonexistent"]
     )
     assert result.exit_code == 3
+
+
+def test_erasure_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
+    workdir = tmp_path / "from-config"
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"workdir: {workdir}\n")
+    _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    assert result.exit_code == 0
+    assert (workdir / "erasure-evidence.json").exists()

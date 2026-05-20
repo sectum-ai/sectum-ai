@@ -161,3 +161,25 @@ def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
     evidence_path.write_text(json.dumps(pack))
     result = _runner.invoke(app, ["verify", str(evidence_path)])
     assert result.exit_code == 4
+
+
+def test_report_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
+    workdir = tmp_path / "from-config"
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"workdir: {workdir}\n")
+    _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+    _runner.invoke(app, ["probe", "--workdir", str(workdir)])
+    result = _runner.invoke(app, ["report", "--config", str(config_path)])
+    assert result.exit_code == 0
+    assert (workdir / "evidence.json").exists()
+
+
+def test_baseline_save_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
+    workdir = tmp_path / "from-config"
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(f"workdir: {workdir}\n")
+    _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+    _runner.invoke(app, ["probe", "--workdir", str(workdir)])
+    result = _runner.invoke(app, ["baseline", "--save", "--config", str(config_path)])
+    assert result.exit_code == 0
+    assert (workdir / "baseline.json").exists()

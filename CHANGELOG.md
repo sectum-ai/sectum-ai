@@ -130,6 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`dsn_env: SECTUM_PGVECTOR_DSN`); vector adapters receive a deterministic
   hashing-trick embedder so a sectum-driven verification needs no
   embedding-model account.
+- `sectum erasure`, `sectum report`, and `sectum baseline` accept
+  `--config sectum.yaml` and use its workdir as a default, completing the
+  per-command `--config` coverage for every workflow command.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
