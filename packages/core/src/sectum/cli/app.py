@@ -144,7 +144,7 @@ adapters:
     # url: http://localhost:8080/rag
   observability:
     kind: fake               # fake | phoenix
-    # base_url: http://localhost:6006
+    # base_url: http://localhost:6007  # compose.yaml publishes Phoenix on 6007
   agent:
     kind: fake               # fake | http
     # url: http://localhost:8080/agent
