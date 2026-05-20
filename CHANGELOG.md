@@ -117,6 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   invalid schema. `sectum seed` accepts `--config sectum.yaml` and reads its
   scenario seed and workdir from the file; explicit `--seed`/`--workdir` flags
   override the config.
+- A config-driven adapter resolver in `sectum.config`: `build_adapters`
+  dispatches each adapter family's `kind` to a concrete `Adapter`, defaulting
+  missing families to plain fakes. `sectum probe` accepts `--config` and
+  builds its adapter bundle from the file, so a tenant-isolated config (every
+  leak knob off) records zero confirmed findings while the default leaky-demo
+  config keeps reproducing them. The `sectum init` template now exposes every
+  adapter family's leak knobs so the demo round-trips through the resolver.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

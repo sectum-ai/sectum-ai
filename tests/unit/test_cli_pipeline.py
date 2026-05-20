@@ -57,6 +57,27 @@ def test_probe_records_a_run_and_exits_two_on_confirmed_leaks(tmp_path: Path) ->
     assert run["metrics"]["retrieval_pivot_rate"] is not None
 
 
+def test_probe_with_an_isolated_config_yields_no_findings(tmp_path: Path) -> None:
+    """A config with non-leaky fakes produces zero confirmed cross-tenant findings."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        "adapters:\n"
+        "  vector_store: {kind: fake, shared_index: false}\n"
+        "  cache: {kind: fake, tenant_scoped: true}\n"
+        "  model: {kind: fake}\n"
+        "  mcp: {kind: fake}\n"
+        "  memory: {kind: fake}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["probe", "--config", str(config_path), "--workdir", str(tmp_path)]
+    )
+    # isolated adapters mean no confirmed cross-tenant findings -> exit 0
+    assert result.exit_code == 0
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert run["metrics"]["confirmed_findings"] == 0
+
+
 def test_probe_without_a_seeded_substrate_fails_cleanly(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3
