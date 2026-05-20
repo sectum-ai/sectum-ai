@@ -281,3 +281,63 @@ def test_build_adapters_includes_rag_observability_and_agent() -> None:
     assert isinstance(bundle.rag, FakeRAGPipeline)
     assert isinstance(bundle.observability, FakeObservability)
     assert isinstance(bundle.agent, FakeAgent)
+
+
+def test_build_rag_http_constructs_an_http_pipeline() -> None:
+    from sectum.adapters.rag.http import HttpRAGPipeline
+
+    adapter = build_rag(AdapterConfig(kind="http", url="http://example.com/rag"))
+    assert isinstance(adapter, HttpRAGPipeline)
+
+
+def test_build_rag_http_accepts_headers_and_timeout() -> None:
+    from sectum.adapters.rag.http import HttpRAGPipeline
+
+    adapter = build_rag(
+        AdapterConfig(
+            kind="http",
+            url="http://example.com/rag",
+            headers={"Authorization": "Bearer x"},
+            timeout=5,
+        )
+    )
+    assert isinstance(adapter, HttpRAGPipeline)
+
+
+def test_build_rag_http_requires_a_url() -> None:
+    with pytest.raises(ConfigError, match="'url' is required"):
+        build_rag(AdapterConfig(kind="http"))
+
+
+def test_build_rag_http_rejects_a_non_mapping_headers_field() -> None:
+    with pytest.raises(ConfigError, match="must be a mapping"):
+        build_rag(AdapterConfig(kind="http", url="http://x", headers="oops"))
+
+
+def test_build_observability_phoenix_constructs_phoenix() -> None:
+    from sectum.adapters.observability.phoenix import PhoenixObservability
+
+    adapter = build_observability(AdapterConfig(kind="phoenix", base_url="http://localhost:6007"))
+    assert isinstance(adapter, PhoenixObservability)
+
+
+def test_build_observability_phoenix_requires_base_url() -> None:
+    with pytest.raises(ConfigError, match="'base_url' is required"):
+        build_observability(AdapterConfig(kind="phoenix"))
+
+
+def test_build_agent_http_constructs_an_http_agent() -> None:
+    from sectum.adapters.agent.http import HttpAgent
+
+    adapter = build_agent(AdapterConfig(kind="http", url="http://example.com/agent"))
+    assert isinstance(adapter, HttpAgent)
+
+
+def test_build_agent_http_requires_a_url() -> None:
+    with pytest.raises(ConfigError, match="'url' is required"):
+        build_agent(AdapterConfig(kind="http"))
+
+
+def test_build_agent_http_rejects_a_non_number_timeout() -> None:
+    with pytest.raises(ConfigError, match="must be a number"):
+        build_agent(AdapterConfig(kind="http", url="http://x", timeout="five"))

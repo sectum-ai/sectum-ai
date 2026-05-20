@@ -22,6 +22,9 @@ adapters:
   model: ...
   mcp: ...
   memory: ...
+  rag: ...
+  observability: ...
+  agent: ...
 evidence:
   timestamper: local
 ```
@@ -49,9 +52,10 @@ A mapping from adapter-family name to that family's configuration. Each entry
 takes a `kind` plus any backend-specific fields. A family that is omitted
 defaults to a plain (non-leaky) fake.
 
-Only the five families `sectum probe` drives — `vector_store`, `cache`,
-`model`, `mcp`, `memory` — are read by the resolver today. Other family
-names parse successfully but are not yet consumed by the CLI.
+The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
+`memory`, `rag`, `observability`, and `agent` — and `sectum probe` drives all
+of them through the runner. Other family names parse successfully but are not
+consumed by the CLI.
 
 ### `vector_store`
 
@@ -91,6 +95,27 @@ No live model adapter is wired into the CLI resolver yet.
 | `fake` | `shared_memory: bool = false` | In-memory store. `shared_memory: true` reproduces the Class 8 cross-tenant memory leak. |
 
 No live memory adapter is wired into the CLI resolver yet.
+
+### `rag`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | — | `FakeRAGPipeline`; needs no fields. |
+| `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
+
+### `observability`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | — | `FakeObservability`; needs no fields. |
+| `phoenix` | `base_url: str` *(required)*, `prefix: str = "sectum"` | `PhoenixObservability` — each tenant maps to a Phoenix project named `{prefix}-{tenant.hex}`. |
+
+### `agent`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | — | `FakeAgent`; needs no fields. |
+| `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
 
 ## `evidence`
 

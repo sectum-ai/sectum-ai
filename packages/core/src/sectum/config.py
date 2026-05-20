@@ -168,6 +168,24 @@ def _optional_str(extras: dict[str, Any], key: str) -> str | None:
     return _str(extras, key, "")
 
 
+def _float(extras: dict[str, Any], key: str, default: float) -> float:
+    """Pull a number from extras with a default; rejects booleans."""
+    value = extras.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ConfigError(f"adapter field {key!r} must be a number, got {value!r}")
+    return float(value)
+
+
+def _str_dict(extras: dict[str, Any], key: str) -> dict[str, str] | None:
+    """Pull an optional string-to-string mapping from extras."""
+    value = extras.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ConfigError(f"adapter field {key!r} must be a mapping, got {value!r}")
+    return {str(k): str(v) for k, v in value.items()}
+
+
 def _resolve_secret(extras: dict[str, Any], direct_key: str, env_key: str) -> str:
     """Resolve a secret value, preferring an environment-variable reference.
 
@@ -297,22 +315,45 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
 
 def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:
     """Build the RAG-pipeline adapter the config selects."""
+    extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeRAGPipeline()
+    if config.kind == "http":
+        from sectum.adapters.rag.http import HttpRAGPipeline
+
+        url = _required_str(extras, "url")
+        headers = _str_dict(extras, "headers")
+        timeout = _float(extras, "timeout", 30.0)
+        return HttpRAGPipeline(url, headers=headers, timeout=timeout)
     raise _unsupported("rag", config.kind)
 
 
 def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
     """Build the observability adapter the config selects."""
+    extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeObservability()
+    if config.kind == "phoenix":
+        from sectum.adapters.observability.phoenix import PhoenixObservability
+
+        base_url = _required_str(extras, "base_url")
+        prefix = _str(extras, "prefix", "sectum")
+        return PhoenixObservability(base_url, prefix=prefix)
     raise _unsupported("observability", config.kind)
 
 
 def build_agent(config: AdapterConfig) -> AgentAdapter:
     """Build the agent adapter the config selects."""
+    extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeAgent()
+    if config.kind == "http":
+        from sectum.adapters.agent.http import HttpAgent
+
+        url = _required_str(extras, "url")
+        headers = _str_dict(extras, "headers")
+        timeout = _float(extras, "timeout", 30.0)
+        return HttpAgent(url, headers=headers, timeout=timeout)
     raise _unsupported("agent", config.kind)
 
 
