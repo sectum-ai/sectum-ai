@@ -15,6 +15,7 @@ from sectum.adapters import (
 from sectum.config import (
     AdapterConfig,
     SectumConfig,
+    _resolve_secret,
     build_adapters,
     build_cache,
     build_mcp,
@@ -120,9 +121,9 @@ def test_build_vector_store_rejects_a_non_boolean_knob() -> None:
         build_vector_store(AdapterConfig(kind="fake", shared_index="yes"))
 
 
-def test_build_vector_store_rejects_an_unwired_kind() -> None:
+def test_build_vector_store_rejects_an_unknown_kind() -> None:
     with pytest.raises(ConfigError, match="not yet supported"):
-        build_vector_store(AdapterConfig(kind="pgvector"))
+        build_vector_store(AdapterConfig(kind="not-a-real-kind"))
 
 
 def test_build_cache_fake_with_a_tenant_scoping_knob() -> None:
@@ -132,9 +133,9 @@ def test_build_cache_fake_with_a_tenant_scoping_knob() -> None:
     assert not shared.supports(Capability.TENANT_SCOPED_KEYS)
 
 
-def test_build_cache_rejects_an_unwired_kind() -> None:
+def test_build_cache_rejects_an_unknown_kind() -> None:
     with pytest.raises(ConfigError, match="not yet supported"):
-        build_cache(AdapterConfig(kind="redis"))
+        build_cache(AdapterConfig(kind="not-a-real-kind"))
 
 
 def test_build_model_fake_with_leak_knobs() -> None:
@@ -181,3 +182,62 @@ def test_build_adapters_respects_per_family_knobs() -> None:
     bundle = build_adapters(config)
     assert bundle.vector.supports(Capability.SHARED_INDEX)
     assert not bundle.cache.supports(Capability.TENANT_SCOPED_KEYS)
+
+
+# --- live adapter wirings ---------------------------------------------------
+
+
+def test_resolve_secret_reads_a_value_from_an_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SECTUM_TEST_DSN", "postgresql://example/test")
+    value = _resolve_secret({"dsn_env": "SECTUM_TEST_DSN"}, "dsn", "dsn_env")
+    assert value == "postgresql://example/test"
+
+
+def test_resolve_secret_uses_a_direct_value_when_present() -> None:
+    value = _resolve_secret({"dsn": "postgresql://example/inline"}, "dsn", "dsn_env")
+    assert value == "postgresql://example/inline"
+
+
+def test_resolve_secret_raises_when_the_env_var_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SECTUM_TEST_DSN", raising=False)
+    with pytest.raises(ConfigError, match="environment variable not set"):
+        _resolve_secret({"dsn_env": "SECTUM_TEST_DSN"}, "dsn", "dsn_env")
+
+
+def test_resolve_secret_raises_when_neither_key_is_present() -> None:
+    with pytest.raises(ConfigError, match="missing 'dsn' or 'dsn_env'"):
+        _resolve_secret({}, "dsn", "dsn_env")
+
+
+def test_build_vector_store_pgvector_requires_a_dsn() -> None:
+    with pytest.raises(ConfigError, match="missing 'dsn' or 'dsn_env'"):
+        build_vector_store(AdapterConfig(kind="pgvector"))
+
+
+def test_build_cache_redis_constructs_a_redis_cache() -> None:
+    from sectum.adapters.cache.redis import RedisCache
+
+    adapter = build_cache(AdapterConfig(kind="redis", host="example", port=6380, prefix="probe"))
+    assert isinstance(adapter, RedisCache)
+    assert adapter.supports(Capability.TENANT_SCOPED_KEYS)
+
+
+def test_build_mcp_stdio_constructs_a_stdio_client() -> None:
+    from sectum.adapters.mcp.client import StdioMCPClient
+
+    adapter = build_mcp(
+        AdapterConfig(kind="stdio", command="echo", args=["hello"], tenant_argument="tenant")
+    )
+    assert isinstance(adapter, StdioMCPClient)
+
+
+def test_build_mcp_stdio_requires_a_command() -> None:
+    with pytest.raises(ConfigError, match="'command' is required"):
+        build_mcp(AdapterConfig(kind="stdio"))
+
+
+def test_build_mcp_stdio_rejects_non_list_args() -> None:
+    with pytest.raises(ConfigError, match="must be a list"):
+        build_mcp(AdapterConfig(kind="stdio", command="echo", args="oops"))

@@ -124,6 +124,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   leak knob off) records zero confirmed findings while the default leaky-demo
   config keeps reproducing them. The `sectum init` template now exposes every
   adapter family's leak knobs so the demo round-trips through the resolver.
+- The CLI resolver now wires the live adapters: `kind: pgvector`, `chroma`,
+  or `weaviate` for `adapters.vector_store`; `kind: redis` for `adapters.cache`;
+  and `kind: stdio` for `adapters.mcp`. Secrets reference environment variables
+  (`dsn_env: SECTUM_PGVECTOR_DSN`); vector adapters receive a deterministic
+  hashing-trick embedder so a sectum-driven verification needs no
+  embedding-model account.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

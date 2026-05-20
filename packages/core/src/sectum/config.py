@@ -16,6 +16,9 @@ environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
 adapter resolver can look them up at run time without storing secrets.
 """
 
+import hashlib
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -126,6 +129,74 @@ def _bool(extras: dict[str, Any], key: str, default: bool) -> bool:
     return value
 
 
+def _int(extras: dict[str, Any], key: str, default: int) -> int:
+    """Pull an integer from extras with a default."""
+    value = extras.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"adapter field {key!r} must be an integer, got {value!r}")
+    return value
+
+
+def _str(extras: dict[str, Any], key: str, default: str) -> str:
+    """Pull a string from extras with a default."""
+    value = extras.get(key, default)
+    if not isinstance(value, str):
+        raise ConfigError(f"adapter field {key!r} must be a string, got {value!r}")
+    return value
+
+
+def _required_str(extras: dict[str, Any], key: str) -> str:
+    """Pull a required string from extras, or raise ``ConfigError`` if missing."""
+    if key not in extras:
+        raise ConfigError(f"adapter field {key!r} is required")
+    return _str(extras, key, "")
+
+
+def _optional_str(extras: dict[str, Any], key: str) -> str | None:
+    """Pull an optional string from extras, or ``None`` when absent."""
+    if key not in extras:
+        return None
+    return _str(extras, key, "")
+
+
+def _resolve_secret(extras: dict[str, Any], direct_key: str, env_key: str) -> str:
+    """Resolve a secret value, preferring an environment-variable reference.
+
+    The convention (the engineering spec, section 17 - "adapters never embed
+    credentials"): the config holds ``dsn_env: SECTUM_PGVECTOR_DSN`` and the
+    resolver reads the value from that environment variable. An inline
+    ``dsn:`` is also accepted but discouraged.
+    """
+    if env_key in extras:
+        var = _str(extras, env_key, "")
+        value = os.environ.get(var)
+        if value is None:
+            raise ConfigError(f"environment variable not set: {var}")
+        return value
+    if direct_key in extras:
+        return _str(extras, direct_key, "")
+    raise ConfigError(f"missing {direct_key!r} or {env_key!r} in adapter config")
+
+
+_EMBED_DIM = 64
+"""Dimension of the CLI's default hashing-trick embedder."""
+
+
+def _hashing_embed(text: str) -> list[float]:
+    """A deterministic hashing-trick embedding for the CLI's live vector adapters.
+
+    No model, no network: a 64-dim sparse vector keyed on the alphanumeric
+    tokens in ``text``. Deterministic across runs and machines, so a
+    sectum-driven verification stays reproducible without an embedding-model
+    account.
+    """
+    vector = [0.0] * _EMBED_DIM
+    for token in re.findall(r"[a-z0-9]+", text.lower()):
+        index = int.from_bytes(hashlib.sha256(token.encode()).digest()[:4], "big") % _EMBED_DIM
+        vector[index] += 1.0
+    return vector
+
+
 def _unsupported(family: str, kind: str) -> ConfigError:
     return ConfigError(f"{family} kind {kind!r} is not yet supported by the CLI resolver")
 
@@ -138,6 +209,24 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             shared_index=_bool(extras, "shared_index", False),
             soft_delete=_bool(extras, "soft_delete", False),
         )
+    if config.kind == "pgvector":
+        from sectum.adapters.vector.pgvector import PgVectorStore
+
+        dsn = _resolve_secret(extras, "dsn", "dsn_env")
+        return PgVectorStore(dsn, _hashing_embed, dim=_EMBED_DIM)
+    if config.kind == "chroma":
+        from sectum.adapters.vector.chroma import ChromaVectorStore
+
+        host = _str(extras, "host", "localhost")
+        port = _int(extras, "port", 8000)
+        return ChromaVectorStore(host, port, _hashing_embed)
+    if config.kind == "weaviate":
+        from sectum.adapters.vector.weaviate import WeaviateVectorStore
+
+        host = _str(extras, "host", "localhost")
+        port = _int(extras, "port", 8080)
+        grpc_port = _int(extras, "grpc_port", 50051)
+        return WeaviateVectorStore(host, port, grpc_port, _hashing_embed)
     raise _unsupported("vector_store", config.kind)
 
 
@@ -146,6 +235,14 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
     extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeCache(tenant_scoped=_bool(extras, "tenant_scoped", True))
+    if config.kind == "redis":
+        from sectum.adapters.cache.redis import RedisCache
+
+        host = _str(extras, "host", "localhost")
+        port = _int(extras, "port", 6379)
+        tenant_scoped = _bool(extras, "tenant_scoped", True)
+        prefix = _str(extras, "prefix", "sectum")
+        return RedisCache(host, port, tenant_scoped=tenant_scoped, prefix=prefix)
     raise _unsupported("cache", config.kind)
 
 
@@ -168,6 +265,16 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
             confused_deputy=_bool(extras, "confused_deputy", False),
             token_passthrough=_bool(extras, "token_passthrough", False),
         )
+    if config.kind == "stdio":
+        from sectum.adapters.mcp.client import StdioMCPClient
+
+        command = _required_str(extras, "command")
+        raw_args = extras.get("args", [])
+        if not isinstance(raw_args, list):
+            raise ConfigError(f"mcp 'args' must be a list, got {raw_args!r}")
+        args = [str(item) for item in raw_args]
+        tenant_argument = _optional_str(extras, "tenant_argument")
+        return StdioMCPClient(command, args, tenant_argument=tenant_argument)
     raise _unsupported("mcp", config.kind)
 
 
