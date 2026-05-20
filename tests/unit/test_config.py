@@ -208,7 +208,7 @@ def test_resolve_secret_raises_when_the_env_var_is_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("SECTUM_TEST_DSN", raising=False)
-    with pytest.raises(ConfigError, match="environment variable not set"):
+    with pytest.raises(ConfigError, match="unset or empty"):
         _resolve_secret({"dsn_env": "SECTUM_TEST_DSN"}, "dsn", "dsn_env")
 
 

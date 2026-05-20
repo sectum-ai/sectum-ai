@@ -290,8 +290,10 @@ def probe(
         typer.Option(
             "--max-concurrency",
             help=(
-                "Run probes in parallel via a thread pool (1 = serial; >1 requires "
-                "thread-safe adapters - the in-memory fakes share state and may race)."
+                "Run probes in parallel via a thread pool (1 = serial). N > 1 requires "
+                "thread-safe adapters AND that probe order does not matter; the demo's "
+                "in-memory fakes share state across mutating and reading probes, so "
+                "concurrent execution there yields nondeterministic findings."
             ),
         ),
     ] = 1,
@@ -372,6 +374,9 @@ def probe(
             model.name: __version__,
             mcp.name: __version__,
             memory.name: __version__,
+            bundle.rag.name: __version__,
+            bundle.observability.name: __version__,
+            bundle.agent.name: __version__,
         },
         probe_versions={
             **{instance.id: __version__ for instance in suite},

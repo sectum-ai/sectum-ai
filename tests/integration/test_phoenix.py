@@ -105,3 +105,11 @@ def test_phoenix_delete_clears_a_tenants_project(adapter: PhoenixObservability) 
     adapter.delete(_TENANT_A)
     # after delete the tenant's project is gone, so a search returns nothing
     assert adapter.search_traces(_TENANT_A, "SECTUM-CANARY-DEL") == []
+
+
+def test_phoenix_delete_is_idempotent_when_no_project_exists(
+    adapter: PhoenixObservability,
+) -> None:
+    # delete on a tenant that was never seeded must not raise (the 404 is swallowed)
+    adapter.delete(_TENANT_B)
+    assert adapter.search_traces(_TENANT_B, "anything") == []

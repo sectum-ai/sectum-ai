@@ -148,9 +148,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects `PhoenixObservability`. New `_float` and `_str_dict` helpers parse
   timeouts and header maps from the config.
 - `sectum probe` accepts `--max-concurrency N` (default 1) to run probes in
-  parallel via a thread pool. Live, thread-safe adapters are required for
-  N > 1; the in-memory fakes share state and may race under concurrent
-  execution, so they're intended for the serial demo path.
+  parallel via a thread pool. N > 1 requires both thread-safe adapters and
+  that probe-order interactions don't matter; the demo's in-memory fakes
+  share state across mutating and reading probes, so concurrent execution
+  there yields nondeterministic findings (the exit code is still stable).
 - Class 11 (`sectum erasure`) now checks the observability surface. The
   `ObservabilityAdapter` interface gains `delete(tenant)`; `FakeObservability`
   gets a `soft_delete` knob mirroring `FakeVectorStore`; `PhoenixObservability`

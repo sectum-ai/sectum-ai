@@ -9,6 +9,7 @@ Requires the ``phoenix`` optional dependency: ``pip install sectum-ai-adapters[p
 
 from uuid import UUID
 
+import httpx
 from phoenix.client import Client
 
 from sectum.adapters.base import Capability, ObservabilityAdapter, TraceHit
@@ -55,7 +56,14 @@ class PhoenixObservability(ObservabilityAdapter):
         return sorted(self._project_names())
 
     def delete(self, tenant: UUID) -> None:
-        """Delete the tenant's Phoenix project (and every trace and span within)."""
-        name = self._project_name(tenant)
-        if name in self._project_names():
-            self._client.projects.delete(project_name=name)
+        """Delete the tenant's Phoenix project; a missing project is a no-op.
+
+        Suppresses a ``404`` so a concurrent erasure (or a tenant that never
+        accumulated traces) does not surface as a crash - the contract is
+        idempotent.
+        """
+        try:
+            self._client.projects.delete(project_name=self._project_name(tenant))
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code != 404:
+                raise

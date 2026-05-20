@@ -31,6 +31,8 @@ def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
     target = substrate.tenants[0].tenant_id
     store = _seeded_store(substrate, soft_delete=False)
     report = ErasureProbe(substrate, vector=store).run(target)
+    # default (no observability adapter) reports only the vector-store surface
+    assert tuple(surface.surface for surface in report.surfaces) == (Surface.VECTOR_DB,)
     assert report.surfaces[0].markers_before > 0
     assert report.erased
     assert report.findings == ()

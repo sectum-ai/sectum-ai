@@ -193,15 +193,23 @@ def _resolve_secret(extras: dict[str, Any], direct_key: str, env_key: str) -> st
     credentials"): the config holds ``dsn_env: SECTUM_PGVECTOR_DSN`` and the
     resolver reads the value from that environment variable. An inline
     ``dsn:`` is also accepted but discouraged.
+
+    Empty values (``dsn_env: ""``, an unset env var, or ``dsn: ""``) are
+    rejected with a ``ConfigError`` rather than silently passed through.
     """
     if env_key in extras:
         var = _str(extras, env_key, "")
+        if not var:
+            raise ConfigError(f"adapter field {env_key!r} must name an environment variable")
         value = os.environ.get(var)
-        if value is None:
-            raise ConfigError(f"environment variable not set: {var}")
+        if not value:
+            raise ConfigError(f"environment variable {var!r} is unset or empty")
         return value
     if direct_key in extras:
-        return _str(extras, direct_key, "")
+        value = _str(extras, direct_key, "")
+        if not value:
+            raise ConfigError(f"adapter field {direct_key!r} must not be empty")
+        return value
     raise ConfigError(f"missing {direct_key!r} or {env_key!r} in adapter config")
 
 

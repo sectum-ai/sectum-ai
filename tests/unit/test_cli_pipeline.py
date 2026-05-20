@@ -220,3 +220,15 @@ def test_probe_rejects_max_concurrency_below_one(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--max-concurrency", "0"])
     assert result.exit_code == 3
+
+
+def test_probe_with_max_concurrency_still_exits_two_against_the_demo(tmp_path: Path) -> None:
+    """The leaky demo + concurrent execution still surfaces confirmed leaks.
+
+    Finding counts may vary across runs because mutating probes (Class 3 vector
+    upsert, Class 8 memory write, Class 9 model train) interleave with reading
+    probes nondeterministically; the exit code is the stable contract.
+    """
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--max-concurrency", "4"])
+    assert result.exit_code == 2
