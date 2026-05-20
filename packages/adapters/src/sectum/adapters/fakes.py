@@ -161,7 +161,10 @@ class FakeObservability(ObservabilityAdapter):
     """
 
     def __init__(self, name: str = "fake-observability", *, soft_delete: bool = False) -> None:
-        super().__init__(name, frozenset({Capability.TRACE_SEARCH}))
+        capabilities = {Capability.TRACE_SEARCH}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
         self._soft_delete = soft_delete
         self._traces: dict[UUID, list[tuple[str, str, str]]] = {}
 

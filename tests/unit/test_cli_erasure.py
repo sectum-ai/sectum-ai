@@ -66,6 +66,22 @@ def test_erasure_uses_the_configs_soft_delete_setting(tmp_path: Path) -> None:
     assert "ERASURE FAILED" in result.output
 
 
+def test_erasure_honors_only_observability_soft_delete_from_config(tmp_path: Path) -> None:
+    """Asymmetric soft-delete: vector hard-deletes; only observability leaves residue."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\n"
+        "adapters:\n"
+        "  vector_store: {kind: fake, soft_delete: false}\n"
+        "  observability: {kind: fake, soft_delete: true}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    # the observability soft-delete drives the failure (the vector surface erased fine)
+    assert result.exit_code == 2
+    assert "ERASURE FAILED" in result.output
+
+
 def test_erasure_warns_when_soft_delete_is_combined_with_config(tmp_path: Path) -> None:
     """--soft-delete is ignored when --config is given; a warning is emitted."""
     config_path = tmp_path / "sectum.yaml"

@@ -281,3 +281,9 @@ def test_soft_delete_observability_retains_traces() -> None:
     obs.delete(_TENANT_A)
     # the soft-delete fake acknowledges but leaves traces - the Class 11 residue
     assert obs.search_traces(_TENANT_A, "CANARY-X")
+
+
+def test_soft_delete_observability_reports_the_capability() -> None:
+    """The fake's capability self-report tracks the soft_delete knob (§11)."""
+    assert FakeObservability(soft_delete=True).supports(Capability.SOFT_DELETE)
+    assert not FakeObservability().supports(Capability.SOFT_DELETE)

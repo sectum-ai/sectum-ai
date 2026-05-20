@@ -340,7 +340,7 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
     """Build the observability adapter the config selects."""
     extras = config.model_extra or {}
     if config.kind == "fake":
-        return FakeObservability()
+        return FakeObservability(soft_delete=_bool(extras, "soft_delete", False))
     if config.kind == "phoenix":
         from sectum.adapters.observability.phoenix import PhoenixObservability
 
