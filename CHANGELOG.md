@@ -147,6 +147,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HttpRAGPipeline`/`HttpAgent`; `kind: phoenix` in `adapters.observability`
   selects `PhoenixObservability`. New `_float` and `_str_dict` helpers parse
   timeouts and header maps from the config.
+- `sectum probe` accepts `--max-concurrency N` (default 1) to run probes in
+  parallel via a thread pool. Live, thread-safe adapters are required for
+  N > 1; the in-memory fakes share state and may race under concurrent
+  execution, so they're intended for the serial demo path.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

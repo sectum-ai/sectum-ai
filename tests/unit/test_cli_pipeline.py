@@ -183,3 +183,40 @@ def test_baseline_save_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["baseline", "--save", "--config", str(config_path)])
     assert result.exit_code == 0
     assert (workdir / "baseline.json").exists()
+
+
+def test_probe_with_max_concurrency_and_isolated_config_yields_no_findings(
+    tmp_path: Path,
+) -> None:
+    """An isolated config runs to completion under --max-concurrency 4."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        "adapters:\n"
+        "  vector_store: {kind: fake, shared_index: false}\n"
+        "  cache: {kind: fake, tenant_scoped: true}\n"
+        "  model: {kind: fake}\n"
+        "  mcp: {kind: fake}\n"
+        "  memory: {kind: fake}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        [
+            "probe",
+            "--config",
+            str(config_path),
+            "--workdir",
+            str(tmp_path),
+            "--max-concurrency",
+            "4",
+        ],
+    )
+    assert result.exit_code == 0
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert run["metrics"]["confirmed_findings"] == 0
+
+
+def test_probe_rejects_max_concurrency_below_one(tmp_path: Path) -> None:
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--max-concurrency", "0"])
+    assert result.exit_code == 3

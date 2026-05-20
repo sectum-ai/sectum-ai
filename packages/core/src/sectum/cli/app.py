@@ -6,6 +6,7 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 
 import functools
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -50,6 +51,7 @@ from sectum.probes import (
 )
 from sectum.runner import Runner, StepResult, retrieval_pivot_rate
 from sectum.spec import (
+    ConfigError,
     EvidenceError,
     EvidencePack,
     Finding,
@@ -283,8 +285,20 @@ def probe(
         Path | None,
         typer.Option("--config", help="Read adapters and workdir from this sectum.yaml file."),
     ] = None,
+    max_concurrency: Annotated[
+        int,
+        typer.Option(
+            "--max-concurrency",
+            help=(
+                "Run probes in parallel via a thread pool (1 = serial; >1 requires "
+                "thread-safe adapters - the in-memory fakes share state and may race)."
+            ),
+        ),
+    ] = 1,
 ) -> None:
     """Run the probe suite against the configured stack and record the findings."""
+    if max_concurrency < 1:
+        raise ConfigError("--max-concurrency must be at least 1")
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir)
@@ -328,8 +342,14 @@ def probe(
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
-    for probe_instance in suite:
-        step_results.extend(runner.run_per_step(probe_instance))
+    if max_concurrency > 1:
+        with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
+            futures = [executor.submit(runner.run_per_step, instance) for instance in suite]
+            for future in futures:
+                step_results.extend(future.result())
+    else:
+        for probe_instance in suite:
+            step_results.extend(runner.run_per_step(probe_instance))
     kv_report = KvCacheTimingProbe(substrate, model=model).run() if run_kv_timing else None
     finished = datetime.now(UTC)
 
