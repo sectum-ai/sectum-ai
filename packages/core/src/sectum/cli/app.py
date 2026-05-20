@@ -314,7 +314,17 @@ def probe(
                     marker.marker_id,
                     f"MCP resource. Reference: {marker.plaintext}",
                 )
-    runner = Runner(substrate, vector=vector, cache=cache, model=model, mcp=mcp, memory=memory)
+    runner = Runner(
+        substrate,
+        vector=vector,
+        cache=cache,
+        model=model,
+        mcp=mcp,
+        memory=memory,
+        rag=bundle.rag,
+        observability=bundle.observability,
+        agent=bundle.agent,
+    )
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []

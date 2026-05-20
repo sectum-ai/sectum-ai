@@ -136,6 +136,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `docs/configuration.md` reference page in the mkdocs nav: the `sectum.yaml`
   top-level shape, every adapter family's supported `kind`s with their fields
   and defaults, the env-var secret pattern, and a live-pgvector example.
+- Extend the scenario runner with `rag.ask`, `observability.search`, and
+  `agent.run` actions and pair them with new `rag`, `observability`, and
+  `agent` fields on `AdapterBundle`; the CLI's `sectum probe` passes the
+  three new adapters into the runner. Probes can now drive a RAG pipeline,
+  search observability traces, or run an agent task directly through the
+  runner; the config resolver wires the three new families to their fakes.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

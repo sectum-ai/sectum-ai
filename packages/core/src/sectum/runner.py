@@ -5,10 +5,13 @@ package graph stays acyclic (core depends on probes, never the reverse).
 """
 
 from sectum.adapters import (
+    AgentAdapter,
     CacheAdapter,
     MCPAdapter,
     MemoryAdapter,
     ModelAdapter,
+    ObservabilityAdapter,
+    RAGPipelineAdapter,
     VectorStoreAdapter,
 )
 from sectum.probes import Probe, confirmed_findings
@@ -38,6 +41,9 @@ class Runner:
         model: ModelAdapter | None = None,
         mcp: MCPAdapter | None = None,
         memory: MemoryAdapter | None = None,
+        rag: RAGPipelineAdapter | None = None,
+        observability: ObservabilityAdapter | None = None,
+        agent: AgentAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
@@ -45,6 +51,9 @@ class Runner:
         self._model = model
         self._mcp = mcp
         self._memory = memory
+        self._rag = rag
+        self._observability = observability
+        self._agent = agent
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
@@ -79,6 +88,12 @@ class Runner:
             return self._memory_write(step)
         if step.action == "memory.recall":
             return self._memory_recall(step)
+        if step.action == "rag.ask":
+            return self._rag_ask(step)
+        if step.action == "observability.search":
+            return self._observability_search(step)
+        if step.action == "agent.run":
+            return self._agent_run(step)
         raise ValueError(f"runner cannot execute action: {step.action!r}")
 
     def _vector_query(self, step: ProbeStep) -> Observation:
@@ -172,6 +187,36 @@ class Runner:
             step_id=step.step_id,
             surface=Surface.AGENT_MEMORY,
             raw_response="\n".join(recalled),
+        )
+
+    def _rag_ask(self, step: ProbeStep) -> Observation:
+        if self._rag is None:
+            raise AdapterError("a rag.ask step needs a rag adapter")
+        answer = self._rag.ask(step.actor_tenant_id, step.payload["query"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.RAG_PIPELINE,
+            raw_response=answer.answer,
+        )
+
+    def _observability_search(self, step: ProbeStep) -> Observation:
+        if self._observability is None:
+            raise AdapterError("an observability.search step needs an observability adapter")
+        hits = self._observability.search_traces(step.actor_tenant_id, step.payload["marker"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.TRACING,
+            raw_response="\n".join(hit.snippet for hit in hits),
+        )
+
+    def _agent_run(self, step: ProbeStep) -> Observation:
+        if self._agent is None:
+            raise AdapterError("an agent.run step needs an agent adapter")
+        result = self._agent.run(step.actor_tenant_id, step.payload["task"])
+        return Observation(
+            step_id=step.step_id,
+            surface=Surface.AGENT_FRAMEWORK,
+            raw_response=result.output,
         )
 
 

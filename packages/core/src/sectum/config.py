@@ -27,15 +27,21 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sectum.adapters import (
+    AgentAdapter,
     CacheAdapter,
+    FakeAgent,
     FakeCache,
     FakeMCP,
     FakeMemory,
     FakeModel,
+    FakeObservability,
+    FakeRAGPipeline,
     FakeVectorStore,
     MCPAdapter,
     MemoryAdapter,
     ModelAdapter,
+    ObservabilityAdapter,
+    RAGPipelineAdapter,
     VectorStoreAdapter,
 )
 from sectum.spec import ConfigError
@@ -119,6 +125,9 @@ class AdapterBundle:
     model: ModelAdapter
     mcp: MCPAdapter
     memory: MemoryAdapter
+    rag: RAGPipelineAdapter
+    observability: ObservabilityAdapter
+    agent: AgentAdapter
 
 
 def _bool(extras: dict[str, Any], key: str, default: bool) -> bool:
@@ -286,6 +295,27 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
     raise _unsupported("memory", config.kind)
 
 
+def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:
+    """Build the RAG-pipeline adapter the config selects."""
+    if config.kind == "fake":
+        return FakeRAGPipeline()
+    raise _unsupported("rag", config.kind)
+
+
+def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
+    """Build the observability adapter the config selects."""
+    if config.kind == "fake":
+        return FakeObservability()
+    raise _unsupported("observability", config.kind)
+
+
+def build_agent(config: AdapterConfig) -> AgentAdapter:
+    """Build the agent adapter the config selects."""
+    if config.kind == "fake":
+        return FakeAgent()
+    raise _unsupported("agent", config.kind)
+
+
 def build_adapters(config: SectumConfig) -> AdapterBundle:
     """Build every adapter the CLI's probe suite needs.
 
@@ -298,4 +328,7 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
         model=build_model(config.adapters.get("model", fake)),
         mcp=build_mcp(config.adapters.get("mcp", fake)),
         memory=build_memory(config.adapters.get("memory", fake)),
+        rag=build_rag(config.adapters.get("rag", fake)),
+        observability=build_observability(config.adapters.get("observability", fake)),
+        agent=build_agent(config.adapters.get("agent", fake)),
     )

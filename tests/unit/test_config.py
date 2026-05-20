@@ -6,10 +6,13 @@ import pytest
 
 from sectum.adapters import (
     Capability,
+    FakeAgent,
     FakeCache,
     FakeMCP,
     FakeMemory,
     FakeModel,
+    FakeObservability,
+    FakeRAGPipeline,
     FakeVectorStore,
 )
 from sectum.config import (
@@ -17,10 +20,13 @@ from sectum.config import (
     SectumConfig,
     _resolve_secret,
     build_adapters,
+    build_agent,
     build_cache,
     build_mcp,
     build_memory,
     build_model,
+    build_observability,
+    build_rag,
     build_vector_store,
     load_config,
 )
@@ -241,3 +247,37 @@ def test_build_mcp_stdio_requires_a_command() -> None:
 def test_build_mcp_stdio_rejects_non_list_args() -> None:
     with pytest.raises(ConfigError, match="must be a list"):
         build_mcp(AdapterConfig(kind="stdio", command="echo", args="oops"))
+
+
+def test_build_rag_defaults_to_a_fake() -> None:
+    assert isinstance(build_rag(AdapterConfig(kind="fake")), FakeRAGPipeline)
+
+
+def test_build_rag_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_rag(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_observability_defaults_to_a_fake() -> None:
+    assert isinstance(build_observability(AdapterConfig(kind="fake")), FakeObservability)
+
+
+def test_build_observability_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_observability(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_agent_defaults_to_a_fake() -> None:
+    assert isinstance(build_agent(AdapterConfig(kind="fake")), FakeAgent)
+
+
+def test_build_agent_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_agent(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_adapters_includes_rag_observability_and_agent() -> None:
+    bundle = build_adapters(SectumConfig())
+    assert isinstance(bundle.rag, FakeRAGPipeline)
+    assert isinstance(bundle.observability, FakeObservability)
+    assert isinstance(bundle.agent, FakeAgent)
