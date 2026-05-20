@@ -97,3 +97,11 @@ def test_phoenix_lists_projects(adapter: PhoenixObservability) -> None:
     _seed(Client(base_url=_BASE_URL), _TENANT_A, "a recorded trace")
     assert _search_with_retry(adapter, _TENANT_A, "a recorded trace")
     assert _project(_TENANT_A) in adapter.list_projects()
+
+
+def test_phoenix_delete_clears_a_tenants_project(adapter: PhoenixObservability) -> None:
+    _seed(Client(base_url=_BASE_URL), _TENANT_A, "the output mentions SECTUM-CANARY-DEL")
+    assert _search_with_retry(adapter, _TENANT_A, "SECTUM-CANARY-DEL")
+    adapter.delete(_TENANT_A)
+    # after delete the tenant's project is gone, so a search returns nothing
+    assert adapter.search_traces(_TENANT_A, "SECTUM-CANARY-DEL") == []

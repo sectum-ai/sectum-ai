@@ -465,12 +465,20 @@ def erasure(
     substrate = _load_substrate(workdir)
     target = _resolve_target(substrate, target_tenant)
     store = FakeVectorStore(soft_delete=soft_delete)
+    obs = FakeObservability(soft_delete=soft_delete)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            obs.record(
+                marker.owner_tenant_id,
+                "sectum-erasure",
+                f"trace recording marker {marker.plaintext}",
+            )
 
     started = datetime.now(UTC)
-    report = ErasureProbe(substrate, vector=store).run(target)
+    report = ErasureProbe(substrate, vector=store, observability=obs).run(target)
     finished = datetime.now(UTC)
 
     run = RunResult(
@@ -479,7 +487,7 @@ def erasure(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
-        adapter_versions={store.name: __version__},
+        adapter_versions={store.name: __version__, obs.name: __version__},
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
         metrics=RunMetrics(

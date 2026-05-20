@@ -151,6 +151,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parallel via a thread pool. Live, thread-safe adapters are required for
   N > 1; the in-memory fakes share state and may race under concurrent
   execution, so they're intended for the serial demo path.
+- Class 11 (`sectum erasure`) now checks the observability surface. The
+  `ObservabilityAdapter` interface gains `delete(tenant)`; `FakeObservability`
+  gets a `soft_delete` knob mirroring `FakeVectorStore`; `PhoenixObservability`
+  removes the tenant's project on delete. `ErasureProbe` accepts an optional
+  `observability` adapter and scans the tracing surface for residual markers,
+  and `sectum erasure` seeds traces and passes a `FakeObservability` through
+  so the workflow round-trips through both the vector and tracing surfaces.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

@@ -167,6 +167,15 @@ class ObservabilityAdapter(Adapter):
     def list_projects(self) -> list[str]:
         """List every observability project."""
 
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete every trace observable for ``tenant``.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        purging the tenant's traces, then re-scans to confirm no residue
+        remains.
+        """
+
 
 class AgentAdapter(Adapter):
     """Adapter for an agent framework."""

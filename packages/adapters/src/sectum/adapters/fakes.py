@@ -153,10 +153,16 @@ class FakeRAGPipeline(RAGPipelineAdapter):
 
 
 class FakeObservability(ObservabilityAdapter):
-    """A deterministic in-memory tracing backend."""
+    """A deterministic in-memory tracing backend.
 
-    def __init__(self, name: str = "fake-observability") -> None:
+    With ``soft_delete=True``, ``delete`` is a no-op - mirroring
+    ``FakeVectorStore``'s soft-delete model. That is the Class 11 erasure
+    residue the verification probe is built to catch.
+    """
+
+    def __init__(self, name: str = "fake-observability", *, soft_delete: bool = False) -> None:
         super().__init__(name, frozenset({Capability.TRACE_SEARCH}))
+        self._soft_delete = soft_delete
         self._traces: dict[UUID, list[tuple[str, str, str]]] = {}
 
     def record(self, tenant: UUID, project: str, text: str) -> str:
@@ -175,6 +181,13 @@ class FakeObservability(ObservabilityAdapter):
 
     def list_projects(self) -> list[str]:
         return sorted({project for traces in self._traces.values() for _, project, _ in traces})
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete observability backend acknowledges the request but
+        # leaves the traces in place - the residue Class 11 is built to catch.
+        if self._soft_delete:
+            return
+        self._traces.pop(tenant, None)
 
 
 class FakeAgent(AgentAdapter):

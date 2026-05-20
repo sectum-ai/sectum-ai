@@ -53,3 +53,9 @@ class PhoenixObservability(ObservabilityAdapter):
 
     def list_projects(self) -> list[str]:
         return sorted(self._project_names())
+
+    def delete(self, tenant: UUID) -> None:
+        """Delete the tenant's Phoenix project (and every trace and span within)."""
+        name = self._project_name(tenant)
+        if name in self._project_names():
+            self._client.projects.delete(project_name=name)

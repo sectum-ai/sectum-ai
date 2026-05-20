@@ -265,3 +265,19 @@ def test_adapter_registry_registers_lists_and_rejects_duplicates() -> None:
     assert registry.by_family(AdapterFamily.CACHE) == [cache]
     with pytest.raises(ValueError, match="already registered"):
         registry.register(FakeVectorStore())
+
+
+def test_observability_delete_clears_a_tenants_traces() -> None:
+    obs = FakeObservability()
+    obs.record(_TENANT_A, "project-a", "trace containing CANARY-X")
+    assert obs.search_traces(_TENANT_A, "CANARY-X")
+    obs.delete(_TENANT_A)
+    assert obs.search_traces(_TENANT_A, "CANARY-X") == []
+
+
+def test_soft_delete_observability_retains_traces() -> None:
+    obs = FakeObservability(soft_delete=True)
+    obs.record(_TENANT_A, "project-a", "trace containing CANARY-X")
+    obs.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves traces - the Class 11 residue
+    assert obs.search_traces(_TENANT_A, "CANARY-X")
