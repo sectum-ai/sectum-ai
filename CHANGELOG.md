@@ -133,6 +133,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sectum erasure`, `sectum report`, and `sectum baseline` accept
   `--config sectum.yaml` and use its workdir as a default, completing the
   per-command `--config` coverage for every workflow command.
+- A `docs/configuration.md` reference page in the mkdocs nav: the `sectum.yaml`
+  top-level shape, every adapter family's supported `kind`s with their fields
+  and defaults, the env-var secret pattern, and a live-pgvector example.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

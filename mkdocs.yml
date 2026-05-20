@@ -25,6 +25,7 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Configuration: configuration.md
   - Attack catalog:
       - Overview: attack-catalog/index.md
       - Class 1 - Direct tenant boundary fetch: attack-catalog/class-01-tenant-boundary.md
