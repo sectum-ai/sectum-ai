@@ -76,3 +76,22 @@ larger, separate piece of work after that.
 - Sequencing: user-level work stays deferred and the tenant path remains
   primary until user-level detection is prioritized; the access-policy model
   (intended-vs-actual access) is the larger piece that follows.
+
+## Update (2026-05-21) — user-level detection landed
+
+The detection half of the deferred work is now implemented:
+
+- `ProbeStep` gained `actor_user_id` and `Finding` gained `owner_user_id` /
+  `observed_in_user_id` (all optional, tenant-level default).
+- The detection pipeline's leak predicate is principal-aware
+  (`_is_cross_principal`): cross-tenant is always a leak; within a tenant, a
+  marker is foreign only to a user-scoped observer whose user differs from the
+  marker's owner. A tenant-level observer is unchanged.
+- User isolation is verified **default-deny**: any cross-user appearance is a
+  leak. The intended-vs-actual access-policy model (allowing legitimate
+  within-tenant sharing) remains the larger, separate follow-on.
+- The flagship Class 2 probe (`rag-entity-bleed`) plans from every principal, so
+  against a store that is not user-scoped a user's benign query surfaces another
+  user's data. Generalizing the remaining probes — and the **user-aware
+  adapters** they need, since today's adapters are tenant-keyed — is the next
+  increment.

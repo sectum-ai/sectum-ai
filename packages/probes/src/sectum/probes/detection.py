@@ -22,7 +22,16 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from sectum.spec import Finding, FindingStatus, Marker, MarkerType, Severity, Substrate, Surface
+from sectum.spec import (
+    Finding,
+    FindingStatus,
+    Marker,
+    MarkerType,
+    Principal,
+    Severity,
+    Substrate,
+    Surface,
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _OWASP_MULTI_TENANT = "LLM08:2025"
@@ -30,6 +39,23 @@ _OWASP_MULTI_TENANT = "LLM08:2025"
 
 def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
+
+
+def _is_cross_principal(marker: Marker, observer: Principal) -> bool:
+    """Whether ``marker`` is foreign to the observing principal (ADR-0006).
+
+    Cross-tenant is always a leak. Within one tenant, the marker is foreign only
+    to a user-scoped observer whose user differs from the marker's owner user; a
+    tenant-level observer (or a tenant-level marker) is never crossed - the
+    tenant owns all its users' data. User isolation is verified default-deny:
+    any cross-user appearance is a leak, since the intended-sharing policy model
+    is deferred (ADR-0006).
+    """
+    if marker.owner_tenant_id != observer.tenant_id:
+        return True
+    if observer.user_id is None or marker.owner_user_id is None:
+        return False
+    return marker.owner_user_id != observer.user_id
 
 
 class EmbeddingProvider(Protocol):
@@ -190,30 +216,41 @@ class DetectionPipeline:
         observation_text: str,
         surface: Surface,
         probe_id: str = "manual",
+        *,
+        observed_user: UUID | None = None,
     ) -> list[Finding]:
-        """Detect cross-tenant leakage in one observation; return all findings."""
-        findings = self._exact(observed_in_tenant, observation_text, surface, probe_id)
-        findings.extend(self._semantic(observed_in_tenant, observation_text, surface, probe_id))
+        """Detect cross-principal leakage in one observation; return all findings.
+
+        The observer is the principal whose session produced the observation:
+        ``observed_in_tenant`` plus an optional ``observed_user``. A leak is a
+        marker owned by a different principal (a different tenant, or a different
+        user within the same tenant - ADR-0006) surfacing here. A tenant-level
+        observer (``observed_user`` ``None``) detects only cross-tenant leaks, so
+        existing tenant-level behavior is unchanged.
+        """
+        observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
+        findings = self._exact(observer, observation_text, surface, probe_id)
+        findings.extend(self._semantic(observer, observation_text, surface, probe_id))
         return findings
 
-    def _foreign(self, observed_in_tenant: UUID, marker_type: MarkerType) -> list[Marker]:
+    def _foreign(self, observer: Principal, marker_type: MarkerType) -> list[Marker]:
         return [
             marker
             for marker in self._markers
-            if marker.marker_type is marker_type and marker.owner_tenant_id != observed_in_tenant
+            if marker.marker_type is marker_type and _is_cross_principal(marker, observer)
         ]
 
     def _exact(
-        self, observed_in_tenant: UUID, text: str, surface: Surface, probe_id: str
+        self, observer: Principal, text: str, surface: Surface, probe_id: str
     ) -> list[Finding]:
         findings: list[Finding] = []
         for marker_type in (MarkerType.HARD_CANARY, MarkerType.SECRET_CANARY):
-            for marker in self._foreign(observed_in_tenant, marker_type):
+            for marker in self._foreign(observer, marker_type):
                 if marker.plaintext in text:
                     findings.append(
                         self._finding(
                             marker,
-                            observed_in_tenant,
+                            observer,
                             surface,
                             probe_id,
                             severity=Severity.CRITICAL,
@@ -225,11 +262,11 @@ class DetectionPipeline:
         return findings
 
     def _semantic(
-        self, observed_in_tenant: UUID, text: str, surface: Surface, probe_id: str
+        self, observer: Principal, text: str, surface: Surface, probe_id: str
     ) -> list[Finding]:
         findings: list[Finding] = []
         observation_tokens = _tokenize(text)
-        for marker in self._foreign(observed_in_tenant, MarkerType.ENTITY_CANARY):
+        for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
             similarity = self._best_window_similarity(observation_tokens, marker)
             # The threshold gates which candidates reach the judge. With the
             # deterministic fake providers the judge (a full marker-phrase
@@ -241,7 +278,7 @@ class DetectionPipeline:
             findings.append(
                 self._finding(
                     marker,
-                    observed_in_tenant,
+                    observer,
                     surface,
                     probe_id,
                     severity=Severity.HIGH if leak.leak else Severity.INFO,
@@ -269,7 +306,7 @@ class DetectionPipeline:
     def _finding(
         self,
         marker: Marker,
-        observed_in_tenant: UUID,
+        observer: Principal,
         surface: Surface,
         probe_id: str,
         *,
@@ -278,18 +315,27 @@ class DetectionPipeline:
         status: FindingStatus,
         evidence: str,
     ) -> Finding:
+        # A user-level observer adds a user segment, so the same marker reaching
+        # two users of one tenant is two distinct findings; a tenant-level
+        # observer has no user segment. Full hex (not a truncation) so two
+        # principals never collide - dedupe_findings must not merge real leaks.
+        user_suffix = f"-{observer.user_id.hex}" if observer.user_id is not None else ""
         return Finding(
             # Keyed by probe as well as marker and observer: the same marker
-            # reaching the same tenant on two surfaces (say a vector store and a
-            # model adapter) is two distinct findings, while repeated detections
+            # reaching the same principal on two surfaces (say a vector store and
+            # a model adapter) is two distinct findings, while repeated detections
             # within one probe collapse under dedupe_findings.
-            finding_id=f"finding-{probe_id}-{marker.marker_id}-{observed_in_tenant.hex[:8]}",
+            finding_id=(
+                f"finding-{probe_id}-{marker.marker_id}-{observer.tenant_id.hex}{user_suffix}"
+            ),
             probe_id=probe_id,
             severity=severity,
             confidence=confidence,
             status=status,
             owner_tenant_id=marker.owner_tenant_id,
-            observed_in_tenant_id=observed_in_tenant,
+            observed_in_tenant_id=observer.tenant_id,
+            owner_user_id=marker.owner_user_id,
+            observed_in_user_id=observer.user_id,
             surface=surface,
             marker_id=marker.marker_id,
             evidence_span=evidence,

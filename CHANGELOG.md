@@ -211,6 +211,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deferred phase.
 - ADR-0006 (the isolation boundary is a principal - a tenant or a user within a
   tenant - generalizing the substrate without repositioning the tenant wedge).
+- User-level (principal) leak detection (ADR-0006 update): the detection
+  pipeline's predicate is now principal-aware - within a tenant, a marker owned
+  by one user surfacing in another user's session is a leak (verified
+  default-deny). `ProbeStep` gains `actor_user_id` and `Finding` gains
+  `owner_user_id`/`observed_in_user_id` (optional, tenant-level default), and
+  the flagship Class 2 probe (`rag-entity-bleed`) plans from every principal, so
+  against a store that is not user-scoped a user's benign query surfaces another
+  user's data. Tenant-level behavior is unchanged. Generalizing the remaining
+  probes (and the user-aware adapters they need) and the intended-vs-actual
+  access-policy model are the documented follow-ons.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

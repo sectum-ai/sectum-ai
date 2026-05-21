@@ -171,11 +171,17 @@ class Substrate(SectumModel):
 
 
 class ProbeStep(SectumModel):
-    """A single planned probe action issued from one tenant's session."""
+    """A single planned probe action issued from one principal's session.
+
+    ``actor_user_id`` is set when the step is issued from a specific user within
+    ``actor_tenant_id``'s tenant (ADR-0006); a tenant-level step leaves it
+    ``None`` and behaves exactly as before.
+    """
 
     step_id: str
     probe_id: str
     actor_tenant_id: UUID
+    actor_user_id: UUID | None = None
     action: str
     payload: dict[str, str] = Field(default_factory=dict)
 
@@ -208,6 +214,10 @@ class Finding(SectumModel):
     status: FindingStatus
     owner_tenant_id: UUID
     observed_in_tenant_id: UUID
+    # The user dimension (ADR-0006): set when the leak crosses a user boundary
+    # within a tenant. Both ``None`` for a tenant-level finding (unchanged).
+    owner_user_id: UUID | None = None
+    observed_in_user_id: UUID | None = None
     surface: Surface
     marker_id: str | None = None
     evidence_span: str = ""

@@ -22,16 +22,23 @@ class RagEntityBleedProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan one benign shared-entity query, issued from every tenant."""
-        tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
+        """Plan one benign shared-entity query, issued from every principal.
+
+        Issuing from each principal (a tenant, or a user within a tenant -
+        ADR-0006) verifies isolation at both granularities: against a store that
+        is not user-scoped, a user's benign query surfaces another user's data in
+        the same tenant. With no users declared this reduces to one query per
+        tenant, exactly as before.
+        """
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
-            for observer in tenant_ids:
+            for observer in substrate.principals():
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",
                         probe_id=self.id,
-                        actor_tenant_id=observer,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
                         action="vector.query",
                         payload={"query": f"records mentioning {entity.value}", "k": "10"},
                     )
@@ -41,11 +48,12 @@ class RagEntityBleedProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan the observation for any foreign canary via the detection pipeline."""
+        """Scan the observation for any foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )
