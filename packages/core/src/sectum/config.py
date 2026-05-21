@@ -82,6 +82,16 @@ class EvidenceConfig(BaseModel):
     rekor_url: str | None = None
 
 
+class SecurityConfig(BaseModel):
+    """At-rest protection settings for the seeded substrate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Name of the env var holding a base64-encoded 32-byte AES-256 key. When set,
+    # `sectum seed` seals the substrate (and its ground-truth manifest) at rest.
+    manifest_key_env: str | None = None
+
+
 class SectumConfig(BaseModel):
     """The parsed ``sectum.yaml`` configuration."""
 
@@ -91,6 +101,7 @@ class SectumConfig(BaseModel):
     workdir: Path = Path(".sectum")
     adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
 
 
 def load_config(path: Path) -> SectumConfig:

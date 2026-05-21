@@ -31,11 +31,13 @@ from sectum.config import (
     AdapterConfig,
     EvidenceConfig,
     SectumConfig,
+    SecurityConfig,
     build_adapters,
     build_observability,
     build_vector_store,
     load_config,
 )
+from sectum.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum.evidence import (
     RekorTransparencyLog,
     Rfc3161Timestamper,
@@ -165,6 +167,13 @@ evidence:
   # tsa_url: https://freetsa.org/tsr
   rekor: false          # true: also record the run digest in a Sigstore Rekor log
   # rekor_url: https://rekor.sigstore.dev
+
+# At-rest protection for the seeded substrate (which holds the ground-truth
+# manifest). Set manifest_key_env to the name of an environment variable holding
+# a base64-encoded 32-byte key; `sectum seed` then seals the substrate on disk.
+# Generate a key: python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"
+security:
+  # manifest_key_env: SECTUM_MANIFEST_KEY
 """
 
 app = typer.Typer(
@@ -240,13 +249,52 @@ def list_adapters() -> None:
         typer.echo(f"{adapter.name:<22}{adapter.family.value:<18}{capabilities}")
 
 
-def _load_substrate(workdir: Path) -> Substrate:
-    """Load the seeded substrate from ``workdir``, or exit with a config error."""
-    path = workdir / "substrate.json"
-    if not path.exists():
-        typer.echo(f"no substrate at {path}; run 'sectum seed' first", err=True)
-        raise typer.Exit(code=3)
-    return Substrate.model_validate_json(path.read_text())
+def _resolve_manifest_key(security: SecurityConfig) -> bytes | None:
+    """Return the configured at-rest key, or ``None`` when encryption is off."""
+    if security.manifest_key_env is None:
+        return None
+    return load_key_from_env(security.manifest_key_env)
+
+
+def _write_substrate(substrate: Substrate, workdir: Path, key: bytes | None) -> Path:
+    """Persist the substrate to ``workdir``, sealed when a key is given.
+
+    Removes the other variant so a re-seed never leaves a stale copy behind - in
+    particular, a plaintext substrate must not survive once a sealed one is
+    written, or the at-rest protection would be silently defeated.
+    """
+    payload = substrate.model_dump_json(indent=2).encode("utf-8")
+    sealed_path = workdir / "substrate.json.enc"
+    plain_path = workdir / "substrate.json"
+    if key is not None:
+        sealed_path.write_bytes(seal_bytes(payload, key))
+        plain_path.unlink(missing_ok=True)
+        return sealed_path
+    plain_path.write_bytes(payload)
+    sealed_path.unlink(missing_ok=True)
+    return plain_path
+
+
+def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
+    """Load the seeded substrate from ``workdir``, or exit with a config error.
+
+    A sealed substrate (``substrate.json.enc``) requires the matching key; a
+    plaintext ``substrate.json`` is loaded directly.
+    """
+    sealed = workdir / "substrate.json.enc"
+    plain = workdir / "substrate.json"
+    if sealed.exists():
+        if key is None:
+            typer.echo(
+                f"the substrate at {sealed} is encrypted; set security.manifest_key_env",
+                err=True,
+            )
+            raise typer.Exit(code=3)
+        return Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+    if plain.exists():
+        return Substrate.model_validate_json(plain.read_text())
+    typer.echo(f"no substrate at {plain}; run 'sectum seed' first", err=True)
+    raise typer.Exit(code=3)
 
 
 def _load_run(workdir: Path) -> RunResult:
@@ -293,8 +341,7 @@ def seed(
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = build_substrate(default_scenario(seed=effective_seed))
     effective_workdir.mkdir(parents=True, exist_ok=True)
-    path = effective_workdir / "substrate.json"
-    path.write_text(substrate.model_dump_json(indent=2))
+    path = _write_substrate(substrate, effective_workdir, _resolve_manifest_key(loaded.security))
     typer.echo(
         f"seeded {len(substrate.tenants)} tenants and "
         f"{len(substrate.documents)} documents -> {path}"
@@ -332,7 +379,7 @@ def probe(
         raise ConfigError("--max-concurrency must be at least 1")
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
-    substrate = _load_substrate(effective_workdir)
+    substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
     suite = _SUITE
     run_kv_timing = True
     if only is not None:
@@ -498,7 +545,7 @@ def report(
     loaded = load_config(config) if config is not None else SectumConfig()
     if workdir is None:
         workdir = loaded.workdir
-    substrate = _load_substrate(workdir)
+    substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     run = _load_run(workdir)
     timestamper = _resolve_timestamper(loaded.evidence, tsa)
     transparency_log = _resolve_transparency_log(loaded.evidence, rekor)
@@ -607,7 +654,7 @@ def erasure(
         fake_default = AdapterConfig(kind="fake", soft_delete=soft_delete)
     if workdir is None:
         workdir = loaded.workdir
-    substrate = _load_substrate(workdir)
+    substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     target = _resolve_target(substrate, target_tenant)
     store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
     obs = build_observability(loaded.adapters.get("observability", fake_default))

@@ -26,6 +26,11 @@ dependencies = [
     "sectum-ai-evidence",
 ]
 
+[project.optional-dependencies]
+# At-rest encryption of the seeded substrate (and its ground-truth manifest).
+# Optional: the default unencrypted path needs no third-party dependency.
+encryption = ["cryptography>=43"]
+
 [project.scripts]
 sectum = "sectum.cli.app:app"
 

@@ -54,6 +54,11 @@ sensitive core: an adversary holding it knows every canary in advance.
 - The full manifest is **not** embedded in the evidence pack by default — only
   its hash. This keeps the sensitive ground truth out of an artifact that
   travels to auditors.
+- At rest, the seeded substrate (which holds the manifest, and the planted
+  canary plaintexts that also appear in the corpus) can be encrypted: set
+  `security.manifest_key_env` and `sectum seed` seals it with AES-256-GCM under
+  a key referenced from the environment. Recommended for BYOC, where the
+  substrate persists on a customer machine.
 
 ### Evidence packs
 

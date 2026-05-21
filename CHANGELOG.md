@@ -222,6 +222,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
+- At-rest encryption of the seeded substrate (`sectum.crypto`): set
+  `security.manifest_key_env` to the name of an environment variable holding a
+  base64 32-byte key, and `sectum seed` seals the substrate - which holds the
+  ground-truth manifest and the planted canary plaintexts - with AES-256-GCM
+  before it touches disk (`substrate.json.enc`); `sectum probe`/`report`/
+  `erasure` open it with the same key. A wrong key or any tampering fails
+  authentication. The key is referenced from the environment, never inlined
+  (the engineering spec, section 17). Backed by `cryptography` behind a
+  `sectum-ai[encryption]` extra; the unencrypted path needs nothing extra.
 - An in-toto attestation wrapping (`sectum.evidence.to_in_toto_statement`,
   `verify_in_toto_statement`): `sectum report` and `sectum erasure` also emit
   `attestation.intoto.json`, the evidence re-expressed as an in-toto Statement

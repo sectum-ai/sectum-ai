@@ -136,6 +136,18 @@ Likewise it checks a Rekor inclusion proof against log keys pinned built in, and
 `--rekor-key <pem>` pins a private instance's key. See the
 [evidence chain](evidence-chain.md#trusted-timestamping-rfc-3161).
 
+## `security`
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `manifest_key_env` | str | — | Name of the environment variable holding a base64-encoded 32-byte AES-256 key. When set, `sectum seed` seals the substrate (and its ground-truth manifest) at rest as `substrate.json.enc` (requires the `sectum-ai[encryption]` extra). |
+
+The substrate holds the canary plaintexts, so sealing it at rest is recommended
+for BYOC runs. Generate a key with
+`python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`
+and export it under the configured name. The key is referenced from the
+environment, never written into `sectum.yaml`.
+
 ## Secrets and environment variables
 
 Credentials never appear inline in `sectum.yaml` (the engineering spec,

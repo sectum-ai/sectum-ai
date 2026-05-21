@@ -2375,8 +2375,14 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+encryption = [
+    { name = "cryptography" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
     { name = "sectum-ai-evidence", editable = "packages/evidence" },
@@ -2384,6 +2390,7 @@ requires-dist = [
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "typer", specifier = ">=0.12" },
 ]
+provides-extras = ["encryption"]
 
 [[package]]
 name = "sectum-ai-adapters"
