@@ -51,6 +51,7 @@ nav:
       - adr/0004-detection-pipeline-placement.md
       - adr/0005-examples-named-by-attack-class.md
       - adr/0006-principal-isolation-model.md
+      - adr/0007-canonical-hashing-serializes-every-field.md
 
 markdown_extensions:
   - admonition

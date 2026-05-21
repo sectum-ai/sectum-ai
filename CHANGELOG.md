@@ -171,6 +171,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deferred phase.
 - ADR-0006 (the isolation boundary is a principal - a tenant or a user within a
   tenant - generalizing the substrate without repositioning the tenant wedge).
+- ADR-0007 (canonical hashing serializes every field; reject
+  exclude_none/exclude_defaults to keep the evidence digest total and
+  unambiguous).
 
 ### Notes
 
