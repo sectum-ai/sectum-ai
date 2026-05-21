@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass
 
 from sectum.evidence.chain import run_digest
-from sectum.spec import EvidencePack, GroundTruthManifest, canonical_hash
+from sectum.spec import EvidenceError, EvidencePack, GroundTruthManifest, canonical_hash
 
 
 @dataclass(frozen=True)
@@ -30,29 +30,46 @@ class VerificationResult:
 
 
 def verify_pack(
-    pack: EvidencePack, manifest: GroundTruthManifest | None = None
+    pack: EvidencePack,
+    manifest: GroundTruthManifest | None = None,
+    *,
+    tsa_certificate: bytes | None = None,
+    tsa_root: bytes | None = None,
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
     Recomputes the run digest, validates that the timestamp token attests it,
     and checks that the run and the pack agree on the manifest hash. When
     ``manifest`` is given, its canonical hash must also match the pack.
+
+    For an RFC 3161 timestamp token, ``tsa_certificate``/``tsa_root`` override
+    the built-in FreeTSA leaf/root to pin a customer's own TSA.
     """
     digest = run_digest(pack.run_result)
-    checks = [_check_token(pack.tsa_token, digest), _check_consistency(pack)]
+    checks = [
+        _check_token(pack.tsa_token, digest, tsa_certificate, tsa_root),
+        _check_consistency(pack),
+    ]
     if manifest is not None:
         checks.append(_check_manifest(manifest, pack.manifest_hash))
     return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
 
 
-def _check_token(token: str | None, digest: str) -> Check:
+def _check_token(
+    token: str | None,
+    digest: str,
+    tsa_certificate: bytes | None = None,
+    tsa_root: bytes | None = None,
+) -> Check:
     name = "timestamp-token"
     if not token:
         return Check(name, ok=False, detail="the pack carries no timestamp token")
     try:
         parsed = json.loads(token)
     except json.JSONDecodeError:
-        return Check(name, ok=False, detail="the timestamp token is not valid JSON")
+        # Not JSON: a base64 RFC 3161 token from a real TSA. Verify its signature
+        # and message imprint against an independently pinned root.
+        return _check_rfc3161_token(token, digest, tsa_certificate, tsa_root)
     if not isinstance(parsed, dict) or parsed.get("digest") != digest:
         return Check(
             name,
@@ -61,6 +78,25 @@ def _check_token(token: str | None, digest: str) -> Check:
         )
     tsa = parsed.get("tsa", "unknown")
     return Check(name, ok=True, detail=f"run digest timestamped by {tsa}")
+
+
+def _check_rfc3161_token(
+    token: str, digest: str, tsa_certificate: bytes | None, tsa_root: bytes | None
+) -> Check:
+    name = "timestamp-token"
+    from sectum.evidence.tsa import verify_rfc3161_token
+
+    try:
+        timestamped_at = verify_rfc3161_token(
+            token, digest, tsa_certificate=tsa_certificate, tsa_root=tsa_root
+        )
+    except EvidenceError as error:
+        return Check(name, ok=False, detail=str(error))
+    return Check(
+        name,
+        ok=True,
+        detail=f"run digest timestamped by an RFC 3161 TSA at {timestamped_at.isoformat()}",
+    )
 
 
 def _check_consistency(pack: EvidencePack) -> Check:

@@ -28,6 +28,7 @@ from sectum.adapters import (
 from sectum.baseline import compare_metrics
 from sectum.config import (
     AdapterConfig,
+    EvidenceConfig,
     SectumConfig,
     build_adapters,
     build_observability,
@@ -35,6 +36,8 @@ from sectum.config import (
     load_config,
 )
 from sectum.evidence import (
+    Rfc3161Timestamper,
+    Timestamper,
     build_evidence_pack,
     control_mappings,
     render_audit_pack,
@@ -433,6 +436,20 @@ def probe(
         raise typer.Exit(code=2)
 
 
+def _resolve_timestamper(evidence: EvidenceConfig, tsa_override: str | None) -> Timestamper | None:
+    """Resolve the configured timestamper, or ``None`` to use the local default.
+
+    A ``--tsa <url>`` override forces an RFC 3161 TSA; otherwise the
+    ``evidence.timestamper`` setting selects ``local`` (default) or ``rfc3161``.
+    """
+    if tsa_override is not None:
+        return Rfc3161Timestamper(tsa_override)
+    if evidence.timestamper == "rfc3161":
+        url = evidence.tsa_url
+        return Rfc3161Timestamper(url) if url is not None else Rfc3161Timestamper()
+    return None
+
+
 @app.command()
 @_handle_typed_errors
 def report(
@@ -443,6 +460,10 @@ def report(
         Path | None,
         typer.Option("--config", help="Read defaults from this sectum.yaml file."),
     ] = None,
+    tsa: Annotated[
+        str | None,
+        typer.Option("--tsa", help="RFC 3161 TSA URL; switches the timestamper to a trusted TSA."),
+    ] = None,
 ) -> None:
     """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
     loaded = load_config(config) if config is not None else SectumConfig()
@@ -450,7 +471,10 @@ def report(
         workdir = loaded.workdir
     substrate = _load_substrate(workdir)
     run = _load_run(workdir)
-    pack = build_evidence_pack(run, substrate.manifest, control_mappings=control_mappings())
+    timestamper = _resolve_timestamper(loaded.evidence, tsa)
+    pack = build_evidence_pack(
+        run, substrate.manifest, control_mappings=control_mappings(), timestamper=timestamper
+    )
     json_path = workdir / "evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
     pdf_path = workdir / "audit-pack.pdf"
@@ -462,13 +486,34 @@ def report(
 @app.command()
 def verify(
     pack: Annotated[Path, typer.Argument(help="Path to an evidence.json pack.")],
+    tsa_cert: Annotated[
+        Path | None,
+        typer.Option("--tsa-cert", help="PEM of the TSA leaf certificate (overrides FreeTSA)."),
+    ] = None,
+    tsa_root: Annotated[
+        Path | None,
+        typer.Option("--tsa-root", help="PEM of the TSA root certificate (overrides FreeTSA)."),
+    ] = None,
 ) -> None:
     """Independently verify a tamper-evident evidence pack."""
     if not pack.exists():
         typer.echo(f"no evidence pack at {pack}", err=True)
         raise typer.Exit(code=3)
-    evidence = EvidencePack.model_validate_json(pack.read_text())
-    result = verify_pack(evidence)
+    for label, cert_path in (("--tsa-cert", tsa_cert), ("--tsa-root", tsa_root)):
+        if cert_path is not None and not cert_path.exists():
+            typer.echo(f"no certificate at {cert_path} for {label}", err=True)
+            raise typer.Exit(code=3)
+    try:
+        # pydantic's ValidationError is a ValueError; this also catches invalid JSON.
+        evidence = EvidencePack.model_validate_json(pack.read_text())
+    except ValueError as error:
+        typer.echo(f"not a valid evidence pack at {pack}: {error}", err=True)
+        raise typer.Exit(code=3) from error
+    result = verify_pack(
+        evidence,
+        tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
+        tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
+    )
     for check in result.checks:
         typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
     if not result.passed:
@@ -552,7 +597,12 @@ def erasure(
             },
         ),
     )
-    pack = build_evidence_pack(run, substrate.manifest, control_mappings=control_mappings())
+    pack = build_evidence_pack(
+        run,
+        substrate.manifest,
+        control_mappings=control_mappings(),
+        timestamper=_resolve_timestamper(loaded.evidence, None),
+    )
     json_path = workdir / "erasure-evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
     pdf_path = workdir / "erasure-attestation.pdf"

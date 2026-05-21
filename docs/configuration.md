@@ -124,9 +124,14 @@ No live memory adapter is wired into the CLI resolver yet.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `timestamper` | `local` \| `rfc3161` | `local` | The development default is a local timestamper. |
-| `tsa_url` | str | — | (`rfc3161` only) URL of the Time-Stamp Authority. |
+| `timestamper` | `local` \| `rfc3161` | `local` | `local` records a wall-clock time with no external anchor. `rfc3161` submits the run digest to a Time-Stamp Authority (requires the `sectum-ai-evidence[rfc3161]` extra). |
+| `tsa_url` | str | — | (`rfc3161` only) URL of the Time-Stamp Authority; defaults to FreeTSA when unset. `sectum report --tsa <url>` overrides it. |
 | `rekor_url` | str | — | URL of the Sigstore Rekor instance. |
+
+`sectum verify` checks an RFC 3161 token against a root pinned independently of
+the pack: it ships the public FreeTSA leaf and root built in, and
+`--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA.
+See the [evidence chain](evidence-chain.md#trusted-timestamping-rfc-3161).
 
 ## Secrets and environment variables
 

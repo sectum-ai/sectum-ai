@@ -22,6 +22,12 @@ dependencies = [
     "reportlab>=4",
 ]
 
+[project.optional-dependencies]
+# RFC 3161 trusted timestamping. Optional: the default LocalTimestamper has no
+# third-party dependency, and `sectum verify` only needs this to check an
+# RFC 3161 token. CVE-2025-52556 was fixed in 1.0.3.
+rfc3161 = ["rfc3161-client>=1.0.3"]
+
 [project.urls]
 Homepage = "https://sectum.ai"
 Repository = "https://github.com/sectum-ai/sectum-ai"

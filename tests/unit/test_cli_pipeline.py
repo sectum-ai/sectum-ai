@@ -5,7 +5,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from sectum.cli.app import app
+from sectum.cli.app import _resolve_timestamper, app
+from sectum.config import EvidenceConfig
+from sectum.evidence import Rfc3161Timestamper
 from sectum.spec import RunMetrics
 
 _runner = CliRunner()
@@ -161,6 +163,49 @@ def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
     evidence_path.write_text(json.dumps(pack))
     result = _runner.invoke(app, ["verify", str(evidence_path)])
     assert result.exit_code == 4
+
+
+def test_verify_on_a_malformed_pack_exits_cleanly(tmp_path: Path) -> None:
+    # The OSS verifier runs on packs it did not produce, so a malformed file must
+    # exit with a code (3), not a traceback.
+    bad_pack = tmp_path / "evidence.json"
+    bad_pack.write_text("{not valid json")
+    result = _runner.invoke(app, ["verify", str(bad_pack)])
+    assert result.exit_code == 3
+
+
+def test_verify_with_a_missing_tsa_cert_errors(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--tsa-cert", str(tmp_path / "absent.pem")],
+    )
+    assert result.exit_code == 3
+
+
+def test_resolve_timestamper_defaults_to_the_local_timestamper() -> None:
+    assert _resolve_timestamper(EvidenceConfig(), None) is None
+
+
+def test_resolve_timestamper_honors_the_rfc3161_setting() -> None:
+    stamper = _resolve_timestamper(
+        EvidenceConfig(timestamper="rfc3161", tsa_url="https://tsa.example/tsr"), None
+    )
+    assert isinstance(stamper, Rfc3161Timestamper)
+    assert stamper.tsa == "https://tsa.example/tsr"
+
+
+def test_resolve_timestamper_rfc3161_without_a_url_uses_freetsa() -> None:
+    stamper = _resolve_timestamper(EvidenceConfig(timestamper="rfc3161"), None)
+    assert isinstance(stamper, Rfc3161Timestamper)
+    assert stamper.tsa == "https://freetsa.org/tsr"
+
+
+def test_resolve_timestamper_cli_override_wins_over_the_config() -> None:
+    stamper = _resolve_timestamper(EvidenceConfig(), "https://pinned.example/tsr")
+    assert isinstance(stamper, Rfc3161Timestamper)
+    assert stamper.tsa == "https://pinned.example/tsr"
 
 
 def test_report_with_a_config_uses_its_workdir(tmp_path: Path) -> None:

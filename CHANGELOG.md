@@ -211,6 +211,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tests closing the reported coverage gaps (the JSON Schema export, the probe
   registry, the runner's per-action adapter guards, the config-resolver
   helpers), raising line coverage from ~95% to ~97%.
+- A real RFC 3161 trusted-timestamping path (`sectum.evidence.Rfc3161Timestamper`,
+  `verify_rfc3161_token`): `sectum report --tsa <url>` (or `evidence.timestamper:
+  rfc3161` in the config) submits the run digest to a Time-Stamp Authority and
+  stores the returned token, and `sectum verify` checks that token against the
+  recomputed digest. Trust is pinned independently of the pack: the verifier
+  ships the public FreeTSA leaf and root built in, and `sectum verify
+  --tsa-cert/--tsa-root` override them for a customer-pinned TSA. Backed by the
+  `rfc3161-client` library behind a `sectum-ai-evidence[rfc3161]` extra (pinned
+  `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
+  offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
+  (the engineering spec, section 8.2).
 
 ### Changed
 

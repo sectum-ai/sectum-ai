@@ -12,12 +12,14 @@ from sectum.evidence.chain import (
 )
 from sectum.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
 from sectum.evidence.pdf import render_audit_pack
+from sectum.evidence.tsa import Rfc3161Timestamper, verify_rfc3161_token
 from sectum.evidence.verify import Check, VerificationResult, verify_pack
 
 __all__ = [
     "COVERAGE_DISCLAIMER",
     "Check",
     "LocalTimestamper",
+    "Rfc3161Timestamper",
     "Timestamper",
     "VerificationResult",
     "build_evidence_pack",
@@ -25,4 +27,5 @@ __all__ = [
     "render_audit_pack",
     "run_digest",
     "verify_pack",
+    "verify_rfc3161_token",
 ]
