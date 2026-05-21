@@ -12,6 +12,12 @@ from sectum.evidence.chain import (
     run_digest,
 )
 from sectum.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
+from sectum.evidence.intoto import (
+    PREDICATE_TYPE,
+    STATEMENT_TYPE,
+    to_in_toto_statement,
+    verify_in_toto_statement,
+)
 from sectum.evidence.pdf import render_audit_pack
 from sectum.evidence.rekor import RekorTransparencyLog, rekor_keyring, verify_rekor_proof
 from sectum.evidence.tsa import Rfc3161Timestamper, verify_rfc3161_token
@@ -19,6 +25,8 @@ from sectum.evidence.verify import Check, VerificationResult, verify_pack
 
 __all__ = [
     "COVERAGE_DISCLAIMER",
+    "PREDICATE_TYPE",
+    "STATEMENT_TYPE",
     "Check",
     "LocalTimestamper",
     "RekorTransparencyLog",
@@ -31,6 +39,8 @@ __all__ = [
     "rekor_keyring",
     "render_audit_pack",
     "run_digest",
+    "to_in_toto_statement",
+    "verify_in_toto_statement",
     "verify_pack",
     "verify_rekor_proof",
     "verify_rfc3161_token",

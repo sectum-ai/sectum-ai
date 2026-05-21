@@ -77,3 +77,10 @@ test condition cryptographically.
 - `evidence.json` — machine-readable and schema-versioned.
 - `audit-pack.pdf` — an executive summary, scope, methodology, findings table,
   and a control-by-control coverage appendix.
+- `attestation.intoto.json` — the same evidence re-expressed as an
+  [in-toto Attestation](https://github.com/in-toto/attestation) Statement (v1):
+  a tool-agnostic envelope whose *subject* is the run (bound by its canonical
+  digest) and whose *predicate* is the verification result (scenario and
+  manifest hashes, metrics, control mappings, and which integrity anchors are
+  present). It is a derived view of the pack — it adds an interoperable format,
+  not new trust — and can be DSSE-signed and logged to Rekor for distribution.

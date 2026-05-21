@@ -146,6 +146,17 @@ def test_report_builds_an_evidence_pack_and_pdf(tmp_path: Path) -> None:
     assert (tmp_path / "audit-pack.pdf").read_bytes().startswith(b"%PDF")
 
 
+def test_report_emits_an_in_toto_attestation(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    statement = json.loads((tmp_path / "attestation.intoto.json").read_text())
+    assert statement["_type"] == "https://in-toto.io/Statement/v1"
+    # the subject digest binds the same run digest the pack is built over
+    pack = json.loads((tmp_path / "evidence.json").read_text())
+    assert statement["subject"][0]["digest"]["sha256"]
+    assert statement["predicate"]["manifest_hash"] == pack["manifest_hash"]
+
+
 def test_verify_passes_for_a_freshly_built_pack(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])

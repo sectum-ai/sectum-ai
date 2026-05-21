@@ -5,6 +5,7 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 """
 
 import functools
+import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -44,6 +45,7 @@ from sectum.evidence import (
     control_mappings,
     rekor_keyring,
     render_audit_pack,
+    to_in_toto_statement,
     verify_pack,
 )
 from sectum.probes import (
@@ -511,8 +513,11 @@ def report(
     json_path.write_text(pack.model_dump_json(indent=2))
     pdf_path = workdir / "audit-pack.pdf"
     render_audit_pack(pack, pdf_path)
+    intoto_path = workdir / "attestation.intoto.json"
+    intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
     typer.echo(f"evidence pack -> {json_path}")
     typer.echo(f"audit pack -> {pdf_path}")
+    typer.echo(f"in-toto attestation -> {intoto_path}")
 
 
 @app.command()
@@ -649,6 +654,8 @@ def erasure(
     json_path.write_text(pack.model_dump_json(indent=2))
     pdf_path = workdir / "erasure-attestation.pdf"
     render_audit_pack(pack, pdf_path)
+    intoto_path = workdir / "erasure-attestation.intoto.json"
+    intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
 
     for surface in report.surfaces:
         typer.echo(

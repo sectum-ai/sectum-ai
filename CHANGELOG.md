@@ -222,6 +222,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
+- An in-toto attestation wrapping (`sectum.evidence.to_in_toto_statement`,
+  `verify_in_toto_statement`): `sectum report` and `sectum erasure` also emit
+  `attestation.intoto.json`, the evidence re-expressed as an in-toto Statement
+  (v1) - subject = the run bound by its canonical digest, predicate = the
+  verification result (scenario/manifest hashes, metrics, control mappings, and
+  which integrity anchors are present). It is a derived, interoperable view of
+  the pack and adds no new trust; standard-library only (the engineering spec,
+  section 13).
 - A Sigstore Rekor transparency-log anchor (`sectum.evidence.RekorTransparencyLog`,
   `verify_rekor_proof`): `sectum report --rekor` (or `evidence.rekor: true`)
   signs the run digest and records a `hashedrekord` entry in a public,
