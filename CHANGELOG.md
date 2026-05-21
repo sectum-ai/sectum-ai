@@ -162,12 +162,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).
-- The principal isolation model (ADR-0006): the spec gains `PrincipalKind`, a
-  `Principal` value model (a tenant, or a user within a tenant),
-  `SyntheticUserSpec`, `SyntheticTenantSpec.users`, `Marker.owner_user_id`, and
-  `Substrate.principals()`. The substrate distributes a tenant's markers across
-  its declared users; tenant-level behavior is unchanged (the new fields default
-  to the tenant case). User-level detection and probing are a deferred phase.
+- The principal isolation model: the spec gains `PrincipalKind`, a `Principal`
+  value model (a tenant, or a user within a tenant), `SyntheticUserSpec`,
+  `SyntheticTenantSpec.users`, `Marker.owner_user_id`, and
+  `Substrate.principals()`. The substrate distributes a tenant's markers
+  round-robin across its declared users; tenant-level behavior is unchanged (the
+  new fields default to the tenant case). User-level detection and probing are a
+  deferred phase.
 - ADR-0006 (the isolation boundary is a principal - a tenant or a user within a
   tenant - generalizing the substrate without repositioning the tenant wedge).
 
