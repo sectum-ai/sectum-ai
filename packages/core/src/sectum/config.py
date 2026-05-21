@@ -46,6 +46,14 @@ from sectum.adapters import (
     RAGPipelineAdapter,
     VectorStoreAdapter,
 )
+from sectum.probes import (
+    AnthropicJudge,
+    DetectionProviders,
+    EmbeddingProvider,
+    Judge,
+    OpenAIEmbeddingProvider,
+    OpenAIJudge,
+)
 from sectum.spec import ConfigError
 
 
@@ -92,6 +100,38 @@ class SecurityConfig(BaseModel):
     manifest_key_env: str | None = None
 
 
+class EmbedderConfig(BaseModel):
+    """The embedding provider for the detection pipeline's semantic step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["fake", "openai"] = "fake"
+    model: str | None = None
+    api_key_env: str | None = None
+
+
+class JudgeConfig(BaseModel):
+    """The judge provider that adjudicates semantic leak candidates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["fake", "openai", "anthropic"] = "fake"
+    model: str | None = None
+    api_key_env: str | None = None
+
+
+class DetectionConfig(BaseModel):
+    """Detection-pipeline providers and calibration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    judge: JudgeConfig = Field(default_factory=JudgeConfig)
+    # The semantic-similarity gate; the conservative default suits the fake
+    # embedder and is the knob to raise once a real embedding model is configured.
+    semantic_threshold: float = 0.62
+
+
 class SectumConfig(BaseModel):
     """The parsed ``sectum.yaml`` configuration."""
 
@@ -102,6 +142,7 @@ class SectumConfig(BaseModel):
     adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    detection: DetectionConfig = Field(default_factory=DetectionConfig)
 
 
 def load_config(path: Path) -> SectumConfig:
@@ -416,4 +457,50 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
         rag=build_rag(config.adapters.get("rag", fake)),
         observability=build_observability(config.adapters.get("observability", fake)),
         agent=build_agent(config.adapters.get("agent", fake)),
+    )
+
+
+def _resolve_api_key(api_key_env: str | None, default_env: str) -> str:
+    env_var = api_key_env or default_env
+    value = os.environ.get(env_var)
+    if not value:
+        raise ConfigError(f"the API key env var {env_var!r} is not set")
+    return value
+
+
+def build_embedder(config: EmbedderConfig) -> EmbeddingProvider | None:
+    """Resolve the configured embedding provider, or ``None`` to use the fake."""
+    if config.kind == "fake":
+        return None
+    if config.kind == "openai":
+        api_key = _resolve_api_key(config.api_key_env, "OPENAI_API_KEY")
+        if config.model is not None:
+            return OpenAIEmbeddingProvider(api_key, model=config.model)
+        return OpenAIEmbeddingProvider(api_key)
+    raise ConfigError(f"unknown embedder kind: {config.kind!r}")
+
+
+def build_judge(config: JudgeConfig) -> Judge | None:
+    """Resolve the configured judge provider, or ``None`` to use the fake."""
+    if config.kind == "fake":
+        return None
+    if config.kind == "openai":
+        api_key = _resolve_api_key(config.api_key_env, "OPENAI_API_KEY")
+        if config.model is not None:
+            return OpenAIJudge(api_key, model=config.model)
+        return OpenAIJudge(api_key)
+    if config.kind == "anthropic":
+        api_key = _resolve_api_key(config.api_key_env, "ANTHROPIC_API_KEY")
+        if config.model is not None:
+            return AnthropicJudge(api_key, model=config.model)
+        return AnthropicJudge(api_key)
+    raise ConfigError(f"unknown judge kind: {config.kind!r}")
+
+
+def build_detection_providers(config: DetectionConfig) -> DetectionProviders:
+    """Build the detection-providers bundle from config (the fakes by default)."""
+    return DetectionProviders(
+        embedder=build_embedder(config.embedder),
+        judge=build_judge(config.judge),
+        semantic_threshold=config.semantic_threshold,
     )

@@ -6,11 +6,11 @@ person, a vendor, compliance terms, amounts, dates - surface another tenant's
 content. No prompt injection is used.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 
-class RagEntityBleedProbe:
+class RagEntityBleedProbe(DetectingProbe):
     """Class 2: benign shared-entity queries that pivot across the tenant boundary."""
 
     id = "rag-entity-bleed"
@@ -42,7 +42,7 @@ class RagEntityBleedProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan the observation for any foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

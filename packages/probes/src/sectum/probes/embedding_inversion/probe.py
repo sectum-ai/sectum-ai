@@ -7,11 +7,11 @@ foreign entity canary; if the index returns the full canary content, the
 foreign entity has been reconstructed from partial knowledge.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class EmbeddingInversionProbe:
+class EmbeddingInversionProbe(DetectingProbe):
     """Class 6: reconstruct a foreign entity canary from a partial-fragment query."""
 
     id = "embedding-inversion"
@@ -50,7 +50,7 @@ class EmbeddingInversionProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan the reconstructed text for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

@@ -10,11 +10,11 @@ verifies cache-key tenancy; the embedding-similarity matching that produces a
 shared entry is assumed, not modelled by the in-memory fake.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class SemanticCacheProbe:
+class SemanticCacheProbe(DetectingProbe):
     """Class 4: verify a semantic cache never serves an answer across tenants."""
 
     id = "semantic-cache-contamination"
@@ -63,7 +63,7 @@ class SemanticCacheProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan a fetched cache value for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

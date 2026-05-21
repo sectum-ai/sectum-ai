@@ -6,11 +6,11 @@ table-stakes probe: it verifies negative authorization across the tenant
 boundary.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class TenantBoundaryProbe:
+class TenantBoundaryProbe(DetectingProbe):
     """Class 1: query each tenant's hard-canary documents from other tenants."""
 
     id = "tenant-boundary-fetch"
@@ -47,7 +47,7 @@ class TenantBoundaryProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan the observation for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

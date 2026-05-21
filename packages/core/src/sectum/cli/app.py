@@ -32,6 +32,7 @@ from sectum.config import (
     SectumConfig,
     SecurityConfig,
     build_adapters,
+    build_detection_providers,
     build_observability,
     build_vector_store,
     load_config,
@@ -52,6 +53,7 @@ from sectum.evidence import (
 from sectum.jobs import build_job_runner
 from sectum.probes import (
     AgentToolHijackProbe,
+    DetectionProviders,
     EmbeddingInversionProbe,
     ErasureProbe,
     IkeaExtractionProbe,
@@ -86,17 +88,22 @@ __version__ = "0.0.0"
 
 _DEFAULT_WORKDIR = Path(".sectum")
 _DEFAULT_CONFIG = Path("sectum.yaml")
-_SUITE: tuple[Probe, ...] = (
-    TenantBoundaryProbe(),
-    RagEntityBleedProbe(),
-    SemanticCacheProbe(),
-    LoraCrossTenantProbe(),
-    AgentToolHijackProbe(),
-    MemoryContamProbe(),
-    EmbeddingInversionProbe(),
-    IkeaExtractionProbe(),
-    RagPoisoningProbe(),
-)
+
+
+def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
+    """Construct the probe suite, threading the configured detection providers."""
+    return (
+        TenantBoundaryProbe(providers),
+        RagEntityBleedProbe(providers),
+        SemanticCacheProbe(providers),
+        LoraCrossTenantProbe(providers),
+        AgentToolHijackProbe(providers),
+        MemoryContamProbe(providers),
+        EmbeddingInversionProbe(providers),
+        IkeaExtractionProbe(providers),
+        RagPoisoningProbe(providers),
+    )
+
 
 # The CLI's default for `sectum probe`: every fake's leak knob is on, so the
 # probe suite reproduces the cross-tenant findings the probes are built to
@@ -174,6 +181,20 @@ evidence:
 # Generate a key: python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"
 security:
   # manifest_key_env: SECTUM_MANIFEST_KEY
+
+# Detection-pipeline providers. The defaults are deterministic offline fakes.
+# Configure a real embedding model and judge to run production detection; API
+# keys are referenced from the environment, never inlined.
+detection:
+  embedder:
+    kind: fake             # fake | openai
+    # model: text-embedding-3-small
+    # api_key_env: OPENAI_API_KEY
+  judge:
+    kind: fake             # fake | openai | anthropic
+    # model: gpt-4o-mini
+    # api_key_env: OPENAI_API_KEY
+  semantic_threshold: 0.62  # raise once a real embedding model is configured
 """
 
 app = typer.Typer(
@@ -380,14 +401,14 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
-    suite = _SUITE
+    suite = _build_suite(build_detection_providers(loaded.detection))
     run_kv_timing = True
     if only is not None:
-        available = [instance.id for instance in _SUITE] + [KvCacheTimingProbe.id]
+        available = [instance.id for instance in suite] + [KvCacheTimingProbe.id]
         if only not in available:
             typer.echo(f"unknown probe '{only}'; available: {', '.join(available)}", err=True)
             raise typer.Exit(code=3)
-        suite = tuple(instance for instance in _SUITE if instance.id == only)
+        suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
     bundle = build_adapters(loaded)
     vector = bundle.vector

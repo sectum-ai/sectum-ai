@@ -6,11 +6,11 @@ a tenant's adapter on a memorizable hard-canary phrase, then runs inference from
 every other tenant; a foreign canary surfacing in a response is weight bleed.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class LoraCrossTenantProbe:
+class LoraCrossTenantProbe(DetectingProbe):
     """Class 9: train a tenant's adapter on a canary, then infer from other tenants."""
 
     id = "lora-cross-tenant"
@@ -55,7 +55,7 @@ class LoraCrossTenantProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan an inference response for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

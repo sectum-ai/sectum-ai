@@ -10,11 +10,11 @@ This is the v1 of Class 7: the MCP confused-deputy and token-passthrough
 sub-probes. Broader agent-framework coverage follows in a later phase.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class AgentToolHijackProbe:
+class AgentToolHijackProbe(DetectingProbe):
     """Class 7: invoke MCP tools across the tenant boundary and detect leakage."""
 
     id = "agent-tool-hijack"
@@ -65,7 +65,7 @@ class AgentToolHijackProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan an MCP tool result for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

@@ -6,13 +6,13 @@ shared index the poison document is retrieved into other tenants' benign
 queries, pivoting the canary across the tenant boundary.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 _POISON_LURE = "quarterly operations digest"
 
 
-class RagPoisoningProbe:
+class RagPoisoningProbe(DetectingProbe):
     """Class 3: plant a poison document, then query its lure from other tenants."""
 
     id = "rag-poisoning"
@@ -66,7 +66,7 @@ class RagPoisoningProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan a query's retrieved context for a foreign poison canary."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

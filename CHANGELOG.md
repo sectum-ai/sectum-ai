@@ -222,6 +222,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
+- Configurable real embedding and judge providers for the detection pipeline
+  (`sectum.probes.providers`): `OpenAIEmbeddingProvider` and an `OpenAIJudge` /
+  `AnthropicJudge`, reached over their HTTP APIs (standard library only). A
+  `detection` config block selects the embedder and judge (`fake` by default),
+  their models, the API-key env var, and the `semantic_threshold`; the resolver
+  builds a `DetectionProviders` bundle that `sectum probe` threads through every
+  probe's detection. Detection stays provider-agnostic and deterministic-by-
+  default; a real embedding model strengthens the Retrieval Pivot and a
+  calibrated judge adjudicates candidates (the engineering spec, sections 6.4,
+  13). The judge is asked a narrow structured question and never sees the
+  ground-truth manifest. Verified with mocked HTTP plus opt-in live tests
+  (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
 - A job-runner abstraction (`sectum.jobs`): a small `JobRunner` interface
   (`map(func, items) -> list`, results in input order) with two local
   implementations - `SerialJobRunner` and a bounded `ThreadJobRunner` -

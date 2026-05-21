@@ -148,6 +148,24 @@ for BYOC runs. Generate a key with
 and export it under the configured name. The key is referenced from the
 environment, never written into `sectum.yaml`.
 
+## `detection`
+
+The detection pipeline's semantic step is provider-agnostic. The defaults are
+deterministic offline fakes; configure real providers for production detection.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `embedder.kind` | `fake` \| `openai` | `fake` | `openai` embeds over the OpenAI API. |
+| `embedder.model` | str | provider default | e.g. `text-embedding-3-small`. |
+| `embedder.api_key_env` | str | `OPENAI_API_KEY` | Env var holding the API key. |
+| `judge.kind` | `fake` \| `openai` \| `anthropic` | `fake` | The LLM judge that adjudicates semantic candidates. |
+| `judge.model` | str | provider default | e.g. `gpt-4o-mini`, `claude-3-5-haiku-latest`. |
+| `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. |
+| `semantic_threshold` | float | `0.62` | The similarity gate before the judge; raise it once a real embedding model is configured (a stronger model surfaces more — the engineering spec, section 7). |
+
+Real providers reach their HTTP APIs with the standard library only; the API key
+is read from the environment, never inlined.
+
 ## Secrets and environment variables
 
 Credentials never appear inline in `sectum.yaml` (the engineering spec,

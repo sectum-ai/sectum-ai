@@ -6,7 +6,7 @@ turn is an unremarkable follow-up question seeded on a shared entity; the
 extraction is confirmed when the sequence surfaces a foreign canary.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 _TURNS: tuple[str, ...] = (
@@ -16,7 +16,7 @@ _TURNS: tuple[str, ...] = (
 )
 
 
-class IkeaExtractionProbe:
+class IkeaExtractionProbe(DetectingProbe):
     """Class 10: a multi-turn benign query sequence that extracts foreign content."""
 
     id = "ikea-extraction"
@@ -49,7 +49,7 @@ class IkeaExtractionProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan a turn's retrieved context for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

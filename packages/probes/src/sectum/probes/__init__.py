@@ -7,7 +7,9 @@ This is the ``sectum.probes`` namespace package (the engineering spec, section
 from sectum.probes.agent_tool_hijack import AgentToolHijackProbe
 from sectum.probes.base import Probe, ProbeRegistry
 from sectum.probes.detection import (
+    DetectingProbe,
     DetectionPipeline,
+    DetectionProviders,
     EmbeddingProvider,
     FakeEmbeddingProvider,
     FakeJudge,
@@ -22,6 +24,11 @@ from sectum.probes.ikea_extraction import IkeaExtractionProbe
 from sectum.probes.kv_cache_timing import KvCacheTimingProbe, KvCacheTimingReport, TimingSignal
 from sectum.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum.probes.memory_contam import MemoryContamProbe
+from sectum.probes.providers import (
+    AnthropicJudge,
+    OpenAIEmbeddingProvider,
+    OpenAIJudge,
+)
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
 from sectum.probes.rag_poisoning import RagPoisoningProbe
 from sectum.probes.semantic_cache import SemanticCacheProbe
@@ -29,7 +36,10 @@ from sectum.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
     "AgentToolHijackProbe",
+    "AnthropicJudge",
+    "DetectingProbe",
     "DetectionPipeline",
+    "DetectionProviders",
     "EmbeddingInversionProbe",
     "EmbeddingProvider",
     "ErasureProbe",
@@ -43,6 +53,8 @@ __all__ = [
     "KvCacheTimingReport",
     "LoraCrossTenantProbe",
     "MemoryContamProbe",
+    "OpenAIEmbeddingProvider",
+    "OpenAIJudge",
     "Probe",
     "ProbeRegistry",
     "RagEntityBleedProbe",

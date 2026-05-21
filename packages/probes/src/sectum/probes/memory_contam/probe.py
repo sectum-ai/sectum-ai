@@ -6,11 +6,11 @@ tenant's memory, then recalls memory from every other tenant; a foreign canary
 surfacing in a recall is cross-tenant memory contamination.
 """
 
-from sectum.probes.detection import DetectionPipeline
+from sectum.probes.detection import DetectingProbe
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
-class MemoryContamProbe:
+class MemoryContamProbe(DetectingProbe):
     """Class 8: write a canary into one tenant's memory, recall it from other tenants."""
 
     id = "memory-contamination"
@@ -55,7 +55,7 @@ class MemoryContamProbe:
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
         """Scan a recalled memory entry for a foreign canary via the detection pipeline."""
-        pipeline = DetectionPipeline(substrate)
+        pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,

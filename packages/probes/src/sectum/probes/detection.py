@@ -56,6 +56,37 @@ class Judge(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class DetectionProviders:
+    """The embedder, judge, and threshold a probe's detection pipeline should use.
+
+    All fields default to the offline, deterministic fakes; a run configures real
+    providers (see ``sectum.probes.providers``) by passing this bundle through to
+    each probe. A probe given no bundle behaves exactly as before.
+    """
+
+    embedder: "EmbeddingProvider | None" = None
+    judge: "Judge | None" = None
+    semantic_threshold: float = 0.62
+
+    def pipeline(self, substrate: Substrate) -> "DetectionPipeline":
+        """Build a detection pipeline for ``substrate`` with these providers."""
+        return DetectionPipeline(substrate, self.embedder, self.judge, self.semantic_threshold)
+
+
+class DetectingProbe:
+    """Base for probes that run the detection pipeline.
+
+    It carries the detection providers so a configured run threads a real
+    embedder and judge through to every probe's detection; constructed with no
+    argument it uses the deterministic fakes, so existing behavior is unchanged.
+    Subclasses call ``self._providers.pipeline(substrate)`` in ``detect``.
+    """
+
+    def __init__(self, providers: DetectionProviders | None = None) -> None:
+        self._providers = providers if providers is not None else DetectionProviders()
+
+
 class FakeEmbeddingProvider:
     """Deterministic hashing-trick embedding for tests and offline runs.
 
