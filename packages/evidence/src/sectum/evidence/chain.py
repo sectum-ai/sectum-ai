@@ -30,6 +30,14 @@ class Timestamper(Protocol):
         ...
 
 
+class TransparencyLog(Protocol):
+    """Records a digest in an append-only transparency log and returns its proof."""
+
+    def record(self, digest: str) -> str:
+        """Return a verifiable proof that ``digest`` was recorded in the log."""
+        ...
+
+
 class LocalTimestamper:
     """A deterministic, offline timestamper for development and tests.
 
@@ -61,12 +69,20 @@ def build_evidence_pack(
     *,
     control_mappings: tuple[ControlMapping, ...] = (),
     timestamper: Timestamper | None = None,
+    transparency_log: TransparencyLog | None = None,
 ) -> EvidencePack:
-    """Assemble a tamper-evident ``EvidencePack`` for a completed run."""
+    """Assemble a tamper-evident ``EvidencePack`` for a completed run.
+
+    The run digest is timestamped (``timestamper``; the local timestamper by
+    default) and, when a ``transparency_log`` is given, also recorded in it - the
+    Sigstore Rekor anchor (the engineering spec, section 8.2).
+    """
     stamper = timestamper if timestamper is not None else LocalTimestamper()
+    digest = run_digest(run_result)
     return EvidencePack(
         run_result=run_result,
         manifest_hash=canonical_hash(manifest),
-        tsa_token=stamper.timestamp(run_digest(run_result)),
+        tsa_token=stamper.timestamp(digest),
+        rekor_proof=transparency_log.record(digest) if transparency_log is not None else None,
         control_mappings=control_mappings,
     )

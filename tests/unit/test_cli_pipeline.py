@@ -5,9 +5,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from sectum.cli.app import _resolve_timestamper, app
+from sectum.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum.config import EvidenceConfig
-from sectum.evidence import Rfc3161Timestamper
+from sectum.evidence import RekorTransparencyLog, Rfc3161Timestamper
 from sectum.spec import RunMetrics
 
 _runner = CliRunner()
@@ -206,6 +206,34 @@ def test_resolve_timestamper_cli_override_wins_over_the_config() -> None:
     stamper = _resolve_timestamper(EvidenceConfig(), "https://pinned.example/tsr")
     assert isinstance(stamper, Rfc3161Timestamper)
     assert stamper.tsa == "https://pinned.example/tsr"
+
+
+def test_resolve_transparency_log_is_none_by_default() -> None:
+    assert _resolve_transparency_log(EvidenceConfig(), False) is None
+
+
+def test_resolve_transparency_log_enabled_by_the_flag() -> None:
+    log = _resolve_transparency_log(EvidenceConfig(), True)
+    assert isinstance(log, RekorTransparencyLog)
+    assert log.rekor_url == "https://rekor.sigstore.dev"
+
+
+def test_resolve_transparency_log_honors_a_config_url() -> None:
+    log = _resolve_transparency_log(
+        EvidenceConfig(rekor=True, rekor_url="https://rekor.example"), False
+    )
+    assert isinstance(log, RekorTransparencyLog)
+    assert log.rekor_url == "https://rekor.example"
+
+
+def test_verify_with_a_missing_rekor_key_errors(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--rekor-key", str(tmp_path / "absent.pem")],
+    )
+    assert result.exit_code == 3
 
 
 def test_report_with_a_config_uses_its_workdir(tmp_path: Path) -> None:

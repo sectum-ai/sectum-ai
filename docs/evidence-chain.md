@@ -11,10 +11,11 @@ verifies independently.
 2. The canonical run is hashed (SHA-256) into a `run_digest`.
 3. The digest is timestamped. The development default is a local timestamper
    (a JSON record of the digest and a wall-clock time, with no external anchor).
-   Production configures an RFC 3161 Time-Stamp Authority (see below); a
-   Sigstore Rekor transparency log is planned.
+   Production configures an RFC 3161 Time-Stamp Authority (see below) and,
+   optionally, records the digest in a Sigstore Rekor transparency log.
 4. The pack bundles the canonical run, the manifest hash, the timestamp token,
-   the control mappings, and a human-readable PDF.
+   the Rekor inclusion proof (when enabled), the control mappings, and a
+   human-readable PDF.
 
 ## Trusted timestamping (RFC 3161)
 
@@ -33,13 +34,35 @@ them with a customer-pinned authority's certificates.
 RFC 3161 support is an optional extra, `sectum-ai-evidence[rfc3161]` (the
 `LocalTimestamper` path needs no third-party dependency).
 
+## Transparency log (Sigstore Rekor)
+
+`sectum report --rekor` (or `evidence.rekor: true` in `sectum.yaml`) also records
+the run digest in the [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/)
+transparency log — a public, append-only Merkle log. The log returns an
+*inclusion proof*: the entry's position, the Merkle audit path to the tree root,
+and a checkpoint (the signed tree head) committing to that root. The proof is
+stored in the pack.
+
+`sectum verify` checks the proof entirely offline: it recomputes the RFC 6962
+Merkle root from the entry and the audit path, and verifies the checkpoint that
+commits to that root was signed by Rekor. As with the TSA, the checkpoint key is
+pinned independently — never read from the pack. The verifier ships the
+public-good instance's log keys built in (selected by log id), and `sectum verify
+--rekor-key <pem>` pins a private instance's key. No network and no current tree
+head are needed to verify; a captured proof verifies indefinitely.
+
+Recording uses an ephemeral signing key: a transparency-log entry's value is the
+public, timestamped *inclusion* of the digest, not the signer's identity. Rekor
+support is the optional `sectum-ai-evidence[rekor]` extra.
+
 ## Verification
 
 `sectum verify <pack>` recomputes the run digest and checks it against the
-timestamp token. For an RFC 3161 token it also validates the token's signature
-against the pinned TSA chain. Any edit to the run record — a changed finding, an
-altered hash — changes the digest and fails verification with a clear reason and
-exit code 4. Because `sectum verify` is part of the open-source core, anyone can
+timestamp token, the Rekor inclusion proof (when present), and the manifest
+hash. For an RFC 3161 token it also validates the token's signature against the
+pinned TSA chain. Any edit to the run record — a changed finding, an altered
+hash — changes the digest and fails verification with a clear reason and exit
+code 4. Because `sectum verify` is part of the open-source core, anyone can
 verify a Sectum AI evidence pack without trusting Sectum AI.
 
 ## What the pack carries — and what it does not

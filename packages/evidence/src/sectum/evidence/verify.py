@@ -6,6 +6,7 @@ digest and fails verification.
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum.evidence.chain import run_digest
@@ -35,6 +36,7 @@ def verify_pack(
     *,
     tsa_certificate: bytes | None = None,
     tsa_root: bytes | None = None,
+    rekor_keyring: Mapping[str, bytes] | None = None,
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
@@ -43,16 +45,35 @@ def verify_pack(
     ``manifest`` is given, its canonical hash must also match the pack.
 
     For an RFC 3161 timestamp token, ``tsa_certificate``/``tsa_root`` override
-    the built-in FreeTSA leaf/root to pin a customer's own TSA.
+    the built-in FreeTSA leaf/root to pin a customer's own TSA. When the pack
+    carries a Rekor inclusion proof, it is verified too; ``rekor_keyring``
+    (log id -> PEM key) overrides the built-in Rekor keys for a private instance.
     """
     digest = run_digest(pack.run_result)
     checks = [
         _check_token(pack.tsa_token, digest, tsa_certificate, tsa_root),
         _check_consistency(pack),
     ]
+    if pack.rekor_proof is not None:
+        checks.append(_check_rekor(pack.rekor_proof, digest, rekor_keyring))
     if manifest is not None:
         checks.append(_check_manifest(manifest, pack.manifest_hash))
     return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
+
+
+def _check_rekor(proof: str, digest: str, rekor_keyring: Mapping[str, bytes] | None) -> Check:
+    name = "rekor-inclusion"
+    from sectum.evidence.rekor import verify_rekor_proof
+
+    try:
+        integrated_at = verify_rekor_proof(proof, digest, keyring=rekor_keyring)
+    except EvidenceError as error:
+        return Check(name, ok=False, detail=str(error))
+    return Check(
+        name,
+        ok=True,
+        detail=f"run digest recorded in the Rekor transparency log at {integrated_at.isoformat()}",
+    )
 
 
 def _check_token(

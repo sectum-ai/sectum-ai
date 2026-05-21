@@ -78,6 +78,7 @@ class EvidenceConfig(BaseModel):
 
     timestamper: Literal["local", "rfc3161"] = "local"
     tsa_url: str | None = None
+    rekor: bool = False
     rekor_url: str | None = None
 
 

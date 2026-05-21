@@ -21,6 +21,7 @@ members = [
 dev = [
     { name = "arize-phoenix-client", specifier = ">=2" },
     { name = "chromadb-client", specifier = ">=0.5" },
+    { name = "cryptography", specifier = ">=43" },
     { name = "hypothesis", specifier = ">=6" },
     { name = "mcp", specifier = ">=1" },
     { name = "mypy", specifier = ">=1.13" },
@@ -2446,17 +2447,21 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+rekor = [
+    { name = "cryptography" },
+]
 rfc3161 = [
     { name = "rfc3161-client" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", marker = "extra == 'rekor'", specifier = ">=43" },
     { name = "reportlab", specifier = ">=4" },
     { name = "rfc3161-client", marker = "extra == 'rfc3161'", specifier = ">=1.0.3" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
 ]
-provides-extras = ["rfc3161"]
+provides-extras = ["rfc3161", "rekor"]
 
 [[package]]
 name = "sectum-ai-probes"

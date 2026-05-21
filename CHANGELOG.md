@@ -222,6 +222,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
+- A Sigstore Rekor transparency-log anchor (`sectum.evidence.RekorTransparencyLog`,
+  `verify_rekor_proof`): `sectum report --rekor` (or `evidence.rekor: true`)
+  signs the run digest and records a `hashedrekord` entry in a public,
+  append-only log, storing the inclusion proof in the pack; `sectum verify`
+  recomputes the RFC 6962 Merkle root and checks the signed checkpoint that
+  commits to it. As with the TSA, the checkpoint key is pinned independently of
+  the pack: the public-good instance's log keys (ECDSA and Ed25519) are shipped
+  built in and selected by log id, and `sectum verify --rekor-key <pem>` pins a
+  private instance's key. Verification is fully offline (no network, no current
+  tree head); a committed real inclusion-proof fixture verifies in CI, and a
+  live round-trip is opt-in via `SECTUM_RUN_LIVE_REKOR`. Backed by `cryptography`
+  behind a `sectum-ai-evidence[rekor]` extra (the engineering spec, section 8.2).
 
 ### Changed
 

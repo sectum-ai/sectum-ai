@@ -36,10 +36,13 @@ from sectum.config import (
     load_config,
 )
 from sectum.evidence import (
+    RekorTransparencyLog,
     Rfc3161Timestamper,
     Timestamper,
+    TransparencyLog,
     build_evidence_pack,
     control_mappings,
+    rekor_keyring,
     render_audit_pack,
     verify_pack,
 )
@@ -154,10 +157,11 @@ adapters:
     # url: http://localhost:8080/agent
 
 # Evidence-chain anchoring. The local timestamper is the development default;
-# production configures an RFC 3161 TSA and a Sigstore Rekor instance.
+# production configures an RFC 3161 TSA and, optionally, a Sigstore Rekor log.
 evidence:
   timestamper: local    # local | rfc3161
   # tsa_url: https://freetsa.org/tsr
+  rekor: false          # true: also record the run digest in a Sigstore Rekor log
   # rekor_url: https://rekor.sigstore.dev
 """
 
@@ -450,6 +454,25 @@ def _resolve_timestamper(evidence: EvidenceConfig, tsa_override: str | None) -> 
     return None
 
 
+def _resolve_transparency_log(evidence: EvidenceConfig, rekor_flag: bool) -> TransparencyLog | None:
+    """Resolve a Rekor transparency log when enabled by ``--rekor`` or the config.
+
+    Recording uses an ephemeral signing key; the transparency guarantee is the
+    public, timestamped inclusion of the digest, not the signer's identity.
+    """
+    if not (rekor_flag or evidence.rekor):
+        return None
+    url = evidence.rekor_url
+    return RekorTransparencyLog(rekor_url=url) if url is not None else RekorTransparencyLog()
+
+
+def _rekor_keyring_override(rekor_key: Path | None) -> dict[str, bytes] | None:
+    """Build a one-key Rekor keyring from a ``--rekor-key`` PEM file, or ``None``."""
+    if rekor_key is None:
+        return None
+    return rekor_keyring(rekor_key.read_bytes())
+
+
 @app.command()
 @_handle_typed_errors
 def report(
@@ -464,6 +487,10 @@ def report(
         str | None,
         typer.Option("--tsa", help="RFC 3161 TSA URL; switches the timestamper to a trusted TSA."),
     ] = None,
+    rekor: Annotated[
+        bool,
+        typer.Option("--rekor", help="Also record the run digest in a Sigstore Rekor log."),
+    ] = False,
 ) -> None:
     """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
     loaded = load_config(config) if config is not None else SectumConfig()
@@ -472,8 +499,13 @@ def report(
     substrate = _load_substrate(workdir)
     run = _load_run(workdir)
     timestamper = _resolve_timestamper(loaded.evidence, tsa)
+    transparency_log = _resolve_transparency_log(loaded.evidence, rekor)
     pack = build_evidence_pack(
-        run, substrate.manifest, control_mappings=control_mappings(), timestamper=timestamper
+        run,
+        substrate.manifest,
+        control_mappings=control_mappings(),
+        timestamper=timestamper,
+        transparency_log=transparency_log,
     )
     json_path = workdir / "evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
@@ -494,12 +526,20 @@ def verify(
         Path | None,
         typer.Option("--tsa-root", help="PEM of the TSA root certificate (overrides FreeTSA)."),
     ] = None,
+    rekor_key: Annotated[
+        Path | None,
+        typer.Option("--rekor-key", help="PEM of a Rekor public key (pins a private instance)."),
+    ] = None,
 ) -> None:
     """Independently verify a tamper-evident evidence pack."""
     if not pack.exists():
         typer.echo(f"no evidence pack at {pack}", err=True)
         raise typer.Exit(code=3)
-    for label, cert_path in (("--tsa-cert", tsa_cert), ("--tsa-root", tsa_root)):
+    for label, cert_path in (
+        ("--tsa-cert", tsa_cert),
+        ("--tsa-root", tsa_root),
+        ("--rekor-key", rekor_key),
+    ):
         if cert_path is not None and not cert_path.exists():
             typer.echo(f"no certificate at {cert_path} for {label}", err=True)
             raise typer.Exit(code=3)
@@ -513,6 +553,7 @@ def verify(
         evidence,
         tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
         tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
+        rekor_keyring=_rekor_keyring_override(rekor_key),
     )
     for check in result.checks:
         typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
@@ -602,6 +643,7 @@ def erasure(
         substrate.manifest,
         control_mappings=control_mappings(),
         timestamper=_resolve_timestamper(loaded.evidence, None),
+        transparency_log=_resolve_transparency_log(loaded.evidence, False),
     )
     json_path = workdir / "erasure-evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
