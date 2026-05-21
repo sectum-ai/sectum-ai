@@ -234,6 +234,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   13). The judge is asked a narrow structured question and never sees the
   ground-truth manifest. Verified with mocked HTTP plus opt-in live tests
   (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
+- Release supply-chain integrity (the engineering spec, section 17): the release
+  workflow now generates a CycloneDX SBOM of the locked third-party dependencies
+  (`scripts/generate_sbom.sh`, from `uv export` through `cyclonedx-py`) and signs
+  the built wheels, sdists, and the SBOM with Sigstore keyless signing (the
+  workflow's OIDC identity, no stored key), uploading the `.sigstore.json`
+  bundles. The SBOM script is reusable locally.
 - A job-runner abstraction (`sectum.jobs`): a small `JobRunner` interface
   (`map(func, items) -> list`, results in input order) with two local
   implementations - `SerialJobRunner` and a bounded `ThreadJobRunner` -

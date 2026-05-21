@@ -8,12 +8,13 @@ on:
 permissions:
   contents: read
 
-# Phase 0 skeleton: builds the workspace distributions and uploads them as
-# artifacts. PyPI trusted publishing, SBOM generation, and Sigstore artifact
-# signing (the engineering spec, section 17) are added in a later phase.
+# Builds the workspace distributions, generates a CycloneDX SBOM, and signs the
+# artifacts with Sigstore (keyless, via the workflow's OIDC identity) - the
+# supply-chain integrity the engineering spec, section 17, calls for. PyPI
+# trusted publishing is added when the project first publishes.
 jobs:
   build:
-    name: Build distributions
+    name: Build distributions and SBOM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,8 +25,41 @@ jobs:
       - name: Build all workspace packages
         run: uv build --all-packages
 
-      - name: Upload distributions
+      - name: Generate CycloneDX SBOM
+        run: scripts/generate_sbom.sh dist/sbom.cdx.json
+
+      - name: Upload distributions and SBOM
         uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
+
+  sign:
+    name: Sign artifacts (Sigstore keyless)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # The OIDC token Sigstore exchanges for a short-lived Fulcio certificate;
+      # no long-lived signing key is stored.
+      id-token: write
+      contents: read
+    steps:
+      - name: Download distributions and SBOM
+        uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+      - name: Sign with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.3.0
+        with:
+          inputs: >-
+            ./dist/*.whl
+            ./dist/*.tar.gz
+            ./dist/sbom.cdx.json
+
+      - name: Upload Sigstore bundles
+        uses: actions/upload-artifact@v7
+        with:
+          name: sigstore-bundles
+          path: ./dist/*.sigstore.json
