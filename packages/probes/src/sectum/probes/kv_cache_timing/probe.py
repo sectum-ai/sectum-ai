@@ -47,10 +47,9 @@ class KvCacheTimingReport:
     @property
     def effect_sizes(self) -> dict[str, float]:
         """Per-pair effect sizes, for ``RunMetrics.side_channel_effect_sizes``."""
+        # Full hex so two tenant pairs cannot collide onto one map key.
         return {
-            f"{signal.owner_tenant_id.hex[:8]}->{signal.observed_in_tenant_id.hex[:8]}": (
-                signal.effect_size
-            )
+            f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}": signal.effect_size
             for signal in self.signals
         }
 
@@ -111,9 +110,11 @@ class KvCacheTimingProbe:
     def _finding(self, signal: TimingSignal) -> Finding:
         severity = Severity.HIGH if signal.effect_size >= _LARGE_EFFECT else Severity.MEDIUM
         return Finding(
+            # Full hex (not a truncation): two tenant pairs must never collide
+            # into one id, or dedupe_findings would merge distinct side channels.
             finding_id=(
-                f"finding-{self.id}-{signal.owner_tenant_id.hex[:8]}"
-                f"-{signal.observed_in_tenant_id.hex[:8]}"
+                f"finding-{self.id}-{signal.owner_tenant_id.hex}"
+                f"-{signal.observed_in_tenant_id.hex}"
             ),
             probe_id=self.id,
             severity=severity,
