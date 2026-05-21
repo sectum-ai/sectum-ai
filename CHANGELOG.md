@@ -159,6 +159,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `observability` adapter and scans the tracing surface for residual markers,
   and `sectum erasure` seeds traces and passes a `FakeObservability` through
   so the workflow round-trips through both the vector and tracing surfaces.
+- The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
+  maps to its own namespace within one index, so a query or fetch is
+  tenant-scoped. Pinecone is a hosted service with no local backend, so it is
+  verified by a mock-backed contract test plus an opt-in live test (the
+  engineering spec, section 13); the CLI resolver wires `kind: pinecone` for
+  `adapters.vector_store`.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

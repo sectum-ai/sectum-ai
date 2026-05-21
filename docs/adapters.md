@@ -27,16 +27,19 @@ its capabilities honestly.
 
 Live adapters implement the same family interface. The pgvector, Chroma, and
 Weaviate vector stores are tenant-isolated and add a `fetch`-by-id primitive
-alongside similarity `query`. The Redis cache prefixes its keys and
-tenant-scopes them by default; `tenant_scoped=False` models the shared key
-space Class 4 is built to catch. The Phoenix observability adapter maps each
-tenant to its own project, so a trace search is scoped to that tenant. The
+alongside similarity `query`; the Pinecone store gives each tenant its own
+namespace within one index and is verified by a mock-backed test plus an opt-in
+live test (it is a hosted service, so there is no local backend). The Redis
+cache prefixes its keys and tenant-scopes them by default; `tenant_scoped=False`
+models the shared key space Class 4 is built to catch. The Phoenix
+observability adapter maps each tenant to its own project, so a trace search
+is scoped to that tenant. The
 HTTP RAG and HTTP agent adapters reach a retrieval pipeline or an agent
 framework over a small JSON API, so any backend that adopts their
 request/response contract works without a backend-specific SDK. The MCP client
 speaks the Model Context Protocol to a stdio server; a generic MCP call carries
 no tenant identity, which is the confused-deputy gap Class 7 examines. The
-vector, cache, and observability adapters are verified against docker-compose
-backends.
+pgvector, Chroma, Weaviate, Redis, and Phoenix adapters are verified against
+docker-compose backends.
 
 Run `sectum adapters` to list the installed adapters and their capabilities.

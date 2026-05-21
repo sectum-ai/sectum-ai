@@ -6,10 +6,12 @@ override the values the config supplies, and the config supplies values the
 built-in defaults would otherwise use (the engineering spec, section 10).
 
 ``build_adapters`` turns the config's ``adapters`` block into concrete
-adapter instances the CLI's probe suite can drive. This module wires the
-fake adapters today; live kinds (pgvector, chroma, weaviate, redis, phoenix,
-http-rag, http-agent, stdio-mcp) are deferred to follow-ups - the resolver
-raises ``ConfigError`` with a clear message until they are wired.
+adapter instances the CLI's probe suite can drive. Each family resolves
+``kind: fake`` to its in-memory fake and dispatches the live kinds to their
+adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
+vector store, ``redis`` for the cache, ``phoenix`` for observability, ``http``
+for RAG and agents, ``stdio`` for MCP); an unsupported kind raises
+``ConfigError`` with a clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -262,6 +264,14 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         port = _int(extras, "port", 8080)
         grpc_port = _int(extras, "grpc_port", 50051)
         return WeaviateVectorStore(host, port, grpc_port, _hashing_embed)
+    if config.kind == "pinecone":
+        from sectum.adapters.vector.pinecone import PineconeVectorStore
+
+        api_key = _resolve_secret(extras, "api_key", "api_key_env")
+        index_name = _required_str(extras, "index")
+        return PineconeVectorStore.connect(
+            api_key, index_name, _hashing_embed, host=_optional_str(extras, "host")
+        )
     raise _unsupported("vector_store", config.kind)
 
 

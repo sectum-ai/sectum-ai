@@ -28,6 +28,7 @@ weaviate = ["weaviate-client>=4.9"]
 redis = ["redis>=5"]
 phoenix = ["arize-phoenix-client>=2"]
 mcp = ["mcp>=1"]
+pinecone = ["pinecone>=5"]
 
 [project.urls]
 Homepage = "https://sectum.ai"
