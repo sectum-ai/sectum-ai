@@ -36,7 +36,9 @@ observability adapter maps each tenant to its own project, so a trace search
 is scoped to that tenant; the Langfuse adapter instead scopes each tenant by
 trace `user_id` within a single project (its public SDK binds one project per
 key pair) and verifies erasure by bulk-deleting that tenant's traces. The
-HTTP RAG and HTTP agent adapters reach a retrieval pipeline or an agent
+LangSmith adapter, like Phoenix, maps each tenant to its own LangSmith
+project, searching its runs and deleting the project on erasure. The HTTP RAG
+and HTTP agent adapters reach a retrieval pipeline or an agent
 framework over a small JSON API, so any backend that adopts their
 request/response contract works without a backend-specific SDK. The MCP client
 speaks the Model Context Protocol to a stdio server; a generic MCP call carries

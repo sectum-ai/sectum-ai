@@ -28,6 +28,7 @@ weaviate = ["weaviate-client>=4.9"]
 redis = ["redis>=5"]
 phoenix = ["arize-phoenix-client>=2"]
 langfuse = ["langfuse>=3,<4"]
+langsmith = ["langsmith>=0.1"]
 mcp = ["mcp>=1"]
 pinecone = ["pinecone>=5"]
 

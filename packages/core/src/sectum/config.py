@@ -9,9 +9,9 @@ built-in defaults would otherwise use (the engineering spec, section 10).
 adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
-vector store, ``redis`` for the cache, ``phoenix``/``langfuse`` for
-observability, ``http`` for RAG and agents, ``stdio`` for MCP); an unsupported
-kind raises ``ConfigError`` with a clear message.
+vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
+for observability, ``http`` for RAG and agents, ``stdio`` for MCP); an
+unsupported kind raises ``ConfigError`` with a clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -364,6 +364,13 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
         secret_key = _resolve_secret(extras, "secret_key", "secret_key_env")
         host = _required_str(extras, "host")
         return LangfuseObservability.connect(public_key, secret_key, host)
+    if config.kind == "langsmith":
+        from sectum.adapters.observability.langsmith import LangSmithObservability
+
+        api_key = _resolve_secret(extras, "api_key", "api_key_env")
+        api_url = _optional_str(extras, "api_url")
+        prefix = _str(extras, "prefix", "sectum")
+        return LangSmithObservability.connect(api_key, api_url, prefix=prefix)
     raise _unsupported("observability", config.kind)
 
 

@@ -172,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   traces and erasure bulk-deletes them. Targets the Langfuse v3 SDK; verified by
   a mock-backed contract test plus an opt-in live test. The CLI resolver wires
   `kind: langfuse` for `adapters.observability`.
+- The live LangSmith observability adapter (`LangSmithObservability`): each
+  tenant maps to its own LangSmith tracing project (like Phoenix), so a search
+  scans that project's runs and erasure deletes the project. Verified by a
+  mock-backed contract test plus an opt-in live test; the CLI resolver wires
+  `kind: langsmith` for `adapters.observability`.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

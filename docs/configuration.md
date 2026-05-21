@@ -111,6 +111,7 @@ No live memory adapter is wired into the CLI resolver yet.
 | `fake` | `soft_delete: bool = false` | `FakeObservability`. `soft_delete: true` models a backend that acknowledges erasure but leaves traces — the Class 11 residue. |
 | `phoenix` | `base_url: str` *(required)*, `prefix: str = "sectum"` | `PhoenixObservability` — each tenant maps to a Phoenix project named `{prefix}-{tenant.hex}`. `delete(tenant)` removes the tenant's project. |
 | `langfuse` | `public_key_env: str` *(or `public_key: str`)*, `secret_key_env: str` *(or `secret_key: str`)*, `host: str` *(required)* | `LangfuseObservability` (Langfuse v3 SDK) — one project, each tenant scoped by trace `user_id`. `delete(tenant)` bulk-deletes the tenant's traces. |
+| `langsmith` | `api_key_env: str` *(or `api_key: str`)*, `api_url: str` *(optional)*, `prefix: str = "sectum"` | `LangSmithObservability` — each tenant maps to a LangSmith project named `{prefix}-{tenant.hex}`. `delete(tenant)` deletes the project. |
 
 ### `agent`
 

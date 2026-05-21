@@ -111,6 +111,13 @@ module = ["langfuse", "langfuse.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
+[[tool.mypy.overrides]]
+# the langsmith client is an optional, live-only dependency; treat it as opaque
+# so the adapter type-checks without it installed (the adapter's API is typed).
+module = ["langsmith", "langsmith.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
