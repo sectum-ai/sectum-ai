@@ -15,6 +15,7 @@ from uuid import UUID
 from sectum.adapters import (
     CacheAdapter,
     MemoryAdapter,
+    ModelAdapter,
     ObservabilityAdapter,
     VectorStoreAdapter,
 )
@@ -78,12 +79,14 @@ class ErasureProbe:
         observability: ObservabilityAdapter | None = None,
         memory: MemoryAdapter | None = None,
         cache: CacheAdapter | None = None,
+        model: ModelAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._observability = observability
         self._memory = memory
         self._cache = cache
+        self._model = model
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -157,6 +160,22 @@ class ErasureProbe:
                 for marker in cache_residual
             )
 
+        if self._model is not None:
+            model_before = self._scan_model(target, markers)
+            self._model.delete(target)
+            model_residual = self._scan_model(target, markers)
+            surfaces.append(
+                SurfaceErasure(
+                    surface=Surface.MODEL_ADAPTER,
+                    markers_before=len(model_before),
+                    residual_after=len(model_residual),
+                )
+            )
+            findings.extend(
+                self._residual_finding(target, marker, Surface.MODEL_ADAPTER)
+                for marker in model_residual
+            )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -192,6 +211,22 @@ class ErasureProbe:
         values = self._cache.values(target)
         return [marker for marker in markers if any(marker.plaintext in value for value in values)]
 
+    def _scan_model(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers the model still reproduces.
+
+        Querying the model with the canary surfaces it only while the tenant's
+        fine-tune/adapter has memorized it; once the adapter is erased the model
+        recalls nothing for that prompt.
+        """
+        if self._model is None:
+            return []
+        model = self._model
+        return [
+            marker
+            for marker in markers
+            if marker.plaintext in model.infer(target, marker.plaintext)
+        ]
+
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
@@ -216,6 +251,10 @@ class ErasureProbe:
             Surface.SEMANTIC_CACHE: (
                 "data survived an Article 17 erasure; evict the tenant's entries from the "
                 "semantic/application cache"
+            ),
+            Surface.MODEL_ADAPTER: (
+                "data survived an Article 17 erasure; retire or retrain the tenant's "
+                "fine-tune/adapter so it no longer reproduces the data"
             ),
         }.get(surface, "data survived an Article 17 erasure; purge it from this surface")
         return Finding(

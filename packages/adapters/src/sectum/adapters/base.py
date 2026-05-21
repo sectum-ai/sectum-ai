@@ -260,6 +260,14 @@ class ModelAdapter(Adapter):
         Class 5 uses this to detect a KV prefix-cache timing side channel.
         """
 
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s per-tenant adapter / fine-tune.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        honoring an erasure request on the model surface.
+        """
+
 
 class MemoryAdapter(Adapter):
     """Adapter for a long-term or agent memory store.

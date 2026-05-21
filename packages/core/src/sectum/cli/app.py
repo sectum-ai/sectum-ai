@@ -35,6 +35,7 @@ from sectum.config import (
     build_cache,
     build_detection_providers,
     build_memory,
+    build_model,
     build_observability,
     build_vector_store,
     load_config,
@@ -681,6 +682,7 @@ def erasure(
     obs = build_observability(loaded.adapters.get("observability", fake_default))
     memory = build_memory(loaded.adapters.get("memory", fake_default))
     cache = build_cache(loaded.adapters.get("cache", fake_default))
+    model = build_model(loaded.adapters.get("model", fake_default))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -701,10 +703,12 @@ def erasure(
                 f"sectum-erasure-{marker.marker_id}",
                 f"cached answer mentioning {marker.plaintext}",
             )
+        if isinstance(model, FakeModel):
+            model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
 
     started = datetime.now(UTC)
     report = ErasureProbe(
-        substrate, vector=store, observability=obs, memory=memory, cache=cache
+        substrate, vector=store, observability=obs, memory=memory, cache=cache, model=model
     ).run(target)
     finished = datetime.now(UTC)
 
@@ -719,6 +723,7 @@ def erasure(
             obs.name: __version__,
             memory.name: __version__,
             cache.name: __version__,
+            model.name: __version__,
         },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,

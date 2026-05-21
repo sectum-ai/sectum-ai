@@ -365,14 +365,18 @@ class FakeModel(ModelAdapter):
         *,
         adapter_bleed: bool = False,
         prefix_cache: bool = False,
+        soft_delete: bool = False,
     ) -> None:
         scope = Capability.SHARED_WEIGHTS if adapter_bleed else Capability.PER_TENANT_ADAPTER
         capabilities = {scope}
         if prefix_cache:
             capabilities.add(Capability.SHARED_PREFIX_CACHE)
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._adapter_bleed = adapter_bleed
         self._prefix_cache = prefix_cache
+        self._soft_delete = soft_delete
         self._adapters: dict[UUID, list[str]] = {}
         self._warmed_prefixes: set[str] = set()
 
@@ -417,6 +421,13 @@ class FakeModel(ModelAdapter):
     def _prefix(prompt: str) -> str:
         """The cache-key prefix of a prompt: its leading characters."""
         return prompt[:20]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete model acknowledges the request but keeps the tenant's
+        # adapter, so the memorized canary still surfaces - the Class 11 residue.
+        if self._soft_delete:
+            return
+        self._adapters.pop(tenant, None)
 
 
 class FakeMemory(MemoryAdapter):

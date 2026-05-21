@@ -174,6 +174,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sectum erasure` seeds the cache through, so the workflow now round-trips the
   vector, tracing, memory, and cache surfaces. An unscoped cache that cannot
   isolate a tenant's entries is itself an erasure failure.
+- Class 11 (`sectum erasure`) now also checks the model / fine-tune-adapter
+  surface. The `ModelAdapter` interface gains `delete(tenant)`; `FakeModel` gets
+  a `soft_delete` knob; `ErasureProbe` accepts an optional `model` adapter and
+  scans it by querying the model with the canary - a memorized canary surfaces
+  only while the tenant's adapter exists - and `sectum erasure` trains and
+  threads a `FakeModel` through, so the workflow now round-trips the vector,
+  tracing, memory, cache, and model surfaces (five of the "ten hiding places").
 - The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
   maps to its own namespace within one index, so a query or fetch is
   tenant-scoped. Pinecone is a hosted service with no local backend, so it is

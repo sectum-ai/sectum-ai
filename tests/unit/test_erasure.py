@@ -1,6 +1,12 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
-from sectum.adapters import FakeCache, FakeMemory, FakeObservability, FakeVectorStore
+from sectum.adapters import (
+    FakeCache,
+    FakeMemory,
+    FakeModel,
+    FakeObservability,
+    FakeVectorStore,
+)
 from sectum.probes import ErasureProbe
 from sectum.spec import MarkerType, Substrate, Surface
 from sectum.substrate import build_substrate, default_scenario
@@ -44,6 +50,14 @@ def _seeded_cache(substrate: Substrate, *, soft_delete: bool) -> FakeCache:
                 f"cached answer mentioning {marker.plaintext}",
             )
     return cache
+
+
+def _seeded_model(substrate: Substrate, *, soft_delete: bool) -> FakeModel:
+    model = FakeModel(soft_delete=soft_delete)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
+    return model
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -163,3 +177,48 @@ def test_erasure_fails_when_cache_soft_deletes() -> None:
     assert surfaces[Surface.SEMANTIC_CACHE].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.SEMANTIC_CACHE for finding in report.findings)
+
+
+def test_erasure_clears_the_model_adapter_when_it_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    model = _seeded_model(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, model=model).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.MODEL_ADAPTER in surfaces
+    assert surfaces[Surface.MODEL_ADAPTER].markers_before > 0
+    assert surfaces[Surface.MODEL_ADAPTER].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_clears_the_model_adapter_under_weight_bleed() -> None:
+    # With adapter_bleed, infer(target) recalls every tenant's adapter, so foreign
+    # canaries (all sharing the SECTUM-CANARY- prefix) are returned. The scan's
+    # substring check on the target's OWN plaintext keeps the verdict correct:
+    # after deleting the target's adapter, its canary is no longer a substring of
+    # any recall, so the surface reads ERASED rather than a false residual.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    model = FakeModel(adapter_bleed=True)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
+    report = ErasureProbe(substrate, vector=store, model=model).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.MODEL_ADAPTER].markers_before > 0
+    assert surfaces[Surface.MODEL_ADAPTER].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_the_model_adapter_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    model = _seeded_model(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, model=model).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.MODEL_ADAPTER].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.MODEL_ADAPTER for finding in report.findings)

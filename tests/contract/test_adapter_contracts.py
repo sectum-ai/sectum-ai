@@ -344,6 +344,22 @@ def test_unscoped_cache_cannot_isolate_a_tenant_for_deletion() -> None:
     assert "value containing CANARY-X" in cache.values(_TENANT_B)
 
 
+def test_model_delete_drops_a_tenants_adapter() -> None:
+    model = FakeModel()
+    model.train_adapter(_TENANT_A, ["fine-tune sample CANARY-X"])
+    assert "CANARY-X" in model.infer(_TENANT_A, "CANARY-X")
+    model.delete(_TENANT_A)
+    assert "CANARY-X" not in model.infer(_TENANT_A, "CANARY-X")
+
+
+def test_soft_delete_model_retains_the_adapter() -> None:
+    model = FakeModel(soft_delete=True)
+    model.train_adapter(_TENANT_A, ["fine-tune sample CANARY-X"])
+    model.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but keeps the adapter - the Class 11 residue
+    assert "CANARY-X" in model.infer(_TENANT_A, "CANARY-X")
+
+
 def test_soft_delete_observability_reports_the_capability() -> None:
     """The fake's capability self-report tracks the soft_delete knob (§11)."""
     assert FakeObservability(soft_delete=True).supports(Capability.SOFT_DELETE)

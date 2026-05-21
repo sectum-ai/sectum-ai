@@ -354,6 +354,7 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
         return FakeModel(
             adapter_bleed=_bool(extras, "adapter_bleed", False),
             prefix_cache=_bool(extras, "prefix_cache", False),
+            soft_delete=_bool(extras, "soft_delete", False),
         )
     raise _unsupported("model", config.kind)
 
