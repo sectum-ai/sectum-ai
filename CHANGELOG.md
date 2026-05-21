@@ -192,6 +192,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).
+- Hypothesis property tests for marker generation and canonical hashing,
+  generalizing the fixed-seed reproducibility and uniqueness invariants to
+  arbitrary seeds (the engineering spec, section 15).
 
 ### Changed
 
