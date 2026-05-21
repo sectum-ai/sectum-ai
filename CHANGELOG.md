@@ -165,6 +165,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verified by a mock-backed contract test plus an opt-in live test (the
   engineering spec, section 13); the CLI resolver wires `kind: pinecone` for
   `adapters.vector_store`.
+- The live Langfuse observability adapter (`LangfuseObservability`): Langfuse's
+  public SDK binds one project per key pair and cannot enumerate projects, so
+  each tenant is scoped by trace `user_id` within a single project (unlike the
+  per-project Phoenix adapter); a search matches the marker in the tenant's
+  traces and erasure bulk-deletes them. Targets the Langfuse v3 SDK; verified by
+  a mock-backed contract test plus an opt-in live test. The CLI resolver wires
+  `kind: langfuse` for `adapters.observability`.
 - ADR-0004 (acyclic package graph; the detection pipeline moved into
   `sectum-ai-probes`).
 - ADR-0005 (examples are named for the attack class, not a metric value).

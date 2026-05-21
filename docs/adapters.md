@@ -33,7 +33,9 @@ live test (it is a hosted service, so there is no local backend). The Redis
 cache prefixes its keys and tenant-scopes them by default; `tenant_scoped=False`
 models the shared key space Class 4 is built to catch. The Phoenix
 observability adapter maps each tenant to its own project, so a trace search
-is scoped to that tenant. The
+is scoped to that tenant; the Langfuse adapter instead scopes each tenant by
+trace `user_id` within a single project (its public SDK binds one project per
+key pair) and verifies erasure by bulk-deleting that tenant's traces. The
 HTTP RAG and HTTP agent adapters reach a retrieval pipeline or an agent
 framework over a small JSON API, so any backend that adopts their
 request/response contract works without a backend-specific SDK. The MCP client
