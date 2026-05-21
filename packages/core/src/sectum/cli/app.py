@@ -70,6 +70,7 @@ from sectum.spec import (
     canonical_hash,
 )
 from sectum.substrate import build_substrate, default_scenario
+from sectum.sweep import embedding_model_sweep
 
 __version__ = "0.0.0"
 
@@ -405,6 +406,15 @@ def probe(
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps) if bleed_steps else None,
+            # The sweep is a fake-substrate illustration of the embedding-strength
+            # effect, so it is recorded only for in-memory-store runs - a live
+            # vector adapter's evidence carries no fake-derived per-model rates.
+            retrieval_pivot_rate_by_model=(
+                embedding_model_sweep(substrate, substrate.scenario.embedding_models)
+                if isinstance(vector, FakeVectorStore)
+                and len(substrate.scenario.embedding_models) > 1
+                else {}
+            ),
             per_probe_findings=_per_probe_counts(confirmed),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
         ),
@@ -416,6 +426,8 @@ def probe(
     typer.echo(f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings")
     if run.metrics.retrieval_pivot_rate is not None:
         typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
+    for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
+        typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
     typer.echo(f"run recorded -> {path}")
     if confirmed:
         raise typer.Exit(code=2)

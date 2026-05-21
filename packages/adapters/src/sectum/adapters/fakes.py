@@ -64,6 +64,12 @@ def _rank(query: str, candidates: list[tuple[UUID, CorpusDocument]], k: int) -> 
     return hits[:k]
 
 
+def _recall_keep(query: str, doc_id: str) -> float:
+    """A deterministic value in [0, 1) used to gate cross-tenant retrieval recall."""
+    digest = hashlib.sha256(f"{query}|{doc_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
 class FakeVectorStore(VectorStoreAdapter):
     """A deterministic in-memory vector store.
 
@@ -79,6 +85,7 @@ class FakeVectorStore(VectorStoreAdapter):
         *,
         shared_index: bool = False,
         soft_delete: bool = False,
+        recall: float = 1.0,
     ) -> None:
         scope = Capability.SHARED_INDEX if shared_index else Capability.PER_TENANT_NAMESPACE
         capabilities = {scope}
@@ -87,6 +94,7 @@ class FakeVectorStore(VectorStoreAdapter):
         super().__init__(name, frozenset(capabilities))
         self._shared_index = shared_index
         self._soft_delete = soft_delete
+        self._recall = recall
         self._documents: dict[UUID, list[CorpusDocument]] = {}
 
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
@@ -103,7 +111,18 @@ class FakeVectorStore(VectorStoreAdapter):
         return [(tenant, document) for document in self._documents.get(tenant, [])]
 
     def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
-        return _rank(text, self._scope(tenant), k)
+        hits = _rank(text, self._scope(tenant), k)
+        if self._recall >= 1.0:
+            return hits
+        # Model embedding-model strength: a weaker model misses some cross-tenant
+        # documents. Own-tenant hits always survive; each cross-tenant hit
+        # survives deterministically with probability ``recall`` (the engineering
+        # spec, section 7 - "stronger embeddings leak more").
+        return [
+            hit
+            for hit in hits
+            if hit.tenant_id == tenant or _recall_keep(text, hit.doc_id) < self._recall
+        ]
 
     def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
         for owner, document in self._scope(tenant):

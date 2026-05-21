@@ -103,6 +103,18 @@ def test_shared_index_vector_store_is_capability_honest() -> None:
     assert any(hit.tenant_id == _TENANT_A for hit in hits)
 
 
+def test_vector_store_recall_drops_cross_tenant_hits() -> None:
+    full = FakeVectorStore(shared_index=True)
+    weak = FakeVectorStore(shared_index=True, recall=0.0)
+    for store in (full, weak):
+        store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+        store.upsert(_TENANT_B, _documents(_TENANT_B, "b", "alpha"))
+    # full recall (the default) leaks tenant A's documents into tenant B's query;
+    # recall 0.0 models a weak embedding that surfaces no cross-tenant content
+    assert any(hit.tenant_id == _TENANT_A for hit in full.query(_TENANT_B, "alpha", 10))
+    assert all(hit.tenant_id == _TENANT_B for hit in weak.query(_TENANT_B, "alpha", 10))
+
+
 def test_vector_store_delete_removes_a_tenant() -> None:
     store = FakeVectorStore()
     store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))

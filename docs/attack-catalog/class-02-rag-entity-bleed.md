@@ -24,6 +24,17 @@ metric is the **Retrieval-Pivot Rate** — the fraction of benign queries that
 surfaced a foreign marker. The rate is a property of the stack under test: 100%
 on a shared index with no isolation, 0% on a per-tenant-namespace store.
 
+## Embedding-model sweep
+
+Stronger retrieval embeddings surface more cross-tenant content, so the
+Retrieval-Pivot Rate rises with embedding strength. When the run uses the in-memory store and a scenario lists more than one
+`embedding_models` entry, `sectum probe` runs the probe once per model and
+reports a per-model rate (`retrieval_pivot_rate_by_model`). The gradient is a
+fake-substrate illustration — embedding strength is modelled by a per-model
+retrieval recall, and a run that uses a live vector adapter records no per-model
+rates. Configuring real embedding providers (a later phase) makes the sweep
+reflect the actual models.
+
 ## Status
 
 Implemented in Phase 3. Walkthrough:

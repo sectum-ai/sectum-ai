@@ -195,6 +195,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hypothesis property tests for marker generation and canonical hashing,
   generalizing the fixed-seed reproducibility and uniqueness invariants to
   arbitrary seeds (the engineering spec, section 15).
+- The Class 2 embedding-model sweep (`sectum.sweep.embedding_model_sweep`): runs
+  the flagship organic-entity-bleed probe once per configured embedding model
+  and records a per-model Retrieval-Pivot Rate
+  (`RunMetrics.retrieval_pivot_rate_by_model`), reproducing the "stronger
+  embeddings leak more" effect (the engineering spec, section 7). `FakeVectorStore`
+  gains a `recall` knob that models embedding strength as how much cross-tenant
+  content a query surfaces. The sweep is a fake-substrate illustration: `sectum
+  probe` records the per-model rates only for in-memory-store runs whose scenario
+  lists more than one embedding model (a live vector adapter records none).
 
 ### Changed
 

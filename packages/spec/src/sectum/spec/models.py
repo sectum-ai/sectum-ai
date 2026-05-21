@@ -226,6 +226,7 @@ class RunMetrics(SectumModel):
     per_probe_findings: dict[str, int] = Field(default_factory=dict)
     confirmed_findings: int = 0
     retrieval_pivot_rate: float | None = None
+    retrieval_pivot_rate_by_model: dict[str, float] = Field(default_factory=dict)
     erasure_residue: dict[str, int] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
 
