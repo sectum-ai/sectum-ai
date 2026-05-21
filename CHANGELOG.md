@@ -222,6 +222,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
+- A job-runner abstraction (`sectum.jobs`): a small `JobRunner` interface
+  (`map(func, items) -> list`, results in input order) with two local
+  implementations - `SerialJobRunner` and a bounded `ThreadJobRunner` -
+  selected by `build_job_runner(max_concurrency)`. `sectum probe` now executes
+  its suite through this interface instead of an inline thread pool, so
+  `--max-concurrency` is unchanged while the orchestration layer becomes the
+  documented seam where a distributed backend (Temporal, Prefect) can drop in
+  later without touching call sites (the engineering spec, sections 13 and 21,
+  the open job-runner decision).
 - At-rest encryption of the seeded substrate (`sectum.crypto`): set
   `security.manifest_key_env` to the name of an environment variable holding a
   base64 32-byte key, and `sectum seed` seals the substrate - which holds the

@@ -7,7 +7,6 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 import functools
 import json
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -50,6 +49,7 @@ from sectum.evidence import (
     to_in_toto_statement,
     verify_pack,
 )
+from sectum.jobs import build_job_runner
 from sectum.probes import (
     AgentToolHijackProbe,
     EmbeddingInversionProbe,
@@ -420,14 +420,12 @@ def probe(
 
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
-    if max_concurrency > 1 and len(suite) > 1:
-        with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
-            futures = [executor.submit(runner.run_per_step, instance) for instance in suite]
-            for future in futures:
-                step_results.extend(future.result())
-    else:
-        for probe_instance in suite:
-            step_results.extend(runner.run_per_step(probe_instance))
+    # A single probe stays serial regardless of --max-concurrency (a pool is only
+    # worth its overhead for a suite > 1). The JobRunner is the seam where a
+    # distributed orchestrator could later replace local threads (spec section 21).
+    job_runner = build_job_runner(max_concurrency if len(suite) > 1 else 1)
+    for group in job_runner.map(runner.run_per_step, suite):
+        step_results.extend(group)
     kv_report = KvCacheTimingProbe(substrate, model=model).run() if run_kv_timing else None
     finished = datetime.now(UTC)
 
