@@ -15,8 +15,7 @@ But the same leakage exists *within* a single tenant, between its **users**: a
 RAG deployment where employee A retrieves employee B's private HR documents,
 per-user agent memory bleeding across colleagues, a semantic cache serving one
 user's answer to another. Mechanically these are identical to the cross-tenant
-classes — only the isolation boundary is finer. Our named competitor DeepTeam
-already models both (`CrossContextRetrieval(types=["tenant","user"])`).
+classes — only the isolation boundary is finer.
 
 Two facts shape the decision:
 
@@ -31,16 +30,10 @@ Two facts shape the decision:
    That makes user-level verification meaningfully more product surface (an
    intended-vs-actual access model), not a relabel.
 
-There is also a go-to-market asymmetry: tenant isolation is sold to the SaaS
-**vendor** (proving tenants don't bleed to their customers); user isolation is
-sold to the **enterprise** deploying internal AI (proving employees can't see
-each other's data). Different buyers, different motions.
-
 ## Decision
 
 Generalize the substrate's identity to a **principal** — a tenant, or a user
-within a tenant — additively, while keeping positioning and the wedge
-tenant-first:
+within a tenant — additively, while keeping the tenant boundary primary:
 
 - The spec gains `PrincipalKind` (`tenant`/`user`), a `Principal` value model
   (`tenant_id` plus optional `user_id`), `SyntheticUserSpec`,
@@ -53,7 +46,7 @@ tenant-first:
 - The substrate distributes a tenant's markers across its declared users
   (round-robin) when users are present; a tenant with no users behaves exactly
   as before.
-- Category, README, and the GDPR Article 17 wedge stay **tenant-first**. This is
+- The README and the GDPR Article 17 erasure flow stay **tenant-first**. This is
   a widening of anchor 1, recorded here per the spec's operating rule to flag
   drift (section 1.2) — not a repositioning.
 
@@ -80,7 +73,6 @@ larger, separate piece of work after that.
   tests now; the detection pipeline does not yet consume `owner_user_id`. That
   is a deliberate, staged foundation, not dead code — and this ADR is the record
   of the staging.
-- Sequencing is governed by the buyer: if the near-term ICP is the SaaS vendor,
-  the tenant path stays primary and user-level remains foundational; if pull
-  comes from enterprises deploying internal AI, the access-policy model is
-  promoted ahead of further breadth.
+- Sequencing: user-level work stays deferred and the tenant path remains
+  primary until user-level detection is prioritized; the access-policy model
+  (intended-vs-actual access) is the larger piece that follows.

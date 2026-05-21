@@ -26,28 +26,20 @@ routinely:
 - **Silent Leaks** (arXiv 2505.15420): 91% extraction efficiency via benign
   queries, with no prompt injection required.
 
-No product verifies multi-tenant isolation across the full AI surface.
-Sectum AI does.
+Sectum AI verifies that isolation across these surfaces, using a marker
+substrate and a manifest-grounded detection pipeline.
 
-## What Sectum AI is not
+## Scope
 
-Sectum AI is not a firewall, a runtime guardrail, a generalist LLM red-team tool, a
-GRC platform, or a SOC 2 readiness tool. It does not remediate — it verifies and
-attests.
+Sectum AI verifies and attests; it does not remediate findings or provide
+runtime protection. See the [threat model](docs/threat-model.md) for the trust
+boundaries and non-goals.
 
-## Open Sectum AI vs Sectum AI Cloud
+## The evidence layer is fully open source
 
-|  | Open Sectum AI (this repo) | Sectum AI Cloud |
-|---|---|---|
-| License | Apache-2.0 | Commercial |
-| Marker substrate, attack catalog, adapters | Yes | Yes |
-| Evidence chain + independent `sectum verify` | Yes | Yes |
-| Regression-baseline engine (`sectum baseline`) | Yes | Yes |
-| Hosted attestation, registry, scheduled runs, dashboard | — | Yes |
-| Auditor-grade engagement + branded packs | — | Yes |
-
-The evidence layer is fully open source — anyone can independently verify a
-Sectum AI evidence pack. See
+The marker substrate, attack catalog, adapters, evidence chain, and the
+independent `sectum verify` are Apache-2.0 — anyone can reproduce a run and
+verify a Sectum AI evidence pack without the project. See
 [ADR-0002](docs/adr/0002-evidence-layer-oss-boundary.md).
 
 ## Repository layout

@@ -188,6 +188,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).
 
+### Changed
+
+- Trim the README and ADR-0006 to engineering content only: drop the
+  commercial Open-vs-Cloud comparison, the competitive positioning, and the
+  go-to-market/buyer rationale, so the repository documents the technical
+  project only.
+
 ### Notes
 
 - Delivery sequencing: the public Apache-2.0 repositories are completed before
