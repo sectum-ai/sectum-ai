@@ -204,6 +204,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content a query surfaces. The sweep is a fake-substrate illustration: `sectum
   probe` records the per-model rates only for in-memory-store runs whose scenario
   lists more than one embedding model (a live vector adapter records none).
+- An end-to-end test suite (`tests/e2e/`) that runs each example walkthrough
+  (retrieval-pivot, erasure-attestation, mcp-tenant-boundary) through the CLI to
+  a verified evidence pack - the section-14 "reproduce the demo" acceptance,
+  gated opt-in by `SECTUM_RUN_E2E` and run on a dedicated CI step. Plus unit
+  tests closing the reported coverage gaps (the JSON Schema export, the probe
+  registry, the runner's per-action adapter guards, the config-resolver
+  helpers), raising line coverage from ~95% to ~97%.
 
 ### Changed
 

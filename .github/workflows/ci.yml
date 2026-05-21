@@ -40,6 +40,11 @@ jobs:
       - name: Tests
         run: uv run pytest --cov=sectum --cov-report=term-missing
 
+      - name: Example walkthroughs (e2e)
+        run: uv run pytest -m e2e -q
+        env:
+          SECTUM_RUN_E2E: "1"
+
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest

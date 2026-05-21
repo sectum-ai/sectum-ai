@@ -126,6 +126,7 @@ addopts = "--strict-markers --strict-config -ra"
 markers = [
     "integration: requires docker-compose backends (see tests/integration)",
     "live: requires live cloud credentials; skipped unless explicitly enabled",
+    "e2e: runs the example walkthroughs end to end; set SECTUM_RUN_E2E=1",
 ]
 
 [tool.coverage.run]
