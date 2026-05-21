@@ -32,6 +32,7 @@ from sectum.config import (
     SectumConfig,
     SecurityConfig,
     build_adapters,
+    build_cache,
     build_detection_providers,
     build_memory,
     build_observability,
@@ -679,6 +680,7 @@ def erasure(
     store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
     obs = build_observability(loaded.adapters.get("observability", fake_default))
     memory = build_memory(loaded.adapters.get("memory", fake_default))
+    cache = build_cache(loaded.adapters.get("cache", fake_default))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -693,9 +695,17 @@ def erasure(
             )
         if isinstance(memory, FakeMemory):
             memory.remember(marker.owner_tenant_id, f"memory note recording {marker.plaintext}")
+        if isinstance(cache, FakeCache):
+            cache.set(
+                marker.owner_tenant_id,
+                f"sectum-erasure-{marker.marker_id}",
+                f"cached answer mentioning {marker.plaintext}",
+            )
 
     started = datetime.now(UTC)
-    report = ErasureProbe(substrate, vector=store, observability=obs, memory=memory).run(target)
+    report = ErasureProbe(
+        substrate, vector=store, observability=obs, memory=memory, cache=cache
+    ).run(target)
     finished = datetime.now(UTC)
 
     run = RunResult(
@@ -704,7 +714,12 @@ def erasure(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
-        adapter_versions={store.name: __version__, obs.name: __version__, memory.name: __version__},
+        adapter_versions={
+            store.name: __version__,
+            obs.name: __version__,
+            memory.name: __version__,
+            cache.name: __version__,
+        },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
         metrics=RunMetrics(

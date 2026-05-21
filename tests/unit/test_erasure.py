@@ -1,6 +1,6 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
-from sectum.adapters import FakeMemory, FakeObservability, FakeVectorStore
+from sectum.adapters import FakeCache, FakeMemory, FakeObservability, FakeVectorStore
 from sectum.probes import ErasureProbe
 from sectum.spec import MarkerType, Substrate, Surface
 from sectum.substrate import build_substrate, default_scenario
@@ -32,6 +32,18 @@ def _seeded_memory(substrate: Substrate, *, soft_delete: bool) -> FakeMemory:
         if marker.marker_type is MarkerType.HARD_CANARY:
             memory.remember(marker.owner_tenant_id, f"memory note recording {marker.plaintext}")
     return memory
+
+
+def _seeded_cache(substrate: Substrate, *, soft_delete: bool) -> FakeCache:
+    cache = FakeCache(soft_delete=soft_delete)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            cache.set(
+                marker.owner_tenant_id,
+                f"sectum-erasure-{marker.marker_id}",
+                f"cached answer mentioning {marker.plaintext}",
+            )
+    return cache
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -126,3 +138,28 @@ def test_erasure_fails_when_memory_soft_deletes() -> None:
     assert surfaces[Surface.AGENT_MEMORY].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.AGENT_MEMORY for finding in report.findings)
+
+
+def test_erasure_clears_cache_when_the_store_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    cache = _seeded_cache(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, cache=cache).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.SEMANTIC_CACHE in surfaces
+    assert surfaces[Surface.SEMANTIC_CACHE].markers_before > 0
+    assert surfaces[Surface.SEMANTIC_CACHE].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_cache_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    cache = _seeded_cache(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, cache=cache).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.SEMANTIC_CACHE].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.SEMANTIC_CACHE for finding in report.findings)

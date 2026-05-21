@@ -106,6 +106,31 @@ def test_erasure_honors_only_memory_soft_delete_from_config(tmp_path: Path) -> N
     assert "ERASURE FAILED" in result.output
 
 
+def test_erasure_reports_the_cache_surface(tmp_path: Path) -> None:
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    # the run scans and reports the semantic-cache surface too
+    assert "semantic_cache:" in result.output
+
+
+def test_erasure_honors_only_cache_soft_delete_from_config(tmp_path: Path) -> None:
+    """Asymmetric soft-delete: only the cache surface leaves residue."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\n"
+        "adapters:\n"
+        "  vector_store: {kind: fake, soft_delete: false}\n"
+        "  observability: {kind: fake, soft_delete: false}\n"
+        "  memory: {kind: fake, soft_delete: false}\n"
+        "  cache: {kind: fake, soft_delete: true}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    assert result.exit_code == 2
+    assert "ERASURE FAILED" in result.output
+
+
 def test_erasure_warns_when_soft_delete_is_combined_with_config(tmp_path: Path) -> None:
     """--soft-delete is ignored when --config is given; a warning is emitted."""
     config_path = tmp_path / "sectum.yaml"

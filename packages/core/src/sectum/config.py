@@ -332,7 +332,10 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
     """Build the cache adapter the config selects."""
     extras = config.model_extra or {}
     if config.kind == "fake":
-        return FakeCache(tenant_scoped=_bool(extras, "tenant_scoped", True))
+        return FakeCache(
+            tenant_scoped=_bool(extras, "tenant_scoped", True),
+            soft_delete=_bool(extras, "soft_delete", False),
+        )
     if config.kind == "redis":
         from sectum.adapters.cache.redis import RedisCache
 

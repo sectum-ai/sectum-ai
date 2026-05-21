@@ -218,6 +218,23 @@ class CacheAdapter(Adapter):
     def keys(self) -> list[str]:
         """List every raw cache key, across all tenants."""
 
+    @abstractmethod
+    def values(self, tenant: UUID) -> list[str]:
+        """Return the cached values ``tenant`` can read.
+
+        A tenant-scoped cache returns only the tenant's own values; an unscoped
+        cache returns every value (the leak). Class 11 uses this to scan the
+        cache surface for residual markers.
+        """
+
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s cached entries.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        honoring an erasure request on the cache surface.
+        """
+
 
 class ModelAdapter(Adapter):
     """Adapter for an inference model with per-tenant fine-tunes or adapters.

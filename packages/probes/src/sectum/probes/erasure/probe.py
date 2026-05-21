@@ -12,7 +12,12 @@ an ``ErasureReport`` instead of a flat finding list.
 from dataclasses import dataclass
 from uuid import UUID
 
-from sectum.adapters import MemoryAdapter, ObservabilityAdapter, VectorStoreAdapter
+from sectum.adapters import (
+    CacheAdapter,
+    MemoryAdapter,
+    ObservabilityAdapter,
+    VectorStoreAdapter,
+)
 from sectum.spec import Finding, FindingStatus, Marker, MarkerType, Severity, Substrate, Surface
 
 
@@ -72,11 +77,13 @@ class ErasureProbe:
         vector: VectorStoreAdapter,
         observability: ObservabilityAdapter | None = None,
         memory: MemoryAdapter | None = None,
+        cache: CacheAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._observability = observability
         self._memory = memory
+        self._cache = cache
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -134,6 +141,22 @@ class ErasureProbe:
                 for marker in mem_residual
             )
 
+        if self._cache is not None:
+            cache_before = self._scan_cache(target, markers)
+            self._cache.delete(target)
+            cache_residual = self._scan_cache(target, markers)
+            surfaces.append(
+                SurfaceErasure(
+                    surface=Surface.SEMANTIC_CACHE,
+                    markers_before=len(cache_before),
+                    residual_after=len(cache_residual),
+                )
+            )
+            findings.extend(
+                self._residual_finding(target, marker, Surface.SEMANTIC_CACHE)
+                for marker in cache_residual
+            )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -162,6 +185,13 @@ class ErasureProbe:
             if any(marker.plaintext in entry for entry in memory.recall(target, marker.plaintext))
         ]
 
+    def _scan_cache(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers still present in the cache."""
+        if self._cache is None:
+            return []
+        values = self._cache.values(target)
+        return [marker for marker in markers if any(marker.plaintext in value for value in values)]
+
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
@@ -182,6 +212,10 @@ class ErasureProbe:
             Surface.AGENT_MEMORY: (
                 "data survived an Article 17 erasure; purge the tenant's entries from the "
                 "agent/long-term memory store"
+            ),
+            Surface.SEMANTIC_CACHE: (
+                "data survived an Article 17 erasure; evict the tenant's entries from the "
+                "semantic/application cache"
             ),
         }.get(surface, "data survived an Article 17 erasure; purge it from this surface")
         return Finding(

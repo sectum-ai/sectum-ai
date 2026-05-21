@@ -52,3 +52,22 @@ class RedisCache(CacheAdapter):
 
     def keys(self) -> list[str]:
         return sorted(str(key) for key in self._client.scan_iter(match=f"{self._prefix}:*"))
+
+    def _tenant_pattern(self, tenant: UUID) -> str:
+        """The key glob for ``tenant``'s entries (or all keys when unscoped)."""
+        return f"{self._prefix}:{tenant}:*" if self._tenant_scoped else f"{self._prefix}:*"
+
+    def values(self, tenant: UUID) -> list[str]:
+        keys = list(self._client.scan_iter(match=self._tenant_pattern(tenant)))
+        if not keys:
+            return []
+        return [str(value) for value in self._client.mget(keys) if value is not None]
+
+    def delete(self, tenant: UUID) -> None:
+        # An unscoped cache cannot isolate one tenant's entries to delete them,
+        # so the data survives - the Class 11 erasure residue.
+        if not self._tenant_scoped:
+            return
+        keys = list(self._client.scan_iter(match=f"{self._prefix}:{tenant}:*"))
+        if keys:
+            self._client.delete(*keys)

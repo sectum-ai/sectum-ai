@@ -302,10 +302,19 @@ class FakeCache(CacheAdapter):
     is shared - one tenant can read another tenant's cached value.
     """
 
-    def __init__(self, name: str = "fake-cache", *, tenant_scoped: bool = True) -> None:
-        capabilities = frozenset({Capability.TENANT_SCOPED_KEYS}) if tenant_scoped else frozenset()
-        super().__init__(name, capabilities)
+    def __init__(
+        self,
+        name: str = "fake-cache",
+        *,
+        tenant_scoped: bool = True,
+        soft_delete: bool = False,
+    ) -> None:
+        capabilities = {Capability.TENANT_SCOPED_KEYS} if tenant_scoped else set()
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
         self._tenant_scoped = tenant_scoped
+        self._soft_delete = soft_delete
         self._store: dict[str, str] = {}
 
     def _key(self, tenant: UUID, key: str) -> str:
@@ -319,6 +328,22 @@ class FakeCache(CacheAdapter):
 
     def keys(self) -> list[str]:
         return sorted(self._store)
+
+    def values(self, tenant: UUID) -> list[str]:
+        if not self._tenant_scoped:
+            return list(self._store.values())
+        prefix = f"{tenant}:"
+        return [value for key, value in self._store.items() if key.startswith(prefix)]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete cache acknowledges but keeps the entries; an unscoped
+        # cache cannot isolate one tenant's entries to delete them. Either way
+        # the data survives - the Class 11 erasure residue.
+        if self._soft_delete or not self._tenant_scoped:
+            return
+        prefix = f"{tenant}:"
+        for key in [key for key in self._store if key.startswith(prefix)]:
+            del self._store[key]
 
 
 class FakeModel(ModelAdapter):

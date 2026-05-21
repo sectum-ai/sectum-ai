@@ -311,6 +311,39 @@ def test_soft_delete_memory_retains_entries() -> None:
     assert memory.recall(_TENANT_A, "CANARY-X")
 
 
+def test_cache_values_are_scoped_to_a_tenant() -> None:
+    cache = FakeCache()
+    cache.set(_TENANT_A, "k", "value containing CANARY-X")
+    cache.set(_TENANT_B, "k", "value containing CANARY-Y")
+    assert cache.values(_TENANT_A) == ["value containing CANARY-X"]
+
+
+def test_cache_delete_clears_a_tenants_entries() -> None:
+    cache = FakeCache()
+    cache.set(_TENANT_A, "k", "value containing CANARY-X")
+    assert cache.values(_TENANT_A)
+    cache.delete(_TENANT_A)
+    assert cache.values(_TENANT_A) == []
+
+
+def test_soft_delete_cache_retains_entries() -> None:
+    cache = FakeCache(soft_delete=True)
+    cache.set(_TENANT_A, "k", "value containing CANARY-X")
+    cache.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves entries - the Class 11 residue
+    assert cache.values(_TENANT_A)
+
+
+def test_unscoped_cache_cannot_isolate_a_tenant_for_deletion() -> None:
+    # An unscoped cache exposes every value to each tenant and cannot delete one
+    # tenant's entries - the residue Class 11 erasure verification surfaces.
+    cache = FakeCache(tenant_scoped=False)
+    cache.set(_TENANT_A, "k", "value containing CANARY-X")
+    assert "value containing CANARY-X" in cache.values(_TENANT_B)
+    cache.delete(_TENANT_A)
+    assert "value containing CANARY-X" in cache.values(_TENANT_B)
+
+
 def test_soft_delete_observability_reports_the_capability() -> None:
     """The fake's capability self-report tracks the soft_delete knob (§11)."""
     assert FakeObservability(soft_delete=True).supports(Capability.SOFT_DELETE)

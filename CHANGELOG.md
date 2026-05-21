@@ -165,6 +165,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepts an optional `memory` adapter and scans it (via `recall`) for residual
   markers, and `sectum erasure` seeds memory and passes a `FakeMemory` through
   so the workflow round-trips the vector, tracing, and memory surfaces.
+- Class 11 (`sectum erasure`) now also checks the semantic/application cache
+  surface. The `CacheAdapter` interface gains `delete(tenant)` and `values(tenant)`
+  (the values a tenant can read - the tenant's own when scoped, all of them when
+  not, which is itself the leak); `FakeCache` gets a `soft_delete` knob and
+  `RedisCache` deletes/scans the tenant's prefixed keys. `ErasureProbe` accepts
+  an optional `cache` adapter and scans its values for residual markers, and
+  `sectum erasure` seeds the cache through, so the workflow now round-trips the
+  vector, tracing, memory, and cache surfaces. An unscoped cache that cannot
+  isolate a tenant's entries is itself an erasure failure.
 - The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
   maps to its own namespace within one index, so a query or fetch is
   tenant-scoped. Pinecone is a hosted service with no local backend, so it is
