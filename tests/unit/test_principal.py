@@ -74,3 +74,56 @@ def test_markers_are_distributed_across_users_round_robin() -> None:
 def test_markers_without_users_stay_tenant_level() -> None:
     substrate = build_substrate(default_scenario(seed=1))
     assert all(marker.owner_user_id is None for marker in substrate.manifest.markers)
+
+
+def test_markers_distribute_round_robin_with_a_remainder() -> None:
+    tenant = SyntheticTenantSpec(
+        tenant_id=UUID(int=0x1),
+        display_name="Acme Robotics",
+        industry="robotics",
+        corpus_size=24,
+        users=tuple(
+            SyntheticUserSpec(user_id=UUID(int=0xC0 + i), display_name=f"User {i}")
+            for i in range(4)
+        ),
+    )
+    scenario = Scenario(
+        scenario_id="uneven-users",
+        seed=7,
+        tenants=(tenant,),
+        shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+    )
+    substrate = build_substrate(scenario)
+    counts = Counter(marker.owner_user_id for marker in substrate.manifest.markers)
+    # six markers round-robin across four users -> two users get two, two get one
+    assert sorted(counts.values(), reverse=True) == [2, 2, 1, 1]
+    assert None not in counts
+
+
+def test_principals_span_tenants_with_and_without_users() -> None:
+    tenant_with_users = SyntheticTenantSpec(
+        tenant_id=UUID(int=0x1),
+        display_name="Acme Robotics",
+        industry="robotics",
+        corpus_size=24,
+        users=(SyntheticUserSpec(user_id=_USER_A, display_name="Alice"),),
+    )
+    bare_tenant = SyntheticTenantSpec(
+        tenant_id=UUID(int=0x2),
+        display_name="Globex",
+        industry="finance",
+        corpus_size=24,
+    )
+    scenario = Scenario(
+        scenario_id="mixed-users",
+        seed=7,
+        tenants=(tenant_with_users, bare_tenant),
+        shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+    )
+    substrate = build_substrate(scenario)
+    # tenant A contributes itself plus its one user; the bare tenant contributes only itself
+    assert [(p.tenant_id, p.user_id) for p in substrate.principals()] == [
+        (UUID(int=0x1), None),
+        (UUID(int=0x1), _USER_A),
+        (UUID(int=0x2), None),
+    ]
