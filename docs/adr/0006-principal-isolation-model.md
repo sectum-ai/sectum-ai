@@ -46,8 +46,10 @@ tenant-first:
   (`tenant_id` plus optional `user_id`), `SyntheticUserSpec`,
   `SyntheticTenantSpec.users`, `Marker.owner_user_id`, and
   `Substrate.principals()`. All new fields default to the tenant-level case, so
-  every existing model, probe, adapter, test, and the demo are byte-for-byte
-  unchanged.
+  existing models, probes, adapters, tests, and the demo behave exactly as
+  before; the only change to serialized output is the new optional fields
+  themselves (`owner_user_id: null`, `users: []`), which shift canonical hashes
+  once (see Consequences).
 - The substrate distributes a tenant's markers across its declared users
   (round-robin) when users are present; a tenant with no users behaves exactly
   as before.
@@ -64,11 +66,16 @@ larger, separate piece of work after that.
 ## Consequences
 
 - The substrate can model users within tenants today and plant per-user
-  markers; `Substrate.principals()` enumerates every isolation boundary. This is
-  the foundation user-level verification builds on.
+  markers; `Substrate.principals()` enumerates every isolation boundary (only
+  the tenant-level boundary until a tenant declares users). This is the
+  foundation user-level verification builds on.
 - The existing tenant-level pipeline carries zero risk: the change is additive
   with tenant-level defaults, and the reproducibility and zero-false-positive
-  invariants still hold.
+  invariants still hold. One mechanical consequence: the canonical hash covers
+  the new optional fields, so a scenario's `scenario_hash` and `manifest_hash`
+  shift once (the reproducibility invariant is *same seed and code produce an
+  identical manifest*, not hash-stability across schema versions). Nothing pins
+  those digests, so no evidence pack or test breaks.
 - The new fields are written by the substrate and read by `principals()` and its
   tests now; the detection pipeline does not yet consume `owner_user_id`. That
   is a deliberate, staged foundation, not dead code — and this ADR is the record
