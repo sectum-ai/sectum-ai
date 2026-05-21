@@ -22,7 +22,7 @@ the spec's positioning rules (section 20: precise, anti-hype).
 
 Examples are named for the attack class they demonstrate, not for any metric
 value. The flagship Class 2 example ships as `examples/retrieval-pivot/`; the
-Class 11 wedge example ships as `examples/erasure-attestation/`.
+Class 11 erasure example ships as `examples/erasure-attestation/`.
 
 ## Consequences
 

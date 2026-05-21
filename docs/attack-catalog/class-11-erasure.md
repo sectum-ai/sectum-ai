@@ -2,8 +2,8 @@
 
 **OWASP:** LLM08:2025 · **Surfaces:** vector DB, tracing · **Probe id:** `gdpr-erasure-verification`
 
-The wedge product: proving a tenant's data has actually left an AI system after
-a right-to-erasure request.
+Proving a tenant's data has actually left an AI system after a right-to-erasure
+request.
 
 ## Goal
 

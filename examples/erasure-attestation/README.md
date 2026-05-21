@@ -1,7 +1,7 @@
 # GDPR Article 17 Erasure Attestation
 
-This example reproduces **Attack Class 11**, the wedge product: verifying that a
-tenant's data has actually left an AI system after a right-to-erasure request.
+This example reproduces **Attack Class 11**: verifying that a tenant's data has
+actually left an AI system after a right-to-erasure request.
 
 ## The problem
 
