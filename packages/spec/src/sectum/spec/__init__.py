@@ -1,6 +1,6 @@
 """Sectum AI data models and JSON Schema (the ``sectum.spec`` namespace package)."""
 
-from sectum.spec.enums import FindingStatus, MarkerType, Severity, Surface
+from sectum.spec.enums import FindingStatus, MarkerType, PrincipalKind, Severity, Surface
 from sectum.spec.errors import (
     AdapterError,
     ConfigError,
@@ -19,6 +19,7 @@ from sectum.spec.models import (
     Marker,
     Observation,
     PlantedLocation,
+    Principal,
     ProbeStep,
     RunMetrics,
     RunResult,
@@ -27,6 +28,7 @@ from sectum.spec.models import (
     SharedEntity,
     Substrate,
     SyntheticTenantSpec,
+    SyntheticUserSpec,
 )
 from sectum.spec.schema import json_schemas, write_json_schemas
 
@@ -46,6 +48,8 @@ __all__ = [
     "MarkerType",
     "Observation",
     "PlantedLocation",
+    "Principal",
+    "PrincipalKind",
     "ProbeStep",
     "RunMetrics",
     "RunResult",
@@ -57,6 +61,7 @@ __all__ = [
     "Substrate",
     "Surface",
     "SyntheticTenantSpec",
+    "SyntheticUserSpec",
     "canonical_hash",
     "json_schemas",
     "sha256_hex",

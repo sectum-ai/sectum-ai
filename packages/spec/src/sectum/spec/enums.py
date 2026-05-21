@@ -28,6 +28,19 @@ class FindingStatus(StrEnum):
     UNVERIFIED = "unverified"
 
 
+class PrincipalKind(StrEnum):
+    """The kind of isolation boundary a principal represents.
+
+    Sectum verifies that one principal's data does not reach another. A tenant
+    is the top-level principal; a user is a sub-principal within a tenant. The
+    substrate, detection, and surfaces are identical at either granularity -
+    only the boundary being verified differs (ADR-0006).
+    """
+
+    TENANT = "tenant"
+    USER = "user"
+
+
 class Surface(StrEnum):
     """A place tenant data can live or leak (the engineering spec, section 23)."""
 

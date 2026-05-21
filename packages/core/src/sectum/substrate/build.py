@@ -21,6 +21,7 @@ def build_substrate(scenario: Scenario) -> Substrate:
             tenant_spec.tenant_id,
             derive_rng(scenario.seed, "markers", index),
             sequence,
+            tenant_spec.users,
         )
         sequence += len(markers)
         documents, locations = generate_corpus(

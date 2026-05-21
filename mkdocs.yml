@@ -50,6 +50,7 @@ nav:
       - adr/0003-deterministic-substrate.md
       - adr/0004-detection-pipeline-placement.md
       - adr/0005-examples-named-by-attack-class.md
+      - adr/0006-principal-isolation-model.md
 
 markdown_extensions:
   - admonition

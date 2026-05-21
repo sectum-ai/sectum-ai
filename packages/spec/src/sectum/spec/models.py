@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sectum.spec.enums import FindingStatus, MarkerType, Severity, Surface
+from sectum.spec.enums import FindingStatus, MarkerType, PrincipalKind, Severity, Surface
 
 SCHEMA_VERSION = "0.1.0"
 """Version stamped onto every aggregate model; bumped on any schema change."""
@@ -25,6 +25,18 @@ class SectumModel(BaseModel):
 # --- Scenario inputs --------------------------------------------------------
 
 
+class SyntheticUserSpec(SectumModel):
+    """A synthetic user within a tenant - a sub-principal (ADR-0006).
+
+    When a tenant declares users, the substrate distributes that tenant's
+    markers across them, so isolation can be verified at user granularity
+    (one employee must not see another's data) as well as tenant granularity.
+    """
+
+    user_id: UUID
+    display_name: str
+
+
 class SyntheticTenantSpec(SectumModel):
     """Configuration for one synthetic tenant (the engineering spec, section 6.1)."""
 
@@ -33,6 +45,7 @@ class SyntheticTenantSpec(SectumModel):
     industry: str
     locale: str = "en-US"
     corpus_size: int = Field(gt=0)
+    users: tuple[SyntheticUserSpec, ...] = ()
 
 
 class SharedEntity(SectumModel):
@@ -58,6 +71,24 @@ class Scenario(SectumModel):
     schema_version: str = SCHEMA_VERSION
 
 
+class Principal(SectumModel):
+    """An isolation boundary Sectum verifies: a tenant, or a user within one.
+
+    A tenant-level principal carries ``user_id is None``; a user-level
+    principal carries both its tenant and its user id. The marker substrate
+    and detection treat both identically - a principal is just the owner of a
+    marker and the actor in a session (ADR-0006).
+    """
+
+    tenant_id: UUID
+    user_id: UUID | None = None
+
+    @property
+    def kind(self) -> PrincipalKind:
+        """Whether this principal is a tenant or a user within a tenant."""
+        return PrincipalKind.TENANT if self.user_id is None else PrincipalKind.USER
+
+
 # --- Markers and corpus -----------------------------------------------------
 
 
@@ -69,11 +100,17 @@ class PlantedLocation(SectumModel):
 
 
 class Marker(SectumModel):
-    """A planted canary whose appearance in the wrong tenant proves leakage."""
+    """A planted canary whose appearance in the wrong principal proves leakage.
+
+    ``owner_user_id`` is set only when the marker is owned by a specific user
+    within ``owner_tenant_id``'s tenant (ADR-0006); a tenant-level marker
+    leaves it ``None``.
+    """
 
     marker_id: str
     marker_type: MarkerType
     owner_tenant_id: UUID
+    owner_user_id: UUID | None = None
     plaintext: str
     embedding_ref: str | None = None
     planted_locations: tuple[PlantedLocation, ...] = ()
@@ -113,6 +150,21 @@ class Substrate(SectumModel):
     documents: tuple[CorpusDocument, ...]
     manifest: GroundTruthManifest
     schema_version: str = SCHEMA_VERSION
+
+    def principals(self) -> tuple[Principal, ...]:
+        """Every isolation boundary in the substrate (ADR-0006).
+
+        Each tenant contributes a tenant-level principal; a tenant that
+        declares users also contributes one principal per user. A tenant with
+        no users contributes only its tenant-level principal.
+        """
+        result: list[Principal] = []
+        for tenant in self.tenants:
+            result.append(Principal(tenant_id=tenant.tenant_id))
+            result.extend(
+                Principal(tenant_id=tenant.tenant_id, user_id=user.user_id) for user in tenant.users
+            )
+        return tuple(result)
 
 
 # --- Probe execution --------------------------------------------------------
