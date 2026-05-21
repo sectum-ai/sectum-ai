@@ -1,6 +1,6 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
-from sectum.adapters import FakeObservability, FakeVectorStore
+from sectum.adapters import FakeMemory, FakeObservability, FakeVectorStore
 from sectum.probes import ErasureProbe
 from sectum.spec import MarkerType, Substrate, Surface
 from sectum.substrate import build_substrate, default_scenario
@@ -24,6 +24,14 @@ def _seeded_observability(substrate: Substrate, *, soft_delete: bool) -> FakeObs
                 f"trace recording marker {marker.plaintext}",
             )
     return obs
+
+
+def _seeded_memory(substrate: Substrate, *, soft_delete: bool) -> FakeMemory:
+    memory = FakeMemory(soft_delete=soft_delete)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            memory.remember(marker.owner_tenant_id, f"memory note recording {marker.plaintext}")
+    return memory
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -93,3 +101,28 @@ def test_erasure_fails_when_observability_soft_deletes() -> None:
     assert surfaces[Surface.TRACING].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.TRACING for finding in report.findings)
+
+
+def test_erasure_clears_memory_when_the_store_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    memory = _seeded_memory(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, memory=memory).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.AGENT_MEMORY in surfaces
+    assert surfaces[Surface.AGENT_MEMORY].markers_before > 0
+    assert surfaces[Surface.AGENT_MEMORY].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_memory_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    memory = _seeded_memory(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, memory=memory).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.AGENT_MEMORY].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.AGENT_MEMORY for finding in report.findings)

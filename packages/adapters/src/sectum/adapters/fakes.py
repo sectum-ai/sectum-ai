@@ -402,10 +402,19 @@ class FakeMemory(MemoryAdapter):
     tenant recalls only its own memory.
     """
 
-    def __init__(self, name: str = "fake-memory", *, shared_memory: bool = False) -> None:
-        scope = Capability.SHARED_MEMORY if shared_memory else Capability.PER_TENANT_MEMORY
-        super().__init__(name, frozenset({scope}))
+    def __init__(
+        self,
+        name: str = "fake-memory",
+        *,
+        shared_memory: bool = False,
+        soft_delete: bool = False,
+    ) -> None:
+        capabilities = {Capability.SHARED_MEMORY if shared_memory else Capability.PER_TENANT_MEMORY}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
         self._shared_memory = shared_memory
+        self._soft_delete = soft_delete
         self._entries: dict[UUID, list[str]] = {}
 
     def remember(self, tenant: UUID, text: str) -> None:
@@ -418,3 +427,10 @@ class FakeMemory(MemoryAdapter):
         else:
             corpus = list(self._entries.get(tenant, []))
         return [text for text in corpus if query_tokens & _tokens(text)]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete memory store acknowledges the request but keeps the
+        # entries - the residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
+        self._entries.pop(tenant, None)

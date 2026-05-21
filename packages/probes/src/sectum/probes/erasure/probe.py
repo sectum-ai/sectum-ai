@@ -12,7 +12,7 @@ an ``ErasureReport`` instead of a flat finding list.
 from dataclasses import dataclass
 from uuid import UUID
 
-from sectum.adapters import ObservabilityAdapter, VectorStoreAdapter
+from sectum.adapters import MemoryAdapter, ObservabilityAdapter, VectorStoreAdapter
 from sectum.spec import Finding, FindingStatus, Marker, MarkerType, Severity, Substrate, Surface
 
 
@@ -71,10 +71,12 @@ class ErasureProbe:
         *,
         vector: VectorStoreAdapter,
         observability: ObservabilityAdapter | None = None,
+        memory: MemoryAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
         self._observability = observability
+        self._memory = memory
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -116,6 +118,22 @@ class ErasureProbe:
                 self._residual_finding(target, marker, Surface.TRACING) for marker in obs_residual
             )
 
+        if self._memory is not None:
+            mem_before = self._scan_memory(target, markers)
+            self._memory.delete(target)
+            mem_residual = self._scan_memory(target, markers)
+            surfaces.append(
+                SurfaceErasure(
+                    surface=Surface.AGENT_MEMORY,
+                    markers_before=len(mem_before),
+                    residual_after=len(mem_residual),
+                )
+            )
+            findings.extend(
+                self._residual_finding(target, marker, Surface.AGENT_MEMORY)
+                for marker in mem_residual
+            )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -131,6 +149,17 @@ class ErasureProbe:
         observability = self._observability
         return [
             marker for marker in markers if observability.search_traces(target, marker.plaintext)
+        ]
+
+    def _scan_memory(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers still recallable from memory."""
+        if self._memory is None:
+            return []
+        memory = self._memory
+        return [
+            marker
+            for marker in markers
+            if any(marker.plaintext in entry for entry in memory.recall(target, marker.plaintext))
         ]
 
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
@@ -149,6 +178,10 @@ class ErasureProbe:
             Surface.TRACING: (
                 "data survived an Article 17 erasure; purge the tenant's traces from the "
                 "observability backend"
+            ),
+            Surface.AGENT_MEMORY: (
+                "data survived an Article 17 erasure; purge the tenant's entries from the "
+                "agent/long-term memory store"
             ),
         }.get(surface, "data survived an Article 17 erasure; purge it from this surface")
         return Finding(

@@ -261,6 +261,14 @@ class MemoryAdapter(Adapter):
     def recall(self, tenant: UUID, query: str) -> list[str]:
         """Return memory entries ``tenant`` can recall for ``query``."""
 
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s memory entries.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        honoring an erasure request on the memory surface.
+        """
+
 
 class AdapterRegistry:
     """An in-memory registry of adapter instances, keyed by adapter name."""

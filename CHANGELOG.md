@@ -159,6 +159,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `observability` adapter and scans the tracing surface for residual markers,
   and `sectum erasure` seeds traces and passes a `FakeObservability` through
   so the workflow round-trips through both the vector and tracing surfaces.
+- Class 11 (`sectum erasure`) now also checks the agent/long-term memory surface
+  (a third of the spec's "ten hiding places"). The `MemoryAdapter` interface
+  gains `delete(tenant)`; `FakeMemory` gets a `soft_delete` knob; `ErasureProbe`
+  accepts an optional `memory` adapter and scans it (via `recall`) for residual
+  markers, and `sectum erasure` seeds memory and passes a `FakeMemory` through
+  so the workflow round-trips the vector, tracing, and memory surfaces.
 - The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
   maps to its own namespace within one index, so a query or fetch is
   tenant-scoped. Pinecone is a hosted service with no local backend, so it is

@@ -380,7 +380,10 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
     """Build the memory adapter the config selects."""
     extras = config.model_extra or {}
     if config.kind == "fake":
-        return FakeMemory(shared_memory=_bool(extras, "shared_memory", False))
+        return FakeMemory(
+            shared_memory=_bool(extras, "shared_memory", False),
+            soft_delete=_bool(extras, "soft_delete", False),
+        )
     raise _unsupported("memory", config.kind)
 
 

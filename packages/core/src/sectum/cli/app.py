@@ -33,6 +33,7 @@ from sectum.config import (
     SecurityConfig,
     build_adapters,
     build_detection_providers,
+    build_memory,
     build_observability,
     build_vector_store,
     load_config,
@@ -677,20 +678,24 @@ def erasure(
     target = _resolve_target(substrate, target_tenant)
     store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
     obs = build_observability(loaded.adapters.get("observability", fake_default))
+    memory = build_memory(loaded.adapters.get("memory", fake_default))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
-    if isinstance(obs, FakeObservability):
-        for marker in substrate.manifest.markers:
-            if marker.marker_type is MarkerType.HARD_CANARY:
-                obs.record(
-                    marker.owner_tenant_id,
-                    "sectum-erasure",
-                    f"trace recording marker {marker.plaintext}",
-                )
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is not MarkerType.HARD_CANARY:
+            continue
+        if isinstance(obs, FakeObservability):
+            obs.record(
+                marker.owner_tenant_id,
+                "sectum-erasure",
+                f"trace recording marker {marker.plaintext}",
+            )
+        if isinstance(memory, FakeMemory):
+            memory.remember(marker.owner_tenant_id, f"memory note recording {marker.plaintext}")
 
     started = datetime.now(UTC)
-    report = ErasureProbe(substrate, vector=store, observability=obs).run(target)
+    report = ErasureProbe(substrate, vector=store, observability=obs, memory=memory).run(target)
     finished = datetime.now(UTC)
 
     run = RunResult(
@@ -699,7 +704,7 @@ def erasure(
         manifest_hash=canonical_hash(substrate.manifest),
         started_at=started,
         finished_at=finished,
-        adapter_versions={store.name: __version__, obs.name: __version__},
+        adapter_versions={store.name: __version__, obs.name: __version__, memory.name: __version__},
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
         metrics=RunMetrics(

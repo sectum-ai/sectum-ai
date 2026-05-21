@@ -295,6 +295,22 @@ def test_soft_delete_observability_retains_traces() -> None:
     assert obs.search_traces(_TENANT_A, "CANARY-X")
 
 
+def test_memory_delete_clears_a_tenants_entries() -> None:
+    memory = FakeMemory()
+    memory.remember(_TENANT_A, "memory note containing CANARY-X")
+    assert memory.recall(_TENANT_A, "CANARY-X")
+    memory.delete(_TENANT_A)
+    assert memory.recall(_TENANT_A, "CANARY-X") == []
+
+
+def test_soft_delete_memory_retains_entries() -> None:
+    memory = FakeMemory(soft_delete=True)
+    memory.remember(_TENANT_A, "memory note containing CANARY-X")
+    memory.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves entries - the Class 11 residue
+    assert memory.recall(_TENANT_A, "CANARY-X")
+
+
 def test_soft_delete_observability_reports_the_capability() -> None:
     """The fake's capability self-report tracks the soft_delete knob (§11)."""
     assert FakeObservability(soft_delete=True).supports(Capability.SOFT_DELETE)

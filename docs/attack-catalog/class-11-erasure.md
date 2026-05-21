@@ -1,6 +1,6 @@
 # Class 11 — GDPR Article 17 erasure verification
 
-**OWASP:** LLM08:2025 · **Surfaces:** vector DB, tracing · **Probe id:** `gdpr-erasure-verification`
+**OWASP:** LLM08:2025 · **Surfaces:** vector DB, tracing, agent memory · **Probe id:** `gdpr-erasure-verification`
 
 Proving a tenant's data has actually left an AI system after a right-to-erasure
 request.
@@ -27,10 +27,10 @@ Officer and a JSON evidence pack — control-mapped to GDPR Articles 17 and 32.
 
 ## Status
 
-Implemented for the vector-store surface (Phase 3) and the observability /
-tracing surface (post-Phase-5 hardening): `ErasureProbe` accepts both a
-vector-store and an optional observability adapter, scans each independently,
-and reports a per-surface verdict. The remaining "ten hiding places" (logs,
-caches, backups, derived indexes, and the rest) follow as their adapter
-families gain a `delete` primitive. Walkthrough:
+Implemented for the vector-store surface (Phase 3), the observability / tracing
+surface, and the agent / long-term memory surface (post-Phase-5 hardening):
+`ErasureProbe` accepts a vector-store plus optional observability and memory
+adapters, scans each independently, and reports a per-surface verdict. The
+remaining "ten hiding places" (caches, backups, derived indexes, and the rest)
+follow as their adapter families gain a `delete` primitive. Walkthrough:
 [`examples/erasure-attestation`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/erasure-attestation).
