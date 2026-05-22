@@ -130,6 +130,9 @@ class Runner:
             doc_type="poison",
             title=step.payload["doc_id"],
             content=step.payload["content"],
+            # The planting principal owns the poison, so a user-scoped store
+            # filters it from a sibling user's retrieval (ADR-0006/0008).
+            owner_user_id=step.actor_user_id,
         )
         self._vector.upsert(step.actor_tenant_id, [document])
         return Observation(step_id=step.step_id, surface=Surface.VECTOR_DB, raw_response="")

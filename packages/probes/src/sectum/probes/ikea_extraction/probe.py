@@ -28,17 +28,23 @@ class IkeaExtractionProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan a multi-turn benign query sequence per shared entity and tenant."""
-        tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
+        """Plan a multi-turn benign query sequence per shared entity and principal.
+
+        The benign sequence runs from every principal - each tenant, and each
+        user within a tenant (ADR-0006) - so detection flags any turn that
+        surfaces a foreign principal's canary. With no users declared the
+        principals are the tenants and this is the original per-tenant plan.
+        """
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
-            for observer in tenant_ids:
+            for observer in substrate.principals():
                 for turn in _TURNS:
                     steps.append(
                         ProbeStep(
                             step_id=f"{self.id}-{len(steps):04d}",
                             probe_id=self.id,
-                            actor_tenant_id=observer,
+                            actor_tenant_id=observer.tenant_id,
+                            actor_user_id=observer.user_id,
                             action="vector.query",
                             payload={"query": turn.format(entity=entity.value), "k": "10"},
                         )
@@ -48,11 +54,12 @@ class IkeaExtractionProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan a turn's retrieved context for a foreign canary via the detection pipeline."""
+        """Scan a turn's retrieved context for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )

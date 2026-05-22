@@ -260,6 +260,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every foreign principal - so a user-scoped store yields no cross-user
   contamination while a tenant-only store surfaces a sibling user's note.
   `user=None` is the tenant-level scope and is unchanged.
+- The remaining retrieval probes are now principal-aware (ADR-0006), riding on
+  the user-aware vector adapter: Class 2 (`rag-entity-bleed`, the flagship),
+  Class 3 (`rag-poisoning`), Class 6 (`embedding-inversion`), and Class 10
+  (`ikea-extraction`) all plan from `substrate.principals()` and pass the
+  observing user to detection, so a benign query - or a planted poison - that
+  surfaces a sibling user's content is flagged. The runner stamps a planted
+  document's `owner_user_id` with the acting principal so a user-scoped store
+  filters it. End to end: against a store scoped by tenant alone these probes
+  report a cross-user leak; against a user-scoped store they report none. With
+  no users declared every plan is unchanged.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

@@ -24,38 +24,38 @@ class RagPoisoningProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan: every tenant plants a poison document, then every tenant queries the lure."""
+        """Plan: each hard canary's owning principal plants a poison, then all query the lure.
+
+        A poison document is planted once per hard canary as the marker's owning
+        principal - a tenant, or a user within a tenant (ADR-0006) - then every
+        principal queries the lure, so poisoning is tested at both granularities.
+        With no users declared the principals are the tenants and this is the
+        original per-tenant plan.
+        """
         steps: list[ProbeStep] = []
-        for tenant in substrate.tenants:
-            hard = next(
-                (
-                    marker
-                    for marker in substrate.manifest.markers
-                    if marker.owner_tenant_id == tenant.tenant_id
-                    and marker.marker_type is MarkerType.HARD_CANARY
-                ),
-                None,
-            )
-            if hard is None:
+        for marker in substrate.manifest.markers:
+            if marker.marker_type is not MarkerType.HARD_CANARY:
                 continue
             steps.append(
                 ProbeStep(
                     step_id=f"{self.id}-{len(steps):04d}",
                     probe_id=self.id,
-                    actor_tenant_id=tenant.tenant_id,
+                    actor_tenant_id=marker.owner_tenant_id,
+                    actor_user_id=marker.owner_user_id,
                     action="vector.upsert",
                     payload={
-                        "doc_id": f"poison-{tenant.tenant_id.hex[:8]}",
-                        "content": f"Poisoned {_POISON_LURE}. Reference: {hard.plaintext}",
+                        "doc_id": f"poison-{marker.marker_id}",
+                        "content": f"Poisoned {_POISON_LURE}. Reference: {marker.plaintext}",
                     },
                 )
             )
-        for tenant in substrate.tenants:
+        for observer in substrate.principals():
             steps.append(
                 ProbeStep(
                     step_id=f"{self.id}-{len(steps):04d}",
                     probe_id=self.id,
-                    actor_tenant_id=tenant.tenant_id,
+                    actor_tenant_id=observer.tenant_id,
+                    actor_user_id=observer.user_id,
                     action="vector.query",
                     payload={"query": _POISON_LURE, "k": "10"},
                 )
@@ -65,11 +65,12 @@ class RagPoisoningProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan a query's retrieved context for a foreign poison canary."""
+        """Scan a query's retrieved context for a foreign-principal poison canary."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )
