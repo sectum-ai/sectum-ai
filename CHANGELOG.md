@@ -326,6 +326,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged (the defaults are the multi-tenant OWASP class and no ATLAS/NIST).
   The per-class ATLAS assignments are a starting point and warrant a domain
   review before the next release.
+- The audit-pack PDF now renders each finding's mapped control IDs inline
+  (`OWASP ...; ATLAS ...; NIST ...`), so an auditor reads per-finding control
+  coverage from the findings table rather than only the run-level mapping
+  section. Empty frameworks are omitted (an erasure finding shows no ATLAS, an
+  unclassified finding shows no suffix). This surfaces the per-finding IDs the
+  `Finding` model and `evidence.json` already carried.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
