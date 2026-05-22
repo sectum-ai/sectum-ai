@@ -18,7 +18,9 @@ class RagPoisoningProbe(DetectingProbe):
     id = "rag-poisoning"
     name = "Adversarial RAG poisoning"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ("AML.T0024",)
+    # T0020 Poison Training Data is the technique (planting the poison document);
+    # T0024 Exfiltration via AI Inference API is the cross-tenant leak it induces.
+    atlas_techniques: tuple[str, ...] = ("AML.T0020", "AML.T0024")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
     requires_adapters: tuple[str, ...] = ()

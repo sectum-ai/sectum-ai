@@ -20,7 +20,9 @@ class AgentToolHijackProbe(DetectingProbe):
     id = "agent-tool-hijack"
     name = "Cross-tenant agent tool-call hijacking"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ("AML.T0024",)
+    # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough
+    # technique; T0024 Exfiltration via AI Inference API is the leak it causes.
+    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MCP,)
     requires_adapters: tuple[str, ...] = ()

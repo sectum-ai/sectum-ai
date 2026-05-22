@@ -16,7 +16,9 @@ class LoraCrossTenantProbe(DetectingProbe):
     id = "lora-cross-tenant"
     name = "LoRA / adapter cross-tenant influence"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0057")
+    # T0024.000 Infer Training Data Membership captures the adapter-memorization
+    # angle, alongside T0024 exfiltration and T0057 LLM Data Leakage.
+    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0024.000", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MODEL_ADAPTER,)
     requires_adapters: tuple[str, ...] = ()
