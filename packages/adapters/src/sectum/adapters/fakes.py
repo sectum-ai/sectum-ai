@@ -475,7 +475,12 @@ class FakeMemory(MemoryAdapter):
 
     With ``shared_memory=True`` a recall spans every tenant's memory - the
     cross-tenant memory contamination Class 8 is built to catch. With it off, a
-    tenant recalls only its own memory.
+    tenant recalls only its own memory. With ``user_scoped=True`` a recall
+    carrying a ``user`` returns only that user's own entries plus the
+    tenant-shared ones (ADR-0006); with it off a recall scopes by tenant alone,
+    so one user recalls a sibling user's note - the cross-user leak.
+    ``shared_memory`` (the tenant boundary) and ``user_scoped`` (the user
+    boundary) model different boundaries and are not meant to be combined.
     """
 
     def __init__(
@@ -483,26 +488,34 @@ class FakeMemory(MemoryAdapter):
         name: str = "fake-memory",
         *,
         shared_memory: bool = False,
+        user_scoped: bool = False,
         soft_delete: bool = False,
     ) -> None:
         capabilities = {Capability.SHARED_MEMORY if shared_memory else Capability.PER_TENANT_MEMORY}
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
         if soft_delete:
             capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._shared_memory = shared_memory
+        self._user_scoped = user_scoped
         self._soft_delete = soft_delete
-        self._entries: dict[UUID, list[str]] = {}
+        # Each entry is tagged with the user that wrote it (``None`` = tenant-level)
+        # so a user-scoped recall can return only the caller's own and shared notes.
+        self._entries: dict[UUID, list[tuple[UUID | None, str]]] = {}
 
-    def remember(self, tenant: UUID, text: str) -> None:
-        self._entries.setdefault(tenant, []).append(text)
+    def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+        self._entries.setdefault(tenant, []).append((user, text))
 
-    def recall(self, tenant: UUID, query: str) -> list[str]:
+    def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
         query_tokens = _tokens(query)
         if self._shared_memory:
-            corpus = [text for entries in self._entries.values() for text in entries]
+            corpus = [entry for entries in self._entries.values() for entry in entries]
         else:
             corpus = list(self._entries.get(tenant, []))
-        return [text for text in corpus if query_tokens & _tokens(text)]
+        if user is not None and self._user_scoped:
+            corpus = [(owner, text) for owner, text in corpus if owner is None or owner == user]
+        return [text for owner, text in corpus if query_tokens & _tokens(text)]
 
     def delete(self, tenant: UUID) -> None:
         # A soft-delete memory store acknowledges the request but keeps the

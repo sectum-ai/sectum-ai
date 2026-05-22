@@ -6,7 +6,7 @@ tenant's memory, then recalls memory from every other tenant; a foreign canary
 surfacing in a recall is cross-tenant memory contamination.
 """
 
-from sectum.probes.detection import DetectingProbe
+from sectum.probes.detection import DetectingProbe, is_cross_principal
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
@@ -22,8 +22,15 @@ class MemoryContamProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan, per hard canary: write it to its owner's memory, recall from others."""
-        tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
+        """Plan, per hard canary: write it to its owner, recall from foreign principals.
+
+        The note is written once as the marker's owning principal, then recalled
+        from every principal to which the marker is foreign - another tenant, or
+        another user within the tenant (ADR-0006) - so memory isolation is
+        verified at both granularities. With no users declared the principals are
+        the tenants and this is the original per-tenant plan.
+        """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
@@ -33,18 +40,20 @@ class MemoryContamProbe(DetectingProbe):
                     step_id=f"{self.id}-{len(steps):04d}",
                     probe_id=self.id,
                     actor_tenant_id=marker.owner_tenant_id,
+                    actor_user_id=marker.owner_user_id,
                     action="memory.write",
                     payload={"text": f"Long-term memory note. Reference: {marker.plaintext}"},
                 )
             )
-            for observer in tenant_ids:
-                if observer == marker.owner_tenant_id:
+            for observer in principals:
+                if not is_cross_principal(marker, observer):
                     continue
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",
                         probe_id=self.id,
-                        actor_tenant_id=observer,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
                         action="memory.recall",
                         payload={"query": "recall the long-term memory note reference"},
                     )
@@ -54,11 +63,12 @@ class MemoryContamProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan a recalled memory entry for a foreign canary via the detection pipeline."""
+        """Scan a recalled memory entry for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )

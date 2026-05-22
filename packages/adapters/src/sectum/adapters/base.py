@@ -303,12 +303,22 @@ class MemoryAdapter(Adapter):
     family = AdapterFamily.MEMORY
 
     @abstractmethod
-    def remember(self, tenant: UUID, text: str) -> None:
-        """Persist ``text`` in ``tenant``'s memory store."""
+    def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+        """Persist ``text`` in the principal's memory store.
+
+        ``user`` scopes the entry to one user within ``tenant`` (ADR-0006);
+        ``user=None`` persists at the tenant level and is unchanged.
+        """
 
     @abstractmethod
-    def recall(self, tenant: UUID, query: str) -> list[str]:
-        """Return memory entries ``tenant`` can recall for ``query``."""
+    def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+        """Return memory entries the principal can recall for ``query``.
+
+        With ``user`` set, a user-scoped store (reporting ``USER_SCOPED``) recalls
+        only that user's own entries plus tenant-shared ones; a store that scopes
+        by tenant alone ignores ``user`` and recalls a sibling user's note - a
+        leak. ``user=None`` is the tenant-level recall and is unchanged.
+        """
 
     @abstractmethod
     def delete(self, tenant: UUID) -> None:

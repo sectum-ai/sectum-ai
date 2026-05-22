@@ -185,13 +185,15 @@ class Runner:
     def _memory_write(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.write step needs a memory adapter")
-        self._memory.remember(step.actor_tenant_id, step.payload["text"])
+        self._memory.remember(step.actor_tenant_id, step.payload["text"], user=step.actor_user_id)
         return Observation(step_id=step.step_id, surface=Surface.AGENT_MEMORY, raw_response="")
 
     def _memory_recall(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.recall step needs a memory adapter")
-        recalled = self._memory.recall(step.actor_tenant_id, step.payload["query"])
+        recalled = self._memory.recall(
+            step.actor_tenant_id, step.payload["query"], user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.AGENT_MEMORY,

@@ -298,6 +298,32 @@ def test_shared_memory_leaks_recall_across_tenants() -> None:
     assert any("alpha" in entry for entry in leaked)
 
 
+def test_user_scoped_memory_isolates_users_within_a_tenant() -> None:
+    memory = FakeMemory(user_scoped=True)
+    assert memory.supports(Capability.USER_SCOPED)
+    memory.remember(_TENANT_A, "alpha memory note", user=_USER_A)
+    assert memory.recall(_TENANT_A, "recall the note", user=_USER_A)
+    # a sibling user in the same tenant cannot recall user A's note
+    assert memory.recall(_TENANT_A, "recall the note", user=_USER_B) == []
+
+
+def test_tenant_scoped_memory_leaks_across_users_when_a_user_is_set() -> None:
+    # Memory scoped by tenant alone ignores ``user``, so a sibling user recalls
+    # the note - the cross-user leak (ADR-0006 default-deny).
+    memory = FakeMemory(user_scoped=False)
+    assert not memory.supports(Capability.USER_SCOPED)
+    memory.remember(_TENANT_A, "alpha memory note", user=_USER_A)
+    leaked = memory.recall(_TENANT_A, "recall the note", user=_USER_B)
+    assert any("alpha" in entry for entry in leaked)
+
+
+def test_memory_user_argument_defaults_to_tenant_scope() -> None:
+    # user=None is the tenant-level recall, so behavior is unchanged from before.
+    memory = FakeMemory(user_scoped=True)
+    memory.remember(_TENANT_A, "alpha memory note")
+    assert memory.recall(_TENANT_A, "recall the note")
+
+
 def test_rag_pipeline_retrieves_indexed_context() -> None:
     rag = FakeRAGPipeline()
     assert isinstance(rag, RAGPipelineAdapter)

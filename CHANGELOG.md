@@ -251,6 +251,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   yields no cross-user leak, a tenant-only cache serves one user another's
   answer. `user=None` is unchanged; `RedisCache` accepts `user` for conformance
   but does not yet report `USER_SCOPED`.
+- The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
+  `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
+  tags each entry with its writer and gains a `user_scoped` knob (reporting
+  `USER_SCOPED`) so a recall returns only the caller's own and tenant-shared
+  notes. The Class 8 memory-contamination probe (`memory-contamination`) is now
+  principal-aware - it writes a note as the owning principal and recalls it from
+  every foreign principal - so a user-scoped store yields no cross-user
+  contamination while a tenant-only store surfaces a sibling user's note.
+  `user=None` is the tenant-level scope and is unchanged.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).
