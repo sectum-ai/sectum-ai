@@ -270,6 +270,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   filters it. End to end: against a store scoped by tenant alone these probes
   report a cross-user leak; against a user-scoped store they report none. With
   no users declared every plan is unchanged.
+- The user dimension reaches the MCP family (ADR-0008). `MCPAdapter.invoke` takes
+  a keyword-only `user`; the runner threads it; and `FakeMCP` records each
+  resource's owning user and gains a `user_scoped` knob (reporting `USER_SCOPED`)
+  so a `lookup` resolves only the caller's own resources within the tenant - a
+  tenant-scoped server resolves a sibling user's resource (the leak). The Class 7
+  agent-tool-hijack probe (`agent-tool-hijack`) is now principal-aware: it issues
+  the confused-deputy and token-passthrough lookups from every foreign principal,
+  so it catches cross-user tool-call hijacking as well as cross-tenant.
+  `user=None` is unchanged; the live `StdioMCPClient` accepts `user` for
+  conformance but does not yet report `USER_SCOPED`.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

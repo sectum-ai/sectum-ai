@@ -382,6 +382,27 @@ def test_mcp_token_passthrough_acts_as_the_token_tenant() -> None:
     assert carried.output == "alpha resource"
 
 
+def test_user_scoped_mcp_isolates_users_within_a_tenant() -> None:
+    mcp = FakeMCP(user_scoped=True)
+    assert mcp.supports(Capability.USER_SCOPED)
+    mcp.provision(_TENANT_A, "res-1", "alpha resource", user=_USER_A)
+    # a sibling user in the same tenant cannot resolve user A's resource
+    assert mcp.invoke(_TENANT_A, "lookup", {"key": "res-1"}, user=_USER_B).output == ""
+    assert (
+        mcp.invoke(_TENANT_A, "lookup", {"key": "res-1"}, user=_USER_A).output == "alpha resource"
+    )
+
+
+def test_tenant_scoped_mcp_resolves_a_sibling_users_resource() -> None:
+    # A tenant-scoped server resolves any key within the tenant regardless of the
+    # owning user, so a sibling user reads it - the cross-user leak (ADR-0006).
+    mcp = FakeMCP()
+    assert not mcp.supports(Capability.USER_SCOPED)
+    mcp.provision(_TENANT_A, "res-1", "alpha resource", user=_USER_A)
+    leaked = mcp.invoke(_TENANT_A, "lookup", {"key": "res-1"}, user=_USER_B)
+    assert leaked.output == "alpha resource"
+
+
 def test_adapter_registry_registers_lists_and_rejects_duplicates() -> None:
     registry = AdapterRegistry()
     store = FakeVectorStore()

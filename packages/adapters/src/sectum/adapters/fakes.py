@@ -261,7 +261,11 @@ class FakeMCP(MCPAdapter):
       argument and acts as whatever tenant the token names (the Asana-class
       pattern).
 
-    With both off the server is tenant-scoped and reports that capability.
+    With both off the server is tenant-scoped and reports that capability. A
+    tenant-scoped server still resolves a key across all of one tenant's
+    resources, so a sibling user's resource surfaces - the cross-user leak.
+    With ``user_scoped=True`` (reporting ``USER_SCOPED``) a ``lookup`` carrying a
+    ``user`` resolves only that user's own resources within the tenant (ADR-0006).
     """
 
     def __init__(
@@ -270,41 +274,56 @@ class FakeMCP(MCPAdapter):
         *,
         confused_deputy: bool = False,
         token_passthrough: bool = False,
+        user_scoped: bool = False,
     ) -> None:
         capabilities = {Capability.TOOL_INVOCATION}
         if not confused_deputy and not token_passthrough:
             capabilities.add(Capability.TENANT_SCOPED_TOOLS)
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
         super().__init__(name, frozenset(capabilities))
         self._confused_deputy = confused_deputy
         self._token_passthrough = token_passthrough
-        self._resources: dict[UUID, dict[str, str]] = {}
+        self._user_scoped = user_scoped
+        # Each resource records the user that owns it (``None`` = tenant-level)
+        # so a user-scoped server can deny a sibling user's lookup.
+        self._resources: dict[UUID, dict[str, tuple[UUID | None, str]]] = {}
 
-    def provision(self, tenant: UUID, key: str, value: str) -> None:
-        """Store a tenant resource the ``lookup`` tool can resolve (test helper)."""
-        self._resources.setdefault(tenant, {})[key] = value
+    def provision(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+        """Store a resource the ``lookup`` tool can resolve (test helper)."""
+        self._resources.setdefault(tenant, {})[key] = (user, value)
 
     def list_tools(self) -> list[str]:
         return list(_MCP_TOOLS)
 
-    def invoke(self, tenant: UUID, tool: str, arguments: dict[str, str]) -> McpResult:
+    def invoke(
+        self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+    ) -> McpResult:
         if tool not in _MCP_TOOLS:
             raise AdapterError(f"unknown tool: {tool}")
         if tool == "echo":
             return McpResult(tool=tool, output=arguments.get("text", ""))
-        return McpResult(tool=tool, output=self._lookup(tenant, arguments))
+        return McpResult(tool=tool, output=self._lookup(tenant, arguments, user))
 
-    def _lookup(self, tenant: UUID, arguments: dict[str, str]) -> str:
+    def _lookup(self, tenant: UUID, arguments: dict[str, str], user: UUID | None) -> str:
         key = arguments.get("key", "")
         if self._confused_deputy:
             # Resource keys are globally unique (marker ids), so resolving
             # across every tenant's resources is unambiguous and order-free.
-            scopes = list(self._resources.values())
-        else:
-            scopes = [self._resources.get(self._effective_tenant(tenant, arguments), {})]
-        for resources in scopes:
-            if key in resources:
-                return resources[key]
-        return ""
+            for resources in self._resources.values():
+                if key in resources:
+                    return resources[key][1]
+            return ""
+        resources = self._resources.get(self._effective_tenant(tenant, arguments), {})
+        if key not in resources:
+            return ""
+        owner_user, value = resources[key]
+        # A user-scoped server denies a sibling user's resource within the tenant;
+        # a tenant-scoped server resolves it (the cross-user leak). ``user=None``
+        # is the tenant-level caller and is unchanged.
+        if self._user_scoped and user is not None and owner_user is not None and owner_user != user:
+            return ""
+        return value
 
     def _effective_tenant(self, tenant: UUID, arguments: dict[str, str]) -> UUID:
         # Token passthrough: the server trusts a caller-supplied token instead

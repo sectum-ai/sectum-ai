@@ -178,7 +178,9 @@ class Runner:
         if self._mcp is None:
             raise AdapterError("an mcp.invoke step needs an MCP adapter")
         arguments = {key: value for key, value in step.payload.items() if key != "tool"}
-        result = self._mcp.invoke(step.actor_tenant_id, step.payload["tool"], arguments)
+        result = self._mcp.invoke(
+            step.actor_tenant_id, step.payload["tool"], arguments, user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.MCP,

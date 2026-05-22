@@ -26,7 +26,12 @@ from sectum.spec import AdapterError
 
 
 class StdioMCPClient(MCPAdapter):
-    """A Model Context Protocol client that speaks to a stdio MCP server."""
+    """A Model Context Protocol client that speaks to a stdio MCP server.
+
+    Scopes by tenant. ``user`` is accepted on ``invoke`` for interface
+    conformance (ADR-0008) but not yet enforced - per-user tool scoping is a
+    follow-on - so this adapter does not report ``USER_SCOPED``.
+    """
 
     def __init__(
         self,
@@ -44,7 +49,9 @@ class StdioMCPClient(MCPAdapter):
     def list_tools(self) -> list[str]:
         return asyncio.run(self._list_tools())
 
-    def invoke(self, tenant: UUID, tool: str, arguments: dict[str, str]) -> McpResult:
+    def invoke(
+        self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+    ) -> McpResult:
         return asyncio.run(self._invoke(tenant, tool, arguments))
 
     async def _list_tools(self) -> list[str]:

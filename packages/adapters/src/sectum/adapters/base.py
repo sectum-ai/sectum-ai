@@ -210,8 +210,16 @@ class MCPAdapter(Adapter):
         """List the tools the MCP server exposes."""
 
     @abstractmethod
-    def invoke(self, tenant: UUID, tool: str, arguments: dict[str, str]) -> McpResult:
-        """Invoke ``tool`` within ``tenant``'s scope."""
+    def invoke(
+        self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+    ) -> McpResult:
+        """Invoke ``tool`` within the principal's scope.
+
+        With ``user`` set, a user-scoped server (reporting ``USER_SCOPED``)
+        resolves only that user's resources within the tenant (ADR-0006); a
+        tenant-scoped server ignores ``user`` and may resolve a sibling user's
+        resource - a leak. ``user=None`` is the tenant-level call and is unchanged.
+        """
 
 
 class CacheAdapter(Adapter):
