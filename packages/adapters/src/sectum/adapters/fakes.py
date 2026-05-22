@@ -412,7 +412,13 @@ class FakeModel(ModelAdapter):
     tenant's inference - the weight-bleed condition Class 9 is built to catch.
     With ``prefix_cache=True`` the model keeps a KV prefix cache shared across
     tenants: a prompt whose prefix was recently seen returns faster, the timing
-    side channel Class 5 is built to catch. Both default to off.
+    side channel Class 5 is built to catch. With ``user_scoped=True`` (reporting
+    ``USER_SCOPED``) inference recalls only the caller user's own adapter within
+    the tenant (ADR-0006); with it off a tenant's adapters are shared across its
+    users, so one user's memorized canary surfaces in a sibling's inference - the
+    cross-user bleed. ``adapter_bleed`` (the tenant boundary) and ``user_scoped``
+    (the user boundary) model different boundaries and are not meant to be
+    combined. All default to off.
     """
 
     _BASE_LATENCY_MS = 100.0
@@ -424,25 +430,33 @@ class FakeModel(ModelAdapter):
         *,
         adapter_bleed: bool = False,
         prefix_cache: bool = False,
+        user_scoped: bool = False,
         soft_delete: bool = False,
     ) -> None:
         scope = Capability.SHARED_WEIGHTS if adapter_bleed else Capability.PER_TENANT_ADAPTER
         capabilities = {scope}
         if prefix_cache:
             capabilities.add(Capability.SHARED_PREFIX_CACHE)
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
         if soft_delete:
             capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._adapter_bleed = adapter_bleed
         self._prefix_cache = prefix_cache
+        self._user_scoped = user_scoped
         self._soft_delete = soft_delete
-        self._adapters: dict[UUID, list[str]] = {}
+        # Each adapter text is tagged with the user that trained it (``None`` =
+        # tenant-level) so a user-scoped model recalls only the caller's own.
+        self._adapters: dict[UUID, list[tuple[UUID | None, str]]] = {}
         self._warmed_prefixes: set[str] = set()
 
-    def train_adapter(self, tenant: UUID, texts: Sequence[str]) -> None:
-        self._adapters.setdefault(tenant, []).extend(texts)
+    def train_adapter(
+        self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+    ) -> None:
+        self._adapters.setdefault(tenant, []).extend((user, text) for text in texts)
 
-    def infer(self, tenant: UUID, prompt: str) -> str:
+    def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
         # Running a prompt warms the shared prefix cache for whoever asks next.
         self._warmed_prefixes.add(self._prefix(prompt))
         # The model "recalls" memorized adapter text that overlaps the prompt.
@@ -450,10 +464,12 @@ class FakeModel(ModelAdapter):
         # the caller's - so a foreign tenant's memorized canary surfaces.
         prompt_tokens = _tokens(prompt)
         if self._adapter_bleed:
-            corpus = [text for texts in self._adapters.values() for text in texts]
+            corpus = [entry for entries in self._adapters.values() for entry in entries]
         else:
             corpus = list(self._adapters.get(tenant, []))
-        recalled = [text for text in corpus if prompt_tokens & _tokens(text)]
+        if user is not None and self._user_scoped:
+            corpus = [(owner, text) for owner, text in corpus if owner is None or owner == user]
+        recalled = [text for owner, text in corpus if prompt_tokens & _tokens(text)]
         if not recalled:
             return "the adapter recalled nothing for this prompt"
         return " ".join(recalled)

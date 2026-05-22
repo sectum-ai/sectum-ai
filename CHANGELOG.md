@@ -280,6 +280,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so it catches cross-user tool-call hijacking as well as cross-tenant.
   `user=None` is unchanged; the live `StdioMCPClient` accepts `user` for
   conformance but does not yet report `USER_SCOPED`.
+- The user dimension reaches the model family (ADR-0008), completing the
+  generalization. `ModelAdapter.train_adapter`/`infer` take a keyword-only
+  `user`; the runner threads it; and `FakeModel` tags each adapter text with its
+  trainer and gains a `user_scoped` knob (reporting `USER_SCOPED`) so inference
+  recalls only the caller user's own adapter within the tenant - a tenant-scoped
+  model surfaces a sibling user's memorized canary (the cross-user bleed). The
+  Class 9 lora-cross-tenant probe (`lora-cross-tenant`) is now principal-aware:
+  it trains the adapter as the owning principal and infers from every foreign
+  principal. `measure_latency` stays tenant-level (the KV-cache side channel is
+  shared infrastructure, not a per-principal scope). `user=None` is unchanged.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

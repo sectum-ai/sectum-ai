@@ -264,6 +264,24 @@ def test_weight_bleed_model_leaks_adapters_across_tenants() -> None:
     assert "alpha" in model.infer(_TENANT_B, "recall the adapter fact")
 
 
+def test_user_scoped_model_isolates_adapters_within_a_tenant() -> None:
+    model = FakeModel(user_scoped=True)
+    assert model.supports(Capability.USER_SCOPED)
+    model.train_adapter(_TENANT_A, ["alpha adapter fact"], user=_USER_A)
+    assert "alpha" in model.infer(_TENANT_A, "recall the adapter fact", user=_USER_A)
+    # a sibling user's inference does not recall user A's adapter
+    assert "alpha" not in model.infer(_TENANT_A, "recall the adapter fact", user=_USER_B)
+
+
+def test_tenant_scoped_model_leaks_adapters_across_users() -> None:
+    # A model scoping adapters by tenant alone surfaces one user's memorized fact
+    # in a sibling user's inference - the cross-user bleed (ADR-0006).
+    model = FakeModel(user_scoped=False)
+    assert not model.supports(Capability.USER_SCOPED)
+    model.train_adapter(_TENANT_A, ["alpha adapter fact"], user=_USER_A)
+    assert "alpha" in model.infer(_TENANT_A, "recall the adapter fact", user=_USER_B)
+
+
 def test_model_prefix_cache_speeds_up_a_warmed_prefix() -> None:
     model = FakeModel(prefix_cache=True)
     assert model.supports(Capability.SHARED_PREFIX_CACHE)

@@ -278,12 +278,24 @@ class ModelAdapter(Adapter):
     family = AdapterFamily.MODEL
 
     @abstractmethod
-    def train_adapter(self, tenant: UUID, texts: Sequence[str]) -> None:
-        """Fit or attach ``tenant``'s per-tenant adapter on ``texts``."""
+    def train_adapter(
+        self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+    ) -> None:
+        """Fit or attach a per-tenant (or per-user) adapter on ``texts``.
+
+        ``user`` scopes the adapter to one user within ``tenant`` (ADR-0006);
+        ``user=None`` is the tenant-level adapter and is unchanged.
+        """
 
     @abstractmethod
-    def infer(self, tenant: UUID, prompt: str) -> str:
-        """Run inference for ``tenant`` and return the completion."""
+    def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+        """Run inference for the principal and return the completion.
+
+        With ``user`` set, a user-scoped model (reporting ``USER_SCOPED``) recalls
+        only that user's own adapter within the tenant; a model that scopes by
+        tenant alone ignores ``user`` and may surface a sibling user's memorized
+        content - a leak. ``user=None`` is the tenant-level call and is unchanged.
+        """
 
     @abstractmethod
     def measure_latency(self, tenant: UUID, prompt: str) -> float:

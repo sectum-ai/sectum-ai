@@ -161,13 +161,17 @@ class Runner:
     def _model_train(self, step: ProbeStep) -> Observation:
         if self._model is None:
             raise AdapterError("a model.train step needs a model adapter")
-        self._model.train_adapter(step.actor_tenant_id, [step.payload["text"]])
+        self._model.train_adapter(
+            step.actor_tenant_id, [step.payload["text"]], user=step.actor_user_id
+        )
         return Observation(step_id=step.step_id, surface=Surface.MODEL_ADAPTER, raw_response="")
 
     def _model_infer(self, step: ProbeStep) -> Observation:
         if self._model is None:
             raise AdapterError("a model.infer step needs a model adapter")
-        response = self._model.infer(step.actor_tenant_id, step.payload["prompt"])
+        response = self._model.infer(
+            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.MODEL_ADAPTER,

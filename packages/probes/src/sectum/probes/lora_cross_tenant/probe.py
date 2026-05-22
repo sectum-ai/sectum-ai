@@ -6,7 +6,7 @@ a tenant's adapter on a memorizable hard-canary phrase, then runs inference from
 every other tenant; a foreign canary surfacing in a response is weight bleed.
 """
 
-from sectum.probes.detection import DetectingProbe
+from sectum.probes.detection import DetectingProbe, is_cross_principal
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
@@ -22,8 +22,15 @@ class LoraCrossTenantProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan, per hard canary: train its owner's adapter, then infer as others."""
-        tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
+        """Plan, per hard canary: train its owning principal's adapter, infer as foreigners.
+
+        The adapter is trained once as the marker's owning principal, then
+        inference runs from every principal to which the marker is foreign -
+        another tenant, or another user within the tenant (ADR-0006) - so adapter
+        influence is tested at both granularities. With no users declared the
+        principals are the tenants and this is the original per-tenant plan.
+        """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
@@ -33,18 +40,20 @@ class LoraCrossTenantProbe(DetectingProbe):
                     step_id=f"{self.id}-{len(steps):04d}",
                     probe_id=self.id,
                     actor_tenant_id=marker.owner_tenant_id,
+                    actor_user_id=marker.owner_user_id,
                     action="model.train",
                     payload={"text": f"Memorized adapter fact. Reference: {marker.plaintext}"},
                 )
             )
-            for observer in tenant_ids:
-                if observer == marker.owner_tenant_id:
+            for observer in principals:
+                if not is_cross_principal(marker, observer):
                     continue
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",
                         probe_id=self.id,
-                        actor_tenant_id=observer,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
                         action="model.infer",
                         payload={"prompt": "recall the memorized adapter fact reference"},
                     )
@@ -54,11 +63,12 @@ class LoraCrossTenantProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan an inference response for a foreign canary via the detection pipeline."""
+        """Scan an inference response for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )
