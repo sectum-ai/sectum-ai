@@ -276,6 +276,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   integration test (the key folding is correct by construction). This is the
   exemplar for bringing the remaining live adapters (pgvector, Chroma, Weaviate,
   Pinecone) to per-backend `USER_SCOPED` enforcement.
+- The live `PgVectorStore` now *enforces* user scoping: with `user_scoped: true`
+  it records each document's `owner_user` (an idempotent `ADD COLUMN` migration)
+  and filters `query`/`fetch` to the caller's own rows plus tenant-shared ones
+  (reporting `USER_SCOPED`), so one user cannot retrieve a sibling user's
+  document within the tenant. The tenant-level `delete`/`list_namespaces` are
+  unchanged. The vector resolver exposes `user_scoped` for the fake and pgvector.
+  Verified against a live PostgreSQL + pgvector backend by the integration tests.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
