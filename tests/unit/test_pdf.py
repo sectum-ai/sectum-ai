@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sectum.evidence import build_evidence_pack, control_mappings, render_audit_pack
-from sectum.evidence.pdf import _finding_controls, _finding_lines
+from sectum.evidence.pdf import _SCOPE_METHODOLOGY, _finding_controls, _finding_lines
 from sectum.spec import (
     EvidencePack,
     Finding,
@@ -75,6 +75,7 @@ def _classified_finding(
     owasp_llm: str = "LLM08:2025",
     atlas: tuple[str, ...] = ("AML.T0024", "AML.T0024.001"),
     nist: tuple[str, ...] = ("MEASURE 2.7",),
+    remediation: str = "",
 ) -> Finding:
     return Finding(
         finding_id="f-controls",
@@ -89,6 +90,7 @@ def _classified_finding(
         owasp_llm=owasp_llm,
         atlas=atlas,
         nist=nist,
+        remediation_pointer=remediation,
     )
 
 
@@ -118,3 +120,23 @@ def test_finding_lines_appends_control_ids_inline() -> None:
 def test_finding_lines_omits_suffix_for_unclassified_finding() -> None:
     [line] = _finding_lines((_classified_finding(owasp_llm="", atlas=(), nist=()),))
     assert "[" not in line
+
+
+def test_finding_lines_includes_remediation_pointer() -> None:
+    lines = _finding_lines((_classified_finding(remediation="rotate the shared index"),))
+    assert len(lines) == 2
+    assert "Remediation: rotate the shared index" in lines[1]
+
+
+def test_finding_lines_omits_remediation_when_absent() -> None:
+    lines = _finding_lines((_classified_finding(),))
+    assert len(lines) == 1
+    assert all("Remediation" not in line for line in lines)
+
+
+def test_scope_methodology_states_limits() -> None:
+    # The scope/methodology narrative must carry the anti-hype limits (the
+    # engineering spec, sections 18 and 20): no remediation, coverage not cert.
+    text = " ".join(_SCOPE_METHODOLOGY)
+    assert "does not remediate" in text
+    assert "test coverage, not legal certification" in text
