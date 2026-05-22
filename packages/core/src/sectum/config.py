@@ -297,13 +297,16 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     if config.kind == "fake":
         return FakeVectorStore(
             shared_index=_bool(extras, "shared_index", False),
+            user_scoped=_bool(extras, "user_scoped", False),
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "pgvector":
         from sectum.adapters.vector.pgvector import PgVectorStore
 
         dsn = _resolve_secret(extras, "dsn", "dsn_env")
-        return PgVectorStore(dsn, _hashing_embed, dim=_EMBED_DIM)
+        return PgVectorStore(
+            dsn, _hashing_embed, dim=_EMBED_DIM, user_scoped=_bool(extras, "user_scoped", False)
+        )
     if config.kind == "chroma":
         from sectum.adapters.vector.chroma import ChromaVectorStore
 
