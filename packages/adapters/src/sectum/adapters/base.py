@@ -30,6 +30,7 @@ class AdapterFamily(StrEnum):
     CACHE = "cache"
     MODEL = "model"
     MEMORY = "memory"
+    SEARCH_INDEX = "search_index"
 
 
 class Capability(StrEnum):
@@ -41,6 +42,7 @@ class Capability(StrEnum):
     SOFT_DELETE = "soft_delete"
     TENANT_SCOPED_KEYS = "tenant_scoped_keys"
     TRACE_SEARCH = "trace_search"
+    TEXT_SEARCH = "text_search"
     TOOL_INVOCATION = "tool_invocation"
     PER_TENANT_ADAPTER = "per_tenant_adapter"
     SHARED_WEIGHTS = "shared_weights"
@@ -346,6 +348,32 @@ class MemoryAdapter(Adapter):
 
         Class 11 (erasure verification) uses this to model the upstream stack
         honoring an erasure request on the memory surface.
+        """
+
+
+class SearchIndexAdapter(Adapter):
+    """Adapter for a full-text search index derived from the RAG corpus.
+
+    A search index is the tenth of the spec's "ten hiding places": a keyword/
+    full-text index (Elasticsearch/OpenSearch and the like) built from the
+    corpus, distinct from the embedding vector store. Class 11 uses it to confirm
+    a tenant's content does not survive in the derived index after an erasure
+    request (the engineering spec, section 7).
+    """
+
+    family = AdapterFamily.SEARCH_INDEX
+
+    @abstractmethod
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return the indexed document snippets in ``tenant``'s scope matching ``query``."""
+
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s indexed documents.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        purging the tenant's entries from the search index, then re-scans to
+        confirm no residue remains.
         """
 
 

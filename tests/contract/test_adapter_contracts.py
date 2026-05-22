@@ -19,12 +19,14 @@ from sectum.adapters import (
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
+    FakeSearchIndex,
     FakeVectorStore,
     MCPAdapter,
     MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
     RAGPipelineAdapter,
+    SearchIndexAdapter,
     VectorStoreAdapter,
 )
 from sectum.spec import AdapterError, CorpusDocument
@@ -74,6 +76,7 @@ def _all_fakes() -> list[Adapter]:
         FakeCache(),
         FakeModel(),
         FakeMemory(),
+        FakeSearchIndex(),
     ]
 
 
@@ -98,6 +101,7 @@ def test_each_fake_belongs_to_the_expected_family() -> None:
     assert FakeCache().family is AdapterFamily.CACHE
     assert FakeModel().family is AdapterFamily.MODEL
     assert FakeMemory().family is AdapterFamily.MEMORY
+    assert FakeSearchIndex().family is AdapterFamily.SEARCH_INDEX
 
 
 def test_isolated_vector_store_does_not_leak_across_tenants() -> None:
@@ -519,3 +523,30 @@ def test_soft_delete_observability_reports_the_capability() -> None:
     """The fake's capability self-report tracks the soft_delete knob (§11)."""
     assert FakeObservability(soft_delete=True).supports(Capability.SOFT_DELETE)
     assert not FakeObservability().supports(Capability.SOFT_DELETE)
+
+
+def test_search_index_search_is_scoped_to_a_tenant() -> None:
+    search = FakeSearchIndex()
+    assert isinstance(search, SearchIndexAdapter)
+    assert search.supports(Capability.TEXT_SEARCH)
+    search.index(_TENANT_A, "alpha document mentioning CANARY-A")
+    search.index(_TENANT_B, "beta document mentioning CANARY-B")
+    # search is scoped to the tenant: tenant A never sees tenant B's documents
+    assert search.search(_TENANT_A, "document") == ["alpha document mentioning CANARY-A"]
+
+
+def test_search_index_delete_clears_a_tenants_documents() -> None:
+    search = FakeSearchIndex()
+    search.index(_TENANT_A, "document mentioning CANARY-X")
+    assert search.search(_TENANT_A, "CANARY-X")
+    search.delete(_TENANT_A)
+    assert search.search(_TENANT_A, "CANARY-X") == []
+
+
+def test_soft_delete_search_index_retains_documents() -> None:
+    search = FakeSearchIndex(soft_delete=True)
+    assert search.supports(Capability.SOFT_DELETE)
+    search.index(_TENANT_A, "document mentioning CANARY-X")
+    search.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves documents - the Class 11 residue
+    assert search.search(_TENANT_A, "CANARY-X")

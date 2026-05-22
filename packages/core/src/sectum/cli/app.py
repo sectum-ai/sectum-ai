@@ -23,6 +23,7 @@ from sectum.adapters import (
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
+    FakeSearchIndex,
     FakeVectorStore,
 )
 from sectum.baseline import compare_metrics
@@ -683,6 +684,10 @@ def erasure(
     memory = build_memory(loaded.adapters.get("memory", fake_default))
     cache = build_cache(loaded.adapters.get("cache", fake_default))
     model = build_model(loaded.adapters.get("model", fake_default))
+    # The search index has no live adapter yet; the deterministic fake models it.
+    # soft_delete rides on fake_default's extras (set from --soft-delete when no
+    # config is given, and absent under --config, matching the other fakes).
+    search = FakeSearchIndex(soft_delete=bool((fake_default.model_extra or {}).get("soft_delete")))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -705,10 +710,17 @@ def erasure(
             )
         if isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
+        search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
 
     started = datetime.now(UTC)
     report = ErasureProbe(
-        substrate, vector=store, observability=obs, memory=memory, cache=cache, model=model
+        substrate,
+        vector=store,
+        observability=obs,
+        memory=memory,
+        cache=cache,
+        model=model,
+        search_index=search,
     ).run(target)
     finished = datetime.now(UTC)
 
@@ -724,6 +736,7 @@ def erasure(
             memory.name: __version__,
             cache.name: __version__,
             model.name: __version__,
+            search.name: __version__,
         },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
