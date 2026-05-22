@@ -31,6 +31,7 @@ class AdapterFamily(StrEnum):
     MODEL = "model"
     MEMORY = "memory"
     SEARCH_INDEX = "search_index"
+    EVAL_SET = "eval_set"
 
 
 class Capability(StrEnum):
@@ -374,6 +375,32 @@ class SearchIndexAdapter(Adapter):
         Class 11 (erasure verification) uses this to model the upstream stack
         purging the tenant's entries from the search index, then re-scans to
         confirm no residue remains.
+        """
+
+
+class EvalSetAdapter(Adapter):
+    """Adapter for an evaluation / golden test-fixture set built from tenant data.
+
+    Eval golden sets are the fourth of the spec's "ten hiding places": curated
+    test fixtures and eval datasets that may copy tenant content out of the
+    production corpus. Class 11 uses this to confirm a tenant's content does not
+    survive in the eval set after an erasure request (the engineering spec,
+    section 7).
+    """
+
+    family = AdapterFamily.EVAL_SET
+
+    @abstractmethod
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return the eval-set entries in ``tenant``'s scope matching ``query``."""
+
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s eval-set entries.
+
+        Class 11 (erasure verification) uses this to model the upstream stack
+        purging the tenant's fixtures from the eval set, then re-scans to confirm
+        no residue remains.
         """
 
 

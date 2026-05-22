@@ -12,8 +12,10 @@ from sectum.adapters import (
     AgentAdapter,
     CacheAdapter,
     Capability,
+    EvalSetAdapter,
     FakeAgent,
     FakeCache,
+    FakeEvalSet,
     FakeMCP,
     FakeMemory,
     FakeModel,
@@ -77,6 +79,7 @@ def _all_fakes() -> list[Adapter]:
         FakeModel(),
         FakeMemory(),
         FakeSearchIndex(),
+        FakeEvalSet(),
     ]
 
 
@@ -102,6 +105,7 @@ def test_each_fake_belongs_to_the_expected_family() -> None:
     assert FakeModel().family is AdapterFamily.MODEL
     assert FakeMemory().family is AdapterFamily.MEMORY
     assert FakeSearchIndex().family is AdapterFamily.SEARCH_INDEX
+    assert FakeEvalSet().family is AdapterFamily.EVAL_SET
 
 
 def test_isolated_vector_store_does_not_leak_across_tenants() -> None:
@@ -550,3 +554,30 @@ def test_soft_delete_search_index_retains_documents() -> None:
     search.delete(_TENANT_A)
     # the soft-delete fake acknowledges but leaves documents - the Class 11 residue
     assert search.search(_TENANT_A, "CANARY-X")
+
+
+def test_eval_set_search_is_scoped_to_a_tenant() -> None:
+    eval_set = FakeEvalSet()
+    assert isinstance(eval_set, EvalSetAdapter)
+    assert eval_set.supports(Capability.TEXT_SEARCH)
+    eval_set.add(_TENANT_A, "alpha fixture mentioning CANARY-A")
+    eval_set.add(_TENANT_B, "beta fixture mentioning CANARY-B")
+    # the eval set is scoped to the tenant: tenant A never sees tenant B's fixtures
+    assert eval_set.search(_TENANT_A, "fixture") == ["alpha fixture mentioning CANARY-A"]
+
+
+def test_eval_set_delete_clears_a_tenants_fixtures() -> None:
+    eval_set = FakeEvalSet()
+    eval_set.add(_TENANT_A, "fixture mentioning CANARY-X")
+    assert eval_set.search(_TENANT_A, "CANARY-X")
+    eval_set.delete(_TENANT_A)
+    assert eval_set.search(_TENANT_A, "CANARY-X") == []
+
+
+def test_soft_delete_eval_set_retains_fixtures() -> None:
+    eval_set = FakeEvalSet(soft_delete=True)
+    assert eval_set.supports(Capability.SOFT_DELETE)
+    eval_set.add(_TENANT_A, "fixture mentioning CANARY-X")
+    eval_set.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves fixtures - the Class 11 residue
+    assert eval_set.search(_TENANT_A, "CANARY-X")

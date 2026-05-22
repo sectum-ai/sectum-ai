@@ -2,6 +2,7 @@
 
 from sectum.adapters import (
     FakeCache,
+    FakeEvalSet,
     FakeMemory,
     FakeModel,
     FakeObservability,
@@ -69,6 +70,14 @@ def _seeded_search(substrate: Substrate, *, soft_delete: bool) -> FakeSearchInde
                 marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}"
             )
     return search
+
+
+def _seeded_eval(substrate: Substrate, *, soft_delete: bool) -> FakeEvalSet:
+    eval_set = FakeEvalSet(soft_delete=soft_delete)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            eval_set.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
+    return eval_set
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -258,3 +267,28 @@ def test_erasure_fails_when_the_search_index_soft_deletes() -> None:
     assert surfaces[Surface.SEARCH_INDEX].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.SEARCH_INDEX for finding in report.findings)
+
+
+def test_erasure_clears_the_eval_set_when_it_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    eval_set = _seeded_eval(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, eval_set=eval_set).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.EVAL_SET in surfaces
+    assert surfaces[Surface.EVAL_SET].markers_before > 0
+    assert surfaces[Surface.EVAL_SET].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_the_eval_set_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    eval_set = _seeded_eval(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, eval_set=eval_set).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.EVAL_SET].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.EVAL_SET for finding in report.findings)

@@ -19,6 +19,7 @@ from sectum.adapters.base import (
     AgentResult,
     CacheAdapter,
     Capability,
+    EvalSetAdapter,
     MCPAdapter,
     McpResult,
     MemoryAdapter,
@@ -593,3 +594,37 @@ class FakeSearchIndex(SearchIndexAdapter):
         if self._soft_delete:
             return
         self._documents.pop(tenant, None)
+
+
+class FakeEvalSet(EvalSetAdapter):
+    """A deterministic in-memory evaluation / golden test-fixture set.
+
+    An eval golden set built from tenant data is the fourth of the spec's "ten
+    hiding places". With ``soft_delete=True`` a ``delete`` is acknowledged but
+    leaves the fixtures in place - the residue Class 11 erasure verification is
+    built to catch. Defaults to off.
+    """
+
+    def __init__(self, name: str = "fake-eval-set", *, soft_delete: bool = False) -> None:
+        capabilities = {Capability.TEXT_SEARCH}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
+        self._soft_delete = soft_delete
+        self._entries: dict[UUID, list[str]] = {}
+
+    def add(self, tenant: UUID, text: str) -> None:
+        """Add an eval-set fixture for ``tenant`` (test helper; not part of the interface)."""
+        self._entries.setdefault(tenant, []).append(text)
+
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return ``tenant``'s eval-set fixtures whose tokens overlap ``query``."""
+        query_tokens = _tokens(query)
+        return [text for text in self._entries.get(tenant, []) if query_tokens & _tokens(text)]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete eval set acknowledges the request but keeps the fixtures -
+        # the residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
+        self._entries.pop(tenant, None)

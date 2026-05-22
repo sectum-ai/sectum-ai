@@ -18,6 +18,7 @@ from sectum.adapters import (
     AdapterRegistry,
     FakeAgent,
     FakeCache,
+    FakeEvalSet,
     FakeMCP,
     FakeMemory,
     FakeModel,
@@ -684,10 +685,12 @@ def erasure(
     memory = build_memory(loaded.adapters.get("memory", fake_default))
     cache = build_cache(loaded.adapters.get("cache", fake_default))
     model = build_model(loaded.adapters.get("model", fake_default))
-    # The search index has no live adapter yet; the deterministic fake models it.
-    # soft_delete rides on fake_default's extras (set from --soft-delete when no
-    # config is given, and absent under --config, matching the other fakes).
-    search = FakeSearchIndex(soft_delete=bool((fake_default.model_extra or {}).get("soft_delete")))
+    # The search index and eval set have no live adapters yet; deterministic
+    # fakes model them. soft_delete rides on fake_default's extras (set from
+    # --soft-delete when no config is given, absent under --config).
+    _fake_soft_delete = bool((fake_default.model_extra or {}).get("soft_delete"))
+    search = FakeSearchIndex(soft_delete=_fake_soft_delete)
+    evalset = FakeEvalSet(soft_delete=_fake_soft_delete)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -711,6 +714,7 @@ def erasure(
         if isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
         search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
+        evalset.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
 
     started = datetime.now(UTC)
     report = ErasureProbe(
@@ -721,6 +725,7 @@ def erasure(
         cache=cache,
         model=model,
         search_index=search,
+        eval_set=evalset,
     ).run(target)
     finished = datetime.now(UTC)
 
@@ -737,6 +742,7 @@ def erasure(
             cache.name: __version__,
             model.name: __version__,
             search.name: __version__,
+            evalset.name: __version__,
         },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,

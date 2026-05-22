@@ -14,6 +14,7 @@ from uuid import UUID
 
 from sectum.adapters import (
     CacheAdapter,
+    EvalSetAdapter,
     MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
@@ -82,6 +83,7 @@ class ErasureProbe:
         cache: CacheAdapter | None = None,
         model: ModelAdapter | None = None,
         search_index: SearchIndexAdapter | None = None,
+        eval_set: EvalSetAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
@@ -90,6 +92,7 @@ class ErasureProbe:
         self._cache = cache
         self._model = model
         self._search_index = search_index
+        self._eval_set = eval_set
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -195,6 +198,21 @@ class ErasureProbe:
                 for marker in search_residual
             )
 
+        if self._eval_set is not None:
+            eval_before = self._scan_eval(target, markers)
+            self._eval_set.delete(target)
+            eval_residual = self._scan_eval(target, markers)
+            surfaces.append(
+                SurfaceErasure(
+                    surface=Surface.EVAL_SET,
+                    markers_before=len(eval_before),
+                    residual_after=len(eval_residual),
+                )
+            )
+            findings.extend(
+                self._residual_finding(target, marker, Surface.EVAL_SET) for marker in eval_residual
+            )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -257,6 +275,17 @@ class ErasureProbe:
             if any(marker.plaintext in hit for hit in search_index.search(target, marker.plaintext))
         ]
 
+    def _scan_eval(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers still present in the eval set."""
+        if self._eval_set is None:
+            return []
+        eval_set = self._eval_set
+        return [
+            marker
+            for marker in markers
+            if any(marker.plaintext in hit for hit in eval_set.search(target, marker.plaintext))
+        ]
+
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
@@ -289,6 +318,10 @@ class ErasureProbe:
             Surface.SEARCH_INDEX: (
                 "data survived an Article 17 erasure; purge the tenant's documents from the "
                 "derived full-text search index"
+            ),
+            Surface.EVAL_SET: (
+                "data survived an Article 17 erasure; purge the tenant's fixtures from the "
+                "evaluation / golden test set"
             ),
         }.get(surface, "data survived an Article 17 erasure; purge it from this surface")
         return Finding(
