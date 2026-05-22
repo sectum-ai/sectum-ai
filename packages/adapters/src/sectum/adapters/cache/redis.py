@@ -16,7 +16,12 @@ from sectum.adapters.base import CacheAdapter, Capability
 
 
 class RedisCache(CacheAdapter):
-    """A cache backed by a Redis server."""
+    """A cache backed by a Redis server.
+
+    Scopes by tenant. ``user`` is accepted on ``get``/``set`` for interface
+    conformance (ADR-0008) but not yet enforced - per-user key folding is a
+    follow-on - so this adapter does not report ``USER_SCOPED``.
+    """
 
     def __init__(
         self,
@@ -43,11 +48,11 @@ class RedisCache(CacheAdapter):
             return f"{self._prefix}:{tenant}:{key}"
         return f"{self._prefix}:{key}"
 
-    def get(self, tenant: UUID, key: str) -> str | None:
+    def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
         value = self._client.get(self._key(tenant, key))
         return None if value is None else str(value)
 
-    def set(self, tenant: UUID, key: str, value: str) -> None:
+    def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
         self._client.set(self._key(tenant, key), value)
 
     def keys(self) -> list[str]:

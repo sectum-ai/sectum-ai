@@ -322,7 +322,11 @@ class FakeCache(CacheAdapter):
 
     With ``tenant_scoped=True`` cache keys incorporate the tenant, so tenants
     cannot read each other's entries. With ``tenant_scoped=False`` the key space
-    is shared - one tenant can read another tenant's cached value.
+    is shared - one tenant can read another tenant's cached value. With
+    ``user_scoped=True`` a key carrying a ``user`` also folds in the user, so one
+    user cannot read another user's entry within the tenant (ADR-0006); with it
+    off the key omits the user, so two users of one tenant collide on one entry -
+    the cross-user leak. All default to off except ``tenant_scoped``.
     """
 
     def __init__(
@@ -330,24 +334,37 @@ class FakeCache(CacheAdapter):
         name: str = "fake-cache",
         *,
         tenant_scoped: bool = True,
+        user_scoped: bool = False,
         soft_delete: bool = False,
     ) -> None:
         capabilities = {Capability.TENANT_SCOPED_KEYS} if tenant_scoped else set()
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
         if soft_delete:
             capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._tenant_scoped = tenant_scoped
+        self._user_scoped = user_scoped
         self._soft_delete = soft_delete
         self._store: dict[str, str] = {}
 
-    def _key(self, tenant: UUID, key: str) -> str:
-        return f"{tenant}:{key}" if self._tenant_scoped else key
+    def _key(self, tenant: UUID, key: str, user: UUID | None = None) -> str:
+        # A user-scoped cache folds the user in (so siblings never collide); a
+        # tenant-scoped cache folds the tenant in; an unscoped cache uses the
+        # bare key. ``user=None`` reproduces the prior tenant-level key exactly.
+        parts: list[str] = []
+        if self._tenant_scoped:
+            parts.append(str(tenant))
+        if self._user_scoped and user is not None:
+            parts.append(str(user))
+        parts.append(key)
+        return ":".join(parts)
 
-    def get(self, tenant: UUID, key: str) -> str | None:
-        return self._store.get(self._key(tenant, key))
+    def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+        return self._store.get(self._key(tenant, key, user))
 
-    def set(self, tenant: UUID, key: str, value: str) -> None:
-        self._store[self._key(tenant, key)] = value
+    def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+        self._store[self._key(tenant, key, user)] = value
 
     def keys(self) -> list[str]:
         return sorted(self._store)

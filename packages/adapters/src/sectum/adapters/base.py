@@ -220,12 +220,23 @@ class CacheAdapter(Adapter):
     family = AdapterFamily.CACHE
 
     @abstractmethod
-    def get(self, tenant: UUID, key: str) -> str | None:
-        """Return the cached value for ``key`` in ``tenant``'s scope."""
+    def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+        """Return the cached value for ``key`` in the principal's scope.
+
+        With ``user`` set, a user-scoped cache (reporting ``USER_SCOPED``) folds
+        the user into the key so one user never reads another user's entry within
+        the tenant (ADR-0006); a cache that scopes by tenant alone ignores
+        ``user`` and serves a sibling user's value - a leak. ``user=None`` is the
+        tenant-level scope and is unchanged.
+        """
 
     @abstractmethod
-    def set(self, tenant: UUID, key: str, value: str) -> None:
-        """Cache ``value`` under ``key`` for ``tenant``."""
+    def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+        """Cache ``value`` under ``key`` for the principal.
+
+        ``user`` scopes the entry to one user within ``tenant`` on a user-scoped
+        cache; ``user=None`` caches at the tenant level and is unchanged.
+        """
 
     @abstractmethod
     def keys(self) -> list[str]:

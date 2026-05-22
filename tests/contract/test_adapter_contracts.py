@@ -222,6 +222,32 @@ def test_cache_tenant_scoping_is_capability_honest() -> None:
     assert shared.get(_TENANT_B, "key") == "secret-a"
 
 
+def test_user_scoped_cache_isolates_users_within_a_tenant() -> None:
+    cache = FakeCache(tenant_scoped=True, user_scoped=True)
+    assert cache.supports(Capability.USER_SCOPED)
+    cache.set(_TENANT_A, "k", "secret-a", user=_USER_A)
+    # a sibling user in the same tenant cannot read user A's entry
+    assert cache.get(_TENANT_A, "k", user=_USER_B) is None
+    assert cache.get(_TENANT_A, "k", user=_USER_A) == "secret-a"
+
+
+def test_tenant_scoped_cache_leaks_across_users_when_a_user_is_set() -> None:
+    # A cache scoped by tenant alone ignores ``user``, so a sibling user reads
+    # the entry - the cross-user leak (ADR-0006 default-deny).
+    cache = FakeCache(tenant_scoped=True, user_scoped=False)
+    assert not cache.supports(Capability.USER_SCOPED)
+    cache.set(_TENANT_A, "k", "secret-a", user=_USER_A)
+    assert cache.get(_TENANT_A, "k", user=_USER_B) == "secret-a"
+
+
+def test_cache_user_argument_defaults_to_tenant_scope() -> None:
+    # user=None is the tenant-level scope, so even a user-scoped cache keys by
+    # tenant alone and the value round-trips exactly as before.
+    cache = FakeCache(tenant_scoped=True, user_scoped=True)
+    cache.set(_TENANT_A, "k", "secret-a")
+    assert cache.get(_TENANT_A, "k") == "secret-a"
+
+
 def test_isolated_model_keeps_adapters_per_tenant() -> None:
     model = FakeModel()
     assert isinstance(model, ModelAdapter)

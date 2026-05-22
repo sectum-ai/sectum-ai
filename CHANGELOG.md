@@ -241,6 +241,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `user=None` is the tenant-level scope and is unchanged; the live vector
   adapters accept `user` for conformance but do not yet report `USER_SCOPED`
   (per-backend user isolation is a follow-on).
+- The user dimension reaches the cache family (ADR-0008). `CacheAdapter.get`/`set`
+  take a keyword-only `user`; the runner threads it; and `FakeCache` gains a
+  `user_scoped` knob that folds the user into the key (reporting `USER_SCOPED`),
+  so one user never reads a sibling user's entry. The Class 4 semantic-cache
+  probe (`semantic-cache-contamination`) is now principal-aware - it primes an
+  entry as the owning principal and fetches it from every foreign principal - so
+  it verifies cache-key tenancy at the user granularity too: a user-scoped cache
+  yields no cross-user leak, a tenant-only cache serves one user another's
+  answer. `user=None` is unchanged; `RedisCache` accepts `user` for conformance
+  but does not yet report `USER_SCOPED`.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

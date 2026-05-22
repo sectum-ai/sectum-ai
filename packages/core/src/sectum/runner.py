@@ -137,13 +137,18 @@ class Runner:
     def _cache_set(self, step: ProbeStep) -> Observation:
         if self._cache is None:
             raise AdapterError("a cache.set step needs a cache adapter")
-        self._cache.set(step.actor_tenant_id, step.payload["key"], step.payload["value"])
+        self._cache.set(
+            step.actor_tenant_id,
+            step.payload["key"],
+            step.payload["value"],
+            user=step.actor_user_id,
+        )
         return Observation(step_id=step.step_id, surface=Surface.SEMANTIC_CACHE, raw_response="")
 
     def _cache_get(self, step: ProbeStep) -> Observation:
         if self._cache is None:
             raise AdapterError("a cache.get step needs a cache adapter")
-        value = self._cache.get(step.actor_tenant_id, step.payload["key"])
+        value = self._cache.get(step.actor_tenant_id, step.payload["key"], user=step.actor_user_id)
         return Observation(
             step_id=step.step_id,
             surface=Surface.SEMANTIC_CACHE,
