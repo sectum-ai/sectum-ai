@@ -321,7 +321,9 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         host = _str(extras, "host", "localhost")
         port = _int(extras, "port", 8080)
         grpc_port = _int(extras, "grpc_port", 50051)
-        return WeaviateVectorStore(host, port, grpc_port, _hashing_embed)
+        return WeaviateVectorStore(
+            host, port, grpc_port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
+        )
     if config.kind == "pinecone":
         from sectum.adapters.vector.pinecone import PineconeVectorStore
 

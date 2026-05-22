@@ -290,6 +290,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tenant-shared ones (reporting `USER_SCOPED`). `user=None` is the tenant-level
   scope and is unchanged. The vector resolver exposes `user_scoped` for Chroma.
   Verified against a live ChromaDB backend by the integration tests.
+- The live `WeaviateVectorStore` now *enforces* user scoping: with
+  `user_scoped: true` it records each document's owning user in a FIELD-tokenized
+  `owner_user` property and filters `query` (server-side) and `fetch`
+  (post-lookup) to the caller's own documents plus tenant-shared ones (reporting
+  `USER_SCOPED`). A non-empty sentinel marks tenant-level documents (Weaviate
+  rejects an `equal("")` filter). `user=None` is the tenant-level scope and is
+  unchanged. The vector resolver exposes `user_scoped` for Weaviate. Verified
+  against a live Weaviate backend by the integration tests. With this, every
+  docker-reachable live adapter (Redis, pgvector, Chroma, Weaviate) enforces
+  user isolation; Pinecone (cloud-only) is the documented follow-on.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
