@@ -16,8 +16,8 @@ class TenantBoundaryProbe(DetectingProbe):
     id = "tenant-boundary-fetch"
     name = "Direct tenant boundary fetch"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ()
-    nist_rmf: tuple[str, ...] = ()
+    atlas_techniques: tuple[str, ...] = ("AML.T0024",)
+    nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
     requires_adapters: tuple[str, ...] = ()
 
@@ -61,4 +61,7 @@ class TenantBoundaryProbe(DetectingProbe):
             observation.surface,
             probe_id=self.id,
             observed_user=step.actor_user_id,
+            owasp_llm=self.owasp_llm,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
         )

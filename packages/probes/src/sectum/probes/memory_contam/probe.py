@@ -16,8 +16,8 @@ class MemoryContamProbe(DetectingProbe):
     id = "memory-contamination"
     name = "Persistent memory contamination"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ()
-    nist_rmf: tuple[str, ...] = ()
+    atlas_techniques: tuple[str, ...] = ("AML.T0057",)
+    nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.AGENT_MEMORY,)
     requires_adapters: tuple[str, ...] = ()
 
@@ -71,4 +71,7 @@ class MemoryContamProbe(DetectingProbe):
             observation.surface,
             probe_id=self.id,
             observed_user=step.actor_user_id,
+            owasp_llm=self.owasp_llm,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
         )

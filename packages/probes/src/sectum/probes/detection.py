@@ -221,6 +221,9 @@ class DetectionPipeline:
         probe_id: str = "manual",
         *,
         observed_user: UUID | None = None,
+        owasp_llm: str = _OWASP_MULTI_TENANT,
+        atlas: tuple[str, ...] = (),
+        nist: tuple[str, ...] = (),
     ) -> list[Finding]:
         """Detect cross-principal leakage in one observation; return all findings.
 
@@ -230,11 +233,20 @@ class DetectionPipeline:
         user within the same tenant - ADR-0006) surfacing here. A tenant-level
         observer (``observed_user`` ``None``) detects only cross-tenant leaks, so
         existing tenant-level behavior is unchanged.
+
+        ``owasp_llm``/``atlas``/``nist`` are the calling probe's control
+        classification (the engineering spec, sections 9 and 18); each finding is
+        stamped with them so the evidence pack carries per-finding control IDs.
+        The defaults (the multi-tenant OWASP class, no ATLAS/NIST) leave a manual
+        ``detect`` call byte-identical to before.
         """
         observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
         findings = self._exact(observer, observation_text, surface, probe_id)
         findings.extend(self._semantic(observer, observation_text, surface, probe_id))
-        return findings
+        return [
+            finding.model_copy(update={"owasp_llm": owasp_llm, "atlas": atlas, "nist": nist})
+            for finding in findings
+        ]
 
     def _foreign(self, observer: Principal, marker_type: MarkerType) -> list[Marker]:
         return [
