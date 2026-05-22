@@ -297,9 +297,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `USER_SCOPED`). A non-empty sentinel marks tenant-level documents (Weaviate
   rejects an `equal("")` filter). `user=None` is the tenant-level scope and is
   unchanged. The vector resolver exposes `user_scoped` for Weaviate. Verified
-  against a live Weaviate backend by the integration tests. With this, every
-  docker-reachable live adapter (Redis, pgvector, Chroma, Weaviate) enforces
-  user isolation; Pinecone (cloud-only) is the documented follow-on.
+  against a live Weaviate backend by the integration tests.
+- The live `PineconeVectorStore` now *enforces* user scoping: with
+  `user_scoped: true` it records each document's owning user in metadata (an
+  empty sentinel marks tenant-level documents) and filters `query` (a Pinecone
+  metadata filter) and `fetch` (post-lookup) to the caller's own documents plus
+  tenant-shared ones (reporting `USER_SCOPED`). `user=None` is the tenant-level
+  scope and is unchanged. `connect` and the vector resolver expose `user_scoped`.
+  A non-empty `owner_user` sentinel marks tenant-level documents (avoiding the
+  empty-string `$in` edge that bit Weaviate, since Pinecone is not live-verified
+  here). Verified by the mock-backed contract tests - Pinecone's established
+  level ("mock + opt-in live"). With this, **every live adapter** enforces user
+  isolation and reports `USER_SCOPED`: Redis, pgvector, Chroma, and Weaviate each
+  verified against a live backend, and Pinecone mock-verified (the live opt-in
+  test runs when credentials are set). This completes the ADR-0008 live-adapter
+  follow-on.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting

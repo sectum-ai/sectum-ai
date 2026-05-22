@@ -32,13 +32,31 @@ class PineconeVectorStore(VectorStoreAdapter):
     :meth:`connect`). The index is held opaquely so the adapter can be tested
     against an in-memory stand-in without the ``pinecone`` package.
 
-    Scopes by tenant. ``user`` is accepted on ``query``/``fetch`` for interface
-    conformance (ADR-0008) but not yet enforced - per-user isolation is a
-    per-backend follow-on - so this adapter does not report ``USER_SCOPED``.
+    Scopes by tenant (one namespace per tenant). With ``user_scoped=True`` it
+    records each document's owning user in metadata (a non-empty sentinel marks
+    tenant-level documents) and filters ``query`` (a metadata filter) and
+    ``fetch`` (post-lookup) to the caller's own documents plus tenant-shared ones
+    (reporting ``USER_SCOPED``), so one user cannot retrieve a sibling user's
+    document within the tenant (ADR-0006). ``user=None`` is the tenant-level
+    scope and is unchanged.
     """
 
-    def __init__(self, index: Any, embed: Embedder, *, name: str = "pinecone") -> None:
-        super().__init__(name, frozenset({Capability.PER_TENANT_NAMESPACE}))
+    _TENANT_LEVEL = "tenant-level"
+    """The ``owner_user`` metadata sentinel for a tenant-level (unowned) document.
+
+    Non-empty on purpose: this adapter's per-user behavior is verified offline
+    against a mock, so the sentinel avoids any empty-string edge in a live
+    Pinecone ``$in`` filter (the kind of backend quirk that bit Weaviate).
+    """
+
+    def __init__(
+        self, index: Any, embed: Embedder, *, name: str = "pinecone", user_scoped: bool = False
+    ) -> None:
+        capabilities = {Capability.PER_TENANT_NAMESPACE}
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
+        super().__init__(name, frozenset(capabilities))
+        self._user_scoped = user_scoped
         self._index = index
         self._embed = embed
 
@@ -51,6 +69,7 @@ class PineconeVectorStore(VectorStoreAdapter):
         *,
         host: str | None = None,
         name: str = "pinecone",
+        user_scoped: bool = False,
     ) -> Self:
         """Open a Pinecone index by name (or host) and return the adapter.
 
@@ -61,7 +80,7 @@ class PineconeVectorStore(VectorStoreAdapter):
 
         client = Pinecone(api_key=api_key)
         index = client.Index(host=host) if host else client.Index(index_name)
-        return cls(index, embed, name=name)
+        return cls(index, embed, name=name, user_scoped=user_scoped)
 
     def _vector(self, text: str) -> list[float]:
         return [float(value) for value in self._embed(text)]
@@ -73,12 +92,26 @@ class PineconeVectorStore(VectorStoreAdapter):
         # foreign vector must not crash a read.
         return getattr(item, "metadata", None) or {}
 
+    def _user_filter(self, user: UUID | None) -> dict[str, Any] | None:
+        """A Pinecone metadata filter for the user's own + tenant-shared documents."""
+        if self._user_scoped and user is not None:
+            return {"owner_user": {"$in": [str(user), self._TENANT_LEVEL]}}
+        return None
+
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
         vectors = [
             {
                 "id": document.doc_id,
                 "values": self._vector(f"{document.title} {document.content}"),
-                "metadata": {"doc_id": document.doc_id, "content": document.content},
+                "metadata": {
+                    "doc_id": document.doc_id,
+                    "content": document.content,
+                    "owner_user": (
+                        str(document.owner_user_id)
+                        if document.owner_user_id
+                        else self._TENANT_LEVEL
+                    ),
+                },
             }
             for document in documents
         ]
@@ -88,11 +121,13 @@ class PineconeVectorStore(VectorStoreAdapter):
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
     ) -> list[VectorHit]:
+        user_filter = self._user_filter(user)
         response = self._index.query(
             vector=self._vector(text),
             top_k=k,
             namespace=tenant.hex,
             include_metadata=True,
+            **({"filter": user_filter} if user_filter is not None else {}),
         )
         hits: list[VectorHit] = []
         for match in response.matches:
@@ -113,6 +148,12 @@ class PineconeVectorStore(VectorStoreAdapter):
         if vector is None:
             return None
         metadata = self._metadata(vector)
+        # fetch is a direct id lookup with no server-side filter, so a user-scoped
+        # store checks the owning user here (ADR-0006).
+        if self._user_scoped and user is not None:
+            owner_user = str(metadata.get("owner_user", self._TENANT_LEVEL))
+            if owner_user not in (str(user), self._TENANT_LEVEL):
+                return None
         return VectorHit(
             doc_id=str(metadata.get("doc_id", doc_id)),
             tenant_id=tenant,
