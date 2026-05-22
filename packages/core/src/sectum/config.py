@@ -312,7 +312,9 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
 
         host = _str(extras, "host", "localhost")
         port = _int(extras, "port", 8000)
-        return ChromaVectorStore(host, port, _hashing_embed)
+        return ChromaVectorStore(
+            host, port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
+        )
     if config.kind == "weaviate":
         from sectum.adapters.vector.weaviate import WeaviateVectorStore
 

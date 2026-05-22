@@ -283,6 +283,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document within the tenant. The tenant-level `delete`/`list_namespaces` are
   unchanged. The vector resolver exposes `user_scoped` for the fake and pgvector.
   Verified against a live PostgreSQL + pgvector backend by the integration tests.
+- The live `ChromaVectorStore` now *enforces* user scoping: with
+  `user_scoped: true` it records each document's owning user in Chroma metadata
+  (an empty sentinel marks tenant-level documents) and filters `query`/`fetch`
+  with a metadata `where` clause to the caller's own documents plus the
+  tenant-shared ones (reporting `USER_SCOPED`). `user=None` is the tenant-level
+  scope and is unchanged. The vector resolver exposes `user_scoped` for Chroma.
+  Verified against a live ChromaDB backend by the integration tests.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
