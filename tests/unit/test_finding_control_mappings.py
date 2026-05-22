@@ -10,7 +10,14 @@ compatibility - the defaults leave a manual call unchanged).
 from uuid import UUID
 
 from sectum.adapters import FakeVectorStore
-from sectum.probes import ErasureProbe, TenantBoundaryProbe, confirmed_findings
+from sectum.probes import (
+    AgentToolHijackProbe,
+    ErasureProbe,
+    LoraCrossTenantProbe,
+    RagPoisoningProbe,
+    TenantBoundaryProbe,
+    confirmed_findings,
+)
 from sectum.probes.detection import DetectionPipeline
 from sectum.runner import Runner
 from sectum.spec import MarkerType, Substrate, Surface
@@ -51,6 +58,17 @@ def test_erasure_findings_carry_the_nist_mapping() -> None:
         assert finding.owasp_llm == "LLM08:2025"
         assert finding.atlas == ()  # erasure verification is a control check, not an attack
         assert finding.nist == ("MEASURE 2.7",)
+
+
+def test_atlas_assignments_match_the_domain_review() -> None:
+    # The per-probe ATLAS techniques were validated against the current MITRE
+    # ATLAS catalog; pin the deliberate, non-obvious assignments so they cannot
+    # silently regress (these IDs land in auditor evidence). rag-poisoning is a
+    # poisoning technique (T0020), agent-tool-hijack a plugin compromise (T0053),
+    # and lora-cross-tenant carries the membership-inference angle (T0024.000).
+    assert RagPoisoningProbe.atlas_techniques == ("AML.T0020", "AML.T0024")
+    assert AgentToolHijackProbe.atlas_techniques == ("AML.T0024", "AML.T0053")
+    assert LoraCrossTenantProbe.atlas_techniques == ("AML.T0024", "AML.T0024.000", "AML.T0057")
 
 
 def test_manual_detect_leaves_classification_at_defaults() -> None:

@@ -324,8 +324,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   probes - and is intentionally empty where no clean ATLAS technique applies
   (KV-cache timing, erasure verification). A manual `pipeline.detect()` call is
   unchanged (the defaults are the multi-tenant OWASP class and no ATLAS/NIST).
-  The per-class ATLAS assignments are a starting point and warrant a domain
-  review before the next release.
+  The per-class ATLAS assignments were then validated against the current MITRE
+  ATLAS catalog: rag-poisoning also carries `AML.T0020` (Poison Training Data),
+  agent-tool-hijack `AML.T0053` (LLM Plugin Compromise), and lora-cross-tenant
+  `AML.T0024.000` (Infer Training Data Membership).
 - The audit-pack PDF now renders each finding's mapped control IDs inline
   (`OWASP ...; ATLAS ...; NIST ...`), so an auditor reads per-finding control
   coverage from the findings table rather than only the run-level mapping
