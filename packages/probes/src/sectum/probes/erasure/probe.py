@@ -72,6 +72,10 @@ class ErasureProbe:
     id = "gdpr-erasure-verification"
     name = "GDPR Article 17 erasure verification"
     owasp_llm = "LLM08:2025"
+    # Erasure verification is a control check, not an attack technique, so atlas
+    # is intentionally empty (the engineering spec, section 9).
+    atlas_techniques: tuple[str, ...] = ()
+    nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
 
     def __init__(
         self,
@@ -336,5 +340,7 @@ class ErasureProbe:
             marker_id=marker.marker_id,
             evidence_span=marker.plaintext,
             owasp_llm=self.owasp_llm,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
             remediation_pointer=remediation,
         )

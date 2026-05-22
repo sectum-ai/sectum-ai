@@ -312,6 +312,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verified against a live backend, and Pinecone mock-verified (the live opt-in
   test runs when credentials are set). This completes the ADR-0008 live-adapter
   follow-on.
+- Per-finding control mappings (the engineering spec, sections 9 and 18). Every
+  probe now populates `atlas_techniques` (MITRE ATLAS) and `nist_rmf` (NIST AI
+  RMF), and the detection pipeline stamps each `Finding` with the probe's
+  `owasp_llm`/`atlas`/`nist`, so the evidence pack carries per-finding control
+  IDs (it previously had only the run-level `controls.py` table). NIST is
+  `MEASURE 2.7` (security/resilience measurement) across the catalog; ATLAS uses
+  conservative, verified techniques - `AML.T0024` (Exfiltration via AI Inference
+  API) for the exfiltration probes, `AML.T0024.001` (Invert AI Model) for
+  embedding inversion, `AML.T0057` (LLM Data Leakage) for the data-leakage
+  probes - and is intentionally empty where no clean ATLAS technique applies
+  (KV-cache timing, erasure verification). A manual `pipeline.detect()` call is
+  unchanged (the defaults are the multi-tenant OWASP class and no ATLAS/NIST).
+  The per-class ATLAS assignments are a starting point and warrant a domain
+  review before the next release.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting

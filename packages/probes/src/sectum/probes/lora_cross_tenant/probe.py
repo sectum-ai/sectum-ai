@@ -16,8 +16,8 @@ class LoraCrossTenantProbe(DetectingProbe):
     id = "lora-cross-tenant"
     name = "LoRA / adapter cross-tenant influence"
     owasp_llm = "LLM08:2025"
-    atlas_techniques: tuple[str, ...] = ()
-    nist_rmf: tuple[str, ...] = ()
+    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0057")
+    nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MODEL_ADAPTER,)
     requires_adapters: tuple[str, ...] = ()
 
@@ -71,4 +71,7 @@ class LoraCrossTenantProbe(DetectingProbe):
             observation.surface,
             probe_id=self.id,
             observed_user=step.actor_user_id,
+            owasp_llm=self.owasp_llm,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
         )
