@@ -11,8 +11,29 @@ tenants on an AI stack, seeds them with cryptographic canary markers, runs a
 catalog of benign and adversarial probes from each tenant's session, and
 produces a tamper-evident, control-mapped evidence pack.
 
-Sectum AI **verifies and attests**. It answers one question: can tenant A's data
-reach tenant B across an AI system's surfaces?
+Sectum AI **verifies and attests**. It answers one question: can one principal's
+data reach another across an AI system's surfaces? A *principal* is an isolation
+boundary — a tenant, or a user within a tenant (see *The isolation boundary*
+below).
+
+## The isolation boundary
+
+The boundary Sectum AI verifies is a **principal**, not only a tenant
+([ADR-0006](adr/0006-principal-isolation-model.md)):
+
+- **Tenant vs tenant** is the primary boundary; a marker crossing it is always a
+  leak.
+- **User vs user within a tenant** is verified additively. When a scenario
+  declares users, a marker owned by one user surfacing in another user's session
+  is a leak, under a **default-deny** policy: any cross-user appearance is
+  flagged. Modelling *intended* within-tenant sharing (a legitimate-sharing
+  policy) is a deliberate non-goal of the current core.
+
+Detection and every probe share one predicate (`is_cross_principal`), and the
+adapter SDK carries an optional user scope
+([ADR-0008](adr/0008-adapter-user-dimension.md)), so a probe verifies isolation
+at both granularities against a store that is — or is not — user-aware. With no
+users declared, behaviour is exactly the tenant-level case.
 
 ## What Sectum AI is not — out of scope
 
