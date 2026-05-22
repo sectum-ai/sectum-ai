@@ -190,6 +190,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   indexes and threads a `FakeSearchIndex` through. The workflow now round-trips
   six of the "ten hiding places". There is no live search-index adapter yet, so
   the fake carries the behavior.
+- Class 11 (`sectum erasure`) now also checks the evaluation / golden-set surface
+  (the fourth "hiding place" - test fixtures and eval datasets that may copy
+  tenant content). A new `EvalSetAdapter` family (`search` + `delete`, reusing
+  the `TEXT_SEARCH` capability) and its `FakeEvalSet` (with a `soft_delete` knob)
+  model an eval set; `ErasureProbe` accepts an optional `eval_set` adapter and
+  scans it for residual markers, and `sectum erasure` seeds and threads a
+  `FakeEvalSet` through. The workflow now round-trips seven of the "ten hiding
+  places". There is no live eval-set adapter yet, so the fake carries the
+  behavior.
 - The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
   maps to its own namespace within one index, so a query or fetch is
   tenant-scoped. Pinecone is a hosted service with no local backend, so it is
