@@ -18,9 +18,12 @@ from sectum.adapters.base import CacheAdapter, Capability
 class RedisCache(CacheAdapter):
     """A cache backed by a Redis server.
 
-    Scopes by tenant. ``user`` is accepted on ``get``/``set`` for interface
-    conformance (ADR-0008) but not yet enforced - per-user key folding is a
-    follow-on - so this adapter does not report ``USER_SCOPED``.
+    Cache keys are namespaced by a fixed prefix and, by default, scoped by
+    tenant. With ``user_scoped=True`` a key carrying a ``user`` also folds in the
+    user (reporting ``USER_SCOPED``), so one user cannot read a sibling user's
+    entry within the tenant (ADR-0006). ``user=None`` keys at the tenant level
+    and is unchanged, so the tenant-scoped ``values``/``delete`` globs still
+    capture user-folded keys (they share the ``prefix:tenant:`` prefix).
     """
 
     def __init__(
@@ -30,30 +33,39 @@ class RedisCache(CacheAdapter):
         *,
         name: str = "redis",
         tenant_scoped: bool = True,
+        user_scoped: bool = False,
         prefix: str = "sectum",
     ) -> None:
-        capabilities = frozenset({Capability.TENANT_SCOPED_KEYS}) if tenant_scoped else frozenset()
-        super().__init__(name, capabilities)
+        capabilities = {Capability.TENANT_SCOPED_KEYS} if tenant_scoped else set()
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
+        super().__init__(name, frozenset(capabilities))
         self._client = redis.Redis(host=host, port=port, decode_responses=True)
         self._tenant_scoped = tenant_scoped
+        self._user_scoped = user_scoped
         self._prefix = prefix
 
-    def _key(self, tenant: UUID, key: str) -> str:
-        """Build the raw Redis key for ``key`` in ``tenant``'s scope.
+    def _key(self, tenant: UUID, key: str, user: UUID | None = None) -> str:
+        """Build the raw Redis key for ``key`` in the principal's scope.
 
-        A tenant-scoped cache folds the tenant into the key so two tenants
-        never collide; an unscoped cache omits it, so they share one entry.
+        A tenant-scoped cache folds the tenant in; a user-scoped cache also folds
+        the user in (when one is given) so siblings never collide; an unscoped
+        cache uses the bare key. ``user=None`` reproduces the tenant-level key.
         """
+        parts = [self._prefix]
         if self._tenant_scoped:
-            return f"{self._prefix}:{tenant}:{key}"
-        return f"{self._prefix}:{key}"
+            parts.append(str(tenant))
+        if self._user_scoped and user is not None:
+            parts.append(str(user))
+        parts.append(key)
+        return ":".join(parts)
 
     def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
-        value = self._client.get(self._key(tenant, key))
+        value = self._client.get(self._key(tenant, key, user))
         return None if value is None else str(value)
 
     def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
-        self._client.set(self._key(tenant, key), value)
+        self._client.set(self._key(tenant, key, user), value)
 
     def keys(self) -> list[str]:
         return sorted(str(key) for key in self._client.scan_iter(match=f"{self._prefix}:*"))

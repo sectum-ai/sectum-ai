@@ -139,6 +139,13 @@ def test_build_cache_fake_with_a_tenant_scoping_knob() -> None:
     assert not shared.supports(Capability.TENANT_SCOPED_KEYS)
 
 
+def test_build_cache_fake_with_a_user_scoping_knob() -> None:
+    default = build_cache(AdapterConfig(kind="fake"))
+    assert not default.supports(Capability.USER_SCOPED)
+    scoped = build_cache(AdapterConfig(kind="fake", user_scoped=True))
+    assert scoped.supports(Capability.USER_SCOPED)
+
+
 def test_build_cache_rejects_an_unknown_kind() -> None:
     with pytest.raises(ConfigError, match="not yet supported"):
         build_cache(AdapterConfig(kind="not-a-real-kind"))
