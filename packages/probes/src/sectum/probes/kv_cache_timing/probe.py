@@ -113,8 +113,7 @@ class KvCacheTimingProbe:
             # Full hex (not a truncation): two tenant pairs must never collide
             # into one id, or dedupe_findings would merge distinct side channels.
             finding_id=(
-                f"finding-{self.id}-{signal.owner_tenant_id.hex}"
-                f"-{signal.observed_in_tenant_id.hex}"
+                f"finding-{self.id}-{signal.owner_tenant_id.hex}-{signal.observed_in_tenant_id.hex}"
             ),
             probe_id=self.id,
             severity=severity,
