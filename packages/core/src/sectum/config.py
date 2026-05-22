@@ -334,6 +334,7 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
     if config.kind == "fake":
         return FakeCache(
             tenant_scoped=_bool(extras, "tenant_scoped", True),
+            user_scoped=_bool(extras, "user_scoped", False),
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "redis":
@@ -342,8 +343,11 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
         host = _str(extras, "host", "localhost")
         port = _int(extras, "port", 6379)
         tenant_scoped = _bool(extras, "tenant_scoped", True)
+        user_scoped = _bool(extras, "user_scoped", False)
         prefix = _str(extras, "prefix", "sectum")
-        return RedisCache(host, port, tenant_scoped=tenant_scoped, prefix=prefix)
+        return RedisCache(
+            host, port, tenant_scoped=tenant_scoped, user_scoped=user_scoped, prefix=prefix
+        )
     raise _unsupported("cache", config.kind)
 
 

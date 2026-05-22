@@ -267,8 +267,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry as the owning principal and fetches it from every foreign principal - so
   it verifies cache-key tenancy at the user granularity too: a user-scoped cache
   yields no cross-user leak, a tenant-only cache serves one user another's
-  answer. `user=None` is unchanged; `RedisCache` accepts `user` for conformance
-  but does not yet report `USER_SCOPED`.
+  answer. `user=None` is unchanged.
+- The live `RedisCache` now *enforces* user scoping: with `user_scoped: true` it
+  folds the user into the Redis key (and reports `USER_SCOPED`), so a sibling
+  user cannot read another user's entry within the tenant; the tenant-level
+  `values`/`delete` globs still capture the user-folded keys. The cache resolver
+  exposes `user_scoped` for both the fake and Redis. Verified by an opt-in Redis
+  integration test (the key folding is correct by construction). This is the
+  exemplar for bringing the remaining live adapters (pgvector, Chroma, Weaviate,
+  Pinecone) to per-backend `USER_SCOPED` enforcement.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting

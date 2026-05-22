@@ -21,6 +21,8 @@ _PORT = int(os.environ.get("SECTUM_REDIS_PORT", "6380"))
 _PREFIX = "sectum-it"
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
+_USER_A = UUID(int=0xA1)
+_USER_B = UUID(int=0xB2)
 
 
 def _flush(connection: redis.Redis) -> None:
@@ -76,3 +78,25 @@ def test_redis_keys_are_prefixed_and_listed(cache: RedisCache) -> None:
     keys = cache.keys()
     assert len(keys) == 2
     assert all(key.startswith(f"{_PREFIX}:") for key in keys)
+
+
+def test_redis_user_scoped_cache_isolates_users(client: redis.Redis) -> None:
+    scoped = RedisCache(_HOST, _PORT, prefix=_PREFIX, user_scoped=True)
+    scoped.set(_TENANT_A, "secret", "alpha-value", user=_USER_A)
+    # a user-scoped cache folds the user into the key, so a sibling user in the
+    # same tenant cannot read user A's entry (ADR-0006)
+    assert scoped.get(_TENANT_A, "secret", user=_USER_B) is None
+    assert scoped.get(_TENANT_A, "secret", user=_USER_A) == "alpha-value"
+    assert scoped.supports(Capability.USER_SCOPED)
+
+
+def test_redis_tenant_only_cache_leaks_across_users(client: redis.Redis) -> None:
+    leaky = RedisCache(_HOST, _PORT, prefix=_PREFIX)  # tenant-scoped, not user-scoped
+    leaky.set(_TENANT_A, "secret", "alpha-value", user=_USER_A)
+    # without user scoping the key omits the user, so a sibling user reads it -
+    # the cross-user leak
+    assert leaky.get(_TENANT_A, "secret", user=_USER_B) == "alpha-value"
+    assert not leaky.supports(Capability.USER_SCOPED)
+    # the tenant-level delete still captures the user-folded entry
+    leaky.delete(_TENANT_A)
+    assert leaky.get(_TENANT_A, "secret", user=_USER_A) is None
