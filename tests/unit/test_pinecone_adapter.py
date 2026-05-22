@@ -19,6 +19,8 @@ from sectum.spec import CorpusDocument
 _DIM = 64
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
+_USER_A = UUID(int=0xA1)
+_USER_B = UUID(int=0xB2)
 
 
 def _embed(text: str) -> list[float]:
@@ -58,14 +60,26 @@ class _FakeIndex:
             }
 
     def query(
-        self, *, vector: list[float], top_k: int, namespace: str, include_metadata: bool = True
+        self,
+        *,
+        vector: list[float],
+        top_k: int,
+        namespace: str,
+        include_metadata: bool = True,
+        filter: dict[str, Any] | None = None,
     ) -> SimpleNamespace:
         store = self._namespaces.get(namespace, {})
+        records = list(store.items())
+        if filter is not None:
+            # A minimal metadata $in filter, enough to model owner_user scoping.
+            allowed = filter["owner_user"]["$in"]
+            records = [
+                (doc_id, record)
+                for doc_id, record in records
+                if record["metadata"].get("owner_user") in allowed
+            ]
         scored = sorted(
-            (
-                (self._dot(vector, record["values"]), doc_id, record)
-                for doc_id, record in store.items()
-            ),
+            ((self._dot(vector, record["values"]), doc_id, record) for doc_id, record in records),
             key=lambda item: item[0],
             reverse=True,
         )
@@ -100,6 +114,20 @@ class _FakeIndex:
     @staticmethod
     def _dot(left: list[float], right: list[float]) -> float:
         return sum(x * y for x, y in zip(left, right, strict=False))
+
+
+def _user_documents(tenant: UUID, user: UUID, prefix: str, word: str) -> list[CorpusDocument]:
+    return [
+        CorpusDocument(
+            doc_id=f"{prefix}-{index}",
+            tenant_id=tenant,
+            doc_type="note",
+            title=f"{word} note {index}",
+            content=f"a document about {word} item {index}",
+            owner_user_id=user,
+        )
+        for index in range(2)
+    ]
 
 
 def _store() -> PineconeVectorStore:
@@ -163,3 +191,30 @@ def test_pinecone_query_tolerates_a_vector_without_metadata() -> None:
     assert len(hits) == 1
     assert hits[0].doc_id == "orphan-1"
     assert hits[0].content == ""
+
+
+def test_pinecone_user_scoped_isolates_users() -> None:
+    store = PineconeVectorStore(_FakeIndex(), _embed, user_scoped=True)
+    assert store.supports(Capability.USER_SCOPED)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_A, "ua", "alpha"))
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    # _documents have no owner, so they land under the tenant-level sentinel
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "shared", "alpha"))
+    doc_ids = {hit.doc_id for hit in store.query(_TENANT_A, "alpha", k=10, user=_USER_A)}
+    # user A sees its own documents and the tenant-shared ones, never user B's
+    assert any(d.startswith("ua-") for d in doc_ids)
+    assert any(d.startswith("shared-") for d in doc_ids)
+    assert not any(d.startswith("ub-") for d in doc_ids)
+    # fetch: own and tenant-shared resolve; a sibling user's document is denied
+    assert store.fetch(_TENANT_A, "ua-0", user=_USER_A) is not None
+    assert store.fetch(_TENANT_A, "shared-0", user=_USER_A) is not None
+    assert store.fetch(_TENANT_A, "ub-0", user=_USER_A) is None
+
+
+def test_pinecone_tenant_only_store_leaks_across_users() -> None:
+    # a store that scopes by namespace alone ignores the user, so a sibling user
+    # reads another user's document - the cross-user leak (ADR-0006)
+    store = PineconeVectorStore(_FakeIndex(), _embed)
+    assert not store.supports(Capability.USER_SCOPED)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    assert store.fetch(_TENANT_A, "ub-0", user=_USER_A) is not None

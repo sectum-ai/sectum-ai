@@ -330,7 +330,11 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         api_key = _resolve_secret(extras, "api_key", "api_key_env")
         index_name = _required_str(extras, "index")
         return PineconeVectorStore.connect(
-            api_key, index_name, _hashing_embed, host=_optional_str(extras, "host")
+            api_key,
+            index_name,
+            _hashing_embed,
+            host=_optional_str(extras, "host"),
+            user_scoped=_bool(extras, "user_scoped", False),
         )
     raise _unsupported("vector_store", config.kind)
 
