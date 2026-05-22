@@ -37,6 +37,7 @@ class Capability(StrEnum):
 
     SHARED_INDEX = "shared_index"
     PER_TENANT_NAMESPACE = "per_tenant_namespace"
+    USER_SCOPED = "user_scoped"
     SOFT_DELETE = "soft_delete"
     TENANT_SCOPED_KEYS = "tenant_scoped_keys"
     TRACE_SEARCH = "trace_search"
@@ -123,16 +124,28 @@ class VectorStoreAdapter(Adapter):
         """Insert or update a tenant's documents."""
 
     @abstractmethod
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
-        """Return the top-``k`` matches for ``text`` in ``tenant``'s scope."""
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
+        """Return the top-``k`` matches for ``text`` in the principal's scope.
+
+        ``user`` narrows the scope to one user within ``tenant`` (ADR-0006). A
+        user-scoped store (reporting ``USER_SCOPED``) returns only that user's
+        documents plus tenant-shared ones; a store that scopes by tenant alone
+        ignores ``user`` and may surface another user's document - a leak.
+        ``user=None`` is the tenant-level scope and is unchanged.
+        """
 
     @abstractmethod
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
-        """Fetch one document by id from ``tenant``'s reachable scope, or ``None``.
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
+        """Fetch one document by id from the principal's reachable scope, or ``None``.
 
         A direct object lookup - the Class 1 BOLA primitive - distinct from the
         similarity ``query``: a tenant-isolated store returns ``None`` for
-        another tenant's ``doc_id``; a shared index returns the document.
+        another tenant's ``doc_id``; a shared index returns the document. With
+        ``user`` set, a user-scoped store likewise returns ``None`` for another
+        user's ``doc_id`` within the tenant (ADR-0006); ``user=None`` is the
+        tenant-level lookup and is unchanged.
         """
 
     @abstractmethod

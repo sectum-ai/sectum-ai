@@ -20,7 +20,13 @@ Embedder = Callable[[str], Sequence[float]]
 
 
 class ChromaVectorStore(VectorStoreAdapter):
-    """A vector store backed by a ChromaDB server."""
+    """A vector store backed by a ChromaDB server.
+
+    Scopes by tenant (one collection per tenant). ``user`` is accepted on
+    ``query``/``fetch`` for interface conformance (ADR-0008) but not yet enforced
+    - per-user isolation is a per-backend follow-on - so this adapter does not
+    report ``USER_SCOPED``.
+    """
 
     def __init__(
         self,
@@ -55,7 +61,9 @@ class ChromaVectorStore(VectorStoreAdapter):
             documents=[document.content for document in items],
         )
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
         collection = self._client.get_or_create_collection(
             self._collection_name(tenant), embedding_function=None
         )
@@ -73,7 +81,7 @@ class ChromaVectorStore(VectorStoreAdapter):
             for doc_id, content, distance in zip(ids, documents, distances, strict=True)
         ]
 
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
         collection = self._client.get_or_create_collection(
             self._collection_name(tenant), embedding_function=None
         )

@@ -100,7 +100,9 @@ class Runner:
         if self._vector is None:
             raise AdapterError("a vector.query step needs a vector adapter")
         k = int(step.payload.get("k", "5"))
-        hits = self._vector.query(step.actor_tenant_id, step.payload["query"], k)
+        hits = self._vector.query(
+            step.actor_tenant_id, step.payload["query"], k, user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.VECTOR_DB,
@@ -110,7 +112,9 @@ class Runner:
     def _vector_fetch(self, step: ProbeStep) -> Observation:
         if self._vector is None:
             raise AdapterError("a vector.fetch step needs a vector adapter")
-        hit = self._vector.fetch(step.actor_tenant_id, step.payload["doc_id"])
+        hit = self._vector.fetch(
+            step.actor_tenant_id, step.payload["doc_id"], user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.VECTOR_DB,

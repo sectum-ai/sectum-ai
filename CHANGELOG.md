@@ -229,6 +229,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   predicate is now public so probe planning and detection share one definition
   of "foreign." With no users declared the plan is byte-identical to the prior
   per-tenant plan.
+- The adapter SDK gains an optional user dimension (ADR-0008), starting with the
+  vector family. `VectorStoreAdapter.query`/`fetch` take a keyword-only
+  `user: UUID | None = None`; the runner threads `ProbeStep.actor_user_id` into
+  them; and `CorpusDocument` gains `owner_user_id` (a pivot document inherits its
+  marker's owner). `FakeVectorStore` gains a `user_scoped` knob and reports the
+  new `USER_SCOPED` capability: scoped, it returns only a user's own documents
+  plus the tenant-shared ones; unscoped, it ignores the user and surfaces another
+  user's document. The Class 1 boundary probe now verifies user isolation end to
+  end - a user-scoped store yields no cross-user leak, a tenant-only store does.
+  `user=None` is the tenant-level scope and is unchanged; the live vector
+  adapters accept `user` for conformance but do not yet report `USER_SCOPED`
+  (per-backend user isolation is a follow-on).
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

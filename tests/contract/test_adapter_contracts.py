@@ -31,6 +31,8 @@ from sectum.spec import AdapterError, CorpusDocument
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
+_USER_A = UUID(int=0xA1)
+_USER_B = UUID(int=0xB2)
 
 
 def _documents(tenant: UUID, prefix: str, word: str, count: int = 3) -> list[CorpusDocument]:
@@ -41,6 +43,22 @@ def _documents(tenant: UUID, prefix: str, word: str, count: int = 3) -> list[Cor
             doc_type="note",
             title=f"{word} note {index}",
             content=f"a document about {word} number {index}",
+        )
+        for index in range(count)
+    ]
+
+
+def _user_documents(
+    tenant: UUID, user: UUID | None, prefix: str, word: str, count: int = 2
+) -> list[CorpusDocument]:
+    return [
+        CorpusDocument(
+            doc_id=f"{prefix}-{index}",
+            tenant_id=tenant,
+            doc_type="note",
+            title=f"{word} note {index}",
+            content=f"a document about {word} number {index}",
+            owner_user_id=user,
         )
         for index in range(count)
     ]
@@ -143,6 +161,52 @@ def test_shared_index_vector_store_fetch_crosses_tenants() -> None:
     hit = store.fetch(_TENANT_B, "a-1")
     assert hit is not None
     assert hit.tenant_id == _TENANT_A
+
+
+def test_user_scoped_vector_store_isolates_users_within_a_tenant() -> None:
+    store = FakeVectorStore(user_scoped=True)
+    assert store.supports(Capability.USER_SCOPED)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_A, "ua", "alpha"))
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    # user A queries within the tenant and sees only its own documents
+    hits = store.query(_TENANT_A, "alpha", k=10, user=_USER_A)
+    assert hits
+    assert all(hit.doc_id.startswith("ua-") for hit in hits)
+    # a direct fetch of user B's document from user A's session is denied
+    assert store.fetch(_TENANT_A, "ub-0", user=_USER_A) is None
+    assert store.fetch(_TENANT_A, "ua-0", user=_USER_A) is not None
+
+
+def test_tenant_scoped_vector_store_leaks_across_users_when_a_user_is_set() -> None:
+    # A store that scopes by tenant alone (not user_scoped) ignores ``user``, so
+    # user A surfaces user B's document - the cross-user leak (ADR-0006).
+    store = FakeVectorStore()
+    assert not store.supports(Capability.USER_SCOPED)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_A, "ua", "alpha"))
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    assert store.fetch(_TENANT_A, "ub-0", user=_USER_A) is not None
+    hits = store.query(_TENANT_A, "alpha", k=10, user=_USER_A)
+    assert any(hit.doc_id.startswith("ub-") for hit in hits)
+
+
+def test_user_scoped_vector_store_exposes_tenant_shared_documents() -> None:
+    # A document with no user owner is tenant-shared and visible to every user.
+    store = FakeVectorStore(user_scoped=True)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, None, "shared", "alpha", count=1))
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    hits = store.query(_TENANT_A, "alpha", k=10, user=_USER_A)
+    assert any(hit.doc_id == "shared-0" for hit in hits)
+    assert all(not hit.doc_id.startswith("ub-") for hit in hits)
+
+
+def test_vector_store_user_argument_defaults_to_tenant_scope() -> None:
+    # user=None is the tenant-level scope, so behavior is unchanged: even a
+    # user-scoped store returns every document in the tenant.
+    store = FakeVectorStore(user_scoped=True)
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_A, "ua", "alpha"))
+    store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
+    doc_ids = {hit.doc_id for hit in store.query(_TENANT_A, "alpha", k=10)}
+    assert {"ua-0", "ub-0"} <= doc_ids
 
 
 def test_cache_tenant_scoping_is_capability_honest() -> None:

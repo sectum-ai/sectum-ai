@@ -26,7 +26,13 @@ Embedder = Callable[[str], Sequence[float]]
 
 
 class WeaviateVectorStore(VectorStoreAdapter):
-    """A vector store backed by a Weaviate server."""
+    """A vector store backed by a Weaviate server.
+
+    Scopes by tenant (one collection per tenant). ``user`` is accepted on
+    ``query``/``fetch`` for interface conformance (ADR-0008) but not yet enforced
+    - per-user isolation is a per-backend follow-on - so this adapter does not
+    report ``USER_SCOPED``.
+    """
 
     def __init__(
         self,
@@ -85,7 +91,9 @@ class WeaviateVectorStore(VectorStoreAdapter):
             else:
                 collection.data.insert(properties=properties, uuid=object_id, vector=vector)
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
         collection = self._collection(tenant)
         result = collection.query.near_vector(
             self._vector(text), limit=k, return_metadata=MetadataQuery(distance=True)
@@ -100,7 +108,7 @@ class WeaviateVectorStore(VectorStoreAdapter):
             for obj in result.objects
         ]
 
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
         collection = self._collection(tenant)
         obj = collection.query.fetch_object_by_id(generate_uuid5(doc_id))
         if obj is None:

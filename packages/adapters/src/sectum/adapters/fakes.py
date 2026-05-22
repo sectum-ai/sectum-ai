@@ -75,8 +75,14 @@ class FakeVectorStore(VectorStoreAdapter):
 
     With ``shared_index=True`` it models a single index shared across tenants:
     a query from one tenant can surface another tenant's documents. With
-    ``soft_delete=True`` a ``delete`` call is acknowledged but leaves the
-    vectors orphaned and still queryable. Both default to off.
+    ``user_scoped=True`` it isolates by user within a tenant (ADR-0006): a query
+    or fetch carrying a ``user`` sees only that user's documents plus the
+    tenant-shared ones; with it off the store scopes by tenant alone, so one
+    user surfaces another user's document - the leak. ``shared_index`` (the
+    tenant boundary) and ``user_scoped`` (the user boundary) model different
+    boundaries and are not meant to be combined. With ``soft_delete=True`` a
+    ``delete`` call is acknowledged but leaves the vectors orphaned and still
+    queryable. All default to off.
     """
 
     def __init__(
@@ -84,15 +90,19 @@ class FakeVectorStore(VectorStoreAdapter):
         name: str = "fake-vector",
         *,
         shared_index: bool = False,
+        user_scoped: bool = False,
         soft_delete: bool = False,
         recall: float = 1.0,
     ) -> None:
         scope = Capability.SHARED_INDEX if shared_index else Capability.PER_TENANT_NAMESPACE
         capabilities = {scope}
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
         if soft_delete:
             capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._shared_index = shared_index
+        self._user_scoped = user_scoped
         self._soft_delete = soft_delete
         self._recall = recall
         self._documents: dict[UUID, list[CorpusDocument]] = {}
@@ -100,18 +110,31 @@ class FakeVectorStore(VectorStoreAdapter):
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
         self._documents.setdefault(tenant, []).extend(documents)
 
-    def _scope(self, tenant: UUID) -> list[tuple[UUID, CorpusDocument]]:
-        """The (owner, document) pairs reachable from ``tenant``'s session."""
+    def _scope(self, tenant: UUID, user: UUID | None) -> list[tuple[UUID, CorpusDocument]]:
+        """The (owner, document) pairs reachable from the principal's session."""
         if self._shared_index:
-            return [
+            candidates = [
                 (owner, document)
                 for owner, documents in self._documents.items()
                 for document in documents
             ]
-        return [(tenant, document) for document in self._documents.get(tenant, [])]
+        else:
+            candidates = [(tenant, document) for document in self._documents.get(tenant, [])]
+        if user is not None and self._user_scoped:
+            # A user-scoped store exposes only the user's own documents plus the
+            # tenant-shared ones (owner_user_id is None); another user's document
+            # is out of scope. A store that scopes by tenant alone ignores ``user``.
+            candidates = [
+                (owner, document)
+                for owner, document in candidates
+                if document.owner_user_id is None or document.owner_user_id == user
+            ]
+        return candidates
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
-        hits = _rank(text, self._scope(tenant), k)
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
+        hits = _rank(text, self._scope(tenant, user), k)
         if self._recall >= 1.0:
             return hits
         # Model embedding-model strength: a weaker model misses some cross-tenant
@@ -124,8 +147,8 @@ class FakeVectorStore(VectorStoreAdapter):
             if hit.tenant_id == tenant or _recall_keep(text, hit.doc_id) < self._recall
         ]
 
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
-        for owner, document in self._scope(tenant):
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
+        for owner, document in self._scope(tenant, user):
             if document.doc_id == doc_id:
                 return VectorHit(
                     doc_id=document.doc_id,

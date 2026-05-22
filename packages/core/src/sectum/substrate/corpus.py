@@ -220,9 +220,14 @@ def generate_corpus(
             content = _pivot_content(doc_type, entity, marker, tenant_spec.industry)
             locations[marker.marker_id].append(PlantedLocation(doc_id=doc_id, field="body"))
             marker_ids: tuple[str, ...] = (marker.marker_id,)
+            # A pivot document inherits its marker's owner user, so a user-scoped
+            # store can decide who may retrieve it (ADR-0006). Filler documents
+            # carry no marker and stay tenant-level (``None``).
+            owner_user_id = marker.owner_user_id
         else:
             content = _TEMPLATES[doc_type].format(**_slot_values(tenant_spec, shared, rng, index))
             marker_ids = ()
+            owner_user_id = None
 
         documents.append(
             CorpusDocument(
@@ -233,6 +238,7 @@ def generate_corpus(
                 content=content,
                 metadata=metadata,
                 marker_ids=marker_ids,
+                owner_user_id=owner_user_id,
             )
         )
     return documents, locations

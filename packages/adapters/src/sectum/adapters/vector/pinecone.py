@@ -31,6 +31,10 @@ class PineconeVectorStore(VectorStoreAdapter):
     Construct it with an open Pinecone ``Index`` object (or use
     :meth:`connect`). The index is held opaquely so the adapter can be tested
     against an in-memory stand-in without the ``pinecone`` package.
+
+    Scopes by tenant. ``user`` is accepted on ``query``/``fetch`` for interface
+    conformance (ADR-0008) but not yet enforced - per-user isolation is a
+    per-backend follow-on - so this adapter does not report ``USER_SCOPED``.
     """
 
     def __init__(self, index: Any, embed: Embedder, *, name: str = "pinecone") -> None:
@@ -81,7 +85,9 @@ class PineconeVectorStore(VectorStoreAdapter):
         if vectors:
             self._index.upsert(vectors=vectors, namespace=tenant.hex)
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
         response = self._index.query(
             vector=self._vector(text),
             top_k=k,
@@ -101,7 +107,7 @@ class PineconeVectorStore(VectorStoreAdapter):
             )
         return hits
 
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
         response = self._index.fetch(ids=[doc_id], namespace=tenant.hex)
         vector = response.vectors.get(doc_id)
         if vector is None:

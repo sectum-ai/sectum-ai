@@ -20,7 +20,12 @@ Embedder = Callable[[str], Sequence[float]]
 
 
 class PgVectorStore(VectorStoreAdapter):
-    """A vector store backed by PostgreSQL with the pgvector extension."""
+    """A vector store backed by PostgreSQL with the pgvector extension.
+
+    Scopes by tenant. ``user`` is accepted on ``query``/``fetch`` for interface
+    conformance (ADR-0008) but not yet enforced - per-user isolation is a
+    per-backend follow-on - so this adapter does not report ``USER_SCOPED``.
+    """
 
     def __init__(
         self,
@@ -64,7 +69,9 @@ class PgVectorStore(VectorStoreAdapter):
                 )
             conn.commit()
 
-    def query(self, tenant: UUID, text: str, k: int = 5) -> list[VectorHit]:
+    def query(
+        self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+    ) -> list[VectorHit]:
         vector = self._literal(self._embed(text))
         with psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
             cur.execute(
@@ -79,7 +86,7 @@ class PgVectorStore(VectorStoreAdapter):
             for doc_id, content, score in rows
         ]
 
-    def fetch(self, tenant: UUID, doc_id: str) -> VectorHit | None:
+    def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
         with psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
             cur.execute(
                 f"SELECT content FROM {self._table} WHERE tenant = %s AND doc_id = %s",

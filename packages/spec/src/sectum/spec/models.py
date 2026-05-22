@@ -126,6 +126,13 @@ class CorpusDocument(SectumModel):
     content: str
     metadata: dict[str, str] = Field(default_factory=dict)
     marker_ids: tuple[str, ...] = ()
+    owner_user_id: UUID | None = None
+    """The user that owns this document within the tenant (ADR-0006), or ``None``.
+
+    A pivot document inherits its planted marker's owner user; filler documents
+    (and every document in a scenario that declares no users) are tenant-level
+    (``None``). A user-scoped store uses this to decide what a user may retrieve.
+    """
 
 
 class GroundTruthManifest(SectumModel):
