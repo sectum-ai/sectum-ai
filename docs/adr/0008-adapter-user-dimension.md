@@ -64,3 +64,23 @@ additive optional parameter.
   the probe suite exercises in CI, consistent with the "fakes are the test
   substrate; live adapters are mock + opt-in" stance (the engineering spec,
   sections 11 and 15).
+
+## Update (2026-05-21) — generalization complete
+
+The user dimension has landed across every adapter family a probe exercises:
+**vector, cache, memory, MCP, and model**. Each fake gained a `user_scoped` knob
+and reports `USER_SCOPED`; the runner threads `ProbeStep.actor_user_id` into all
+of those calls; and the probes are principal-aware end to end - Class 1
+(tenant-boundary), Class 2 (flagship rag-entity-bleed), Class 3 (rag-poisoning),
+Class 4 (semantic-cache), Class 6 (embedding-inversion), Class 7
+(agent-tool-hijack), Class 8 (memory-contamination), Class 9 (lora-cross-tenant),
+and Class 10 (ikea-extraction) each verify user isolation with a positive
+(tenant-only store leaks) and a negative (user-scoped store does not) case.
+
+The **RAG pipeline** family (`RAGPipelineAdapter.ask`) was *not* given a user
+dimension: no probe issues a `rag.ask` step (the retrieval probes confirm via
+`vector.query`), so there was nothing to thread it through. `ModelAdapter.
+measure_latency` likewise stays tenant-level - the KV-cache timing side channel
+(Class 5) is shared infrastructure, not a per-principal scope. The live adapters
+still accept `user` for conformance without yet enforcing it (the per-backend
+follow-on above).
