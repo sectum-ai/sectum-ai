@@ -22,11 +22,17 @@ Embedder = Callable[[str], Sequence[float]]
 class ChromaVectorStore(VectorStoreAdapter):
     """A vector store backed by a ChromaDB server.
 
-    Scopes by tenant (one collection per tenant). ``user`` is accepted on
-    ``query``/``fetch`` for interface conformance (ADR-0008) but not yet enforced
-    - per-user isolation is a per-backend follow-on - so this adapter does not
-    report ``USER_SCOPED``.
+    Scopes by tenant (one collection per tenant). With ``user_scoped=True`` it
+    records each document's owning user in metadata and filters ``query``/
+    ``fetch`` to the caller's own documents plus tenant-shared ones (reporting
+    ``USER_SCOPED``), so one user cannot retrieve a sibling user's document
+    within the tenant (ADR-0006). ``user=None`` is the tenant-level scope and is
+    unchanged. Tenant-level documents carry an empty ``owner_user`` sentinel so
+    the metadata filter can match them.
     """
+
+    _TENANT_LEVEL = ""
+    """The ``owner_user`` metadata sentinel for a tenant-level (unowned) document."""
 
     def __init__(
         self,
@@ -36,17 +42,28 @@ class ChromaVectorStore(VectorStoreAdapter):
         *,
         name: str = "chroma",
         prefix: str = "sectum",
+        user_scoped: bool = False,
     ) -> None:
-        super().__init__(name, frozenset({Capability.PER_TENANT_NAMESPACE}))
+        capabilities = {Capability.PER_TENANT_NAMESPACE}
+        if user_scoped:
+            capabilities.add(Capability.USER_SCOPED)
+        super().__init__(name, frozenset(capabilities))
         self._client = chromadb.HttpClient(host=host, port=port)
         self._embed = embed
         self._prefix = prefix
+        self._user_scoped = user_scoped
 
     def _collection_name(self, tenant: UUID) -> str:
         return f"{self._prefix}-{tenant.hex}"
 
     def _vector(self, text: str) -> list[float]:
         return [float(value) for value in self._embed(text)]
+
+    def _user_where(self, user: UUID | None) -> dict[str, object] | None:
+        """A Chroma ``where`` filter for the user's own + tenant-shared documents."""
+        if self._user_scoped and user is not None:
+            return {"owner_user": {"$in": [str(user), self._TENANT_LEVEL]}}
+        return None
 
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
         items = list(documents)
@@ -59,6 +76,14 @@ class ChromaVectorStore(VectorStoreAdapter):
             ids=[document.doc_id for document in items],
             embeddings=[self._vector(f"{document.title} {document.content}") for document in items],
             documents=[document.content for document in items],
+            metadatas=[
+                {
+                    "owner_user": str(document.owner_user_id)
+                    if document.owner_user_id
+                    else self._TENANT_LEVEL
+                }
+                for document in items
+            ],
         )
 
     def query(
@@ -67,7 +92,12 @@ class ChromaVectorStore(VectorStoreAdapter):
         collection = self._client.get_or_create_collection(
             self._collection_name(tenant), embedding_function=None
         )
-        result = collection.query(query_embeddings=[self._vector(text)], n_results=k)
+        where = self._user_where(user)
+        result = collection.query(
+            query_embeddings=[self._vector(text)],
+            n_results=k,
+            **({"where": where} if where is not None else {}),
+        )
         ids = result["ids"][0]
         documents = result["documents"][0] if result["documents"] else [""] * len(ids)
         distances = result["distances"][0] if result["distances"] else [0.0] * len(ids)
@@ -85,7 +115,8 @@ class ChromaVectorStore(VectorStoreAdapter):
         collection = self._client.get_or_create_collection(
             self._collection_name(tenant), embedding_function=None
         )
-        result = collection.get(ids=[doc_id])
+        where = self._user_where(user)
+        result = collection.get(ids=[doc_id], **({"where": where} if where is not None else {}))
         ids = result["ids"]
         if not ids:
             return None
