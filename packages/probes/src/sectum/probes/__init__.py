@@ -17,6 +17,7 @@ from sectum.probes.detection import (
     JudgeVerdict,
     confirmed_findings,
     dedupe_findings,
+    is_cross_principal,
 )
 from sectum.probes.embedding_inversion import EmbeddingInversionProbe
 from sectum.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
@@ -65,4 +66,5 @@ __all__ = [
     "TimingSignal",
     "confirmed_findings",
     "dedupe_findings",
+    "is_cross_principal",
 ]

@@ -221,6 +221,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user's data. Tenant-level behavior is unchanged. Generalizing the remaining
   probes (and the user-aware adapters they need) and the intended-vs-actual
   access-policy model are the documented follow-ons.
+- The Class 1 direct-tenant-boundary probe (`tenant-boundary-fetch`) is now
+  principal-aware (ADR-0006): it plans a direct fetch of every hard-canary
+  document from each principal to which the marker is foreign - cross-tenant as
+  before, and cross-user within a tenant when users are declared - so negative
+  authorization is verified at both granularities. The `is_cross_principal`
+  predicate is now public so probe planning and detection share one definition
+  of "foreign." With no users declared the plan is byte-identical to the prior
+  per-tenant plan.
 - ADR-0007 (canonical hashing serializes every field; reject
   exclude_none/exclude_defaults to keep the evidence digest total and
   unambiguous).

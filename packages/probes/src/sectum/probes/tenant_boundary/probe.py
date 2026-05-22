@@ -6,12 +6,12 @@ table-stakes probe: it verifies negative authorization across the tenant
 boundary.
 """
 
-from sectum.probes.detection import DetectingProbe
+from sectum.probes.detection import DetectingProbe, is_cross_principal
 from sectum.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 
 class TenantBoundaryProbe(DetectingProbe):
-    """Class 1: query each tenant's hard-canary documents from other tenants."""
+    """Class 1: fetch each principal's hard-canary documents from other principals."""
 
     id = "tenant-boundary-fetch"
     name = "Direct tenant boundary fetch"
@@ -22,21 +22,28 @@ class TenantBoundaryProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ()
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan, for every hard-canary document, a direct fetch from each other tenant."""
-        tenant_ids = [tenant.tenant_id for tenant in substrate.tenants]
+        """Plan, for every hard-canary document, a direct fetch from each foreign principal.
+
+        A fetch is issued from every principal (a tenant, or a user within a
+        tenant - ADR-0006) to which the marker is foreign, so the probe verifies
+        negative authorization at both granularities. With no users declared the
+        principals are the tenants and this is the original per-tenant plan.
+        """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
                 continue
             for location in marker.planted_locations:
-                for observer in tenant_ids:
-                    if observer == marker.owner_tenant_id:
+                for observer in principals:
+                    if not is_cross_principal(marker, observer):
                         continue
                     steps.append(
                         ProbeStep(
                             step_id=f"{self.id}-{len(steps):04d}",
                             probe_id=self.id,
-                            actor_tenant_id=observer,
+                            actor_tenant_id=observer.tenant_id,
+                            actor_user_id=observer.user_id,
                             action="vector.fetch",
                             payload={"doc_id": location.doc_id},
                         )
@@ -46,11 +53,12 @@ class TenantBoundaryProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan the observation for a foreign canary via the detection pipeline."""
+        """Scan the observation for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
+            observed_user=step.actor_user_id,
         )

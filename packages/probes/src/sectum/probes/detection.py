@@ -41,7 +41,7 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
-def _is_cross_principal(marker: Marker, observer: Principal) -> bool:
+def is_cross_principal(marker: Marker, observer: Principal) -> bool:
     """Whether ``marker`` is foreign to the observing principal (ADR-0006).
 
     Cross-tenant is always a leak. Within one tenant, the marker is foreign only
@@ -50,6 +50,9 @@ def _is_cross_principal(marker: Marker, observer: Principal) -> bool:
     tenant owns all its users' data. User isolation is verified default-deny:
     any cross-user appearance is a leak, since the intended-sharing policy model
     is deferred (ADR-0006).
+
+    Detection uses this to decide which markers are foreign to an observer;
+    probe planning uses it to decide which principals to issue a step from.
     """
     if marker.owner_tenant_id != observer.tenant_id:
         return True
@@ -237,7 +240,7 @@ class DetectionPipeline:
         return [
             marker
             for marker in self._markers
-            if marker.marker_type is marker_type and _is_cross_principal(marker, observer)
+            if marker.marker_type is marker_type and is_cross_principal(marker, observer)
         ]
 
     def _exact(

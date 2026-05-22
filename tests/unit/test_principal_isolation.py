@@ -8,11 +8,17 @@ the tenant-level case are unchanged.
 
 from uuid import UUID
 
-from sectum.probes import DetectionPipeline, RagEntityBleedProbe
+from sectum.probes import (
+    DetectionPipeline,
+    RagEntityBleedProbe,
+    TenantBoundaryProbe,
+    is_cross_principal,
+)
 from sectum.spec import (
     FindingStatus,
     Marker,
     MarkerType,
+    Principal,
     Scenario,
     SharedEntity,
     Surface,
@@ -173,3 +179,49 @@ def test_the_flagship_probe_is_tenant_level_without_users() -> None:
     substrate = build_substrate(default_scenario(seed=1))
     steps = RagEntityBleedProbe().plan(substrate)
     assert all(step.actor_user_id is None for step in steps)
+
+
+def test_tenant_boundary_plans_a_cross_user_fetch_when_users_are_declared() -> None:
+    # One tenant with two users: each user's hard-canary doc is fetched from the
+    # other user's session (cross-user), and never from the owning user nor from
+    # the tenant-level principal, which owns all its users' data (ADR-0006).
+    substrate = build_substrate(_users_scenario())
+    steps = TenantBoundaryProbe().plan(substrate)
+    owner_of_doc = {
+        location.doc_id: marker.owner_user_id
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.HARD_CANARY
+        for location in marker.planted_locations
+    }
+    assert steps  # the scenario does plant cross-user fetches
+    # every fetch is issued from a user (never the tenant-level principal) and
+    # never from the doc's owning user - it is always cross-user
+    for step in steps:
+        assert step.actor_user_id is not None
+        assert step.actor_user_id != owner_of_doc[step.payload["doc_id"]]
+    # both users appear as actors; the tenant-level principal issues none
+    assert {step.actor_user_id for step in steps} == {_USER_A, _USER_B}
+
+
+def test_tenant_boundary_is_tenant_level_without_users() -> None:
+    substrate = build_substrate(default_scenario(seed=1))
+    steps = TenantBoundaryProbe().plan(substrate)
+    # no user scope anywhere, and every tenant fetches every other tenant's docs
+    assert {step.actor_user_id for step in steps} == {None}
+    assert {step.actor_tenant_id for step in steps} == {t.tenant_id for t in substrate.tenants}
+
+
+def test_is_cross_principal_predicate() -> None:
+    marker = Marker(
+        marker_id="m",
+        marker_type=MarkerType.HARD_CANARY,
+        owner_tenant_id=_TENANT,
+        owner_user_id=_USER_A,
+        plaintext="x",
+    )
+    # cross-user within the tenant, and cross-tenant, are foreign
+    assert is_cross_principal(marker, Principal(tenant_id=_TENANT, user_id=_USER_B))
+    assert is_cross_principal(marker, Principal(tenant_id=_OTHER_TENANT, user_id=_USER_A))
+    # the owning user and the owning tenant (no user scope) are not foreign
+    assert not is_cross_principal(marker, Principal(tenant_id=_TENANT, user_id=_USER_A))
+    assert not is_cross_principal(marker, Principal(tenant_id=_TENANT))

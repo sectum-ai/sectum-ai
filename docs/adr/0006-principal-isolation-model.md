@@ -83,15 +83,18 @@ The detection half of the deferred work is now implemented:
 
 - `ProbeStep` gained `actor_user_id` and `Finding` gained `owner_user_id` /
   `observed_in_user_id` (all optional, tenant-level default).
-- The detection pipeline's leak predicate is principal-aware
-  (`_is_cross_principal`): cross-tenant is always a leak; within a tenant, a
-  marker is foreign only to a user-scoped observer whose user differs from the
-  marker's owner. A tenant-level observer is unchanged.
+- The detection pipeline's leak predicate is principal-aware and now **public**
+  (`is_cross_principal`), so detection and probe planning share one definition of
+  "foreign": cross-tenant is always a leak; within a tenant, a marker is foreign
+  only to a user-scoped observer whose user differs from the marker's owner. A
+  tenant-level observer is unchanged.
 - User isolation is verified **default-deny**: any cross-user appearance is a
   leak. The intended-vs-actual access-policy model (allowing legitimate
   within-tenant sharing) remains the larger, separate follow-on.
-- The flagship Class 2 probe (`rag-entity-bleed`) plans from every principal, so
-  against a store that is not user-scoped a user's benign query surfaces another
-  user's data. Generalizing the remaining probes — and the **user-aware
-  adapters** they need, since today's adapters are tenant-keyed — is the next
-  increment.
+- The flagship Class 2 probe (`rag-entity-bleed`) and the Class 1
+  direct-tenant-boundary probe (`tenant-boundary-fetch`) both plan from every
+  principal: Class 2 issues a benign query from each, and Class 1 fetches each
+  hard-canary document from every principal to which it is foreign (cross-tenant
+  and, within a tenant, cross-user). Generalizing the remaining probes — and the
+  **user-aware adapters** they need, since today's adapters are tenant-keyed — is
+  the next increment.
