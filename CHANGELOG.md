@@ -181,6 +181,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only while the tenant's adapter exists - and `sectum erasure` trains and
   threads a `FakeModel` through, so the workflow now round-trips the vector,
   tracing, memory, cache, and model surfaces (five of the "ten hiding places").
+- Class 11 (`sectum erasure`) now also checks the derived full-text search-index
+  surface (the tenth "hiding place"). A new `SearchIndexAdapter` family
+  (`search` + `delete`, capability `TEXT_SEARCH`) and its `FakeSearchIndex` (with
+  a `soft_delete` knob) model a keyword index built from the corpus, distinct
+  from the embedding vector store; `ErasureProbe` accepts an optional
+  `search_index` adapter and scans it for residual markers, and `sectum erasure`
+  indexes and threads a `FakeSearchIndex` through. The workflow now round-trips
+  six of the "ten hiding places". There is no live search-index adapter yet, so
+  the fake carries the behavior.
 - The live Pinecone vector-store adapter (`PineconeVectorStore`): each tenant
   maps to its own namespace within one index, so a query or fetch is
   tenant-scoped. Pinecone is a hosted service with no local backend, so it is

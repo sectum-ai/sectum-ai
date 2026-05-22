@@ -17,6 +17,7 @@ from sectum.adapters import (
     MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
+    SearchIndexAdapter,
     VectorStoreAdapter,
 )
 from sectum.spec import Finding, FindingStatus, Marker, MarkerType, Severity, Substrate, Surface
@@ -80,6 +81,7 @@ class ErasureProbe:
         memory: MemoryAdapter | None = None,
         cache: CacheAdapter | None = None,
         model: ModelAdapter | None = None,
+        search_index: SearchIndexAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
@@ -87,6 +89,7 @@ class ErasureProbe:
         self._memory = memory
         self._cache = cache
         self._model = model
+        self._search_index = search_index
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -176,6 +179,22 @@ class ErasureProbe:
                 for marker in model_residual
             )
 
+        if self._search_index is not None:
+            search_before = self._scan_search(target, markers)
+            self._search_index.delete(target)
+            search_residual = self._scan_search(target, markers)
+            surfaces.append(
+                SurfaceErasure(
+                    surface=Surface.SEARCH_INDEX,
+                    markers_before=len(search_before),
+                    residual_after=len(search_residual),
+                )
+            )
+            findings.extend(
+                self._residual_finding(target, marker, Surface.SEARCH_INDEX)
+                for marker in search_residual
+            )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -227,6 +246,17 @@ class ErasureProbe:
             if marker.plaintext in model.infer(target, marker.plaintext)
         ]
 
+    def _scan_search(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers still present in the search index."""
+        if self._search_index is None:
+            return []
+        search_index = self._search_index
+        return [
+            marker
+            for marker in markers
+            if any(marker.plaintext in hit for hit in search_index.search(target, marker.plaintext))
+        ]
+
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
@@ -255,6 +285,10 @@ class ErasureProbe:
             Surface.MODEL_ADAPTER: (
                 "data survived an Article 17 erasure; retire or retrain the tenant's "
                 "fine-tune/adapter so it no longer reproduces the data"
+            ),
+            Surface.SEARCH_INDEX: (
+                "data survived an Article 17 erasure; purge the tenant's documents from the "
+                "derived full-text search index"
             ),
         }.get(surface, "data survived an Article 17 erasure; purge it from this surface")
         return Finding(

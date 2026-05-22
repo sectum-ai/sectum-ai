@@ -5,6 +5,7 @@ from sectum.adapters import (
     FakeMemory,
     FakeModel,
     FakeObservability,
+    FakeSearchIndex,
     FakeVectorStore,
 )
 from sectum.probes import ErasureProbe
@@ -58,6 +59,16 @@ def _seeded_model(substrate: Substrate, *, soft_delete: bool) -> FakeModel:
         if marker.marker_type is MarkerType.HARD_CANARY:
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
     return model
+
+
+def _seeded_search(substrate: Substrate, *, soft_delete: bool) -> FakeSearchIndex:
+    search = FakeSearchIndex(soft_delete=soft_delete)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            search.index(
+                marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}"
+            )
+    return search
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -222,3 +233,28 @@ def test_erasure_fails_when_the_model_adapter_soft_deletes() -> None:
     assert surfaces[Surface.MODEL_ADAPTER].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.MODEL_ADAPTER for finding in report.findings)
+
+
+def test_erasure_clears_the_search_index_when_it_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    search = _seeded_search(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, search_index=search).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.SEARCH_INDEX in surfaces
+    assert surfaces[Surface.SEARCH_INDEX].markers_before > 0
+    assert surfaces[Surface.SEARCH_INDEX].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_the_search_index_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    search = _seeded_search(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, search_index=search).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.SEARCH_INDEX].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.SEARCH_INDEX for finding in report.findings)

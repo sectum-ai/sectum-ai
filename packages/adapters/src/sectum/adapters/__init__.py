@@ -18,6 +18,7 @@ from sectum.adapters.base import (
     ObservabilityAdapter,
     RagAnswer,
     RAGPipelineAdapter,
+    SearchIndexAdapter,
     TraceHit,
     VectorHit,
     VectorStoreAdapter,
@@ -30,6 +31,7 @@ from sectum.adapters.fakes import (
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
+    FakeSearchIndex,
     FakeVectorStore,
 )
 
@@ -48,6 +50,7 @@ __all__ = [
     "FakeModel",
     "FakeObservability",
     "FakeRAGPipeline",
+    "FakeSearchIndex",
     "FakeVectorStore",
     "MCPAdapter",
     "McpResult",
@@ -56,6 +59,7 @@ __all__ = [
     "ObservabilityAdapter",
     "RAGPipelineAdapter",
     "RagAnswer",
+    "SearchIndexAdapter",
     "TraceHit",
     "VectorHit",
     "VectorStoreAdapter",

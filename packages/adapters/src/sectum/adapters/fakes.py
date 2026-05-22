@@ -26,6 +26,7 @@ from sectum.adapters.base import (
     ObservabilityAdapter,
     RagAnswer,
     RAGPipelineAdapter,
+    SearchIndexAdapter,
     TraceHit,
     VectorHit,
     VectorStoreAdapter,
@@ -558,3 +559,37 @@ class FakeMemory(MemoryAdapter):
         if self._soft_delete:
             return
         self._entries.pop(tenant, None)
+
+
+class FakeSearchIndex(SearchIndexAdapter):
+    """A deterministic in-memory full-text search index.
+
+    A search index derived from the RAG corpus is the tenth of the spec's "ten
+    hiding places". With ``soft_delete=True`` a ``delete`` is acknowledged but
+    leaves the documents indexed and still searchable - the residue Class 11
+    erasure verification is built to catch. Defaults to off.
+    """
+
+    def __init__(self, name: str = "fake-search", *, soft_delete: bool = False) -> None:
+        capabilities = {Capability.TEXT_SEARCH}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
+        self._soft_delete = soft_delete
+        self._documents: dict[UUID, list[str]] = {}
+
+    def index(self, tenant: UUID, text: str) -> None:
+        """Index a document's text for ``tenant`` (test helper; not part of the interface)."""
+        self._documents.setdefault(tenant, []).append(text)
+
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return ``tenant``'s indexed snippets whose tokens overlap ``query``."""
+        query_tokens = _tokens(query)
+        return [text for text in self._documents.get(tenant, []) if query_tokens & _tokens(text)]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete index acknowledges the request but keeps the documents
+        # searchable - the residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
+        self._documents.pop(tenant, None)
