@@ -17,6 +17,26 @@ from sectum.evidence.chain import run_digest
 from sectum.evidence.controls import COVERAGE_DISCLAIMER
 from sectum.spec import ControlMapping, EvidencePack, Finding, FindingStatus
 
+# Static scope/methodology narrative (the engineering spec, sections 8.3, 6.4,
+# and 8.4). Factual and anti-hype (section 20): what was tested, how detection
+# works, and the explicit limits (no remediation, test coverage not legal
+# certification).
+_SCOPE_METHODOLOGY: tuple[str, ...] = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. Probes run from each "
+    "tenant's session against the configured surfaces; this pack attests the "
+    "isolation of those surfaces under the run's scenario.",
+    "Each observation passes a layered detector - exact canary match, then "
+    "semantic similarity, then a calibrated judge. A confirmed finding is a "
+    "marker owned by one tenant observed in another, traceable to the manifest, "
+    "so confirmed findings carry no false positives; a candidate that cannot be "
+    "tied to a manifest marker is recorded as unverified rather than confirmed.",
+    "Scope is limited to the probes and surfaces exercised in this run, against "
+    "the test condition fixed by the manifest hash below. Sectum verifies and "
+    "attests; it does not remediate - findings carry remediation pointers, not "
+    "changes - and this pack asserts test coverage, not legal certification.",
+)
+
 
 def _finding_controls(finding: Finding) -> str:
     """Return a finding's mapped control IDs as ``OWASP ...; ATLAS ...; NIST ...``.
@@ -37,10 +57,12 @@ def _finding_controls(finding: Finding) -> str:
 
 
 def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
-    """Return one escaped summary line per finding, or a single 'none' line.
+    """Return escaped finding lines, or a single 'none' line for an empty run.
 
-    Each line ends with the finding's mapped control IDs (OWASP / ATLAS / NIST)
-    when it carries any, so an auditor reads per-finding control coverage inline.
+    Each finding contributes a summary line - ending with its mapped control IDs
+    (OWASP / ATLAS / NIST) when it carries any - followed by an italic
+    remediation line when the finding carries a remediation pointer, so an
+    auditor reads per-finding control coverage and the remediation inline.
     """
     if not findings:
         return ["No findings were recorded for this run."]
@@ -55,6 +77,8 @@ def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
         if controls:
             line += f" [{escape(controls)}]"
         lines.append(line)
+        if finding.remediation_pointer:
+            lines.append(f"<i>Remediation: {escape(finding.remediation_pointer)}</i>")
     return lines
 
 
@@ -90,6 +114,9 @@ def render_audit_pack(pack: EvidencePack, output: Path) -> None:
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in summary
     ]
+
+    flow += [Spacer(1, 12), Paragraph("Scope and methodology", heading)]
+    flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
     flow += [Paragraph(line, body) for line in _finding_lines(run.findings)]

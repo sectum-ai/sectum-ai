@@ -334,6 +334,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   section. Empty frameworks are omitted (an erasure finding shows no ATLAS, an
   unclassified finding shows no suffix). This surfaces the per-finding IDs the
   `Finding` model and `evidence.json` already carried.
+- The audit-pack PDF now renders each finding's `remediation_pointer` (as an
+  italic line beneath the finding) and a "Scope and methodology" section, so the
+  pack covers the full spec section 8.3 layout. The methodology narrative states
+  the detection method (synthetic-tenant substrate; exact/semantic/judge;
+  manifest-grounded zero false positives) and the limits (Sectum does not
+  remediate; the pack asserts test coverage, not legal certification).
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
