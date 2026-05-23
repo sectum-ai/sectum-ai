@@ -1,6 +1,6 @@
 # Class 7 — Cross-tenant agent tool-call hijacking
 
-**OWASP:** LLM08:2025 · **Surface:** MCP · **Probe id:** `agent-tool-hijack`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0053 · **NIST:** MEASURE 2.7 · **Surface:** MCP · **Probe id:** `agent-tool-hijack`
 
 ## Goal
 

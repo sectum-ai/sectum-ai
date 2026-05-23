@@ -4,21 +4,23 @@ Each probe is pluggable behind a common `Probe` interface and ships with unit
 tests and a deterministic in-memory fake adapter. The catalog grows by phase;
 the classes below are implemented today.
 
-| Class | Probe | Surface |
-|---|---|---|
-| [1 — Direct tenant boundary fetch](class-01-tenant-boundary.md) | `tenant-boundary-fetch` | vector DB |
-| [2 — Organic entity-bleed RAG](class-02-rag-entity-bleed.md) | `rag-entity-bleed` | vector DB |
-| [3 — Adversarial RAG poisoning](class-03-rag-poisoning.md) | `rag-poisoning` | vector DB |
-| [4 — Semantic-cache contamination](class-04-semantic-cache.md) | `semantic-cache-contamination` | semantic cache |
-| [5 — KV-cache timing side channel](class-05-kv-cache-timing.md) | `kv-cache-timing` | KV cache |
-| [6 — Embedding inversion across tenants](class-06-embedding-inversion.md) | `embedding-inversion` | vector DB |
-| [7 — Agent tool-call hijacking](class-07-agent-tool-hijack.md) | `agent-tool-hijack` | MCP |
-| [8 — Persistent memory contamination](class-08-memory-contamination.md) | `memory-contamination` | agent memory |
-| [9 — LoRA cross-tenant influence](class-09-lora-cross-tenant.md) | `lora-cross-tenant` | model / adapter |
-| [10 — IKEA-style benign extraction](class-10-ikea-extraction.md) | `ikea-extraction` | vector DB |
-| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification` | vector DB |
+| Class | Probe | ATLAS | Surface |
+|---|---|---|---|
+| [1 — Direct tenant boundary fetch](class-01-tenant-boundary.md) | `tenant-boundary-fetch` | `AML.T0024` | vector DB |
+| [2 — Organic entity-bleed RAG](class-02-rag-entity-bleed.md) | `rag-entity-bleed` | `AML.T0024`, `AML.T0057` | vector DB |
+| [3 — Adversarial RAG poisoning](class-03-rag-poisoning.md) | `rag-poisoning` | `AML.T0020`, `AML.T0024` | vector DB |
+| [4 — Semantic-cache contamination](class-04-semantic-cache.md) | `semantic-cache-contamination` | `AML.T0057` | semantic cache |
+| [5 — KV-cache timing side channel](class-05-kv-cache-timing.md) | `kv-cache-timing` | — (timing channel) | KV cache |
+| [6 — Embedding inversion across tenants](class-06-embedding-inversion.md) | `embedding-inversion` | `AML.T0024`, `AML.T0024.001` | vector DB |
+| [7 — Agent tool-call hijacking](class-07-agent-tool-hijack.md) | `agent-tool-hijack` | `AML.T0024`, `AML.T0053` | MCP |
+| [8 — Persistent memory contamination](class-08-memory-contamination.md) | `memory-contamination` | `AML.T0057` | agent memory |
+| [9 — LoRA cross-tenant influence](class-09-lora-cross-tenant.md) | `lora-cross-tenant` | `AML.T0024`, `AML.T0024.000`, `AML.T0057` | model / adapter |
+| [10 — IKEA-style benign extraction](class-10-ikea-extraction.md) | `ikea-extraction` | `AML.T0024`, `AML.T0057` | vector DB |
+| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification` | — (control check) | all configured surfaces |
 
-Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses**.
+Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses** and
+**NIST AI RMF MEASURE 2.7** (security/resilience measurement). The MITRE ATLAS
+technique IDs vary by class — see each page for the rationale.
 
 All eleven adversarial attack classes are implemented. Class 12 — the
 tamper-evident audit chain — is the cross-cutting

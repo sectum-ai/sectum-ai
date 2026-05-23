@@ -345,6 +345,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite) without weakening the gate. Coverage shards are combined automatically
   (`[tool.coverage.run] parallel = true`). The serial path still works, so a
   developer can run `pytest` without `-n auto` for clearer single-test output.
+- The per-class attack-catalog docs (`docs/attack-catalog/class-*.md`) now show
+  each probe's MITRE ATLAS and NIST AI RMF technique IDs in the header line, and
+  the catalog overview (`index.md`) gains an ATLAS column - so the docs match the
+  IDs the source code carries. Also fixes the Class 11 erasure page (and the
+  index table) to list all seven configured erasure surfaces (vector DB,
+  tracing, agent memory, semantic cache, model/fine-tune, search index, eval
+  set) instead of the original five.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting

@@ -1,6 +1,6 @@
 # Class 4 — Semantic-cache contamination
 
-**OWASP:** LLM08:2025 · **Surface:** semantic cache · **Probe id:** `semantic-cache-contamination`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** semantic cache · **Probe id:** `semantic-cache-contamination`
 
 ## Goal
 

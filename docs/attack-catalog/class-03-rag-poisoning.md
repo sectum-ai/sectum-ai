@@ -1,6 +1,6 @@
 # Class 3 — Adversarial RAG poisoning
 
-**OWASP:** LLM08:2025 · **Surface:** vector DB · **Probe id:** `rag-poisoning`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0020, AML.T0024 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `rag-poisoning`
 
 ## Goal
 

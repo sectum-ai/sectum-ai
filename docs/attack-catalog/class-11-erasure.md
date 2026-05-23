@@ -1,6 +1,6 @@
 # Class 11 — GDPR Article 17 erasure verification
 
-**OWASP:** LLM08:2025 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune · **Probe id:** `gdpr-erasure-verification`
+**OWASP:** LLM08:2025 · **ATLAS:** — (a control check, not an attack technique) · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune, search index, eval set · **Probe id:** `gdpr-erasure-verification`
 
 Proving a tenant's data has actually left an AI system after a right-to-erasure
 request.
