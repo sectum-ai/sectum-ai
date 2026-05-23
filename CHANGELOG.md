@@ -362,6 +362,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vs Sectum Cloud" two-column comparison (both share the same evidence format,
   Cloud is hosted/managed) and a Support section linking to GitHub Sponsors
   and a commercial-support contact.
+- The audit-pack PDF now renders each finding's `evidence_span` as a quoted
+  italic line beneath the finding - the captured leak text from the detection
+  pipeline (the engineering spec, section 6.4) IS the auditor's proof. Order
+  per finding: summary (with controls), evidence (proof), remediation (action).
+  Empty spans are guarded so a pipeline finding without a captured span renders
+  nothing extra.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
