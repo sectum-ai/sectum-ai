@@ -1,0 +1,140 @@
+# Sectum AI configuration template.
+#
+# Copy to `sectum.yaml` at the project root, edit the blocks you need, and pass
+# `--config sectum.yaml` to the CLI:
+#
+#     uv run sectum seed   --config sectum.yaml
+#     uv run sectum probe  --config sectum.yaml
+#     uv run sectum report --config sectum.yaml
+#
+# Anything omitted uses the built-in default; explicit CLI flags
+# (--seed, --workdir, --probe) override the values here.
+#
+# Credentials never appear inline. Adapter blocks reference environment
+# variables (for example `dsn_env: SECTUM_PGVECTOR_DSN`) so the adapter
+# resolver looks them up at run time.
+
+# -----------------------------------------------------------------------------
+# Scenario: drives the deterministic substrate.
+# -----------------------------------------------------------------------------
+scenario:
+  # Substrate RNG seed. Fixed for reproducibility — same seed => same manifest.
+  seed: 2026
+  # Built-in profiles: "demo" (small, fast). The corpus_profile string is
+  # included in the manifest hash, so any change invalidates a baseline.
+  corpus_profile: demo
+
+# Where seed/probe/report write their artifacts (substrate.json, run.json,
+# evidence.json, audit-pack.pdf, attestation.intoto.json).
+workdir: .sectum
+
+# -----------------------------------------------------------------------------
+# Adapters: a `kind` per family. `fake` is the in-memory deterministic adapter
+# used by the unit suite; the live `kind`s below talk to real backends.
+#
+# Every adapter family defaults to `fake` if you omit it; you only need to
+# declare the families you've pointed at real infrastructure.
+# -----------------------------------------------------------------------------
+adapters:
+
+  vector:
+    # kind: fake               # in-memory, deterministic (the default)
+    # kind: pgvector           # Postgres + pgvector
+    #   dsn_env: SECTUM_PGVECTOR_DSN
+    #   shared_index: false    # set true to reproduce a leaky multi-tenant setup
+    # kind: chroma             # Chroma server
+    #   host: localhost
+    #   port: 8000
+    # kind: weaviate           # Weaviate (REST + gRPC)
+    #   host: localhost
+    #   http_port: 8080
+    #   grpc_port: 50051
+    # kind: pinecone           # Pinecone (cloud, opt-in)
+    #   index_env: SECTUM_PINECONE_INDEX
+    #   api_key_env: SECTUM_PINECONE_API_KEY
+    kind: fake
+
+  cache:
+    # kind: redis              # Redis (key-prefixed, tenant-scoped)
+    #   host: localhost
+    #   port: 6379
+    kind: fake
+
+  observability:
+    # kind: phoenix            # Arize Phoenix (per-tenant project)
+    #   base_url_env: SECTUM_PHOENIX_URL
+    # kind: langfuse           # Langfuse cloud or self-hosted
+    #   host_env: LANGFUSE_HOST
+    #   public_key_env: LANGFUSE_PUBLIC_KEY
+    #   secret_key_env: LANGFUSE_SECRET_KEY
+    # kind: langsmith
+    #   api_key_env: LANGSMITH_API_KEY
+    kind: fake
+
+  rag:
+    # kind: http               # generic JSON HTTP RAG pipeline
+    #   url_env: SECTUM_RAG_URL
+    kind: fake
+
+  agent:
+    # kind: http               # generic JSON HTTP agent endpoint
+    #   url_env: SECTUM_AGENT_URL
+    kind: fake
+
+  mcp:
+    # kind: stdio              # stdio Model Context Protocol server
+    #   command: ["uvx", "your-mcp-server"]
+    kind: fake
+
+  model:
+    # No live kinds yet — the fake is the substrate the LoRA / KV-cache-timing
+    # probes exercise in CI; a real provider lands as a follow-on.
+    kind: fake
+
+  memory:
+    # No live kinds yet — see the model note above.
+    kind: fake
+
+# -----------------------------------------------------------------------------
+# Evidence chain (the engineering spec, section 8).
+# -----------------------------------------------------------------------------
+evidence:
+  # `local`   — fast, dev-only HMAC stamp (the default).
+  # `rfc3161` — submit the run digest to an RFC 3161 Time-Stamp Authority.
+  timestamper: local
+  # tsa_url: https://freetsa.org/tsr
+  # Sigstore Rekor transparency log (off by default for dev; on for prod).
+  rekor: false
+  # rekor_url: https://rekor.sigstore.dev
+
+# -----------------------------------------------------------------------------
+# Security: optional at-rest encryption for the ground-truth manifest
+# (the engineering spec, section 17).
+# -----------------------------------------------------------------------------
+security:
+  # Name of the env var holding a base64-encoded 32-byte AES-256 key.
+  # When set, `sectum seed` seals the substrate and its manifest at rest.
+  manifest_key_env: null   # set to e.g. "SECTUM_MANIFEST_KEY" to seal at rest
+
+# -----------------------------------------------------------------------------
+# Detection: providers driving the semantic/judge steps of the leak detector.
+# Fakes are deterministic and used by the unit suite; switch to real providers
+# for higher-fidelity detection on real corpora.
+# -----------------------------------------------------------------------------
+detection:
+  embedder:
+    # kind: openai
+    #   model: text-embedding-3-small
+    #   api_key_env: OPENAI_API_KEY
+    kind: fake
+  judge:
+    # kind: openai
+    #   model: gpt-4o-mini
+    #   api_key_env: OPENAI_API_KEY
+    # kind: anthropic
+    #   model: claude-3-5-sonnet
+    #   api_key_env: ANTHROPIC_API_KEY
+    kind: fake
+  # Cosine-similarity gate for semantic candidates. The conservative default
+  # suits the fake embedder; raise it once a real embedding model is configured.
+  semantic_threshold: 0.62
