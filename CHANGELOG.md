@@ -373,6 +373,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the catalog, restate fit, and update the per-probe source comment and
   per-class doc together. The May 2026 ad-hoc sweep that produced PR #8
   (adding T0020 / T0053 / T0024.000) becomes a per-release gate.
+- `docs/samples/` now ships real outputs of the runnable examples - the
+  retrieval-pivot audit-pack PDF (264 findings, all per-finding control IDs
+  and remediation pointers rendered) and the GDPR Article 17 erasure
+  attestation pack (per-surface ERASED/RESIDUAL DATA verdicts) - so a
+  prospective auditor or DPO can see what they get without installing
+  anything. Each pack ships its in-toto attestation envelope; `sectum verify
+  docs/samples/erasure-attestation-evidence.json` demonstrates the
+  tamper-evident chain end to end.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
