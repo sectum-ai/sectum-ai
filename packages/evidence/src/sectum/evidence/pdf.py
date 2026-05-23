@@ -56,13 +56,39 @@ def _finding_controls(finding: Finding) -> str:
     return "; ".join(parts)
 
 
+def _evidence_line(finding: Finding) -> str | None:
+    """Return the escaped italic ``<i>Evidence: "..."</i>`` line for a finding.
+
+    The engineering spec, section 6.4: the detector pipeline captures the span
+    of observed text that proves the leak (the canary substring, the semantic
+    candidate, or the judge's evidence_span). Showing it in the auditor pack
+    IS the proof. Returns ``None`` when the finding carries no evidence span
+    (the default), so no line is rendered.
+    """
+    if not finding.evidence_span:
+        return None
+    return f'<i>Evidence: "{escape(finding.evidence_span)}"</i>'
+
+
+def _remediation_line(finding: Finding) -> str | None:
+    """Return the escaped italic ``<i>Remediation: ...</i>`` line for a finding.
+
+    Returns ``None`` when the finding carries no remediation pointer (the
+    default), so no line is rendered.
+    """
+    if not finding.remediation_pointer:
+        return None
+    return f"<i>Remediation: {escape(finding.remediation_pointer)}</i>"
+
+
 def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
     """Return escaped finding lines, or a single 'none' line for an empty run.
 
     Each finding contributes a summary line - ending with its mapped control IDs
-    (OWASP / ATLAS / NIST) when it carries any - followed by an italic
-    remediation line when the finding carries a remediation pointer, so an
-    auditor reads per-finding control coverage and the remediation inline.
+    (OWASP / ATLAS / NIST) when it carries any - then, when present, an
+    italic evidence-span line (the proof) and an italic remediation line (the
+    pointer). The order is proof, then pointer, mirroring how an auditor reads
+    each finding.
     """
     if not findings:
         return ["No findings were recorded for this run."]
@@ -77,8 +103,12 @@ def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
         if controls:
             line += f" [{escape(controls)}]"
         lines.append(line)
-        if finding.remediation_pointer:
-            lines.append(f"<i>Remediation: {escape(finding.remediation_pointer)}</i>")
+        evidence = _evidence_line(finding)
+        if evidence:
+            lines.append(evidence)
+        remediation = _remediation_line(finding)
+        if remediation:
+            lines.append(remediation)
     return lines
 
 

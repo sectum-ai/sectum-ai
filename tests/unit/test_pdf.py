@@ -5,7 +5,13 @@ from pathlib import Path
 from uuid import UUID
 
 from sectum.evidence import build_evidence_pack, control_mappings, render_audit_pack
-from sectum.evidence.pdf import _SCOPE_METHODOLOGY, _finding_controls, _finding_lines
+from sectum.evidence.pdf import (
+    _SCOPE_METHODOLOGY,
+    _evidence_line,
+    _finding_controls,
+    _finding_lines,
+    _remediation_line,
+)
 from sectum.spec import (
     EvidencePack,
     Finding,
@@ -76,6 +82,7 @@ def _classified_finding(
     atlas: tuple[str, ...] = ("AML.T0024", "AML.T0024.001"),
     nist: tuple[str, ...] = ("MEASURE 2.7",),
     remediation: str = "",
+    evidence: str = "",
 ) -> Finding:
     return Finding(
         finding_id="f-controls",
@@ -91,6 +98,7 @@ def _classified_finding(
         atlas=atlas,
         nist=nist,
         remediation_pointer=remediation,
+        evidence_span=evidence,
     )
 
 
@@ -132,6 +140,40 @@ def test_finding_lines_omits_remediation_when_absent() -> None:
     lines = _finding_lines((_classified_finding(),))
     assert len(lines) == 1
     assert all("Remediation" not in line for line in lines)
+
+
+def test_evidence_line_quotes_the_span() -> None:
+    # The span (often a canary substring) is the auditor's proof, so the line
+    # is rendered in quotes and italic.
+    line = _evidence_line(_classified_finding(evidence="SECTUM-CANARY-ABC123"))
+    assert line == '<i>Evidence: "SECTUM-CANARY-ABC123"</i>'
+
+
+def test_evidence_line_omitted_when_absent() -> None:
+    # An unconfirmed or pipeline finding may carry no span; render nothing.
+    assert _evidence_line(_classified_finding()) is None
+
+
+def test_remediation_line_helper() -> None:
+    line = _remediation_line(_classified_finding(remediation="purge orphaned vectors"))
+    assert line == "<i>Remediation: purge orphaned vectors</i>"
+    assert _remediation_line(_classified_finding()) is None
+
+
+def test_finding_lines_orders_summary_evidence_remediation() -> None:
+    # Both evidence and remediation present: order is summary -> evidence -> remediation.
+    lines = _finding_lines(
+        (
+            _classified_finding(
+                evidence="leaked phrase here",
+                remediation="rotate the shared index",
+            ),
+        )
+    )
+    assert len(lines) == 3
+    assert "<b>high</b>" in lines[0]  # summary line
+    assert lines[1] == '<i>Evidence: "leaked phrase here"</i>'
+    assert lines[2] == "<i>Remediation: rotate the shared index</i>"
 
 
 def test_scope_methodology_states_limits() -> None:
