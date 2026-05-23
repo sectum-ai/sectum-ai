@@ -1,0 +1,104 @@
+{
+  "run_result": {
+    "run_id": "erasure-7cd276c8",
+    "scenario_hash": "083169e020ae06d60d7fb74426120e158f83b4561fccb1a1d03dbe7350f6fdfc",
+    "manifest_hash": "8fe3474ce0b74594e8104086141794055a08d959f3858efcf802fea3279fece6",
+    "started_at": "2026-05-23T22:58:27.304149Z",
+    "finished_at": "2026-05-23T22:58:27.304669Z",
+    "adapter_versions": {
+      "fake-vector": "0.0.0",
+      "fake-observability": "0.0.0",
+      "fake-memory": "0.0.0",
+      "fake-cache": "0.0.0",
+      "fake-model": "0.0.0",
+      "fake-search": "0.0.0",
+      "fake-eval-set": "0.0.0"
+    },
+    "probe_versions": {
+      "gdpr-erasure-verification": "0.0.0"
+    },
+    "findings": [],
+    "metrics": {
+      "per_probe_findings": {},
+      "confirmed_findings": 0,
+      "retrieval_pivot_rate": null,
+      "retrieval_pivot_rate_by_model": {},
+      "erasure_residue": {
+        "vector_db": 0,
+        "tracing": 0,
+        "agent_memory": 0,
+        "semantic_cache": 0,
+        "model_adapter": 0,
+        "search_index": 0,
+        "eval_set": 0
+      },
+      "side_channel_effect_sizes": {}
+    },
+    "schema_version": "0.1.0"
+  },
+  "manifest_hash": "8fe3474ce0b74594e8104086141794055a08d959f3858efcf802fea3279fece6",
+  "tsa_token": "{\"digest\":\"e219d21c4455ca2f97012659ed23e0ae1e042121abed2e07ad0d682f25154d2d\",\"timestamped_at\":\"2026-05-23T22:58:27.304962+00:00\",\"tsa\":\"local-dev\"}",
+  "rekor_proof": null,
+  "control_mappings": [
+    {
+      "framework": "SOC 2 (TSC)",
+      "control_ids": [
+        "CC6.1",
+        "CC6.6",
+        "CC6.7"
+      ],
+      "assertion": "Tenant logical separation tested by benign and adversarial probing across the AI surfaces."
+    },
+    {
+      "framework": "ISO/IEC 27001:2022",
+      "control_ids": [
+        "A.5.15",
+        "A.8.3",
+        "A.8.12"
+      ],
+      "assertion": "Cross-tenant information leakage tested; residual leakage itemized."
+    },
+    {
+      "framework": "GDPR",
+      "control_ids": [
+        "Article 17",
+        "Article 25",
+        "Article 32"
+      ],
+      "assertion": "Erasure across the AI surfaces verified; tenant isolation tested."
+    },
+    {
+      "framework": "EU AI Act",
+      "control_ids": [
+        "Article 15"
+      ],
+      "assertion": "Robustness of tenant isolation tested under benign and adversarial conditions."
+    },
+    {
+      "framework": "HIPAA",
+      "control_ids": [
+        "164.312(a)(1)",
+        "164.312(c)(1)",
+        "164.312(e)(1)"
+      ],
+      "assertion": "Segregation of regulated tenant data verified across the AI surfaces."
+    },
+    {
+      "framework": "NIST AI RMF",
+      "control_ids": [
+        "MEASURE 2.7",
+        "MANAGE 2.x"
+      ],
+      "assertion": "Documented measurement of multi-tenant security risk."
+    },
+    {
+      "framework": "OWASP LLM Top 10",
+      "control_ids": [
+        "LLM08:2025"
+      ],
+      "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
+    }
+  ],
+  "pdf_ref": null,
+  "schema_version": "0.1.0"
+}
