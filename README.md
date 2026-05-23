@@ -42,6 +42,23 @@ independent `sectum verify` are Apache-2.0 — anyone can reproduce a run and
 verify a Sectum AI evidence pack without the project. See
 [ADR-0002](docs/adr/0002-evidence-layer-oss-boundary.md).
 
+## Open Sectum vs Sectum Cloud
+
+| | **Open Sectum** (this repo) | **Sectum Cloud** (private) |
+|---|---|---|
+| License | Apache-2.0 | Commercial |
+| Marker substrate, attack catalog, adapters | ✓ | ✓ |
+| Evidence chain + independent `sectum verify` | ✓ | ✓ |
+| `sectum` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `baseline` / `adapters`) | ✓ | ✓ |
+| Continuous scheduled runs against a customer stack | — | ✓ |
+| Attestation hosting and managed audit-pack delivery | — | ✓ |
+| Dashboard, alerting, and regression baselines across runs | — | ✓ |
+| Auditor / DPO channel: pre-curated evidence packages | — | ✓ |
+
+Both share the same evidence format. An evidence pack produced by Sectum Cloud
+verifies under the open-source `sectum verify`, by design — there is no
+proprietary verification path.
+
 ## Repository layout
 
 A `uv` workspace of five publishable packages:
@@ -98,6 +115,15 @@ To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 - OWASP LLM08:2025 — Vector and Embedding Weaknesses
 - Retrieval Pivot Attacks in Hybrid RAG (arXiv, 2026)
 - Silent Leaks (arXiv 2505.15420)
+
+## Support
+
+Sectum AI is independent and self-funded. If the work matters to you:
+
+- **Sponsor on GitHub:** [github.com/sponsors/sectum-ai](https://github.com/sponsors/sectum-ai) keeps the OSS evidence layer fully open.
+- **Commercial support:** for Sectum Cloud, custom adapters, or a DPO-grade
+  GDPR Article 17 erasure-attestation engagement, get in touch via
+  [security@sectum.ai](mailto:security@sectum.ai).
 
 ## License
 

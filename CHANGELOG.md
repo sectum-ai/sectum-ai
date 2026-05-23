@@ -358,6 +358,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manifest-at-rest, detection providers and semantic threshold) with copy-and-
   edit annotations. Validated to load cleanly under `sectum.config.load_config`.
   The README quickstart now points at it.
+- README now carries the spec section 20 storefront elements: an "Open Sectum
+  vs Sectum Cloud" two-column comparison (both share the same evidence format,
+  Cloud is hosted/managed) and a Support section linking to GitHub Sponsors
+  and a commercial-support contact.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
