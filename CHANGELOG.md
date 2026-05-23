@@ -340,6 +340,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the detection method (synthetic-tenant substrate; exact/semantic/judge;
   manifest-grounded zero false positives) and the limits (Sectum does not
   remediate; the pack asserts test coverage, not legal certification).
+- Parallelized the CI test run with `pytest-xdist` (`pytest -n auto`); the test
+  step now clocks ~2x faster wall-clock (locally 282s -> 113s on the full
+  suite) without weakening the gate. Coverage shards are combined automatically
+  (`[tool.coverage.run] parallel = true`). The serial path still works, so a
+  developer can run `pytest` without `-n auto` for clearer single-test output.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting

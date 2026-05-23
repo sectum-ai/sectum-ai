@@ -13,6 +13,7 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-cov>=5.0",
+    "pytest-xdist>=3",
     "pre-commit>=4.0",
     "psycopg[binary]>=3.3.4",
     "chromadb-client>=0.5",
@@ -140,6 +141,10 @@ markers = [
 
 [tool.coverage.run]
 branch = true
+# parallel: each pytest-xdist worker writes its own .coverage.<pid>.<random>
+# shard; pytest-cov combines them at the end. Also keeps the serial path
+# correct (one shard becomes one combined .coverage file).
+parallel = true
 source = ["sectum"]
 # Live adapters are exercised by docker-backed integration tests, not the unit
 # suite; exclude them so the gate measures unit-tested code.

@@ -38,7 +38,7 @@ jobs:
         run: uv run mypy
 
       - name: Tests
-        run: uv run pytest --cov=sectum --cov-report=term-missing
+        run: uv run pytest -n auto --cov=sectum --cov-report=term-missing
 
       - name: Example walkthroughs (e2e)
         run: uv run pytest -m e2e -q
