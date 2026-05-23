@@ -381,6 +381,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anything. Each pack ships its in-toto attestation envelope; `sectum verify
   docs/samples/erasure-attestation-evidence.json` demonstrates the
   tamper-evident chain end to end.
+- `docs/glossary.md` mirrors the spec section 23 vocabulary - tenant, principal,
+  marker types, ground-truth manifest, Retrieval-Pivot Rate, surface, probe,
+  finding, evidence pack, BYOC, wedge - with cross-links into the attack
+  catalog, evidence chain, compliance mappings, threat model, and sample
+  packs. Standard buyer/auditor reference; wired into the mkdocs nav.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
