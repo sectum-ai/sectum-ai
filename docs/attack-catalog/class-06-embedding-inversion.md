@@ -1,6 +1,6 @@
 # Class 6 — Embedding inversion across tenants
 
-**OWASP:** LLM08:2025 · **Surface:** vector DB · **Probe id:** `embedding-inversion`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0024.001 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `embedding-inversion`
 
 ## Goal
 

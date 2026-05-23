@@ -1,6 +1,6 @@
 # Class 2 — Organic entity-bleed RAG
 
-**OWASP:** LLM08:2025 · **Surface:** vector DB · **Probe id:** `rag-entity-bleed`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `rag-entity-bleed`
 
 The flagship probe. It reproduces the Retrieval Pivot: benign, non-adversarial
 queries surface another tenant's content through shared organic entities.

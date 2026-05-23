@@ -1,6 +1,6 @@
 # Class 9 — LoRA / adapter cross-tenant influence
 
-**OWASP:** LLM08:2025 · **Surface:** model / adapter layer · **Probe id:** `lora-cross-tenant`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0024.000, AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** model / adapter layer · **Probe id:** `lora-cross-tenant`
 
 ## Goal
 

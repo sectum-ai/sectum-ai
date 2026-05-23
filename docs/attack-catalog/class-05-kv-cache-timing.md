@@ -1,6 +1,6 @@
 # Class 5 — KV-cache timing side channel
 
-**OWASP:** LLM08:2025 · **Surface:** KV cache · **Probe id:** `kv-cache-timing`
+**OWASP:** LLM08:2025 · **ATLAS:** — (not an attack technique; a statistical timing side channel) · **NIST:** MEASURE 2.7 · **Surface:** KV cache · **Probe id:** `kv-cache-timing`
 
 ## Goal
 

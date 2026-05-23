@@ -1,6 +1,6 @@
 # Class 1 — Direct tenant boundary fetch
 
-**OWASP:** LLM08:2025 · **Surface:** vector DB · **Probe id:** `tenant-boundary-fetch`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `tenant-boundary-fetch`
 
 ## Goal
 

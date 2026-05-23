@@ -1,6 +1,6 @@
 # Class 8 — Persistent memory contamination
 
-**OWASP:** LLM08:2025 · **Surface:** agent memory · **Probe id:** `memory-contamination`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** agent memory · **Probe id:** `memory-contamination`
 
 ## Goal
 

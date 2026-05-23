@@ -1,6 +1,6 @@
 # Class 10 — IKEA-style implicit benign extraction
 
-**OWASP:** LLM08:2025 · **Surface:** vector DB · **Probe id:** `ikea-extraction`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `ikea-extraction`
 
 ## Goal
 
