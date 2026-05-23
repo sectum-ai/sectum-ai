@@ -16,3 +16,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0006](0006-principal-isolation-model.md) | The isolation boundary is a principal (tenant or user) | Accepted |
 | [0007](0007-canonical-hashing-serializes-every-field.md) | Canonical hashing serializes every field | Accepted |
 | [0008](0008-adapter-user-dimension.md) | The adapter SDK carries an optional user dimension | Accepted |
+| [0009](0009-atlas-technique-review-process.md) | ATLAS technique IDs are validated against the live MITRE catalog before each release | Accepted |
