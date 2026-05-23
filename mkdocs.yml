@@ -45,6 +45,7 @@ nav:
   - vs DeepTeam: vs-deepteam.md
   - Threat model: threat-model.md
   - Sample evidence packs: samples/README.md
+  - Glossary: glossary.md
   - Architecture decisions:
       - Overview: adr/README.md
       - adr/0001-monorepo-packaging-layout.md
