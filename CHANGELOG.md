@@ -368,6 +368,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per finding: summary (with controls), evidence (proof), remediation (action).
   Empty spans are guarded so a pipeline finding without a captured span renders
   nothing extra.
+- ADR-0009 records the release-time ATLAS technique-review process:
+  re-validate every probe's MITRE ATLAS IDs against the MISP-galaxy mirror of
+  the catalog, restate fit, and update the per-probe source comment and
+  per-class doc together. The May 2026 ad-hoc sweep that produced PR #8
+  (adding T0020 / T0053 / T0024.000) becomes a per-release gate.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
