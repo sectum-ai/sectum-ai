@@ -1,9 +1,10 @@
 # Sample evidence packs
 
 These artifacts were produced by the runnable end-to-end examples in
-[`examples/`](../../examples/) — they are real outputs of `sectum report`
-and `sectum erasure`, checked in so a prospective auditor, DPO, or CISO can
-see what they get without installing anything.
+[`examples/`](https://github.com/sectum-ai/sectum-ai/tree/main/examples) — they
+are real outputs of `sectum report` and `sectum erasure`, checked in so a
+prospective auditor, DPO, or CISO can see what they get without installing
+anything.
 
 | File | Source example | Size | What it is |
 |---|---|---|---|
@@ -44,5 +45,6 @@ cp examples/erasure-attestation/out/erasure-attestation.intoto.json docs/samples
 
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
 (~235 KB with 264 findings); run the example locally to inspect the JSON
-structure, or read the [`Finding`](../../packages/spec/src/sectum/spec/models.py)
+structure, or read the
+[`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum/spec/models.py)
 schema.
