@@ -79,6 +79,11 @@ uv run sectum report --workdir .sectum
 uv run sectum verify .sectum/evidence.json
 ```
 
+For richer configuration (live vector store, real embedder/judge, Rekor
+signing, manifest-at-rest), copy
+[`sectum.yaml.example`](sectum.yaml.example) to `sectum.yaml` and pass
+`--config sectum.yaml` to each command.
+
 To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation, security, contributing

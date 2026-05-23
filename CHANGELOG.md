@@ -352,6 +352,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   index table) to list all seven configured erasure surfaces (vector DB,
   tracing, agent memory, semantic cache, model/fine-tune, search index, eval
   set) instead of the original five.
+- A self-documenting `sectum.yaml.example` at the repo root: every block the
+  config schema accepts (scenario, workdir, all eight adapter families with
+  per-`kind` placeholders for the live backends, evidence chain, security/
+  manifest-at-rest, detection providers and semantic threshold) with copy-and-
+  edit annotations. Validated to load cleanly under `sectum.config.load_config`.
+  The README quickstart now points at it.
 - The user dimension reaches the memory family (ADR-0008). `MemoryAdapter.remember`/
   `recall` take a keyword-only `user`; the runner threads it; and `FakeMemory`
   tags each entry with its writer and gains a `user_scoped` knob (reporting
