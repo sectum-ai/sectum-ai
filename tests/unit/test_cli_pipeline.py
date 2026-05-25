@@ -339,3 +339,41 @@ def test_probe_single_probe_filter_runs_serially_under_max_concurrency(tmp_path:
     assert result.exit_code == 2
     run = json.loads((tmp_path / "run.json").read_text())
     assert set(run["probe_versions"]) == {"agent-tool-hijack"}
+
+
+def test_probe_output_json_emits_a_parseable_summary_on_stdout(tmp_path: Path) -> None:
+    """--output json emits a single JSON object on stdout that a CI pipeline can parse."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    # the leaky demo still exits 2 on confirmed findings; --output toggles the rendering
+    assert result.exit_code == 2
+    summary = json.loads(result.stdout)
+    assert summary["run_id"].startswith("run-")
+    # the full suite + the KV timing probe = 10 entries
+    assert summary["probe_count"] == 10
+    assert summary["confirmed_findings"] > 0
+    assert summary["retrieval_pivot_rate"] is not None
+    assert summary["run_path"].endswith("run.json")
+    # the per-probe count must agree with run.json's metrics block
+    run = json.loads(Path(summary["run_path"]).read_text())
+    assert summary["per_probe_findings"] == run["metrics"]["per_probe_findings"]
+
+
+def test_probe_output_text_is_the_default(tmp_path: Path) -> None:
+    """No --output flag still produces the human-readable rendering, not JSON."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 2
+    # the human-readable rendering is not parseable as a single JSON object
+    assert "ran " in result.stdout
+    assert "run recorded -> " in result.stdout
+
+
+def test_probe_output_json_rejects_an_unknown_value(tmp_path: Path) -> None:
+    """Typer/Click rejects an --output value outside the enum and exits non-zero."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "yaml"])
+    # invalid enum value -> Click usage error (exit 2 from Click's parser)
+    assert result.exit_code != 0
+    # nothing on disk gets written because the parser rejected the args before the command body
+    assert not (tmp_path / "run.json").exists()

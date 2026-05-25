@@ -37,3 +37,19 @@ uv run sectum verify .sectum/evidence.json
 
 Exit codes: `0` no confirmed leaks; `2` confirmed leaks present; `3` config or
 adapter error; `4` evidence verification failure.
+
+## Read the probe summary from CI
+
+`sectum probe` defaults to a human-readable summary. Pass `--output json` to
+emit a single JSON object on stdout instead — convenient for CI dashboards
+that want to act on the headline metrics without scraping prose:
+
+```sh
+uv run sectum probe --workdir .sectum --output json | jq '.retrieval_pivot_rate'
+```
+
+The summary carries the `run_id`, the probe count, the confirmed-finding
+count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
+when Class 2 swept models), the per-probe finding counts, and a `run_path`
+pointer to the full `run.json` on disk. Errors still print to stderr and
+exit codes are unchanged.

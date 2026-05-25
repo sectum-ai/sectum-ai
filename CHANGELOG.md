@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `sectum probe --output json` emits a single machine-parseable JSON object on
+  stdout (the run id, the probe count, the confirmed-finding count, the
+  Retrieval-Pivot Rate, the per-probe counts, and a `run_path` pointer) so CI
+  pipelines and dashboards can act on the headline metrics without scraping
+  the human-readable rendering. `--output text` is the unchanged default.
 - Phase 0 — repository foundation: a `uv` workspace with five packages
   (`sectum-ai`, `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
   `sectum-ai-evidence`).
