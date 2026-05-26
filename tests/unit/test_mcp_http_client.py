@@ -54,7 +54,7 @@ def patched(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         async with create_client_server_memory_streams() as (client_streams, server_streams):
             client_read, client_write = client_streams
             server_read, server_write = server_streams
-            server = _server()._mcp_server  # type: ignore[reportPrivateUsage]
+            server = _server()._mcp_server
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
                     lambda: server.run(

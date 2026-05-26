@@ -399,9 +399,7 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         headers = _str_dict(extras, "headers")
         timeout = _float(extras, "timeout", 30.0)
         tenant_argument = _optional_str(extras, "tenant_argument")
-        return HttpMCPClient(
-            url, headers=headers, timeout=timeout, tenant_argument=tenant_argument
-        )
+        return HttpMCPClient(url, headers=headers, timeout=timeout, tenant_argument=tenant_argument)
     raise _unsupported("mcp", config.kind)
 
 
