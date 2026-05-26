@@ -89,13 +89,13 @@ jobs:
       contents: read
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: distributions
           path: dist/
 
       - name: Download SBOMs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sboms
           path: dist/sbom/
@@ -159,7 +159,7 @@ jobs:
       id-token: write
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: distributions
           path: dist/
@@ -192,13 +192,13 @@ jobs:
       # the SBOMs and Sigstore bundles, which together are the integrity layer
       # a verifier needs.
       - name: Download SBOMs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sboms
           path: dist/sbom/
 
       - name: Download Sigstore bundles
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: signatures
           path: dist/signatures/
