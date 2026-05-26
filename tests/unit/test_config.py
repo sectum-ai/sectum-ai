@@ -366,3 +366,88 @@ def test_build_agent_http_requires_a_url() -> None:
 def test_build_agent_http_rejects_a_non_number_timeout() -> None:
     with pytest.raises(ConfigError, match="must be a number"):
         build_agent(AdapterConfig(kind="http", url="http://x", timeout="five"))
+
+
+def test_build_agent_langgraph_imports_and_invokes_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: langgraph`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns any object exposing ``invoke(input, config)``; the
+    resolver calls it once and hands the graph to ``LangGraphAgent``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.agent.langgraph import LangGraphAgent
+
+    class _StubGraph:
+        def invoke(self, input: object, config: object | None = None) -> dict[str, object]:
+            return {"messages": []}
+
+    module = types.ModuleType("sectum_test_langgraph_factory")
+    module.make_graph = lambda: _StubGraph()  # type: ignore[attr-defined]
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_langgraph_factory", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="langgraph",
+            factory="sectum_test_langgraph_factory:make_graph",
+        )
+    )
+    assert isinstance(adapter, LangGraphAgent)
+
+
+def test_build_agent_langgraph_requires_a_factory() -> None:
+    with pytest.raises(ConfigError, match="'factory' is required"):
+        build_agent(AdapterConfig(kind="langgraph"))
+
+
+def test_build_agent_langgraph_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_agent(AdapterConfig(kind="langgraph", factory="not_dotted"))
+
+
+def test_build_agent_langgraph_rejects_a_missing_factory_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_langgraph_factory_missing")
+    monkeypatch.setitem(sys.modules, "sectum_test_langgraph_factory_missing", module)
+    with pytest.raises(ConfigError, match="not exported"):
+        build_agent(
+            AdapterConfig(
+                kind="langgraph",
+                factory="sectum_test_langgraph_factory_missing:nope",
+            )
+        )
+
+
+def test_build_agent_langgraph_rejects_a_non_callable_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_langgraph_factory_non_callable")
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(
+        sys.modules, "sectum_test_langgraph_factory_non_callable", module
+    )
+    with pytest.raises(ConfigError, match="not callable"):
+        build_agent(
+            AdapterConfig(
+                kind="langgraph",
+                factory="sectum_test_langgraph_factory_non_callable:NOT_A_CALLABLE",
+            )
+        )
+
+
+def test_build_agent_langgraph_rejects_an_unimportable_module() -> None:
+    with pytest.raises(ConfigError, match="cannot be imported"):
+        build_agent(
+            AdapterConfig(kind="langgraph", factory="no_such_module_anywhere:thing")
+        )

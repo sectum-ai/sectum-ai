@@ -31,6 +31,7 @@ langfuse = ["langfuse>=3,<4"]
 langsmith = ["langsmith>=0.1"]
 mcp = ["mcp>=1"]
 pinecone = ["pinecone>=5"]
+langgraph = ["langgraph>=0.2", "langchain-core>=0.3"]
 
 [project.urls]
 Homepage = "https://sectum.ai"
