@@ -10,7 +10,7 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
-for observability, ``http`` for RAG and agents, ``stdio`` for MCP); an
+for observability, ``http`` for RAG and agents, ``stdio``/``http`` for MCP); an
 unsupported kind raises ``ConfigError`` with a clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
@@ -392,6 +392,16 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         args = [str(item) for item in raw_args]
         tenant_argument = _optional_str(extras, "tenant_argument")
         return StdioMCPClient(command, args, tenant_argument=tenant_argument)
+    if config.kind == "http":
+        from sectum.adapters.mcp.http import HttpMCPClient
+
+        url = _required_str(extras, "url")
+        headers = _str_dict(extras, "headers")
+        timeout = _float(extras, "timeout", 30.0)
+        tenant_argument = _optional_str(extras, "tenant_argument")
+        return HttpMCPClient(
+            url, headers=headers, timeout=timeout, tenant_argument=tenant_argument
+        )
     raise _unsupported("mcp", config.kind)
 
 
