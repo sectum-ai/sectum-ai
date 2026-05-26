@@ -8,58 +8,232 @@ on:
 permissions:
   contents: read
 
-# Builds the workspace distributions, generates a CycloneDX SBOM, and signs the
-# artifacts with Sigstore (keyless, via the workflow's OIDC identity) - the
-# supply-chain integrity the engineering spec, section 17, calls for. PyPI
-# trusted publishing is added when the project first publishes.
+# Cuts a signed release of all five workspace packages on a `v*` tag push:
+#   build  -> sbom  -> sign  -> publish-pypi  -> github-release
+#
+# The trust model is keyless and tokenless. Sigstore (Fulcio + Rekor) signs
+# every distribution and its SBOM with a short-lived certificate bound to the
+# workflow's OIDC identity, and PyPI publishes via Trusted Publisher (OIDC) -
+# the repository keeps no static publishing secrets. The supply-chain integrity
+# the engineering spec, section 17, calls for.
+#
+# `concurrency` is keyed per tag with `cancel-in-progress: false`: a release is
+# never killed mid-publish, and two tags can advance independently.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
-    name: Build distributions and SBOM
+    name: Build distributions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # Tag-triggered runs must publish exactly the version a human approved.
+      # `workflow_dispatch` carries no tag and skips this gate; the build still
+      # runs, but the publish-pypi job below refuses to ship a manual run.
+      - name: Verify pyproject.toml versions match the tag
+        if: github.event_name == 'push'
+        run: uv run python scripts/check_release_version.py "${GITHUB_REF_NAME}"
 
       - name: Build all workspace packages
         run: uv build --all-packages
 
-      - name: Generate CycloneDX SBOM
-        run: scripts/generate_sbom.sh dist/sbom.cdx.json
-
-      - name: Upload distributions and SBOM
+      - name: Upload distributions
         uses: actions/upload-artifact@v7
         with:
-          name: dist
+          name: distributions
           path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  sbom:
+    name: Generate per-package SBOMs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # One CycloneDX SBOM per published distribution so a consumer auditing
+      # only `sectum-ai-spec` (for instance) sees that distribution's resolved
+      # tree, not the union of every package's tree.
+      - name: Generate per-package CycloneDX SBOMs
+        run: scripts/generate_package_sboms.sh dist/sbom
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v7
+        with:
+          name: sboms
+          path: dist/sbom/
+          if-no-files-found: error
+          retention-days: 7
 
   sign:
     name: Sign artifacts (Sigstore keyless)
-    needs: build
+    needs: [build, sbom]
     runs-on: ubuntu-latest
     permissions:
       # The OIDC token Sigstore exchanges for a short-lived Fulcio certificate;
-      # no long-lived signing key is stored.
+      # no long-lived signing key is stored. `contents: read` is the floor.
       id-token: write
       contents: read
     steps:
-      - name: Download distributions and SBOM
+      - name: Download distributions
         uses: actions/download-artifact@v7
         with:
-          name: dist
+          name: distributions
           path: dist/
 
-      - name: Sign with Sigstore
-        uses: sigstore/gh-action-sigstore-python@v3.3.0
+      - name: Download SBOMs
+        uses: actions/download-artifact@v7
         with:
-          inputs: >-
-            ./dist/*.whl
-            ./dist/*.tar.gz
-            ./dist/sbom.cdx.json
+          name: sboms
+          path: dist/sbom/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      # Cosign 2.x defaults to keyless OIDC signing - no `COSIGN_EXPERIMENTAL`
+      # toggle needed. The OIDC token is minted automatically by the runner
+      # because the job declares `id-token: write` above.
+      #
+      # `cosign sign-blob --bundle` produces a `.sigstore` bundle that carries
+      # the Fulcio certificate, the signature, and the Rekor inclusion proof -
+      # everything `cosign verify-blob --bundle <name>.sigstore <file>` needs
+      # to verify the artifact offline, once the signer identity is pinned
+      # (see docs/RELEASING.md for the exact invocation a consumer runs).
+      - name: Sign distributions and SBOMs (keyless OIDC)
+        run: |
+          set -euo pipefail
+          mkdir -p dist/signatures
+
+          # Sign every sdist, wheel, and SBOM. The `--yes` flag accepts the
+          # transparency-log warning non-interactively.
+          shopt -s nullglob
+          for artifact in dist/*.whl dist/*.tar.gz dist/sbom/*.cdx.json; do
+            base="$(basename "$artifact")"
+            cosign sign-blob \
+              --yes \
+              --bundle "dist/signatures/${base}.sigstore" \
+              "$artifact"
+          done
+          shopt -u nullglob
+
+          echo "signed artifacts:"
+          ls -la dist/signatures/
 
       - name: Upload Sigstore bundles
         uses: actions/upload-artifact@v7
         with:
-          name: sigstore-bundles
-          path: ./dist/*.sigstore.json
+          name: signatures
+          path: dist/signatures/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI (Trusted Publisher)
+    needs: sign
+    # Manual `workflow_dispatch` runs build and sign for inspection but never
+    # publish; PyPI publishing only fires on a real tag push.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/sectum-ai/
+    permissions:
+      # PyPI Trusted Publisher exchanges this OIDC token for a one-shot upload
+      # credential scoped to the project. No `secrets.PYPI_API_TOKEN` exists in
+      # this repository - the credential story is OIDC end to end.
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish sdists and wheels
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # The default packages-dir is `dist/`; named here so a future drift
+          # in the action's default is harmless.
+          packages-dir: dist/
+          # Verbose logs make a release postmortem easier; nothing in them is
+          # sensitive (the upload is OIDC-authenticated, not token-printed).
+          verbose: true
+
+  github-release:
+    name: Publish GitHub Release
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      # `softprops/action-gh-release` needs write access to create the release
+      # and upload assets to it; nothing else is touched in the repository.
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # The wheels and sdists live on PyPI; the GitHub Release only attaches
+      # the SBOMs and Sigstore bundles, which together are the integrity layer
+      # a verifier needs.
+      - name: Download SBOMs
+        uses: actions/download-artifact@v7
+        with:
+          name: sboms
+          path: dist/sbom/
+
+      - name: Download Sigstore bundles
+        uses: actions/download-artifact@v7
+        with:
+          name: signatures
+          path: dist/signatures/
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          uv run python scripts/extract_changelog.py "${GITHUB_REF_NAME}" \
+            > release-notes.md
+          echo "---"
+          head -40 release-notes.md
+
+      # A pre-release tag (`v0.1.0-rc.1`, `v0.1.0-alpha.2`, `v0.1.0-beta.3`)
+      # is published as a pre-release on GitHub so users don't pick it up as
+      # the "latest" release. Final tags publish as the latest release.
+      - name: Mark as pre-release if the tag is one
+        id: prerelease
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "$tag" =~ -(a|b|rc|alpha|beta) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          fail_on_unmatched_files: true
+          # The PyPI artifacts (wheels and sdists) live on PyPI; the GitHub
+          # Release attaches the SBOMs and Sigstore bundles so an auditor can
+          # verify a release without scraping PyPI's JSON API.
+          files: |
+            dist/sbom/*.cdx.json
+            dist/signatures/*.sigstore

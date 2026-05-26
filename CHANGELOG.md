@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Retrieval-Pivot Rate, the per-probe counts, and a `run_path` pointer) so CI
   pipelines and dashboards can act on the headline metrics without scraping
   the human-readable rendering. `--output text` is the unchanged default.
+- The signed release pipeline (`.github/workflows/release.yml`): a `v*` tag
+  push builds the five workspace distributions, generates a CycloneDX SBOM per
+  distribution, signs every sdist, wheel, and SBOM with Sigstore (keyless,
+  OIDC), publishes to PyPI via Trusted Publisher (OIDC), and creates a GitHub
+  Release with the matching CHANGELOG section as its body and the SBOMs and
+  `.sigstore` bundles as assets. A `pypi` environment fronts the publish step
+  so the maintainer's approval is the final human gate; no static PyPI token
+  lives in the repository. `scripts/check_release_version.py` blocks a release
+  whose tag and `pyproject.toml` versions drift, and
+  `scripts/extract_changelog.py` lifts the matching CHANGELOG section (with an
+  `Unreleased` fallback for pre-release tags). `scripts/generate_package_sboms.sh`
+  emits one SBOM per distribution. `docs/RELEASING.md` is the operator's
+  reference (the PyPI Trusted Publisher setup, the per-release checklist, how
+  to verify an artifact with `cosign verify-blob`, and the yank procedure);
+  `SECURITY.md` and `CONTRIBUTING.md` cross-link the trust model.
 - Phase 0 — repository foundation: a `uv` workspace with five packages
   (`sectum-ai`, `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
   `sectum-ai-evidence`).

@@ -72,6 +72,23 @@ section is the source of truth for that configuration:
 Significant decisions are recorded as ADRs in [`docs/adr/`](docs/adr/). If a
 change involves an architectural choice, add or update an ADR in the same PR.
 
+## Trust policy: how releases are signed
+
+Sectum AI ships its five packages with **OIDC end to end** — no static
+publishing token lives in this repository:
+
+- **PyPI** publishes via a Trusted Publisher (OIDC) bound to this repository's
+  `release.yml` workflow.
+- **Sigstore** signs every sdist, wheel, and CycloneDX SBOM with a short-lived
+  Fulcio certificate issued against the workflow's OIDC identity, producing a
+  `.sigstore` bundle that anchors to the public Rekor transparency log.
+- The `.sigstore` bundles and SBOMs are attached to the matching **GitHub
+  Release** so an auditor can verify a release without scraping PyPI.
+
+A consumer verifies a downloaded artifact with `cosign verify-blob` against the
+release workflow's identity. The exact recipe and the operator's release
+procedure are in [`docs/RELEASING.md`](docs/RELEASING.md).
+
 ## Reporting security issues
 
 Do not open public issues for vulnerabilities — see [SECURITY.md](SECURITY.md).
