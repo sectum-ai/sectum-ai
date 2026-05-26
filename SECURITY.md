@@ -53,6 +53,25 @@ Out of scope: third-party dependencies (report those upstream), and any system
 that Sectum AI is *pointed at* during a verification run — those belong to their
 own owners and operators.
 
+## Release artifact integrity
+
+The canonical, signed source of every Sectum AI distribution is the official
+PyPI release plus its matching GitHub Release. Both are produced by the
+[release pipeline](docs/RELEASING.md):
+
+- **PyPI** publishes via Trusted Publisher (OIDC). The repository holds no
+  long-lived publishing token.
+- Every sdist, wheel, and CycloneDX SBOM is signed by Sigstore using the
+  release workflow's short-lived OIDC identity. The `.sigstore` bundles are
+  attached to the GitHub Release for the same tag.
+- A consumer verifies an artifact with `cosign verify-blob` against the
+  workflow identity; the exact recipe is in
+  [docs/RELEASING.md](docs/RELEASING.md#verifying-a-released-artifact).
+
+A distribution that does not have a matching Sigstore bundle on the GitHub
+Release for its tag is not an official Sectum AI release. Report any such
+artifact to `security@sectum.ai`.
+
 ## Safe harbor
 
 We will not pursue or support legal action against good-faith security research
