@@ -84,6 +84,9 @@ adapters:
   mcp:
     # kind: stdio              # stdio Model Context Protocol server
     #   command: ["uvx", "your-mcp-server"]
+    # kind: http               # streamable-HTTP MCP server
+    #   url: https://mcp.example.com/mcp
+    #   tenant_argument: tenant
     kind: fake
 
   model:
