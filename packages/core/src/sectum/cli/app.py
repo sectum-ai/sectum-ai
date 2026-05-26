@@ -8,6 +8,7 @@ import functools
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -93,6 +94,19 @@ __version__ = "0.0.0"
 
 _DEFAULT_WORKDIR = Path(".sectum")
 _DEFAULT_CONFIG = Path("sectum.yaml")
+
+
+class OutputFormat(StrEnum):
+    """Output rendering for commands that report run-level results to stdout.
+
+    `text` is the default human-readable rendering. `json` emits a single
+    machine-parseable JSON object so CI pipelines and scripts can read the
+    summary off stdout without scraping prose. Error messages stay on stderr
+    in either mode, and exit codes are unchanged.
+    """
+
+    TEXT = "text"
+    JSON = "json"
 
 
 def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
@@ -399,6 +413,17 @@ def probe(
             ),
         ),
     ] = 1,
+    output: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--output",
+            help=(
+                "Render the run summary on stdout. `text` is human-readable (default); "
+                "`json` emits a single machine-parseable object for CI pipelines."
+            ),
+            case_sensitive=False,
+        ),
+    ] = OutputFormat.TEXT,
 ) -> None:
     """Run the probe suite against the configured stack and record the findings."""
     if max_concurrency < 1:
@@ -502,13 +527,29 @@ def probe(
     path = effective_workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
     probe_count = len(suite) + (1 if run_kv_timing else 0)
-    plural = "" if probe_count == 1 else "s"
-    typer.echo(f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings")
-    if run.metrics.retrieval_pivot_rate is not None:
-        typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
-    for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
-        typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
-    typer.echo(f"run recorded -> {path}")
+    if output is OutputFormat.JSON:
+        # Single-shot JSON object so the consumer can `jq .` it. The full run
+        # is still on disk at `run_path`; this is the summary CI dashboards read.
+        summary = {
+            "run_id": run.run_id,
+            "probe_count": probe_count,
+            "confirmed_findings": len(confirmed),
+            "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
+            "retrieval_pivot_rate_by_model": run.metrics.retrieval_pivot_rate_by_model,
+            "per_probe_findings": run.metrics.per_probe_findings,
+            "run_path": str(path),
+        }
+        typer.echo(json.dumps(summary, indent=2))
+    else:
+        plural = "" if probe_count == 1 else "s"
+        typer.echo(
+            f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings"
+        )
+        if run.metrics.retrieval_pivot_rate is not None:
+            typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
+        for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
+            typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
+        typer.echo(f"run recorded -> {path}")
     if confirmed:
         raise typer.Exit(code=2)
 
