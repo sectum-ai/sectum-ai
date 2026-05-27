@@ -54,31 +54,27 @@ cd "$(dirname "$0")"
 # Fresh substrate each recording.
 rm -rf .sectum
 
-# Use a fixed seed so the demo is reproducible across runs.
-config=$(mktemp)
-cat > "$config" <<'YAML'
-scenario:
-  seed: 2026
-  corpus_profile: demo
-workdir: .sectum
-# Default leaky-fakes substrate; the cast is supposed to show real
-# findings, not a clean run.
-YAML
-
-# The narrative script asciinema records. Each line lands as a typed
-# command in the cast. Comments are visible to the viewer; commands
-# are run via the asciinema-recorded shell.
+# The recording uses the built-in leaky-fakes defaults — the same path
+# `examples/retrieval-pivot/run.sh` drives. Earlier revisions of this
+# script supplied a custom `sectum.yaml`; that turned out to override
+# the substrate flags that make the demo *leaky*, and the resulting
+# cast showed 0 findings — directly contradicting the title. The
+# in-memory leaky fakes are what produce the 264-finding pack the
+# website promises; do not re-introduce a config override here without
+# also reproducing the run.sh output.
 cast=demo.cast
 asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --command "bash -c '
   # === 1. Seed a 4-tenant marker substrate (Acme, Globex, Initech, Hooli)
-  sectum seed --workdir .sectum --config $config
+  sectum seed --workdir .sectum
   echo
-  # === 2. Run the cross-tenant probe suite. The default substrate is
-  #        deliberately leaky so the headline RPR shows real findings.
-  sectum probe --workdir .sectum --config $config --output json
+  # === 2. Run the cross-tenant probe suite. The default in-memory
+  #        substrate is deliberately leaky so the headline RPR shows
+  #        real findings; sectum probe exits 2 when it confirms
+  #        cross-tenant leaks, so tolerate the non-zero exit.
+  sectum probe --workdir .sectum --output json || true
   echo
   # === 3. Build the tamper-evident evidence pack (JSON + PDF + in-toto envelope).
-  sectum report --workdir .sectum --config $config
+  sectum report --workdir .sectum
   echo
   # === 4. Independently verify the pack with no Sectum installation trust.
   sectum verify .sectum/evidence.json
@@ -86,9 +82,6 @@ asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --co
   # === 5. Inspect what landed on disk.
   ls -lh .sectum/*.json .sectum/*.pdf
 '" "$cast"
-
-# Tidy.
-rm -f "$config"
 
 echo
 echo "wrote $cast ($(wc -c < "$cast" | tr -d ' ') bytes)"
