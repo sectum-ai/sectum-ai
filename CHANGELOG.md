@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live Anthropic native tool-use agent adapter
+  (`packages/adapters/src/sectum/adapters/agent/anthropic_tooluse.py`):
+  an `AnthropicToolUseAgent` that drives the Anthropic Messages API
+  in native tool-use mode with one conversation history cached per
+  tenant; each `run` posts a user message prefixed with
+  `[tenant:<hex>]` and the underlying loop calls `messages.create`,
+  executes each `tool_use` block via the python callable carried on
+  the tool spec's `__sectum_callable__` sidecar, appends a
+  `tool_result` user message, and repeats until
+  `stop_reason: end_turn`. The adapter caches one conversation
+  per tenant and rolls back the user message on a failed turn so a
+  retry sees a clean history. The `anthropic` package is imported
+  only on the live `connect` path; the adapter module + 10
+  mock-backed unit tests in
+  `tests/unit/test_anthropic_tooluse_agent.py` need no extra
+  dependency. The live backend lives in
+  `packages/adapters/src/sectum/adapters/agent/_anthropic_tooluse_live.py`
+  and is exercised end-to-end only when the operator installs the
+  optional extras group
+  (`pip install sectum-ai-adapters[anthropic-tooluse]`). The CLI
+  resolver accepts `kind: anthropic-tooluse` under `agent` via a
+  `factory: module.path:callable` returning a client implementing
+  the `_AnthropicClient` protocol; `docs/configuration.md` and
+  `sectum.yaml.example` are updated to match. Brings the live
+  agent-adapter family to **six** (http, langgraph, autogen,
+  crewai, openai-assistants, anthropic-tooluse) — the full v1 set
+  spec §11 names.
 - A live OpenAI Assistants agent adapter
   (`packages/adapters/src/sectum/adapters/agent/openai_assistants.py`):
   an `OpenAIAssistantsAgent` that drives an OpenAI Assistant with one

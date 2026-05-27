@@ -11,9 +11,9 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
 for observability, ``http`` for RAG,
-``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants`` for
-agents, ``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError``
-with a clear message.
+``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants``/
+``anthropic-tooluse`` for agents, ``stdio``/``http`` for MCP); an unsupported
+kind raises ``ConfigError`` with a clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -632,6 +632,36 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
                 "assistant_id; it must be the OpenAI Assistant's id"
             )
         return OpenAIAssistantsAgent(client, assistant_id)
+    if config.kind == "anthropic-tooluse":
+        # A live Anthropic native tool-use agent is wired in code (the tool
+        # specs are Python objects carrying a ``__sectum_callable__`` sidecar
+        # so the backend can execute them in the tool-use loop). The resolver
+        # expects a client-factory callable referenced by
+        # ``module.path:callable`` that returns an object implementing the
+        # ``_AnthropicClient`` protocol the adapter consumes — typically the
+        # ``LiveAnthropicClient`` built by ``AnthropicToolUseAgent.connect``.
+        from importlib import import_module
+
+        from sectum.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"anthropic-tooluse 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"anthropic-tooluse factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"anthropic-tooluse factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"anthropic-tooluse factory {factory_path!r} is not callable")
+        return AnthropicToolUseAgent(factory())
     raise _unsupported("agent", config.kind)
 
 

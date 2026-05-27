@@ -182,6 +182,25 @@ wheels = [
 ]
 
 [[package]]
+name = "anthropic"
+version = "0.104.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "docstring-parser" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/22/c7/7a655b948916f777354648ce979f68b94d5b8dbdb5f61fed1f37fad9378c/anthropic-0.104.1.tar.gz", hash = "sha256:17362b6c45f527afcc9b0fdf62011ffd359726ab2ebcb1978ea0cc41bd8d8d40", size = 850081, upload-time = "2026-05-22T15:36:57.432Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/12/d9ab42790494d7c428391a46cd28492395566a6a8ccb138d681978594455/anthropic-0.104.1-py3-none-any.whl", hash = "sha256:35c8cb456f5a4405aafe1f10f03f6fcc54fa51fa8ec01d655cc4b437d120e9b7", size = 832996, upload-time = "2026-05-22T15:36:59.519Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4008,6 +4027,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+anthropic-tooluse = [
+    { name = "anthropic" },
+]
 autogen = [
     { name = "pyautogen" },
 ]
@@ -4058,6 +4080,7 @@ weaviate = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'huggingface'", specifier = ">=1" },
+    { name = "anthropic", marker = "extra == 'anthropic-tooluse'", specifier = ">=0.40" },
     { name = "arize-phoenix-client", marker = "extra == 'phoenix'", specifier = ">=2" },
     { name = "chromadb-client", marker = "extra == 'chroma'", specifier = ">=0.5" },
     { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
@@ -4077,7 +4100,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.45" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
 ]
-provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants"]
+provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants", "anthropic-tooluse"]
 
 [[package]]
 name = "sectum-ai-evidence"
