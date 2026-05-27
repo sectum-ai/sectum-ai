@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-26
+
+First public release. Sectum AI ships as a five-package `uv` workspace
+(`sectum-ai`, `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
+`sectum-ai-evidence`), Apache-2.0 licensed, with a tamper-evident evidence
+chain anyone can verify with `sectum verify` and no Sectum-side trust.
+What landed in 0.1.0 is the work that closed the phase-0 through phase-5
+build plan; the rest of this section is the per-feature log.
+
 ### Added
 
 - A live LangGraph agent adapter (`packages/adapters/src/sectum/adapters/agent/langgraph.py`):

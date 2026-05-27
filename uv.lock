@@ -2535,7 +2535,7 @@ wheels = [
 
 [[package]]
 name = "sectum-ai"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "pyyaml" },
@@ -2565,7 +2565,7 @@ provides-extras = ["encryption"]
 
 [[package]]
 name = "sectum-ai-adapters"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/adapters" }
 dependencies = [
     { name = "sectum-ai-spec" },
@@ -2623,7 +2623,7 @@ provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfu
 
 [[package]]
 name = "sectum-ai-evidence"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/evidence" }
 dependencies = [
     { name = "reportlab" },
@@ -2649,7 +2649,7 @@ provides-extras = ["rfc3161", "rekor"]
 
 [[package]]
 name = "sectum-ai-probes"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/probes" }
 dependencies = [
     { name = "sectum-ai-spec" },
@@ -2660,7 +2660,7 @@ requires-dist = [{ name = "sectum-ai-spec", editable = "packages/spec" }]
 
 [[package]]
 name = "sectum-ai-spec"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/spec" }
 dependencies = [
     { name = "pydantic" },
