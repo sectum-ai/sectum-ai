@@ -108,6 +108,16 @@ adapters:
     #                          # adapter built by the caller. Requires the optional
     #                          # `openai-assistants` extra:
     #                          # `pip install sectum-ai-adapters[openai-assistants]`.
+    # kind: anthropic-tooluse  # the Anthropic Messages API in native tool-use mode
+    #                          # with one conversation history cached per tenant; each
+    #                          # per-tenant user message is prefixed with [tenant:<hex>]
+    #                          # and the loop runs to `stop_reason: end_turn` per turn.
+    #                          # construct via `AnthropicToolUseAgent.connect(model, tools)`
+    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # config validator accepts an anthropic-tooluse adapter
+    #                          # built by the caller. Requires the optional
+    #                          # `anthropic-tooluse` extra:
+    #                          # `pip install sectum-ai-adapters[anthropic-tooluse]`.
     kind: fake
 
   mcp:
