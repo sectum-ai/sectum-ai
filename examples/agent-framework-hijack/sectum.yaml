@@ -1,0 +1,18 @@
+# examples/agent-framework-hijack/sectum.yaml
+#
+# Drives the AgentFrameworkHijackProbe against the in-memory FakeAgent with
+# both leak knobs on (confused-deputy + tool-call passthrough), so the demo
+# reproduces the cross-tenant findings the probe is built to catch without
+# requiring a live agent SDK or credentials.
+
+scenario:
+  seed: 2026
+  corpus_profile: demo
+
+workdir: .
+
+adapters:
+  agent:
+    kind: fake
+    confused_deputy: true
+    tool_call_passthrough: true

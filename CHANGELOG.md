@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A runnable Class 7 walkthrough for the new probe in
+  `examples/agent-framework-hijack/` (README + `run.sh` +
+  `sectum.yaml`). The script seeds a four-tenant substrate, runs
+  `sectum probe --probe agent-framework-hijack` against the in-memory
+  `FakeAgent` with both leak knobs on, assembles a tamper-evident
+  evidence pack, and verifies it — the same canonical CLI flow the
+  other examples follow. Demonstrates 24 confirmed cross-tenant
+  findings on the demo agent. README documents both ends of the
+  Class 7 surface (the MCP example for the server end, this example
+  for the agent caller end) and points at the existing
+  `examples/agent-tool-hijack/factories.py` for swapping in a live
+  LangGraph / AutoGen / CrewAI / OpenAI Assistants / Anthropic
+  tool-use caller. Wired into the e2e example suite
+  (`tests/e2e/test_examples.py`).
 - A direct agent-framework Class 7 probe, `AgentFrameworkHijackProbe`
   (`packages/probes/src/sectum/probes/agent_framework_hijack/`). Where the
   existing `AgentToolHijackProbe` verifies the MCP server end of an
