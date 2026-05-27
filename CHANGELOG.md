@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Five new example walkthroughs filling in the rest of the attack
+  catalog: `examples/tenant-boundary-fetch/` (Class 1, the BOLA-style
+  cross-tenant doc-id fetch), `examples/rag-poisoning/` (Class 3,
+  cross-tenant adversarial poisoning of a shared index),
+  `examples/semantic-cache/` (Class 4, prompt-cache contamination on
+  a non-tenant-keyed cache), `examples/embedding-inversion/` (Class 6,
+  nearest-neighbour reconstruction across a shared vector index),
+  and `examples/ikea-extraction/` (Class 10, Silent-Leaks-style
+  multi-turn benign extraction). Each follows the canonical CLI flow
+  (seed → probe → report → verify), names the standard remediation
+  in the README, and points at the live adapter shipped in v0.1.0
+  (Pinecone / pgvector / Weaviate / Chroma / Redis) as the swap
+  path for a real-stack probe. Combined with the previously-shipped
+  examples (retrieval-pivot, erasure-attestation, mcp-tenant-boundary,
+  agent-tool-hijack, memory-contamination, kv-cache-timing,
+  lora-cross-tenant), the OSS now has a runnable walkthrough for
+  every attack class in the catalog (Classes 1–11). All five were
+  smoke-tested on a clean substrate and added to the e2e
+  `_EXAMPLES` parametrized tuple.
 - A new `examples/lora-cross-tenant/` walkthrough that reproduces Attack
   Class 9 — cross-tenant LoRA / adapter influence — end to end. The
   `lora-cross-tenant` probe trains each tenant's adapter on a small
