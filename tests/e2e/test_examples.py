@@ -27,6 +27,7 @@ _EXAMPLES = (
     "erasure-attestation",
     "mcp-tenant-boundary",
     "agent-tool-hijack",
+    "memory-contamination",
 )
 
 
