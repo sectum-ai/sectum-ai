@@ -373,6 +373,27 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
             prefix_cache=_bool(extras, "prefix_cache", False),
             soft_delete=_bool(extras, "soft_delete", False),
         )
+    if config.kind == "huggingface":
+        # A live HuggingFace + PEFT LoRA model. Like the agent live kinds,
+        # ``connect`` imports the heavy transformers/peft/torch stack only
+        # when this branch fires; an operator who set ``kind: huggingface``
+        # without the extras group sees a typed AdapterError at construction
+        # rather than an opaque ImportError mid-run.
+        from sectum.adapters.model.huggingface import HuggingFaceLoraModel
+
+        base_model_id = _required_str(extras, "base_model_id")
+        adapters_dir = _required_str(extras, "adapters_dir")
+        return HuggingFaceLoraModel.connect(
+            base_model_id=base_model_id,
+            adapters_dir=adapters_dir,
+            adapter_bleed=_bool(extras, "adapter_bleed", False),
+            user_scoped=_bool(extras, "user_scoped", False),
+            soft_delete=_bool(extras, "soft_delete", False),
+            lora_rank=_int(extras, "lora_rank", 8),
+            lora_alpha=_int(extras, "lora_alpha", 16),
+            train_epochs=_int(extras, "train_epochs", 1),
+            device_map=_str(extras, "device_map", "auto"),
+        )
     raise _unsupported("model", config.kind)
 
 
