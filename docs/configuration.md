@@ -79,8 +79,7 @@ consumed by the CLI.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `adapter_bleed: bool = false`, `prefix_cache: bool = false` | In-memory model. `adapter_bleed` reproduces Class 9; `prefix_cache` reproduces Class 5. |
-
-No live model adapter is wired into the CLI resolver yet.
+| `huggingface` | `base_model_id: str` *(required)*, `adapters_dir: str` *(required)*, `adapter_bleed: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false`, `lora_rank: int = 8`, `lora_alpha: int = 16`, `train_epochs: int = 1`, `device_map: str = "auto"` | `HuggingFaceLoraModel` — a HuggingFace causal LM with per-tenant PEFT LoRA adapters managed on disk. The `adapter_bleed` knob merges every tenant's LoRA into every inference (Class 9). Requires the optional `huggingface` extra: `pip install sectum-ai-adapters[huggingface]`. |
 
 ### `mcp`
 

@@ -154,6 +154,24 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# transformers / peft / torch / accelerate are optional, live-only
+# dependencies; treat them as opaque so the adapter type-checks without
+# them installed (the adapter's API is fully typed; the live PEFT backend
+# only loads them on the connect path).
+module = [
+    "transformers",
+    "transformers.*",
+    "peft",
+    "peft.*",
+    "torch",
+    "torch.*",
+    "accelerate",
+    "accelerate.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # rfc3161-client ships a Rust extension whose stubs expose broad return types;
 # treat it as opaque - the Rfc3161Timestamper's own API is fully typed.
 module = ["rfc3161_client", "rfc3161_client.*"]

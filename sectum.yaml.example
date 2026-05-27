@@ -111,8 +111,16 @@ adapters:
     kind: fake
 
   model:
-    # No live kinds yet — the fake is the substrate the LoRA / KV-cache-timing
-    # probes exercise in CI; a real provider lands as a follow-on.
+    # kind: huggingface       # a HuggingFace causal LM with per-tenant PEFT
+    #                         # LoRA adapters managed on disk under `adapters_dir`.
+    #                         # Requires the optional `huggingface` extras:
+    #                         # `pip install sectum-ai-adapters[huggingface]`.
+    #   base_model_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    #   adapters_dir: ./.sectum/lora-adapters
+    #   lora_rank: 8
+    #   lora_alpha: 16
+    #   train_epochs: 1
+    #   device_map: auto
     kind: fake
 
   memory:

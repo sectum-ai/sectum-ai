@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live HuggingFace + PEFT LoRA model adapter
+  (`packages/adapters/src/sectum/adapters/model/huggingface.py`): a
+  `HuggingFaceLoraModel` that wraps a HuggingFace causal-LM base with
+  a per-tenant (and optionally per-user) LoRA managed via `peft`.
+  `train_adapter` fine-tunes a tenant-scoped LoRA on a small text
+  corpus; `infer` loads that LoRA on top of the shared base model
+  and generates a completion; `delete` removes the LoRA dir (or, with
+  `soft_delete=True`, routes new inference back to base while leaving
+  the on-disk weights as the Class 11 residue). The `adapter_bleed`
+  knob merges every tenant's LoRA into every inference — the
+  weight-bleed condition Class 9 (LoRA cross-tenant) is built to
+  catch. `transformers` / `peft` / `torch` are imported lazily on
+  the live `connect` path, so the adapter module + the 13 mock-backed
+  unit tests in `tests/unit/test_huggingface_model.py` need no extra
+  dependency. The live backend lives in
+  `packages/adapters/src/sectum/adapters/model/_huggingface_live.py`
+  and is exercised end-to-end against a real base model only when
+  the operator installs the optional extras group (`pip install
+  sectum-ai-adapters[huggingface]`). The CLI resolver accepts
+  `kind: huggingface` under `model` with `base_model_id` and
+  `adapters_dir` required and `lora_rank`/`lora_alpha`/`train_epochs`/
+  `device_map` knobs forwarded to `connect`.
 - A new `examples/memory-contamination/` walkthrough that reproduces Attack
   Class 8 — persistent memory contamination (SpAIware-class) — end to end:
   the `memory-contamination` probe writes a hard canary into every tenant's
