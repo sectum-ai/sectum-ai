@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `examples/agent-tool-hijack/` Class 7 walkthrough now ships
+  factories for the full v1 agent family: in addition to the
+  `langgraph` / `autogen` / `crewai` factories already wired,
+  `examples/agent_tool_hijack.factories:make_openai_assistants`
+  and `examples/agent_tool_hijack.factories:make_anthropic_tooluse`
+  let an operator swap the agent caller across all five named v1
+  backends without rewriting the probe. The README's "Swap the agent
+  caller" section gains step-by-step blocks for both new kinds, so
+  the cross-adapter consistency story (the same Class 7 probe runs
+  the same way against every shipped agent framework) covers the
+  full v1 set spec §11 names.
 - A live Anthropic native tool-use agent adapter
   (`packages/adapters/src/sectum/adapters/agent/anthropic_tooluse.py`):
   an `AnthropicToolUseAgent` that drives the Anthropic Messages API
