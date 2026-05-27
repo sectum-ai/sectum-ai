@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path, so the mock-backed contract test in `tests/unit/test_langgraph_agent.py`
   runs against an in-memory stand-in with no extra dependency; the live path
   needs the optional extras group (`pip install sectum-ai-adapters[langgraph]`)
-  and is exercised by `tests/integration/test_langgraph_agent.py`
+  and is exercised by `tests/integration/test_langgraph.py`
   (opt-in via the env-gated integration suite). The CLI resolver accepts
   `kind: langgraph` under `agent`; `docs/configuration.md` and
   `sectum.yaml.example` are updated to match.
