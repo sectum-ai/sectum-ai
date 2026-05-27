@@ -71,10 +71,18 @@ class EmbeddingProvider(Protocol):
 
 @dataclass(frozen=True)
 class JudgeVerdict:
-    """A judge's adjudication of a semantic leak candidate."""
+    """A judge's adjudication of a semantic leak candidate.
+
+    ``evidence_span`` is the verbatim slice of the observation the judge cites
+    as proof that the foreign entity surfaces (the engineering spec, section
+    6.4: the judge returns ``{leak, evidence_span, rationale}``). It is the
+    empty string when the judge declines to point at a span, and the detection
+    pipeline carries it into ``Finding.evidence_span`` for the audit pack.
+    """
 
     leak: bool
     rationale: str
+    evidence_span: str = ""
 
 
 class Judge(Protocol):
@@ -149,12 +157,22 @@ class FakeJudge:
         """Return a leak verdict based on marker-token coverage of the text."""
         marker_tokens = set(_tokenize(marker.plaintext))
         if not marker_tokens:
-            return JudgeVerdict(leak=False, rationale="empty marker")
+            return JudgeVerdict(leak=False, rationale="empty marker", evidence_span="")
         overlap = marker_tokens & set(_tokenize(observed_text))
         ratio = len(overlap) / len(marker_tokens)
         if ratio >= 1.0:
-            return JudgeVerdict(leak=True, rationale="all marker tokens present in observation")
-        return JudgeVerdict(leak=False, rationale=f"insufficient marker overlap ({ratio:.2f})")
+            # On a confirmed leak the fake judge cites the marker plaintext as
+            # the evidence span - the same slice the audit-pack PDF quotes.
+            return JudgeVerdict(
+                leak=True,
+                rationale="all marker tokens present in observation",
+                evidence_span=marker.plaintext,
+            )
+        return JudgeVerdict(
+            leak=False,
+            rationale=f"insufficient marker overlap ({ratio:.2f})",
+            evidence_span="",
+        )
 
 
 def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
@@ -290,6 +308,13 @@ class DetectionPipeline:
             if similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
+            # The judge may quote a verbatim span from the observation - the
+            # audit pack renders that span (the engineering spec, section 6.4
+            # and the PDF renderer). Fall back to the marker plaintext when the
+            # judge declines, so a confirmed leak always shows the foreign
+            # entity to the auditor and an unverified candidate carries the
+            # judge's rationale instead.
+            evidence = (leak.evidence_span or marker.plaintext) if leak.leak else leak.rationale
             findings.append(
                 self._finding(
                     marker,
@@ -299,7 +324,7 @@ class DetectionPipeline:
                     severity=Severity.HIGH if leak.leak else Severity.INFO,
                     confidence=round(similarity, 4),
                     status=FindingStatus.CONFIRMED if leak.leak else FindingStatus.UNVERIFIED,
-                    evidence=marker.plaintext if leak.leak else leak.rationale,
+                    evidence=evidence,
                 )
             )
         return findings
