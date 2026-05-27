@@ -30,6 +30,11 @@ _EXAMPLES = (
     "memory-contamination",
     "lora-cross-tenant",
     "kv-cache-timing",
+    "tenant-boundary-fetch",
+    "rag-poisoning",
+    "semantic-cache",
+    "embedding-inversion",
+    "ikea-extraction",
 )
 
 
