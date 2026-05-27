@@ -10,8 +10,9 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
-for observability, ``http`` for RAG and agents, ``stdio``/``http`` for MCP); an
-unsupported kind raises ``ConfigError`` with a clear message.
+for observability, ``http`` for RAG, ``http``/``langgraph`` for agents,
+``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError`` with a
+clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -469,6 +470,36 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
         headers = _str_dict(extras, "headers")
         timeout = _float(extras, "timeout", 30.0)
         return HttpAgent(url, headers=headers, timeout=timeout)
+    if config.kind == "langgraph":
+        # A live LangGraph agent is wired in code (the graph is a Python object,
+        # not a YAML value): the resolver expects the caller to expose a
+        # graph-factory callable and refer to it by ``module.path:callable``.
+        # The factory is imported and called with no arguments; it must return
+        # a compiled graph object (or any object exposing
+        # ``invoke(input, config) -> mapping``).
+        from importlib import import_module
+
+        from sectum.adapters.agent.langgraph import LangGraphAgent
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"langgraph 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"langgraph factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"langgraph factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"langgraph factory {factory_path!r} is not callable")
+        recursion_limit = _int(extras, "recursion_limit", 25)
+        return LangGraphAgent(factory(), recursion_limit=recursion_limit)
     raise _unsupported("agent", config.kind)
 
 

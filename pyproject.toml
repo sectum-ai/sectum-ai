@@ -123,6 +123,23 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# the langgraph, langchain-core, and langchain-openai packages are optional,
+# live-only dependencies; treat them as opaque so the adapter type-checks
+# without them installed (the adapter's API is fully typed). langchain-openai
+# is referenced only by the opt-in live integration test as an example model
+# provider; the adapter itself is provider-agnostic.
+module = [
+    "langgraph",
+    "langgraph.*",
+    "langchain_core",
+    "langchain_core.*",
+    "langchain_openai",
+    "langchain_openai.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # rfc3161-client ships a Rust extension whose stubs expose broad return types;
 # treat it as opaque - the Rfc3161Timestamper's own API is fully typed.
 module = ["rfc3161_client", "rfc3161_client.*"]

@@ -120,6 +120,7 @@ No live memory adapter is wired into the CLI resolver yet.
 |---|---|---|
 | `fake` | — | `FakeAgent`; needs no fields. |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
+| `langgraph` | (constructed in Python) | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The `sectum.yaml` block only flips the kind; the caller constructs the graph (typically via `LangGraphAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
 
 ## `evidence`
 

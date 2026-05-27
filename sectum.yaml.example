@@ -79,6 +79,12 @@ adapters:
   agent:
     # kind: http               # generic JSON HTTP agent endpoint
     #   url_env: SECTUM_AGENT_URL
+    # kind: langgraph          # a compiled LangGraph StateGraph (per-thread checkpoint)
+    #                          # construct via `LangGraphAgent.connect(model, tools)`
+    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # config validator accepts a langgraph adapter built
+    #                          # by the caller. Requires the optional `langgraph`
+    #                          # extra: `pip install sectum-ai-adapters[langgraph]`.
     kind: fake
 
   mcp:
