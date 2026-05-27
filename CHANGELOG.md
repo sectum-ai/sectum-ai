@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A new `examples/kv-cache-timing/` walkthrough that reproduces Attack
+  Class 5 — the KV-cache prefix-cache timing side channel — end to
+  end against the in-memory `FakeModel` with `prefix_cache: true`.
+  The probe runs 24 paired primed-vs-control trials per cross-tenant
+  pair and reports the Cohen's d effect size; a confirmed finding
+  lands when the effect crosses the 0.8 "large effect" boundary. The
+  README explains the statistical workflow, names the remediation
+  pointer (per-tenant prefix-cache scoping or disabling the shared
+  cache), and scopes the demo to the fake-model substrate while
+  pointing at the new live `huggingface` model kind as the on-ramp to
+  real-inference-engine probing. Smoke-tested on a clean substrate:
+  the evidence pack verifies under `sectum verify`. Joins
+  `mcp-tenant-boundary/`, `agent-tool-hijack/`, and
+  `memory-contamination/` as the agent-side isolation examples
+  alongside the flagship Class 2 `retrieval-pivot/` and the wedge
+  Class 11 `erasure-attestation/`.
 - A live HuggingFace + PEFT LoRA model adapter
   (`packages/adapters/src/sectum/adapters/model/huggingface.py`): a
   `HuggingFaceLoraModel` that wraps a HuggingFace causal-LM base with
