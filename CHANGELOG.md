@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live CrewAI agent adapter (`packages/adapters/src/sectum/adapters/agent/crewai.py`):
+  a `CrewAIAgent` that drives a CrewAI `Crew` of agents + tasks through
+  `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so a
+  templated task description interpolates the tenant id and a tenant-aware
+  tool reads the scope from its call arguments — the per-tenant isolation
+  property Class 7 (agent tool-call hijack) verifies. The adapter walks the
+  crew's `tasks_output` and surfaces every tool the agents invoked while
+  completing each task — reading both the modern `tool_calls` attribute
+  and CrewAI's legacy `tools_calls` (note the trailing 's') and
+  `tool_results` shapes — so the Class 7 probes can see which tool fired
+  on which task in each tenant's session. The `crewai` package is imported
+  only on the live `connect` path, so the mock-backed contract test in
+  `tests/unit/test_crewai_agent.py` runs against an in-memory stand-in
+  with no extra dependency; the live path needs the optional extras group
+  (`pip install sectum-ai-adapters[crewai]`) and is exercised by
+  `tests/integration/test_crewai.py` (opt-in via the env-gated
+  integration suite). The CLI resolver accepts `kind: crewai` under
+  `agent` (via a `factory: module.path:callable` returning a `Crew`);
+  `docs/configuration.md` and `sectum.yaml.example` are updated to match.
 - A live AutoGen agent adapter (`packages/adapters/src/sectum/adapters/agent/autogen.py`):
   an `AutoGenAgent` that drives an AutoGen `AssistantAgent` + `UserProxyAgent`
   pair through `UserProxyAgent.initiate_chat`, prefixing every user message

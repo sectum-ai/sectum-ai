@@ -33,6 +33,7 @@ mcp = ["mcp>=1"]
 pinecone = ["pinecone>=5"]
 langgraph = ["langgraph>=0.2", "langchain-core>=0.3"]
 autogen = ["pyautogen>=0.2,<0.3"]
+crewai = ["crewai>=0.80"]
 
 [project.urls]
 Homepage = "https://sectum.ai"
