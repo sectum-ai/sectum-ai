@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A new `examples/lora-cross-tenant/` walkthrough that reproduces Attack
+  Class 9 — cross-tenant LoRA / adapter influence — end to end. The
+  `lora-cross-tenant` probe trains each tenant's adapter on a small
+  corpus that includes the tenant's `HARD_CANARY`, then queries every
+  foreign tenant; on a mis-routed or weight-bled stack the canary
+  surfaces in the wrong tenant's inference. The demo runs against the
+  in-memory `FakeModel` with `adapter_bleed: true` (the leaky
+  weight-bleed condition the substrate is built to catch). README
+  explains both the routing-failure and weight-bleed shapes of the
+  attack, scopes the demo to the fake substrate, and documents the
+  `sectum.yaml` swap that points the same probe at the new live
+  `HuggingFaceLoraModel` for real-PEFT-stack probing. Smoke-tested on
+  a clean substrate: the evidence pack verifies under `sectum verify`.
 - A new `examples/kv-cache-timing/` walkthrough that reproduces Attack
   Class 5 — the KV-cache prefix-cache timing side channel — end to
   end against the in-memory `FakeModel` with `prefix_cache: true`.
