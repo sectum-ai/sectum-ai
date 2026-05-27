@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A second flavour of the Erasure Attestation sample in `docs/samples/`: the
+  RESIDUAL DATA pack produced by `sectum erasure --soft-delete` against the
+  `examples/erasure-attestation` substrate. Three new files
+  (`erasure-attestation-residual-data-audit-pack.pdf`,
+  `erasure-attestation-residual-data-evidence.json`,
+  `erasure-attestation-residual-data-attestation.intoto.json`) sit next to the
+  existing happy-path ERASED pack so a prospective DPO can see both the
+  successful-erasure deliverable and the failure-mode artefact the pack is
+  built to catch — without running anything locally. The samples README now
+  describes both verdict flavours, lists the regeneration commands for both,
+  and explains that either pack verifies under `sectum verify`; the verdict
+  is data, not signal integrity.
+- `examples/erasure-attestation/sectum.yaml.production`: a documented
+  production-shape config for the engagement, with `evidence.timestamper:
+  local` and `evidence.rekor: true` defaults and a comment explaining why
+  real engagements should pin a customer-chosen TSA URL (FreeTSA, the OSS
+  demo default, has been observed to be unreachable for hours at a time).
+  Used by the sample regeneration in `docs/samples/README.md`.
 - `sectum probe --output json` emits a single machine-parseable JSON object on
   stdout (the run id, the probe count, the confirmed-finding count, the
   Retrieval-Pivot Rate, the per-probe counts, and a `run_path` pointer) so CI
