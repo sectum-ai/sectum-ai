@@ -36,7 +36,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # LangGraph
 # ---------------------------------------------------------------------------
@@ -145,9 +144,7 @@ def make_crewai_crew() -> Any:
     from crewai import Agent, Crew, Task
     from crewai.tools import tool
 
-    os.environ.setdefault(
-        "OPENAI_MODEL_NAME", os.environ.get("SECTUM_AGENT_MODEL", "gpt-4o-mini")
-    )
+    os.environ.setdefault("OPENAI_MODEL_NAME", os.environ.get("SECTUM_AGENT_MODEL", "gpt-4o-mini"))
 
     @tool("lookup")  # type: ignore[untyped-decorator]
     def lookup(query: str) -> str:

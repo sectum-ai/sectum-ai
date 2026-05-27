@@ -17,11 +17,15 @@ from sectum.adapters import (
 )
 from sectum.config import (
     AdapterConfig,
+    EmbedderConfig,
+    JudgeConfig,
     SectumConfig,
     _resolve_secret,
     build_adapters,
     build_agent,
     build_cache,
+    build_embedder,
+    build_judge,
     build_mcp,
     build_memory,
     build_model,
@@ -707,3 +711,92 @@ def test_build_agent_crewai_forwards_input_and_tenant_keys(
     assert isinstance(adapter, CrewAIAgent)
     assert adapter._input_key == "query"
     assert adapter._tenant_key == "customer"
+
+
+# ---------------------------------------------------------------------------
+# unknown-kind rejection for the three resolver families that lacked it
+# ---------------------------------------------------------------------------
+
+
+def test_build_model_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match=r"not yet supported"):
+        build_model(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_mcp_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match=r"not yet supported"):
+        build_mcp(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_memory_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match=r"not yet supported"):
+        build_memory(AdapterConfig(kind="not-a-real-kind"))
+
+
+# ---------------------------------------------------------------------------
+# detection-provider resolver: missing-API-key paths
+# ---------------------------------------------------------------------------
+
+
+def test_build_embedder_fake_returns_none() -> None:
+    # The fake embedder is the calibrated semantic-similarity stand-in - the
+    # resolver returns None so the detection pipeline uses its built-in fake.
+    assert build_embedder(EmbedderConfig(kind="fake")) is None
+
+
+def test_build_embedder_openai_raises_when_api_key_env_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An operator who configures `kind: openai` without setting OPENAI_API_KEY
+    # (or the custom api_key_env they named) must see a typed ConfigError
+    # naming the env var - not a confusing OpenAI client error at first call.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
+        build_embedder(EmbedderConfig(kind="openai"))
+
+
+def test_build_embedder_openai_raises_when_custom_api_key_env_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The custom api_key_env name flows into the error message so the
+    # operator can immediately spot which env var the resolver looked for.
+    monkeypatch.delenv("CUSTOM_OPENAI_KEY", raising=False)
+    with pytest.raises(ConfigError, match="CUSTOM_OPENAI_KEY"):
+        build_embedder(EmbedderConfig(kind="openai", api_key_env="CUSTOM_OPENAI_KEY"))
+
+
+def test_build_judge_fake_returns_none() -> None:
+    assert build_judge(JudgeConfig(kind="fake")) is None
+
+
+def test_build_judge_openai_raises_when_api_key_env_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
+        build_judge(JudgeConfig(kind="openai"))
+
+
+def test_build_judge_anthropic_raises_when_api_key_env_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
+        build_judge(JudgeConfig(kind="anthropic"))
+
+
+def test_build_judge_rejects_an_unknown_kind() -> None:
+    # The Pydantic Literal type already rejects unknown kinds at validation
+    # time; this test pins the behaviour against a future refactor that
+    # might drop the validator.
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match=r"anthropic|openai|fake"):
+        JudgeConfig(kind="not-a-real-kind")
+
+
+def test_build_embedder_rejects_an_unknown_kind() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match=r"openai|fake"):
+        EmbedderConfig(kind="not-a-real-kind")
