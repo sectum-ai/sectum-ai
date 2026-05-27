@@ -58,6 +58,7 @@ from sectum.evidence import (
 )
 from sectum.jobs import build_job_runner
 from sectum.probes import (
+    AgentFrameworkHijackProbe,
     AgentToolHijackProbe,
     DetectionProviders,
     EmbeddingInversionProbe,
@@ -117,6 +118,7 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
         SemanticCacheProbe(providers),
         LoraCrossTenantProbe(providers),
         AgentToolHijackProbe(providers),
+        AgentFrameworkHijackProbe(providers),
         MemoryContamProbe(providers),
         EmbeddingInversionProbe(providers),
         IkeaExtractionProbe(providers),
@@ -136,7 +138,7 @@ _DEMO_CONFIG = SectumConfig(
         "memory": AdapterConfig(kind="fake", shared_memory=True),
         "rag": AdapterConfig(kind="fake"),
         "observability": AdapterConfig(kind="fake"),
-        "agent": AdapterConfig(kind="fake"),
+        "agent": AdapterConfig(kind="fake", confused_deputy=True, tool_call_passthrough=True),
     }
 )
 
@@ -456,6 +458,14 @@ def probe(
                     marker.owner_tenant_id,
                     marker.marker_id,
                     f"MCP resource. Reference: {marker.plaintext}",
+                )
+    if isinstance(bundle.agent, FakeAgent):
+        for marker in substrate.manifest.markers:
+            if marker.marker_type is MarkerType.HARD_CANARY:
+                bundle.agent.provision(
+                    marker.owner_tenant_id,
+                    marker.marker_id,
+                    f"agent tool returned. Reference: {marker.plaintext}",
                 )
     runner = Runner(
         substrate,

@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A direct agent-framework Class 7 probe, `AgentFrameworkHijackProbe`
+  (`packages/probes/src/sectum/probes/agent_framework_hijack/`). Where the
+  existing `AgentToolHijackProbe` verifies the MCP server end of an
+  agent's tool call, this probe verifies the *agent caller* itself.
+  Each tenant's hard canary is provisioned as a resolvable resource the
+  agent's built-in `lookup` tool can fetch; from every foreign principal
+  the probe issues `agent.run(tenant, "lookup <marker_id>")` and, in a
+  second step, the same task carrying `token=<owner-hex>` — the
+  confused-deputy + Asana-class token-passthrough pair, but at the
+  agent layer. A foreign canary in the agent's final output means the
+  framework or its tool layer lost the caller's tenant scope on the way
+  to the resource. The probe runs against every shipped v1 agent
+  backend (`fake` / `http` / `langgraph` / `autogen` / `crewai` /
+  `openai-assistants` / `anthropic-tooluse`) so the attestation pack
+  speaks the same language to a DPO regardless of which framework the
+  customer ran.
+- The in-memory `FakeAgent` gains two leak knobs the new probe drives
+  against: `confused_deputy=True` resolves `lookup <key>` across every
+  tenant's resources (lost tenant scope), and `tool_call_passthrough=True`
+  honours a caller-supplied `token=<tenant-hex>` argument (the
+  Asana-class agentic token-passthrough pattern). A `provision(tenant,
+  key, value)` test helper registers a tenant's resource; the CLI's
+  leaky-demo config flips both knobs on so `sectum probe` reproduces
+  the cross-tenant findings the probe is built to catch. The default
+  `FakeAgent()` stays non-leaky and now reports
+  `Capability.TENANT_SCOPED_TOOLS`.
 - The `examples/agent-tool-hijack/` Class 7 walkthrough now ships
   factories for the full v1 agent family: in addition to the
   `langgraph` / `autogen` / `crewai` factories already wired,
