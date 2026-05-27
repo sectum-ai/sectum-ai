@@ -29,6 +29,7 @@ _EXAMPLES = (
     "agent-tool-hijack",
     "memory-contamination",
     "lora-cross-tenant",
+    "kv-cache-timing",
 )
 
 
