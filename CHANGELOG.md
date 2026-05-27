@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A new `examples/agent-tool-hijack/` walkthrough that reproduces Attack
+  Class 7 from the *agent-adapter* perspective: the same Class 7 probe
+  the `examples/mcp-tenant-boundary/` example drives (with confused-deputy
+  and token-passthrough sub-probes against the in-memory leaky MCP server),
+  but framed around the agent caller and accompanied by
+  `factories.py` — copy-pasteable connect-time factory callables for each
+  of the four shipped agent kinds (`fake`, `langgraph`, `autogen`,
+  `crewai`). README documents the `sectum.yaml` swap for each kind so an
+  operator can verify Class 7 with the same agent framework their customer
+  actually runs in production. Smoke-tested on a clean substrate:
+  `run.sh` exits with the canonical Class 7 leak findings and the evidence
+  pack verifies under `sectum verify`.
 - A live CrewAI agent adapter (`packages/adapters/src/sectum/adapters/agent/crewai.py`):
   a `CrewAIAgent` that drives a CrewAI `Crew` of agents + tasks through
   `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so a
