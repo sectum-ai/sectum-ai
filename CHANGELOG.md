@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live LangGraph agent adapter (`packages/adapters/src/sectum/adapters/agent/langgraph.py`):
+  a `LangGraphAgent` that drives a compiled LangGraph `StateGraph` with one
+  `thread_id` per tenant (`config={"configurable": {"thread_id": tenant.hex}}`)
+  so per-thread checkpoint or memory cannot bleed across tenants — the
+  isolation property Class 7 (agent tool-call hijack) verifies. The adapter
+  surfaces every tool the graph called during a run (not just the final
+  state) so the Class 7 probes can see *which* tool fired and with what
+  arguments. The `langgraph` package is imported only on the live `connect`
+  path, so the mock-backed contract test in `tests/unit/test_langgraph_agent.py`
+  runs against an in-memory stand-in with no extra dependency; the live path
+  needs the optional extras group (`pip install sectum-ai-adapters[langgraph]`)
+  and is exercised by `tests/integration/test_langgraph_agent.py`
+  (opt-in via the env-gated integration suite). The CLI resolver accepts
+  `kind: langgraph` under `agent`; `docs/configuration.md` and
+  `sectum.yaml.example` are updated to match.
 - A second flavour of the Erasure Attestation sample in `docs/samples/`: the
   RESIDUAL DATA pack produced by `sectum erasure --soft-delete` against the
   `examples/erasure-attestation` substrate. Three new files
