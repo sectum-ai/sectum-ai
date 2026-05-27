@@ -5,9 +5,10 @@ hijacking. Where the [`mcp-tenant-boundary`](../mcp-tenant-boundary/)
 walkthrough tells the story from the MCP-server end (the leaky lookup
 service), this one tells it from the *agent* end (the framework that
 makes the call) — and shows how to swap the agent caller between the
-four shipped agent adapters (`fake`, `http`, `langgraph`, `autogen`,
-`crewai`) so the same probe verifies isolation regardless of which
-agent framework a customer's stack happens to use.
+six shipped agent adapters (`fake`, `http`, `langgraph`, `autogen`,
+`crewai`, `openai-assistants`, `anthropic-tooluse`) so the same probe
+verifies isolation regardless of which agent framework a customer's
+stack happens to use.
 
 ## The attack
 
@@ -138,6 +139,51 @@ interpolate `{tenant_id}` so the task body carries the tenant context
 into the language model's prompt and, from there, into the tool-call
 arguments.
 
+### OpenAI Assistants
+
+```yaml
+adapters:
+  agent:
+    kind: openai-assistants
+    factory: examples.agent_tool_hijack.factories:make_openai_assistants
+```
+
+```sh
+pip install sectum-ai-adapters[openai-assistants]
+export OPENAI_API_KEY=sk-...
+sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+```
+
+The OpenAI Assistants adapter scopes by caching one `Thread` per
+tenant — created on first use and reused on every subsequent call,
+so a tool that scopes by `thread_id` cannot bleed across tenants.
+Each per-tenant user message is prefixed with `[tenant:<hex>]`; the
+Assistant instructions forward the token into a `tenant` tool
+argument the tenant-aware tool reads.
+
+### Anthropic native tool-use
+
+```yaml
+adapters:
+  agent:
+    kind: anthropic-tooluse
+    factory: examples.agent_tool_hijack.factories:make_anthropic_tooluse
+```
+
+```sh
+pip install sectum-ai-adapters[anthropic-tooluse]
+export ANTHROPIC_API_KEY=sk-ant-...
+sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+```
+
+The Anthropic tool-use adapter scopes by caching one conversation
+history per tenant; each per-tenant user message is prefixed with
+`[tenant:<hex>]` and the tool-use loop runs to `stop_reason:
+end_turn`. Tools attach a python callable via the
+`__sectum_callable__` sidecar on each tool spec; the live backend
+executes it on every `tool_use` block and posts the result back as a
+`tool_result` user message.
+
 ### HTTP (generic JSON agent)
 
 ```yaml
@@ -166,10 +212,11 @@ configured agent.
 Switching the agent kind does **not** change what counts as a leak —
 the substrate, the canary detection pipeline, and the evidence chain
 are all adapter-agnostic. A leak detected with `FakeAgent` is a leak
-detected with `CrewAIAgent`; the only thing that varies is how the
-probe steps reach the leaky tool. That's the design point: the
-attestation pack speaks the same language to a DPO regardless of
-which framework the customer ran their probe against.
+detected with `CrewAIAgent`, `OpenAIAssistantsAgent`, or
+`AnthropicToolUseAgent`; the only thing that varies is how the probe
+steps reach the leaky tool. That's the design point: the attestation
+pack speaks the same language to a DPO regardless of which framework
+the customer ran their probe against.
 
 ## What's *not* in this example
 
@@ -178,4 +225,5 @@ agent-framework instrumentation (where the probe inspects the
 adapter's `AgentResult.tool_calls` directly, not via MCP) is the
 Class 7 expansion the engineering spec defers to a later phase. The
 agent adapters this example wires (`langgraph` / `autogen` /
-`crewai`) are the SDK piece that expansion will build on.
+`crewai` / `openai-assistants` / `anthropic-tooluse`) — the full v1
+set spec §11 names — are the SDK piece that expansion will build on.
