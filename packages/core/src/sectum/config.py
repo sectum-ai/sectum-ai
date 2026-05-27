@@ -11,7 +11,7 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
 for observability, ``http`` for RAG,
-``http``/``langgraph``/``autogen``/``crewai`` for
+``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants`` for
 agents, ``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError``
 with a clear message.
 
@@ -591,6 +591,47 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
         input_key = _str(extras, "input_key", "task")
         tenant_key = _str(extras, "tenant_key", "tenant_id")
         return CrewAIAgent(factory(), input_key=input_key, tenant_key=tenant_key)
+    if config.kind == "openai-assistants":
+        # A live OpenAI Assistants agent is wired in code (the Assistant is a
+        # persistent server-side object plus a Python callable map for the
+        # tool execution loop, not a YAML value). The resolver expects a
+        # client-factory callable referenced by ``module.path:callable`` that
+        # returns a 2-tuple ``(client, assistant_id)`` where ``client``
+        # implements the _AssistantsClient protocol the adapter consumes.
+        from importlib import import_module
+
+        from sectum.adapters.agent.openai_assistants import OpenAIAssistantsAgent
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"openai-assistants 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"openai-assistants factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"openai-assistants factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"openai-assistants factory {factory_path!r} is not callable")
+        pair = factory()
+        if not (isinstance(pair, tuple) and len(pair) == 2):
+            raise ConfigError(
+                f"openai-assistants factory {factory_path!r} must return "
+                "a (client, assistant_id) tuple"
+            )
+        client, assistant_id = pair
+        if not isinstance(assistant_id, str) or not assistant_id:
+            raise ConfigError(
+                f"openai-assistants factory {factory_path!r} returned a non-string "
+                "assistant_id; it must be the OpenAI Assistant's id"
+            )
+        return OpenAIAssistantsAgent(client, assistant_id)
     raise _unsupported("agent", config.kind)
 
 
