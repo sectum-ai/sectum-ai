@@ -19,6 +19,15 @@ This repository contains no static publishing token, by design.
 These steps configure the credential-less trust paths. They run once per
 project and never need touching again.
 
+> **Do all three steps below BEFORE you push your first `v*` tag.** The
+> publish-pypi job runs *after* a maintainer approves the `pypi`
+> environment, and if the Pending Publishers in step 1 are missing PyPI
+> rejects the upload with `invalid-publisher: Publisher with matching
+> claims was not found`. The build/SBOM/sign work already done is not
+> lost — re-run the failed `publish-pypi` job once the publishers are
+> registered and the same artefacts will publish — but cleaner to set
+> up the prerequisites first.
+
 ### 1. Register the PyPI Trusted Publisher for every package
 
 Each of the five distributions is registered separately. For a project that has
