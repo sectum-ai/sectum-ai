@@ -6,7 +6,7 @@ local checkpointer is the only way to wire per-thread state without a hosted
 backend. The adapter's logic is verified here against an in-memory stand-in
 for a compiled graph (the engineering spec, sections 11 and 13: live SDK,
 mock-backed contract test plus opt-in live). The live path is exercised by
-``tests/integration/test_langgraph_agent.py``.
+``tests/integration/test_langgraph.py``.
 """
 
 from dataclasses import dataclass, field
