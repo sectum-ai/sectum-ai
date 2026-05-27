@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (opt-in via the env-gated integration suite). The CLI resolver accepts
   `kind: langgraph` under `agent`; `docs/configuration.md` and
   `sectum.yaml.example` are updated to match.
+- Live OpenAI and Anthropic providers for the Class 2 detection pipeline
+  (`packages/probes/src/sectum/probes/providers.py`): `OpenAIEmbedder`
+  (default `text-embedding-3-small`), `OpenAIJudge` (default `gpt-4o-mini`
+  via JSON-mode structured output), and `AnthropicJudge` (default
+  `claude-3-5-sonnet` via tool-use structured output). The judge prompt
+  enforces the spec §6.4 guardrail — only the candidate entity descriptor
+  is shown, never the ground-truth manifest verbatim. No
+  `AnthropicEmbedder` ships because Anthropic does not expose an
+  embeddings API as of 2026; the gap is documented inline in
+  `providers.py`. The CLI resolver now accepts `kind: openai` and
+  `kind: anthropic` under `embedder` / `judge` config blocks; mock-backed
+  unit tests cover construction, retry, and structured-output parsing,
+  and a pair of live-gated integration tests run against the real APIs
+  when `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` are set.
 - A second flavour of the Erasure Attestation sample in `docs/samples/`: the
   RESIDUAL DATA pack produced by `sectum erasure --soft-delete` against the
   `examples/erasure-attestation` substrate. Three new files
