@@ -28,6 +28,7 @@ _EXAMPLES = (
     "mcp-tenant-boundary",
     "agent-tool-hijack",
     "memory-contamination",
+    "kv-cache-timing",
 )
 
 
