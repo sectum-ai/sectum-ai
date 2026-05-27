@@ -203,5 +203,7 @@ follow-up release or advisory. Do not delete the tag - existing pins, signed
 artifacts, and Sigstore log entries reference it.
 
 Publish a follow-up release (`vX.Y.Z+1`) as soon as a fix is ready, and follow
-the disclosure cadence in [`SECURITY.md`](../SECURITY.md) for the underlying
+the disclosure cadence in
+[`SECURITY.md`](https://github.com/sectum-ai/sectum-ai/blob/main/SECURITY.md)
+for the underlying
 vulnerability.
