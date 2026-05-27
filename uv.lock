@@ -4036,6 +4036,9 @@ langsmith = [
 mcp = [
     { name = "mcp" },
 ]
+openai-assistants = [
+    { name = "openai" },
+]
 pgvector = [
     { name = "psycopg", extra = ["binary"] },
 ]
@@ -4063,6 +4066,7 @@ requires-dist = [
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1" },
+    { name = "openai", marker = "extra == 'openai-assistants'", specifier = ">=1.50" },
     { name = "peft", marker = "extra == 'huggingface'", specifier = ">=0.13" },
     { name = "pinecone", marker = "extra == 'pinecone'", specifier = ">=5" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'pgvector'", specifier = ">=3.3.4" },
@@ -4073,7 +4077,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.45" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
 ]
-provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface"]
+provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants"]
 
 [[package]]
 name = "sectum-ai-evidence"

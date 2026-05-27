@@ -100,6 +100,14 @@ adapters:
     #                          # config validator accepts a crewai adapter built
     #                          # by the caller. Requires the optional `crewai`
     #                          # extra: `pip install sectum-ai-adapters[crewai]`.
+    # kind: openai-assistants  # an OpenAI Assistant + per-tenant Thread (the API
+    #                          # caches Threads server-side; one per tenant.hex)
+    #                          # construct via `OpenAIAssistantsAgent.connect(model, tools)`
+    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # config validator accepts an openai-assistants
+    #                          # adapter built by the caller. Requires the optional
+    #                          # `openai-assistants` extra:
+    #                          # `pip install sectum-ai-adapters[openai-assistants]`.
     kind: fake
 
   mcp:

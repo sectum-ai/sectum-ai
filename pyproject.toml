@@ -172,6 +172,15 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# openai is an optional, live-only dependency for the OpenAI Assistants
+# agent adapter; treat it as opaque so the adapter type-checks without it
+# installed (the adapter's API is fully typed; the live backend only loads
+# the SDK on the connect path).
+module = ["openai", "openai.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # rfc3161-client ships a Rust extension whose stubs expose broad return types;
 # treat it as opaque - the Rfc3161Timestamper's own API is fully typed.
 module = ["rfc3161_client", "rfc3161_client.*"]

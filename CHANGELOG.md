@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live OpenAI Assistants agent adapter
+  (`packages/adapters/src/sectum/adapters/agent/openai_assistants.py`):
+  an `OpenAIAssistantsAgent` that drives an OpenAI Assistant with one
+  `Thread` cached per tenant; each `run` posts a user message
+  prefixed with `[tenant:<hex>]` and drives the Assistants
+  ``Run`` through the tool-call resolution loop to completion. The
+  adapter caches one Thread per tenant on first use and reuses it
+  on every subsequent call — the per-tenant isolation property
+  Class 7 verifies. The Assistant's persistent server-side state
+  (model + system prompt + registered tools) is created once via
+  `connect()` and reused across runs.
+- The `openai` package is imported only on the live `connect`
+  path; the adapter module + 9 mock-backed unit tests in
+  `tests/unit/test_openai_assistants_agent.py` need no extra
+  dependency. The live backend lives in
+  `packages/adapters/src/sectum/adapters/agent/_openai_assistants_live.py`
+  and is exercised end-to-end only when the operator installs the
+  optional extras group (`pip install sectum-ai-adapters[openai-assistants]`).
+  The CLI resolver accepts `kind: openai-assistants` under `agent`
+  via a `factory: module.path:callable` returning a 2-tuple
+  `(client, assistant_id)`; `docs/configuration.md` and
+  `sectum.yaml.example` are updated to match. Brings the live
+  agent-adapter family to **five** (http, langgraph, autogen,
+  crewai, openai-assistants) — the v1 set spec §11 names.
 - Five new example walkthroughs filling in the rest of the attack
   catalog: `examples/tenant-boundary-fetch/` (Class 1, the BOLA-style
   cross-tenant doc-id fetch), `examples/rag-poisoning/` (Class 3,
