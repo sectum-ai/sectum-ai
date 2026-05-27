@@ -54,9 +54,7 @@ class _StubGraph:
     calls: list[_Call] = field(default_factory=list)
     raise_on_invoke: Exception | None = None
 
-    def invoke(
-        self, input: dict[str, Any], config: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def invoke(self, input: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         if self.raise_on_invoke is not None:
             raise self.raise_on_invoke
         config = config or {}

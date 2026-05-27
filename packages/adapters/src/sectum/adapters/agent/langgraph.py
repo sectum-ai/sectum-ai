@@ -94,9 +94,7 @@ class LangGraphAgent(AgentAdapter):
             raise AdapterError(f"langgraph invoke failed: {error}") from error
 
         if not isinstance(state, dict):
-            raise AdapterError(
-                f"langgraph state must be a mapping, got {type(state).__name__}"
-            )
+            raise AdapterError(f"langgraph state must be a mapping, got {type(state).__name__}")
         messages = state.get("messages", [])
         if not isinstance(messages, list):
             raise AdapterError(

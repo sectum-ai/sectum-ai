@@ -485,8 +485,7 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
         module_name, _, attr = factory_path.rpartition(":")
         if not module_name or not attr:
             raise ConfigError(
-                "langgraph 'factory' must be 'module.path:callable', "
-                f"got {factory_path!r}"
+                f"langgraph 'factory' must be 'module.path:callable', got {factory_path!r}"
             )
         try:
             module = import_module(module_name)

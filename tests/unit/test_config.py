@@ -454,9 +454,7 @@ def test_build_agent_langgraph_rejects_a_non_callable_factory(
 
     module = types.ModuleType("sectum_test_langgraph_factory_non_callable")
     module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "sectum_test_langgraph_factory_non_callable", module
-    )
+    monkeypatch.setitem(sys.modules, "sectum_test_langgraph_factory_non_callable", module)
     with pytest.raises(ConfigError, match="not callable"):
         build_agent(
             AdapterConfig(
@@ -468,6 +466,4 @@ def test_build_agent_langgraph_rejects_a_non_callable_factory(
 
 def test_build_agent_langgraph_rejects_an_unimportable_module() -> None:
     with pytest.raises(ConfigError, match="cannot be imported"):
-        build_agent(
-            AdapterConfig(kind="langgraph", factory="no_such_module_anywhere:thing")
-        )
+        build_agent(AdapterConfig(kind="langgraph", factory="no_such_module_anywhere:thing"))
