@@ -714,6 +714,237 @@ def test_build_agent_crewai_forwards_input_and_tenant_keys(
 
 
 # ---------------------------------------------------------------------------
+# kind: openai-assistants
+# ---------------------------------------------------------------------------
+
+
+def test_build_agent_openai_assistants_imports_and_invokes_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: openai-assistants`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns a 2-tuple ``(client, assistant_id)``; the resolver
+    calls it once and hands the pair to ``OpenAIAssistantsAgent``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.agent.openai_assistants import OpenAIAssistantsAgent
+
+    class _StubAssistantsClient:
+        def create_thread(self) -> str:
+            return "thread-stub"
+
+        def add_user_message(self, thread_id: str, content: str) -> None:
+            pass
+
+        def run_until_complete(
+            self, thread_id: str, assistant_id: str
+        ) -> tuple[str, tuple[str, ...]]:
+            return ("", ())
+
+    module = types.ModuleType("sectum_test_openai_assistants_factory")
+    module.make_pair = lambda: (_StubAssistantsClient(), "assistant-abc")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_openai_assistants_factory", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="openai-assistants",
+            factory="sectum_test_openai_assistants_factory:make_pair",
+        )
+    )
+    assert isinstance(adapter, OpenAIAssistantsAgent)
+    assert adapter._assistant_id == "assistant-abc"
+
+
+def test_build_agent_openai_assistants_requires_a_factory() -> None:
+    with pytest.raises(ConfigError, match="'factory' is required"):
+        build_agent(AdapterConfig(kind="openai-assistants"))
+
+
+def test_build_agent_openai_assistants_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_agent(AdapterConfig(kind="openai-assistants", factory="not_dotted"))
+
+
+def test_build_agent_openai_assistants_rejects_a_missing_factory_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_openai_assistants_factory_missing")
+    monkeypatch.setitem(sys.modules, "sectum_test_openai_assistants_factory_missing", module)
+    with pytest.raises(ConfigError, match="not exported"):
+        build_agent(
+            AdapterConfig(
+                kind="openai-assistants",
+                factory="sectum_test_openai_assistants_factory_missing:nope",
+            )
+        )
+
+
+def test_build_agent_openai_assistants_rejects_a_non_callable_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_openai_assistants_factory_non_callable")
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_openai_assistants_factory_non_callable", module)
+    with pytest.raises(ConfigError, match="not callable"):
+        build_agent(
+            AdapterConfig(
+                kind="openai-assistants",
+                factory="sectum_test_openai_assistants_factory_non_callable:NOT_A_CALLABLE",
+            )
+        )
+
+
+def test_build_agent_openai_assistants_rejects_an_unimportable_module() -> None:
+    with pytest.raises(ConfigError, match="cannot be imported"):
+        build_agent(
+            AdapterConfig(kind="openai-assistants", factory="no_such_module_anywhere:thing")
+        )
+
+
+def test_build_agent_openai_assistants_rejects_a_non_tuple_factory_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_openai_assistants_factory_bad_return")
+    module.make_pair = lambda: "not a tuple"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_openai_assistants_factory_bad_return", module)
+    with pytest.raises(ConfigError, match=r"\(client, assistant_id\)"):
+        build_agent(
+            AdapterConfig(
+                kind="openai-assistants",
+                factory="sectum_test_openai_assistants_factory_bad_return:make_pair",
+            )
+        )
+
+
+def test_build_agent_openai_assistants_rejects_a_non_string_assistant_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    class _StubAssistantsClient:
+        def create_thread(self) -> str:
+            return "t"
+
+        def add_user_message(self, thread_id: str, content: str) -> None:
+            pass
+
+        def run_until_complete(
+            self, thread_id: str, assistant_id: str
+        ) -> tuple[str, tuple[str, ...]]:
+            return ("", ())
+
+    module = types.ModuleType("sectum_test_openai_assistants_factory_bad_id")
+    module.make_pair = lambda: (_StubAssistantsClient(), 12345)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_openai_assistants_factory_bad_id", module)
+    with pytest.raises(ConfigError, match="non-string"):
+        build_agent(
+            AdapterConfig(
+                kind="openai-assistants",
+                factory="sectum_test_openai_assistants_factory_bad_id:make_pair",
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# kind: anthropic-tooluse
+# ---------------------------------------------------------------------------
+
+
+def test_build_agent_anthropic_tooluse_imports_and_invokes_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: anthropic-tooluse`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns the ``_AnthropicClient`` the adapter consumes; the
+    resolver calls it once and hands the client to ``AnthropicToolUseAgent``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
+
+    class _StubAnthropicClient:
+        def run_turn(self, messages: list[dict[str, object]]) -> tuple[str, tuple[str, ...]]:
+            return ("", ())
+
+    module = types.ModuleType("sectum_test_anthropic_tooluse_factory")
+    module.make_client = lambda: _StubAnthropicClient()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_anthropic_tooluse_factory", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="anthropic-tooluse",
+            factory="sectum_test_anthropic_tooluse_factory:make_client",
+        )
+    )
+    assert isinstance(adapter, AnthropicToolUseAgent)
+
+
+def test_build_agent_anthropic_tooluse_requires_a_factory() -> None:
+    with pytest.raises(ConfigError, match="'factory' is required"):
+        build_agent(AdapterConfig(kind="anthropic-tooluse"))
+
+
+def test_build_agent_anthropic_tooluse_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_agent(AdapterConfig(kind="anthropic-tooluse", factory="not_dotted"))
+
+
+def test_build_agent_anthropic_tooluse_rejects_a_missing_factory_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_anthropic_tooluse_factory_missing")
+    monkeypatch.setitem(sys.modules, "sectum_test_anthropic_tooluse_factory_missing", module)
+    with pytest.raises(ConfigError, match="not exported"):
+        build_agent(
+            AdapterConfig(
+                kind="anthropic-tooluse",
+                factory="sectum_test_anthropic_tooluse_factory_missing:nope",
+            )
+        )
+
+
+def test_build_agent_anthropic_tooluse_rejects_a_non_callable_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_anthropic_tooluse_factory_non_callable")
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_anthropic_tooluse_factory_non_callable", module)
+    with pytest.raises(ConfigError, match="not callable"):
+        build_agent(
+            AdapterConfig(
+                kind="anthropic-tooluse",
+                factory="sectum_test_anthropic_tooluse_factory_non_callable:NOT_A_CALLABLE",
+            )
+        )
+
+
+def test_build_agent_anthropic_tooluse_rejects_an_unimportable_module() -> None:
+    with pytest.raises(ConfigError, match="cannot be imported"):
+        build_agent(
+            AdapterConfig(kind="anthropic-tooluse", factory="no_such_module_anywhere:thing")
+        )
+
+
+# ---------------------------------------------------------------------------
 # unknown-kind rejection for the three resolver families that lacked it
 # ---------------------------------------------------------------------------
 
