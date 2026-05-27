@@ -484,7 +484,10 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
     """Build the agent adapter the config selects."""
     extras = config.model_extra or {}
     if config.kind == "fake":
-        return FakeAgent()
+        return FakeAgent(
+            confused_deputy=_bool(extras, "confused_deputy", False),
+            tool_call_passthrough=_bool(extras, "tool_call_passthrough", False),
+        )
     if config.kind == "http":
         from sectum.adapters.agent.http import HttpAgent
 

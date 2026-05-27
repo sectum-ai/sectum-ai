@@ -237,18 +237,79 @@ class FakeObservability(ObservabilityAdapter):
         self._traces.pop(tenant, None)
 
 
-class FakeAgent(AgentAdapter):
-    """A deterministic in-memory agent.
+_AGENT_LOOKUP_RE = re.compile(r"^lookup\s+(\S+?)(?:\s+token=([0-9a-fA-F-]+))?\s*$")
 
-    It echoes the task and records one notional tool call - enough to exercise
-    the adapter contract.
+
+class FakeAgent(AgentAdapter):
+    """A deterministic in-memory agent with a ``lookup`` tool.
+
+    Default behaviour: echoes the task and records one notional tool call -
+    enough to exercise the adapter contract. When a task matches
+    ``lookup <key>[ token=<tenant-hex>]`` the agent invokes its built-in
+    ``lookup`` tool against a tenant-scoped resource registry that the
+    test substrate provisions via :meth:`provision`.
+
+    Two independent flaws can be switched on, both caught by the Class 7
+    direct agent-framework hijack probe:
+
+    - ``confused_deputy=True``: ``lookup`` resolves keys across every tenant's
+      resources - the agent has lost the caller's tenant scope on the way to
+      its tool.
+    - ``tool_call_passthrough=True``: ``lookup`` honours a caller-supplied
+      ``token=<tenant-hex>`` argument and acts as whatever tenant the token
+      names (the Asana-class agentic tool-passthrough pattern).
+
+    With both off the agent is tenant-scoped and reports that capability.
     """
 
-    def __init__(self, name: str = "fake-agent") -> None:
-        super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
+    def __init__(
+        self,
+        name: str = "fake-agent",
+        *,
+        confused_deputy: bool = False,
+        tool_call_passthrough: bool = False,
+    ) -> None:
+        capabilities = {Capability.TOOL_INVOCATION}
+        if not confused_deputy and not tool_call_passthrough:
+            capabilities.add(Capability.TENANT_SCOPED_TOOLS)
+        super().__init__(name, frozenset(capabilities))
+        self._confused_deputy = confused_deputy
+        self._tool_call_passthrough = tool_call_passthrough
+        self._resources: dict[UUID, dict[str, str]] = {}
+
+    def provision(self, tenant: UUID, key: str, value: str) -> None:
+        """Store a resource the ``lookup`` tool can resolve (test helper)."""
+        self._resources.setdefault(tenant, {})[key] = value
 
     def run(self, tenant: UUID, task: str) -> AgentResult:
-        return AgentResult(output=f"tenant {tenant} completed: {task}", tool_calls=("noop",))
+        match = _AGENT_LOOKUP_RE.match(task)
+        if match is None:
+            return AgentResult(
+                output=f"tenant {tenant} completed: {task}",
+                tool_calls=("noop",),
+            )
+        key, token = match.group(1), match.group(2)
+        value = self._lookup(tenant, key, token)
+        return AgentResult(
+            output=f"tool returned: {value}" if value else "tool returned: ",
+            tool_calls=("lookup",),
+        )
+
+    def _lookup(self, tenant: UUID, key: str, token: str | None) -> str:
+        if self._confused_deputy:
+            # The agent lost the caller's tenant scope on the way to the tool
+            # call; the tool resolves against every tenant's resources.
+            for resources in self._resources.values():
+                if key in resources:
+                    return resources[key]
+            return ""
+        effective_tenant = tenant
+        if self._tool_call_passthrough and token is not None:
+            try:
+                effective_tenant = UUID(token)
+            except ValueError:
+                effective_tenant = tenant
+        return self._resources.get(effective_tenant, {}).get(key, "")
 
 
 class FakeMCP(MCPAdapter):
