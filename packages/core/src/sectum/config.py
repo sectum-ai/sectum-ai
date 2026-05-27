@@ -10,9 +10,9 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
-for observability, ``http`` for RAG, ``http``/``langgraph`` for agents,
-``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError`` with a
-clear message.
+for observability, ``http`` for RAG, ``http``/``langgraph``/``autogen`` for
+agents, ``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError``
+with a clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -500,6 +500,44 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
             raise ConfigError(f"langgraph factory {factory_path!r} is not callable")
         recursion_limit = _int(extras, "recursion_limit", 25)
         return LangGraphAgent(factory(), recursion_limit=recursion_limit)
+    if config.kind == "autogen":
+        # A live AutoGen agent is wired in code (the assistant and user-proxy
+        # are Python objects, not YAML values): the resolver expects the caller
+        # to expose a pair-factory callable and refer to it by
+        # ``module.path:callable``. The factory is imported and called with no
+        # arguments; it must return a 2-tuple ``(assistant, user_proxy)`` where
+        # ``user_proxy`` exposes ``initiate_chat(recipient, message=...)``.
+        from importlib import import_module
+
+        from sectum.adapters.agent.autogen import AutoGenAgent
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"autogen 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"autogen factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"autogen factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"autogen factory {factory_path!r} is not callable")
+        pair = factory()
+        if not (isinstance(pair, tuple) and len(pair) == 2):
+            raise ConfigError(
+                f"autogen factory {factory_path!r} must return a (assistant, user_proxy) tuple"
+            )
+        assistant, user_proxy = pair
+        max_turns: int | None = None
+        if "max_turns" in extras and extras["max_turns"] is not None:
+            max_turns = _int(extras, "max_turns", 0)
+        return AutoGenAgent(assistant, user_proxy, max_turns=max_turns)
     raise _unsupported("agent", config.kind)
 
 

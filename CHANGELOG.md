@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A live AutoGen agent adapter (`packages/adapters/src/sectum/adapters/agent/autogen.py`):
+  an `AutoGenAgent` that drives an AutoGen `AssistantAgent` + `UserProxyAgent`
+  pair through `UserProxyAgent.initiate_chat`, prefixing every user message
+  with a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from
+  its call arguments — the per-tenant isolation property Class 7 (agent
+  tool-call hijack) verifies. The adapter walks the conversation's
+  `chat_history` (with a `chat_messages` fallback for the v0.4+ shape) and
+  surfaces every tool the assistant called during a run — including both the
+  modern OpenAI `tool_calls` array and the legacy single `function_call`
+  field — so the Class 7 probes can see *which* tool fired in each tenant's
+  session. The `autogen` package is imported only on the live `connect`
+  path, so the mock-backed contract test in `tests/unit/test_autogen_agent.py`
+  runs against an in-memory stand-in with no extra dependency; the live path
+  needs the optional extras group (`pip install sectum-ai-adapters[autogen]`)
+  and is exercised by `tests/integration/test_autogen.py` (opt-in via the
+  env-gated integration suite). The CLI resolver accepts `kind: autogen`
+  under `agent` (via a `factory: module.path:callable` returning
+  `(assistant, user_proxy)`); `docs/configuration.md` and
+  `sectum.yaml.example` are updated to match.
+
 ## [0.1.0] - 2026-05-26
 
 First public release. Sectum AI ships as a five-package `uv` workspace

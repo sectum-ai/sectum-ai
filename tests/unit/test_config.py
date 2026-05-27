@@ -467,3 +467,134 @@ def test_build_agent_langgraph_rejects_a_non_callable_factory(
 def test_build_agent_langgraph_rejects_an_unimportable_module() -> None:
     with pytest.raises(ConfigError, match="cannot be imported"):
         build_agent(AdapterConfig(kind="langgraph", factory="no_such_module_anywhere:thing"))
+
+
+def test_build_agent_autogen_imports_and_invokes_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: autogen`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns a 2-tuple ``(assistant, user_proxy)``; the resolver
+    calls it once and hands the pair to ``AutoGenAgent``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.agent.autogen import AutoGenAgent
+
+    class _StubAssistant:
+        name = "stub"
+
+    class _StubProxy:
+        def initiate_chat(self, recipient: object, **kwargs: object) -> object:
+            return {"chat_history": []}
+
+    module = types.ModuleType("sectum_test_autogen_factory")
+    module.make_pair = lambda: (_StubAssistant(), _StubProxy())  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_autogen_factory", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="autogen",
+            factory="sectum_test_autogen_factory:make_pair",
+        )
+    )
+    assert isinstance(adapter, AutoGenAgent)
+
+
+def test_build_agent_autogen_requires_a_factory() -> None:
+    with pytest.raises(ConfigError, match="'factory' is required"):
+        build_agent(AdapterConfig(kind="autogen"))
+
+
+def test_build_agent_autogen_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_agent(AdapterConfig(kind="autogen", factory="not_dotted"))
+
+
+def test_build_agent_autogen_rejects_a_missing_factory_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_autogen_factory_missing")
+    monkeypatch.setitem(sys.modules, "sectum_test_autogen_factory_missing", module)
+    with pytest.raises(ConfigError, match="not exported"):
+        build_agent(
+            AdapterConfig(
+                kind="autogen",
+                factory="sectum_test_autogen_factory_missing:nope",
+            )
+        )
+
+
+def test_build_agent_autogen_rejects_a_non_callable_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_autogen_factory_non_callable")
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_autogen_factory_non_callable", module)
+    with pytest.raises(ConfigError, match="not callable"):
+        build_agent(
+            AdapterConfig(
+                kind="autogen",
+                factory="sectum_test_autogen_factory_non_callable:NOT_A_CALLABLE",
+            )
+        )
+
+
+def test_build_agent_autogen_rejects_an_unimportable_module() -> None:
+    with pytest.raises(ConfigError, match="cannot be imported"):
+        build_agent(AdapterConfig(kind="autogen", factory="no_such_module_anywhere:thing"))
+
+
+def test_build_agent_autogen_rejects_a_non_tuple_factory_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_autogen_factory_bad_return")
+    module.make_pair = lambda: "not a tuple"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_autogen_factory_bad_return", module)
+    with pytest.raises(ConfigError, match="assistant, user_proxy"):
+        build_agent(
+            AdapterConfig(
+                kind="autogen",
+                factory="sectum_test_autogen_factory_bad_return:make_pair",
+            )
+        )
+
+
+def test_build_agent_autogen_forwards_a_max_turns_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    from sectum.adapters.agent.autogen import AutoGenAgent
+
+    class _StubAssistant:
+        name = "stub"
+
+    class _StubProxy:
+        def initiate_chat(self, recipient: object, **kwargs: object) -> object:
+            return {"chat_history": []}
+
+    module = types.ModuleType("sectum_test_autogen_factory_max_turns")
+    module.make_pair = lambda: (_StubAssistant(), _StubProxy())  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_autogen_factory_max_turns", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="autogen",
+            factory="sectum_test_autogen_factory_max_turns:make_pair",
+            max_turns=7,
+        )
+    )
+    assert isinstance(adapter, AutoGenAgent)
+    assert adapter._max_turns == 7

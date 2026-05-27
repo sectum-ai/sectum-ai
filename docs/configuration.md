@@ -121,6 +121,7 @@ No live memory adapter is wired into the CLI resolver yet.
 | `fake` | — | `FakeAgent`; needs no fields. |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
 | `langgraph` | (constructed in Python) | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The `sectum.yaml` block only flips the kind; the caller constructs the graph (typically via `LangGraphAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
+| `autogen` | (constructed in Python) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The `sectum.yaml` block only flips the kind; the caller constructs the pair (typically via `AutoGenAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
 
 ## `evidence`
 

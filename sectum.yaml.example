@@ -85,6 +85,13 @@ adapters:
     #                          # config validator accepts a langgraph adapter built
     #                          # by the caller. Requires the optional `langgraph`
     #                          # extra: `pip install sectum-ai-adapters[langgraph]`.
+    # kind: autogen            # an AutoGen AssistantAgent + UserProxyAgent pair
+    #                          # (each per-tenant message prefixed with [tenant:<hex>])
+    #                          # construct via `AutoGenAgent.connect(model, tools)`
+    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # config validator accepts an autogen adapter built
+    #                          # by the caller. Requires the optional `autogen`
+    #                          # extra: `pip install sectum-ai-adapters[autogen]`.
     kind: fake
 
   mcp:
