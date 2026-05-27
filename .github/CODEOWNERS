@@ -1,5 +1,7 @@
 # Sectum AI - code ownership.
 #
-# TODO: replace the placeholder below with the real maintainer GitHub handle or
-# team before enabling required CODEOWNERS review in branch protection.
-* @sectum-ai/maintainers
+# Single-maintainer ownership today. The `@dmitrymaranik` handle owns every
+# path; CODEOWNERS-required review in branch protection therefore routes to
+# the maintainer for every PR. When a `sectum-ai/maintainers` team forms, swap
+# `@dmitrymaranik` for the team slug here and keep the same `*` glob.
+* @dmitrymaranik
