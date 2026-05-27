@@ -92,6 +92,14 @@ adapters:
     #                          # config validator accepts an autogen adapter built
     #                          # by the caller. Requires the optional `autogen`
     #                          # extra: `pip install sectum-ai-adapters[autogen]`.
+    # kind: crewai             # a CrewAI Crew (agents + tasks) kicked off per tenant
+    #                          # (tenant.hex passed in as the `tenant_id` input
+    #                          # variable; templated task descriptions interpolate it)
+    #                          # construct via `CrewAIAgent.connect(agents, tasks)`
+    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # config validator accepts a crewai adapter built
+    #                          # by the caller. Requires the optional `crewai`
+    #                          # extra: `pip install sectum-ai-adapters[crewai]`.
     kind: fake
 
   mcp:

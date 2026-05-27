@@ -10,7 +10,8 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
-for observability, ``http`` for RAG, ``http``/``langgraph``/``autogen`` for
+for observability, ``http`` for RAG,
+``http``/``langgraph``/``autogen``/``crewai`` for
 agents, ``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError``
 with a clear message.
 
@@ -538,6 +539,37 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
         if "max_turns" in extras and extras["max_turns"] is not None:
             max_turns = _int(extras, "max_turns", 0)
         return AutoGenAgent(assistant, user_proxy, max_turns=max_turns)
+    if config.kind == "crewai":
+        # A live CrewAI agent is wired in code (the crew is a Python object
+        # composed of agents + tasks, not a YAML value): the resolver expects
+        # the caller to expose a crew-factory callable and refer to it by
+        # ``module.path:callable``. The factory is imported and called with no
+        # arguments; it must return a ``Crew`` (or any object exposing
+        # ``kickoff(inputs: dict)``).
+        from importlib import import_module
+
+        from sectum.adapters.agent.crewai import CrewAIAgent
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"crewai 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"crewai factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"crewai factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"crewai factory {factory_path!r} is not callable")
+        input_key = _str(extras, "input_key", "task")
+        tenant_key = _str(extras, "tenant_key", "tenant_id")
+        return CrewAIAgent(factory(), input_key=input_key, tenant_key=tenant_key)
     raise _unsupported("agent", config.kind)
 
 

@@ -598,3 +598,112 @@ def test_build_agent_autogen_forwards_a_max_turns_extra(
     )
     assert isinstance(adapter, AutoGenAgent)
     assert adapter._max_turns == 7
+
+
+def test_build_agent_crewai_imports_and_invokes_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: crewai`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns any object exposing ``kickoff(inputs)``; the resolver
+    calls it once and hands the crew to ``CrewAIAgent``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.agent.crewai import CrewAIAgent
+
+    class _StubCrew:
+        def kickoff(self, inputs: dict[str, object]) -> dict[str, object]:
+            return {"raw": "", "tasks_output": []}
+
+    module = types.ModuleType("sectum_test_crewai_factory")
+    module.make_crew = lambda: _StubCrew()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_crewai_factory", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="crewai",
+            factory="sectum_test_crewai_factory:make_crew",
+        )
+    )
+    assert isinstance(adapter, CrewAIAgent)
+
+
+def test_build_agent_crewai_requires_a_factory() -> None:
+    with pytest.raises(ConfigError, match="'factory' is required"):
+        build_agent(AdapterConfig(kind="crewai"))
+
+
+def test_build_agent_crewai_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_agent(AdapterConfig(kind="crewai", factory="not_dotted"))
+
+
+def test_build_agent_crewai_rejects_a_missing_factory_attribute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_crewai_factory_missing")
+    monkeypatch.setitem(sys.modules, "sectum_test_crewai_factory_missing", module)
+    with pytest.raises(ConfigError, match="not exported"):
+        build_agent(
+            AdapterConfig(
+                kind="crewai",
+                factory="sectum_test_crewai_factory_missing:nope",
+            )
+        )
+
+
+def test_build_agent_crewai_rejects_a_non_callable_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    module = types.ModuleType("sectum_test_crewai_factory_non_callable")
+    module.NOT_A_CALLABLE = 42  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_crewai_factory_non_callable", module)
+    with pytest.raises(ConfigError, match="not callable"):
+        build_agent(
+            AdapterConfig(
+                kind="crewai",
+                factory="sectum_test_crewai_factory_non_callable:NOT_A_CALLABLE",
+            )
+        )
+
+
+def test_build_agent_crewai_rejects_an_unimportable_module() -> None:
+    with pytest.raises(ConfigError, match="cannot be imported"):
+        build_agent(AdapterConfig(kind="crewai", factory="no_such_module_anywhere:thing"))
+
+
+def test_build_agent_crewai_forwards_input_and_tenant_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    import types
+
+    from sectum.adapters.agent.crewai import CrewAIAgent
+
+    class _StubCrew:
+        def kickoff(self, inputs: dict[str, object]) -> dict[str, object]:
+            return {"raw": "", "tasks_output": []}
+
+    module = types.ModuleType("sectum_test_crewai_factory_keys")
+    module.make_crew = lambda: _StubCrew()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_crewai_factory_keys", module)
+
+    adapter = build_agent(
+        AdapterConfig(
+            kind="crewai",
+            factory="sectum_test_crewai_factory_keys:make_crew",
+            input_key="query",
+            tenant_key="customer",
+        )
+    )
+    assert isinstance(adapter, CrewAIAgent)
+    assert adapter._input_key == "query"
+    assert adapter._tenant_key == "customer"
