@@ -1,0 +1,20 @@
+# Production-shape config for the Erasure Attestation engagement.
+#
+# Originally configured rfc3161 + FreeTSA (https://freetsa.org/tsr)
+# but FreeTSA goes down intermittently. Real engagements should pin a
+# customer-chosen TSA (their preferred trust anchor); the local-dev
+# default is appropriate for the OSS sample so the regeneration is
+# reproducible. The Rekor flag is on so the sample shows a real
+# transparency-log inclusion proof.
+#
+# Used by docs/samples/ regeneration; not by the default run.sh.
+
+scenario:
+  seed: 2026
+  corpus_profile: demo
+workdir: out
+
+evidence:
+  timestamper: local
+  rekor: true
+  # rekor_url defaults to https://rekor.sigstore.dev

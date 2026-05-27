@@ -57,6 +57,8 @@ nav:
       - adr/0007-canonical-hashing-serializes-every-field.md
       - adr/0008-adapter-user-dimension.md
       - adr/0009-atlas-technique-review-process.md
+  - Maintainers:
+      - Releasing: RELEASING.md
 
 markdown_extensions:
   - admonition

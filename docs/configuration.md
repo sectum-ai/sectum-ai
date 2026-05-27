@@ -87,7 +87,8 @@ No live model adapter is wired into the CLI resolver yet.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `confused_deputy: bool = false`, `token_passthrough: bool = false` | In-memory MCP server; both knobs reproduce the Class 7 flaws. |
-| `stdio` | `command: str` *(required)*, `args: list[str] = []`, `tenant_argument: str | null = null` | Launches an MCP server as a subprocess and speaks MCP over stdio. |
+| `stdio` | `command: str` *(required)*, `args: list[str] = []`, `tenant_argument: str \| null = null` | Launches an MCP server as a subprocess and speaks MCP over stdio. |
+| `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0`, `tenant_argument: str \| null = null` | `HttpMCPClient` — opens a streamable HTTP session against a remote MCP server. |
 
 ### `memory`
 

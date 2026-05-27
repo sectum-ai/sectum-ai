@@ -1,0 +1,385 @@
+{
+  "run_result": {
+    "run_id": "erasure-7cd276c8",
+    "scenario_hash": "083169e020ae06d60d7fb74426120e158f83b4561fccb1a1d03dbe7350f6fdfc",
+    "manifest_hash": "8fe3474ce0b74594e8104086141794055a08d959f3858efcf802fea3279fece6",
+    "started_at": "2026-05-27T01:36:15.244131Z",
+    "finished_at": "2026-05-27T01:36:15.244862Z",
+    "adapter_versions": {
+      "fake-vector": "0.0.0",
+      "fake-observability": "0.0.0",
+      "fake-memory": "0.0.0",
+      "fake-cache": "0.0.0",
+      "fake-model": "0.0.0",
+      "fake-search": "0.0.0",
+      "fake-eval-set": "0.0.0"
+    },
+    "probe_versions": {
+      "gdpr-erasure-verification": "0.0.0"
+    },
+    "findings": [
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-tracing-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "tracing",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's traces from the observability backend"
+      },
+      {
+        "finding_id": "erasure-residual-tracing-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "tracing",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's traces from the observability backend"
+      },
+      {
+        "finding_id": "erasure-residual-agent_memory-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "agent_memory",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's entries from the agent/long-term memory store"
+      },
+      {
+        "finding_id": "erasure-residual-agent_memory-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "agent_memory",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's entries from the agent/long-term memory store"
+      },
+      {
+        "finding_id": "erasure-residual-semantic_cache-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "semantic_cache",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; evict the tenant's entries from the semantic/application cache"
+      },
+      {
+        "finding_id": "erasure-residual-semantic_cache-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "semantic_cache",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; evict the tenant's entries from the semantic/application cache"
+      },
+      {
+        "finding_id": "erasure-residual-model_adapter-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "model_adapter",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; retire or retrain the tenant's fine-tune/adapter so it no longer reproduces the data"
+      },
+      {
+        "finding_id": "erasure-residual-model_adapter-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "model_adapter",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; retire or retrain the tenant's fine-tune/adapter so it no longer reproduces the data"
+      },
+      {
+        "finding_id": "erasure-residual-search_index-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "search_index",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's documents from the derived full-text search index"
+      },
+      {
+        "finding_id": "erasure-residual-search_index-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "search_index",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's documents from the derived full-text search index"
+      },
+      {
+        "finding_id": "erasure-residual-eval_set-mkr-00000",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "eval_set",
+        "marker_id": "mkr-00000",
+        "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's fixtures from the evaluation / golden test set"
+      },
+      {
+        "finding_id": "erasure-residual-eval_set-mkr-00001",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "eval_set",
+        "marker_id": "mkr-00001",
+        "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge the tenant's fixtures from the evaluation / golden test set"
+      }
+    ],
+    "metrics": {
+      "per_probe_findings": {},
+      "confirmed_findings": 14,
+      "retrieval_pivot_rate": null,
+      "retrieval_pivot_rate_by_model": {},
+      "erasure_residue": {
+        "vector_db": 2,
+        "tracing": 2,
+        "agent_memory": 2,
+        "semantic_cache": 2,
+        "model_adapter": 2,
+        "search_index": 2,
+        "eval_set": 2
+      },
+      "side_channel_effect_sizes": {}
+    },
+    "schema_version": "0.1.0"
+  },
+  "manifest_hash": "8fe3474ce0b74594e8104086141794055a08d959f3858efcf802fea3279fece6",
+  "tsa_token": "{\"digest\":\"62659443593e78e1033383fd0028fcde8a008a3c06dc3a125750178c348b87af\",\"timestamped_at\":\"2026-05-27T01:36:15.245396+00:00\",\"tsa\":\"local-dev\"}",
+  "rekor_proof": null,
+  "control_mappings": [
+    {
+      "framework": "SOC 2 (TSC)",
+      "control_ids": [
+        "CC6.1",
+        "CC6.6",
+        "CC6.7"
+      ],
+      "assertion": "Tenant logical separation tested by benign and adversarial probing across the AI surfaces."
+    },
+    {
+      "framework": "ISO/IEC 27001:2022",
+      "control_ids": [
+        "A.5.15",
+        "A.8.3",
+        "A.8.12"
+      ],
+      "assertion": "Cross-tenant information leakage tested; residual leakage itemized."
+    },
+    {
+      "framework": "GDPR",
+      "control_ids": [
+        "Article 17",
+        "Article 25",
+        "Article 32"
+      ],
+      "assertion": "Erasure across the AI surfaces verified; tenant isolation tested."
+    },
+    {
+      "framework": "EU AI Act",
+      "control_ids": [
+        "Article 15"
+      ],
+      "assertion": "Robustness of tenant isolation tested under benign and adversarial conditions."
+    },
+    {
+      "framework": "HIPAA",
+      "control_ids": [
+        "164.312(a)(1)",
+        "164.312(c)(1)",
+        "164.312(e)(1)"
+      ],
+      "assertion": "Segregation of regulated tenant data verified across the AI surfaces."
+    },
+    {
+      "framework": "NIST AI RMF",
+      "control_ids": [
+        "MEASURE 2.7",
+        "MANAGE 2.x"
+      ],
+      "assertion": "Documented measurement of multi-tenant security risk."
+    },
+    {
+      "framework": "OWASP LLM Top 10",
+      "control_ids": [
+        "LLM08:2025"
+      ],
+      "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
+    }
+  ],
+  "pdf_ref": null,
+  "schema_version": "0.1.0"
+}

@@ -274,6 +274,26 @@ def test_build_mcp_stdio_rejects_non_list_args() -> None:
         build_mcp(AdapterConfig(kind="stdio", command="echo", args="oops"))
 
 
+def test_build_mcp_http_constructs_an_http_client() -> None:
+    from sectum.adapters.mcp.http import HttpMCPClient
+
+    adapter = build_mcp(
+        AdapterConfig(
+            kind="http",
+            url="http://stub.invalid/mcp",
+            headers={"Authorization": "Bearer x"},
+            timeout=5.0,
+            tenant_argument="tenant",
+        )
+    )
+    assert isinstance(adapter, HttpMCPClient)
+
+
+def test_build_mcp_http_requires_a_url() -> None:
+    with pytest.raises(ConfigError, match="'url' is required"):
+        build_mcp(AdapterConfig(kind="http"))
+
+
 def test_build_rag_defaults_to_a_fake() -> None:
     assert isinstance(build_rag(AdapterConfig(kind="fake")), FakeRAGPipeline)
 

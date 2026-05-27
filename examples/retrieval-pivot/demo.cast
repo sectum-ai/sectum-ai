@@ -1,0 +1,11 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1779846464, "env": {"SHELL": "/bin/zsh", "TERM": null}, "title": "Sectum AI — 95% leakage in 90 seconds"}
+[0.228619, "o", "seeded 4 tenants and 96 documents -> .sectum/substrate.json\r\n"]
+[0.252961, "o", "\r\n"]
+[2.118197, "o", "{\r\n  \"run_id\": \"run-sectum-demo-2026\",\r\n  \"probe_count\": 10,\r\n  \"confirmed_findings\": 264,\r\n  \"retrieval_pivot_rate\": 1.0,\r\n  \"retrieval_pivot_rate_by_model\": {},\r\n  \"per_probe_findings\": {\r\n    \"tenant-boundary-fetch\": 24,\r\n    \"rag-entity-bleed\": 36,\r\n    \"semantic-cache-contamination\": 24,\r\n    \"lora-cross-tenant\": 24,\r\n    \"agent-tool-hijack\": 24,\r\n    \"memory-contamination\": 24,\r\n    \"embedding-inversion\": 24,\r\n    \"ikea-extraction\": 48,\r\n    \"rag-poisoning\": 24,\r\n    \"kv-cache-timing\": 12\r\n  },\r\n  \"run_path\": \".sectum/run.json\"\r\n}\r\n"]
+[2.145888, "o", "\r\n"]
+[2.455525, "o", "evidence pack -> .sectum/evidence.json\r\naudit pack -> .sectum/audit-pack.pdf\r\nin-toto attestation -> .sectum/attestation.intoto.json\r\n"]
+[2.480943, "o", "\r\n"]
+[2.703529, "o", "[ok] timestamp-token: run digest timestamped by local-dev\r\n[ok] manifest-consistency: the run and the pack agree on the manifest hash\r\nVERIFIED: the evidence pack is intact\r\n"]
+[2.727351, "o", "\r\n"]
+[2.73194, "o", "-rw-r--r--@ 1 dmitry.maranik  staff   4.0K May 26 18:47 .sectum/attestation.intoto.json\r\n-rw-r--r--@ 1 dmitry.maranik  staff    28K May 26 18:47 .sectum/audit-pack.pdf\r\n-rw-r--r--@ 1 dmitry.maranik  staff   230K May 26 18:47 .sectum/evidence.json\r\n"]
+[2.732002, "o", "-rw-r--r--@ 1 dmitry.maranik  staff   215K May 26 18:47 .sectum/run.json\r\n-rw-r--r--@ 1 dmitry.maranik  staff    58K May 26 18:47 .sectum/substrate.json\r\n"]

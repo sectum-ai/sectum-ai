@@ -11,8 +11,8 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
 for observability, ``http`` for RAG, ``http``/``langgraph`` for agents,
-``stdio`` for MCP); an unsupported kind raises ``ConfigError`` with a clear
-message.
+``stdio``/``http`` for MCP); an unsupported kind raises ``ConfigError`` with a
+clear message.
 
 Credentials never appear inline in the file. Adapter blocks will reference
 environment variables (for example ``dsn_env: SECTUM_PGVECTOR_DSN``) so the
@@ -393,6 +393,14 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         args = [str(item) for item in raw_args]
         tenant_argument = _optional_str(extras, "tenant_argument")
         return StdioMCPClient(command, args, tenant_argument=tenant_argument)
+    if config.kind == "http":
+        from sectum.adapters.mcp.http import HttpMCPClient
+
+        url = _required_str(extras, "url")
+        headers = _str_dict(extras, "headers")
+        timeout = _float(extras, "timeout", 30.0)
+        tenant_argument = _optional_str(extras, "tenant_argument")
+        return HttpMCPClient(url, headers=headers, timeout=timeout, tenant_argument=tenant_argument)
     raise _unsupported("mcp", config.kind)
 
 
