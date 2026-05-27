@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A new `examples/memory-contamination/` walkthrough that reproduces Attack
+  Class 8 — persistent memory contamination (SpAIware-class) — end to end:
+  the `memory-contamination` probe writes a hard canary into every tenant's
+  long-term memory as the owning principal and then recalls it from every
+  foreign principal, against an in-memory `FakeMemory` whose `shared_memory`
+  knob removes the tenant boundary. The walkthrough sits alongside
+  `mcp-tenant-boundary/` and `agent-tool-hijack/` as the agent-side
+  isolation surface, and the README scopes it to the only memory adapter
+  shipped today (the `FakeMemory` substrate) while naming the live
+  agent-framework memory plugins (LangGraph checkpointers, AutoGen memory,
+  CrewAI memory, Mem0, Letta, Zep) the `MemoryAdapter` interface is built
+  to receive. Smoke-tested on a clean substrate: `run.sh` exits with 24
+  confirmed Class 8 leak findings and the evidence pack verifies under
+  `sectum verify`.
 - A new `examples/agent-tool-hijack/` walkthrough that reproduces Attack
   Class 7 from the *agent-adapter* perspective: the same Class 7 probe
   the `examples/mcp-tenant-boundary/` example drives (with confused-deputy
