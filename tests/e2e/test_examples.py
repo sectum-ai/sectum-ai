@@ -27,6 +27,7 @@ _EXAMPLES = (
     "erasure-attestation",
     "mcp-tenant-boundary",
     "agent-tool-hijack",
+    "agent-framework-hijack",
     "memory-contamination",
     "lora-cross-tenant",
     "kv-cache-timing",

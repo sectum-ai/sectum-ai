@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# examples/agent-framework-hijack/run.sh
+#
+# Reproduces Attack Class 7 - cross-tenant agent tool-call hijacking - from the
+# agent-framework end: seed a substrate, run the direct agent-framework probe
+# against the in-memory FakeAgent with both leak knobs on (confused-deputy +
+# tool-call passthrough), assemble a tamper-evident evidence pack, and verify
+# it. Where examples/agent-tool-hijack/ verifies the leaky MCP server an agent
+# calls, this example verifies the *agent caller* itself - no MCP server in
+# the loop - and surfaces the same kinds of cross-tenant findings via the
+# agent's final output rather than the tool result.
+#
+# The probe runs against every shipped v1 agent backend (`fake` / `http` /
+# `langgraph` / `autogen` / `crewai` / `openai-assistants` /
+# `anthropic-tooluse`); this script drives the fake so it stays
+# credential-free and runs end-to-end in CI.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$here/../.." && pwd)"
+out="$here/out"
+
+sectum() { uv run --quiet --project "$repo_root" sectum "$@"; }
+
+rm -rf "$out"
+mkdir -p "$out"
+
+cp "$here/sectum.yaml" "$out/sectum.yaml"
+
+echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
+sectum seed --workdir "$out" --config "$out/sectum.yaml"
+
+echo
+echo "==> 2/4  Probe Class 7 from the agent-framework end"
+echo "         (the leaky in-memory FakeAgent stands in for any agent caller;"
+echo "         swap it for a live backend via the factories.py wiring in"
+echo "         examples/agent-tool-hijack/)"
+# 'sectum probe' exits 2 when it confirms cross-tenant leaks - expected on the
+# leaky demo agent, so tolerate the non-zero exit.
+sectum probe --workdir "$out" --config "$out/sectum.yaml" --probe agent-framework-hijack || true
+
+echo
+echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
+sectum report --workdir "$out" --config "$out/sectum.yaml"
+
+echo
+echo "==> 4/4  Independently verify the evidence pack"
+sectum verify "$out/evidence.json"
+
+echo
+echo "Artifacts written to: $out"
+echo
+echo "The page-3 findings table itemises each confirmed Class 7 leak via the"
+echo "agent-framework surface. To swap the agent caller to a live backend, see"
+echo "examples/agent-tool-hijack/factories.py - the probe stays the same; only"
+echo "the agent.kind in sectum.yaml changes."
