@@ -69,6 +69,10 @@ adapters:
     #   secret_key_env: LANGFUSE_SECRET_KEY
     # kind: langsmith
     #   api_key_env: LANGSMITH_API_KEY
+    # kind: otel               # generic OpenTelemetry (OTLP-JSON trace-query endpoint)
+    #   base_url_env: SECTUM_OTEL_URL  # any Jaeger/Tempo/collector shim that speaks
+    #   query_path: /v1/traces/query   # the Sectum OTLP-JSON trace-query contract
+    #   tenant_attribute: tenant.id    # resource attribute carrying the tenant.hex
     kind: fake
 
   rag:

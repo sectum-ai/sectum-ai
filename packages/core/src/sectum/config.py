@@ -9,7 +9,7 @@ built-in defaults would otherwise use (the engineering spec, section 10).
 adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
-vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
+vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``/``otel``
 for observability, ``http``/``langchain`` for RAG,
 ``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants``/
 ``anthropic-tooluse`` for agents, ``stdio``/``http`` for MCP); an unsupported
@@ -506,6 +506,21 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
         api_url = _optional_str(extras, "api_url")
         prefix = _str(extras, "prefix", "sectum")
         return LangSmithObservability.connect(api_key, api_url, prefix=prefix)
+    if config.kind == "otel":
+        from sectum.adapters.observability.otel import OtelObservability
+
+        base_url = _resolve_secret(extras, "base_url", "base_url_env")
+        query_path = _str(extras, "query_path", "/v1/traces/query")
+        headers = _str_dict(extras, "headers")
+        timeout = _float(extras, "timeout", 30.0)
+        tenant_attribute = _str(extras, "tenant_attribute", "tenant.id")
+        return OtelObservability.connect(
+            base_url,
+            query_path=query_path,
+            headers=headers,
+            timeout=timeout,
+            tenant_attribute=tenant_attribute,
+        )
     raise _unsupported("observability", config.kind)
 
 
