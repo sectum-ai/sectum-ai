@@ -178,18 +178,38 @@ class FakeRAGPipeline(RAGPipelineAdapter):
 
     Call ``index`` - a test helper beyond the adapter interface - to populate a
     tenant's corpus before calling ``ask``.
+
+    With ``shared_index=True`` (the leaky knob) the pipeline's retriever
+    searches across *every* tenant's indexed documents, so a benign query
+    from tenant Y surfaces tenant X's content - the exact Class 2 pivot
+    pattern the Retrieval-Pivot probe is built to detect. With it off the
+    pipeline is tenant-scoped (the default).
     """
 
-    def __init__(self, name: str = "fake-rag") -> None:
-        super().__init__(name)
+    def __init__(self, name: str = "fake-rag", *, shared_index: bool = False) -> None:
+        capabilities: set[Capability] = set()
+        if shared_index:
+            capabilities.add(Capability.SHARED_INDEX)
+        else:
+            capabilities.add(Capability.PER_TENANT_NAMESPACE)
+        super().__init__(name, frozenset(capabilities))
         self._documents: dict[UUID, list[CorpusDocument]] = {}
+        self._shared_index = shared_index
 
     def index(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
         """Populate a tenant's corpus (test helper; not part of the interface)."""
         self._documents.setdefault(tenant, []).extend(documents)
 
     def ask(self, tenant: UUID, query: str) -> RagAnswer:
-        candidates = [(tenant, document) for document in self._documents.get(tenant, [])]
+        if self._shared_index:
+            # Cross-tenant retrieval: rank candidates from every tenant's corpus.
+            candidates = [
+                (owner, document)
+                for owner, documents in self._documents.items()
+                for document in documents
+            ]
+        else:
+            candidates = [(tenant, document) for document in self._documents.get(tenant, [])]
         retrieved = tuple(_rank(query, candidates, k=3))
         if not retrieved:
             return RagAnswer(answer="no relevant context found", retrieved=())

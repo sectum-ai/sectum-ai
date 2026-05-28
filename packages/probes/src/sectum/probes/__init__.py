@@ -32,6 +32,7 @@ from sectum.probes.providers import (
     OpenAIJudge,
 )
 from sectum.probes.rag_entity_bleed import RagEntityBleedProbe
+from sectum.probes.rag_pipeline_bleed import RagPipelineBleedProbe
 from sectum.probes.rag_poisoning import RagPoisoningProbe
 from sectum.probes.semantic_cache import SemanticCacheProbe
 from sectum.probes.tenant_boundary import TenantBoundaryProbe
@@ -61,6 +62,7 @@ __all__ = [
     "Probe",
     "ProbeRegistry",
     "RagEntityBleedProbe",
+    "RagPipelineBleedProbe",
     "RagPoisoningProbe",
     "SemanticCacheProbe",
     "SurfaceErasure",

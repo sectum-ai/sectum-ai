@@ -7,7 +7,7 @@ the classes below are implemented today.
 | Class | Probe | ATLAS | Surface |
 |---|---|---|---|
 | [1 — Direct tenant boundary fetch](class-01-tenant-boundary.md) | `tenant-boundary-fetch` | `AML.T0024` | vector DB |
-| [2 — Organic entity-bleed RAG](class-02-rag-entity-bleed.md) | `rag-entity-bleed` | `AML.T0024`, `AML.T0057` | vector DB |
+| [2 — Organic entity-bleed RAG](class-02-rag-entity-bleed.md) | `rag-entity-bleed`, `rag-pipeline-bleed` | `AML.T0024`, `AML.T0057` | vector DB, RAG pipeline |
 | [3 — Adversarial RAG poisoning](class-03-rag-poisoning.md) | `rag-poisoning` | `AML.T0020`, `AML.T0024` | vector DB |
 | [4 — Semantic-cache contamination](class-04-semantic-cache.md) | `semantic-cache-contamination` | `AML.T0057` | semantic cache |
 | [5 — KV-cache timing side channel](class-05-kv-cache-timing.md) | `kv-cache-timing` | — (timing channel) | KV cache |
