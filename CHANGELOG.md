@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live generic OpenTelemetry observability adapter, `OtelObservability`
+  (`packages/adapters/src/sectum/adapters/observability/otel.py`). Adds
+  the first of the spec §11 named-but-unshipped observability backends.
+  OpenTelemetry's SDK is export-only, so the adapter reads traces over a
+  small OTLP-JSON HTTP query contract — `POST {base_url}{query_path}`
+  with `{"tenant": "<hex>", "marker": "..."}` returning standard
+  `resourceSpans` — so one connector reaches any OTel-compatible backend
+  (Jaeger / Tempo / Grafana / a vendor backend, or a thin shim) without a
+  backend-specific SDK. Scopes by the resource attribute `tenant.id`
+  (configurable) and re-scans every span's name + attribute values for
+  the marker, so a backend that ignores the tenant filter is itself
+  caught as a leak. `delete(tenant)` issues a scoped `DELETE` and treats
+  a store with no delete API (404/405/501) idempotently — the residue
+  then surfaces at the next scan, the honest Class 11 signal. Standard-
+  library HTTP only, so the adapter and its 8 mock-backed unit tests need
+  no optional extra. The CLI resolver accepts `kind: otel` under
+  `observability`; `docs/configuration.md` and `sectum.yaml.example` are
+  updated. (Helicone + Datadog APM, the other two §11-named backends,
+  follow on the same injectable-client pattern once their live REST
+  schemas + per-tenant delete semantics are verified against the vendor
+  APIs.)
 - A Class 2 expansion probe, `RagPipelineBleedProbe`
   (`packages/probes/src/sectum/probes/rag_pipeline_bleed/`). Where the
   flagship `RagEntityBleedProbe` issues benign shared-entity queries
