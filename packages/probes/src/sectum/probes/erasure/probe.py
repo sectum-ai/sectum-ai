@@ -21,7 +21,16 @@ from sectum.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum.spec import Finding, FindingStatus, Marker, MarkerType, Severity, Substrate, Surface
+from sectum.spec import (
+    ErasureUnsupported,
+    Finding,
+    FindingStatus,
+    Marker,
+    MarkerType,
+    Severity,
+    Substrate,
+    Surface,
+)
 
 
 @dataclass(frozen=True)
@@ -125,7 +134,15 @@ class ErasureProbe:
 
         if self._observability is not None:
             obs_before = self._scan_observability(target, markers)
-            self._observability.delete(target)
+            caveat = False
+            try:
+                self._observability.delete(target)
+            except ErasureUnsupported:
+                # The backend has no programmatic per-tenant erasure API; the
+                # data is presumed retained. Record the surface as residual
+                # (never a false PASS) and emit a caveat finding rather than
+                # crash the run - spec §7 Class 11 hiding place #8.
+                caveat = True
             obs_residual = self._scan_observability(target, markers)
             surfaces.append(
                 SurfaceErasure(
@@ -134,9 +151,15 @@ class ErasureProbe:
                     residual_after=len(obs_residual),
                 )
             )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.TRACING) for marker in obs_residual
-            )
+            if caveat:
+                findings.extend(
+                    self._caveat_finding(target, marker, Surface.TRACING) for marker in obs_before
+                )
+            else:
+                findings.extend(
+                    self._residual_finding(target, marker, Surface.TRACING)
+                    for marker in obs_residual
+                )
 
         if self._memory is not None:
             mem_before = self._scan_memory(target, markers)
@@ -343,4 +366,37 @@ class ErasureProbe:
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
             remediation_pointer=remediation,
+        )
+
+    def _caveat_finding(self, target: UUID, marker: Marker, surface: Surface) -> Finding:
+        """A finding for a surface whose backend exposes no programmatic erasure API.
+
+        This is *attestable-with-caveat* (spec §7 Class 11 #8), not an erasure
+        *failure*: the customer's erasure flow is not broken - the backend
+        simply offers no per-tenant delete, so the data is presumed retained
+        and must be purged via the backend's own retention policy or console.
+        The distinction matters to a DPO, so it is carried in the remediation
+        pointer rather than conflated with a residual-after-erasure finding.
+        """
+        return Finding(
+            finding_id=f"erasure-caveat-{surface.value}-{marker.marker_id}",
+            probe_id=self.id,
+            severity=Severity.MEDIUM,
+            confidence=1.0,
+            status=FindingStatus.CONFIRMED,
+            owner_tenant_id=target,
+            observed_in_tenant_id=target,
+            surface=surface,
+            marker_id=marker.marker_id,
+            evidence_span=marker.plaintext,
+            owasp_llm=self.owasp_llm,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
+            remediation_pointer=(
+                "ATTESTABLE WITH CAVEAT: this backend exposes no programmatic "
+                "per-tenant erasure API, so Article 17 erasure cannot be verified "
+                "through it; purge the tenant's data via the backend's retention "
+                "policy or console and re-run. This is a backend limitation, not "
+                "a failure of the erasure flow."
+            ),
         )

@@ -73,6 +73,18 @@ adapters:
     #   base_url_env: SECTUM_OTEL_URL  # any Jaeger/Tempo/collector shim that speaks
     #   query_path: /v1/traces/query   # the Sectum OTLP-JSON trace-query contract
     #   tenant_attribute: tenant.id    # resource attribute carrying the tenant.hex
+    # kind: helicone           # Helicone request logs (scoped by a custom property)
+    #   api_key_env: HELICONE_API_KEY
+    #   tenant_property: tenant        # Helicone-Property-* carrying the tenant.hex
+    #                                  # NB: read-only — Helicone has no per-tenant
+    #                                  # erasure API, so Class 11 reports its surface
+    #                                  # as attestable-with-caveat.
+    # kind: datadog            # Datadog APM / LLM Observability spans (scoped by a tag)
+    #   api_key_env: DD_API_KEY
+    #   application_key_env: DD_APP_KEY
+    #   tenant_tag: tenant             # span tag carrying the tenant.hex; read-only —
+    #                                  # erasure is governed by retention, so Class 11
+    #                                  # reports its surface as attestable-with-caveat.
     kind: fake
 
   rag:

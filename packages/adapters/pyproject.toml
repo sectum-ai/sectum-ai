@@ -38,6 +38,8 @@ huggingface = ["transformers>=4.45", "peft>=0.13", "torch>=2.4", "accelerate>=1"
 openai-assistants = ["openai>=1.50"]
 anthropic-tooluse = ["anthropic>=0.40"]
 rag-langchain = ["langchain-core>=0.3"]
+# helicone + datadog observability read over their REST APIs with the standard
+# library (no SDK), so they need no extras group; listed here for discoverability.
 
 [project.urls]
 Homepage = "https://sectum.ai"

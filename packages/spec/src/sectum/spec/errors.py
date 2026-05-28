@@ -19,6 +19,18 @@ class AdapterError(SectumError):
     """An adapter is missing, misconfigured, or failed at runtime."""
 
 
+class ErasureUnsupported(AdapterError):
+    """A backend exposes no programmatic per-tenant erasure API.
+
+    Raised from an adapter's ``delete`` when the backend cannot purge a
+    tenant's data through its API (erasure is governed by a retention policy
+    or a manual console action instead). The Class 11 erasure probe catches
+    this and itemises the surface as *attestable-with-caveat* (the engineering
+    spec, section 7, Class 11, hiding place #8) rather than reporting a false
+    erasure success - the data is presumed retained until proven otherwise.
+    """
+
+
 class EvidenceError(SectumError):
     """Building or verifying a tamper-evident evidence pack failed."""
 

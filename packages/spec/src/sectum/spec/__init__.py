@@ -5,6 +5,7 @@ from sectum.spec.errors import (
     AdapterError,
     ConfigError,
     DetectionError,
+    ErasureUnsupported,
     EvidenceError,
     SectumError,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "ControlMapping",
     "CorpusDocument",
     "DetectionError",
+    "ErasureUnsupported",
     "EvidenceError",
     "EvidencePack",
     "Finding",
