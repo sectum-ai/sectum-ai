@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A live LangChain RAG pipeline adapter (`LangChainRAGPipeline` in
+  `packages/adapters/src/sectum/adapters/rag/langchain.py`). Closes
+  the last named v1 RAG kind spec §11 lists — "RAG — a generic HTTP
+  RAG adapter + LangChain." The adapter wraps any LangChain
+  `Runnable` (typically a composed LCEL chain of retriever + prompt
+  + LLM + output parser) and invokes it per-tenant with
+  `{"tenant": str(tenant), "query": query}`; tenant-aware retrievers
+  filter on `tenant` and isolated ones ignore it — a retriever that
+  shares its corpus is the exact leak Class 2 detects, so the
+  adapter passes the scope through and lets the substrate verify it.
+  The chain's response is parsed into the canonical
+  `RagAnswer(answer, retrieved)` whether the chain returns a string,
+  the modern `{"answer", "retrieved"}` shape, or the legacy
+  `{"result", "source_documents"}` shape; LangChain `Document`
+  objects with `page_content` + `metadata` parse into `VectorHit`
+  via the metadata's `doc_id` + `score`. `langchain_core` is
+  imported only on the live `connect` path; the adapter and its 10
+  mock-backed unit tests need no extra dependency. Optional extras
+  group: `pip install sectum-ai-adapters[rag-langchain]`. The CLI
+  resolver accepts `kind: langchain` under `rag` via a
+  `factory: module.path:callable` returning a `Runnable`;
+  `docs/configuration.md` and `sectum.yaml.example` are updated.
 - A runnable Class 7 walkthrough for the new probe in
   `examples/agent-framework-hijack/` (README + `run.sh` +
   `sectum.yaml`). The script seeds a four-tenant substrate, runs

@@ -4070,6 +4070,9 @@ phoenix = [
 pinecone = [
     { name = "pinecone" },
 ]
+rag-langchain = [
+    { name = "langchain-core" },
+]
 redis = [
     { name = "redis" },
 ]
@@ -4085,6 +4088,7 @@ requires-dist = [
     { name = "chromadb-client", marker = "extra == 'chroma'", specifier = ">=0.5" },
     { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
+    { name = "langchain-core", marker = "extra == 'rag-langchain'", specifier = ">=0.3" },
     { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=3,<4" },
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
@@ -4100,7 +4104,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.45" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
 ]
-provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants", "anthropic-tooluse"]
+provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants", "anthropic-tooluse", "rag-langchain"]
 
 [[package]]
 name = "sectum-ai-evidence"

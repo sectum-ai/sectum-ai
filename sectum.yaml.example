@@ -74,6 +74,11 @@ adapters:
   rag:
     # kind: http               # generic JSON HTTP RAG pipeline
     #   url_env: SECTUM_RAG_URL
+    # kind: langchain          # any LangChain `Runnable` (a composed LCEL chain)
+    #                          # construct via `LangChainRAGPipeline.connect(retriever, llm)`
+    #                          # or wrap a hand-built chain. Requires the optional
+    #                          # `rag-langchain` extra:
+    #                          # `pip install sectum-ai-adapters[rag-langchain]`.
     kind: fake
 
   agent:

@@ -10,7 +10,7 @@ adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
 vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``
-for observability, ``http`` for RAG,
+for observability, ``http``/``langchain`` for RAG,
 ``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants``/
 ``anthropic-tooluse`` for agents, ``stdio``/``http`` for MCP); an unsupported
 kind raises ``ConfigError`` with a clear message.
@@ -449,6 +449,35 @@ def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:
         headers = _str_dict(extras, "headers")
         timeout = _float(extras, "timeout", 30.0)
         return HttpRAGPipeline(url, headers=headers, timeout=timeout)
+    if config.kind == "langchain":
+        # A live LangChain RAG pipeline is wired in code (the chain is a
+        # composed Runnable, not a YAML value): the resolver expects the
+        # caller to expose a chain-factory callable and refer to it by
+        # ``module.path:callable``. The factory is imported and called with
+        # no arguments; it must return any object exposing
+        # ``invoke(input) -> str | dict``.
+        from importlib import import_module
+
+        from sectum.adapters.rag.langchain import LangChainRAGPipeline
+
+        factory_path = _required_str(extras, "factory")
+        module_name, _, attr = factory_path.rpartition(":")
+        if not module_name or not attr:
+            raise ConfigError(
+                f"langchain 'factory' must be 'module.path:callable', got {factory_path!r}"
+            )
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            raise ConfigError(
+                f"langchain factory module {module_name!r} cannot be imported: {error}"
+            ) from error
+        if not hasattr(module, attr):
+            raise ConfigError(f"langchain factory {factory_path!r} is not exported")
+        factory = getattr(module, attr)
+        if not callable(factory):
+            raise ConfigError(f"langchain factory {factory_path!r} is not callable")
+        return LangChainRAGPipeline(factory())
     raise _unsupported("rag", config.kind)
 
 

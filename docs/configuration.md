@@ -103,6 +103,7 @@ No live memory adapter is wired into the CLI resolver yet.
 |---|---|---|
 | `fake` | — | `FakeRAGPipeline`; needs no fields. |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
+| `langchain` | (constructed in Python) | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. The `sectum.yaml` block only flips the kind; the caller constructs the chain (typically via `LangChainRAGPipeline.connect(retriever, llm)`) and supplies it to the substrate runner. Requires the optional `rag-langchain` extra: `pip install sectum-ai-adapters[rag-langchain]`. |
 
 ### `observability`
 
