@@ -69,6 +69,7 @@ from sectum.probes import (
     MemoryContamProbe,
     Probe,
     RagEntityBleedProbe,
+    RagPipelineBleedProbe,
     RagPoisoningProbe,
     SemanticCacheProbe,
     TenantBoundaryProbe,
@@ -115,6 +116,7 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
     return (
         TenantBoundaryProbe(providers),
         RagEntityBleedProbe(providers),
+        RagPipelineBleedProbe(providers),
         SemanticCacheProbe(providers),
         LoraCrossTenantProbe(providers),
         AgentToolHijackProbe(providers),
@@ -136,7 +138,7 @@ _DEMO_CONFIG = SectumConfig(
         "model": AdapterConfig(kind="fake", adapter_bleed=True, prefix_cache=True),
         "mcp": AdapterConfig(kind="fake", confused_deputy=True, token_passthrough=True),
         "memory": AdapterConfig(kind="fake", shared_memory=True),
-        "rag": AdapterConfig(kind="fake"),
+        "rag": AdapterConfig(kind="fake", shared_index=True),
         "observability": AdapterConfig(kind="fake"),
         "agent": AdapterConfig(kind="fake", confused_deputy=True, tool_call_passthrough=True),
     }
@@ -467,6 +469,10 @@ def probe(
                     marker.marker_id,
                     f"agent tool returned. Reference: {marker.plaintext}",
                 )
+    if isinstance(bundle.rag, FakeRAGPipeline):
+        for tenant in substrate.tenants:
+            documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+            bundle.rag.index(tenant.tenant_id, documents)
     runner = Runner(
         substrate,
         vector=vector,

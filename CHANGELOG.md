@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A Class 2 expansion probe, `RagPipelineBleedProbe`
+  (`packages/probes/src/sectum/probes/rag_pipeline_bleed/`). Where the
+  flagship `RagEntityBleedProbe` issues benign shared-entity queries
+  through the vector adapter (`Surface.VECTOR_DB`), this probe issues
+  the same queries through the RAG-pipeline adapter
+  (`Surface.RAG_PIPELINE`). The customer-facing surface in production
+  is usually the RAG endpoint - not the underlying vector store - so a
+  shared-index retriever inside a tenant-aware-looking pipeline is the
+  exact leak this variant catches against the customer's actual
+  contract. Wired into the CLI suite and the default leaky-demo
+  config.
+- The `FakeRAGPipeline` gains a `shared_index: bool = False` leak knob.
+  With it on, the pipeline's retriever searches across every tenant's
+  indexed documents - the cross-tenant retrieval pattern the new probe
+  is built to catch. The default stays tenant-scoped and now reports
+  `Capability.PER_TENANT_NAMESPACE`; `shared_index=True` reports
+  `Capability.SHARED_INDEX` (the same capability the leaky
+  `FakeVectorStore` advertises). `build_rag(config)` reads the knob
+  from extras; the CLI's leaky-demo config flips it on and provisions
+  every substrate document into the fake's index automatically.
 - A live LangChain RAG pipeline adapter (`LangChainRAGPipeline` in
   `packages/adapters/src/sectum/adapters/rag/langchain.py`). Closes
   the last named v1 RAG kind spec §11 lists — "RAG — a generic HTTP

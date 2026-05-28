@@ -349,8 +349,8 @@ def test_probe_output_json_emits_a_parseable_summary_on_stdout(tmp_path: Path) -
     assert result.exit_code == 2
     summary = json.loads(result.stdout)
     assert summary["run_id"].startswith("run-")
-    # the full suite + the KV timing probe = 11 entries
-    assert summary["probe_count"] == 11
+    # the full suite + the KV timing probe = 12 entries
+    assert summary["probe_count"] == 12
     assert summary["confirmed_findings"] > 0
     assert summary["retrieval_pivot_rate"] is not None
     assert summary["run_path"].endswith("run.json")

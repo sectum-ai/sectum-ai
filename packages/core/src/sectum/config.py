@@ -441,7 +441,7 @@ def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:
     """Build the RAG-pipeline adapter the config selects."""
     extras = config.model_extra or {}
     if config.kind == "fake":
-        return FakeRAGPipeline()
+        return FakeRAGPipeline(shared_index=_bool(extras, "shared_index", False))
     if config.kind == "http":
         from sectum.adapters.rag.http import HttpRAGPipeline
 
