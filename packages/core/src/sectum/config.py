@@ -9,7 +9,8 @@ built-in defaults would otherwise use (the engineering spec, section 10).
 adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
-vector store, ``redis`` for the cache, ``phoenix``/``langfuse``/``langsmith``/``otel``
+vector store, ``redis`` for the cache,
+``phoenix``/``langfuse``/``langsmith``/``otel``/``helicone``/``datadog``
 for observability, ``http``/``langchain`` for RAG,
 ``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants``/
 ``anthropic-tooluse`` for agents, ``stdio``/``http`` for MCP); an unsupported
@@ -520,6 +521,25 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
             headers=headers,
             timeout=timeout,
             tenant_attribute=tenant_attribute,
+        )
+    if config.kind == "helicone":
+        from sectum.adapters.observability.helicone import HeliconeObservability
+
+        api_key = _resolve_secret(extras, "api_key", "api_key_env")
+        base_url = _str(extras, "base_url", "https://api.helicone.ai")
+        tenant_property = _str(extras, "tenant_property", "tenant")
+        return HeliconeObservability.connect(
+            api_key, base_url=base_url, tenant_property=tenant_property
+        )
+    if config.kind == "datadog":
+        from sectum.adapters.observability.datadog import DatadogObservability
+
+        api_key = _resolve_secret(extras, "api_key", "api_key_env")
+        application_key = _resolve_secret(extras, "application_key", "application_key_env")
+        base_url = _str(extras, "base_url", "https://api.datadoghq.com")
+        tenant_tag = _str(extras, "tenant_tag", "tenant")
+        return DatadogObservability.connect(
+            api_key, application_key, base_url=base_url, tenant_tag=tenant_tag
         )
     raise _unsupported("observability", config.kind)
 

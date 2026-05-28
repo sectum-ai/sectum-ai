@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Live Helicone and Datadog APM observability adapters
+  (`HeliconeObservability`, `DatadogObservability`), completing the spec §11
+  observability backend list (Langfuse, LangSmith, Helicone, Phoenix,
+  Datadog APM, generic OTel). Both read the tenant's traces over their
+  documented query APIs — Helicone's request-query endpoint scoped by a
+  custom property (`Helicone-Property-Tenant`), Datadog's spans-search
+  endpoint scoped by a span tag (`@tenant:<hex>`) — and scan the
+  request/response bodies (Helicone) or span attributes (Datadog) for the
+  marker. Standard-library HTTP, no optional extra; adapter logic verified
+  by mock-backed unit tests, live wire format opt-in.
+- Both adapters are **read-only with respect to erasure**: neither backend
+  exposes a documented programmatic per-tenant bulk-delete (Helicone purges
+  via retention settings; Datadog via retention policy), so their
+  `delete(tenant)` raises the new `ErasureUnsupported(AdapterError)`. The
+  Class 11 erasure probe now catches `ErasureUnsupported` per surface and
+  records it as *attestable-with-caveat* (spec §7, hiding place #8): the
+  surface shows residual = baseline (data presumed retained, never a false
+  erasure PASS) with a distinct `erasure-caveat-*` finding whose remediation
+  pointer explains it is a backend limitation, not a failure of the
+  customer's erasure flow. This distinction matters to a DPO and is the
+  honest representation for a compliance attestation.
+- `ErasureUnsupported` is exported from `sectum.spec` and subclasses
+  `AdapterError`, so callers that don't special-case the caveat still catch
+  it under existing adapter-error handling. The CLI resolver accepts
+  `kind: helicone` and `kind: datadog` under `observability`;
+  `docs/configuration.md` and `sectum.yaml.example` document both, including
+  the read-only erasure caveat.
 - A live generic OpenTelemetry observability adapter, `OtelObservability`
   (`packages/adapters/src/sectum/adapters/observability/otel.py`). Adds
   the first of the spec §11 named-but-unshipped observability backends.

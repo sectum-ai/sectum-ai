@@ -149,6 +149,51 @@ def test_erasure_fails_when_observability_soft_deletes() -> None:
     assert any(finding.surface is Surface.TRACING for finding in report.findings)
 
 
+def test_erasure_reports_a_caveat_when_observability_has_no_erasure_api() -> None:
+    # A backend whose delete() raises ErasureUnsupported (Helicone / Datadog)
+    # must NOT crash the run and must NOT be reported as erased: the data is
+    # presumed retained, so the surface shows residual + a caveat finding
+    # distinct from an erasure *failure* (spec §7 Class 11 hiding place #8).
+    from uuid import UUID
+
+    from sectum.adapters.base import ObservabilityAdapter, TraceHit
+    from sectum.spec import ErasureUnsupported
+
+    class _NoErasureObservability(ObservabilityAdapter):
+        def __init__(self, seeded: FakeObservability) -> None:
+            super().__init__("no-erasure-obs")
+            self._seeded = seeded
+
+        def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
+            return self._seeded.search_traces(tenant, marker)
+
+        def list_projects(self) -> list[str]:
+            return self._seeded.list_projects()
+
+        def delete(self, tenant: UUID) -> None:
+            raise ErasureUnsupported("backend exposes no per-tenant erasure API")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    obs = _NoErasureObservability(_seeded_observability(substrate, soft_delete=False))
+    report = ErasureProbe(substrate, vector=store, observability=obs).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    # the surface is recorded (no crash) and shows residual = before (retained)
+    assert surfaces[Surface.TRACING].markers_before > 0
+    assert surfaces[Surface.TRACING].residual_after == surfaces[Surface.TRACING].markers_before
+    assert not report.erased
+    # a caveat finding is emitted, distinct from a residual-after-erasure finding
+    caveat_findings = [
+        finding
+        for finding in report.findings
+        if finding.surface is Surface.TRACING
+        and "ATTESTABLE WITH CAVEAT" in finding.remediation_pointer
+    ]
+    assert caveat_findings
+    assert all(finding.finding_id.startswith("erasure-caveat-") for finding in caveat_findings)
+
+
 def test_erasure_clears_memory_when_the_store_hard_deletes() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id
