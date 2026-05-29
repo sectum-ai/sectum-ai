@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A per-package `README.md` for all five distributions (`sectum-ai`,
+  `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
+  `sectum-ai-evidence`), each wired in via `readme = "README.md"` in its
+  `pyproject.toml`. Caught by a local release rehearsal (`uv build
+  --all-packages` + `twine check`): every distribution previously built with
+  no `long_description`, so each PyPI project page would have rendered
+  **blank**. `twine check` now passes clean on all ten artifacts, and a
+  fresh-venv install of the built wheels runs the `sectum` CLI end to end —
+  so the v0.1.0 publish (pending the PyPI Trusted Publisher registration)
+  will land with proper project pages rather than empty ones.
 - Live Helicone and Datadog APM observability adapters
   (`HeliconeObservability`, `DatadogObservability`), completing the spec §11
   observability backend list (Langfuse, LangSmith, Helicone, Phoenix,
