@@ -91,11 +91,22 @@ class HeliconeObservability(ObservabilityAdapter):
                 hits.append(
                     TraceHit(
                         trace_id=str(row.get("request_id") or row.get("id") or ""),
-                        project=tenant.hex,
+                        # Attribute the hit to the row's *own* tenant property, not
+                        # the querying tenant: on a leaky backend that surfaces a
+                        # foreign request, the hit must name its true owner so the
+                        # evidence shows observed-in (querier) != owner. Falls back
+                        # to the querier when the row carries no tenant property.
+                        project=self._row_owner(row, tenant.hex),
                         snippet=snippet,
                     )
                 )
         return hits
+
+    def _row_owner(self, row: dict[str, Any], default: str) -> str:
+        properties = row.get("properties") or row.get("request_properties") or {}
+        if isinstance(properties, dict) and self._tenant_property in properties:
+            return str(properties[self._tenant_property])
+        return default
 
     def list_projects(self) -> list[str]:
         return sorted(self._client.tenant_values())

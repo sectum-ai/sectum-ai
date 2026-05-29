@@ -32,7 +32,7 @@ from sectum.adapters.base import (
     VectorHit,
     VectorStoreAdapter,
 )
-from sectum.spec import AdapterError, CorpusDocument
+from sectum.spec import AdapterError, CorpusDocument, ErasureUnsupported
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _MCP_TOOLS = ("echo", "lookup")
@@ -219,17 +219,30 @@ class FakeRAGPipeline(RAGPipelineAdapter):
 class FakeObservability(ObservabilityAdapter):
     """A deterministic in-memory tracing backend.
 
-    With ``soft_delete=True``, ``delete`` is a no-op - mirroring
-    ``FakeVectorStore``'s soft-delete model. That is the Class 11 erasure
-    residue the verification probe is built to catch.
+    Two distinct erasure-gap models, both caught by Class 11:
+
+    - ``soft_delete=True``: ``delete`` is a no-op - the backend acknowledges
+      the request but leaves the traces in place (mirroring ``FakeVectorStore``).
+      This is a genuine erasure *failure* (residual data).
+    - ``no_erasure=True``: ``delete`` raises ``ErasureUnsupported`` - the
+      backend exposes no programmatic per-tenant erasure API at all (Helicone,
+      Datadog APM). Class 11 records this as *attestable-with-caveat*, distinct
+      from a soft-delete failure (spec §7 #8).
     """
 
-    def __init__(self, name: str = "fake-observability", *, soft_delete: bool = False) -> None:
+    def __init__(
+        self,
+        name: str = "fake-observability",
+        *,
+        soft_delete: bool = False,
+        no_erasure: bool = False,
+    ) -> None:
         capabilities = {Capability.TRACE_SEARCH}
         if soft_delete:
             capabilities.add(Capability.SOFT_DELETE)
         super().__init__(name, frozenset(capabilities))
         self._soft_delete = soft_delete
+        self._no_erasure = no_erasure
         self._traces: dict[UUID, list[tuple[str, str, str]]] = {}
 
     def record(self, tenant: UUID, project: str, text: str) -> str:
@@ -250,6 +263,13 @@ class FakeObservability(ObservabilityAdapter):
         return sorted({project for traces in self._traces.values() for _, project, _ in traces})
 
     def delete(self, tenant: UUID) -> None:
+        # A backend with no per-tenant erasure API signals the caveat path;
+        # checked first so it is unambiguous even if soft_delete is also set.
+        if self._no_erasure:
+            raise ErasureUnsupported(
+                "fake observability backend models a tracing service with no "
+                "per-tenant erasure API; data is presumed retained"
+            )
         # A soft-delete observability backend acknowledges the request but
         # leaves the traces in place - the residue Class 11 is built to catch.
         if self._soft_delete:

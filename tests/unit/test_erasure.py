@@ -179,10 +179,19 @@ def test_erasure_reports_a_caveat_when_observability_has_no_erasure_api() -> Non
     obs = _NoErasureObservability(_seeded_observability(substrate, soft_delete=False))
     report = ErasureProbe(substrate, vector=store, observability=obs).run(target)
     surfaces = {surface.surface: surface for surface in report.surfaces}
+    tracing = surfaces[Surface.TRACING]
     # the surface is recorded (no crash) and shows residual = before (retained)
-    assert surfaces[Surface.TRACING].markers_before > 0
-    assert surfaces[Surface.TRACING].residual_after == surfaces[Surface.TRACING].markers_before
+    assert tracing.markers_before > 0
+    assert tracing.residual_after == tracing.markers_before
     assert not report.erased
+    # the caveat is distinct end to end: not erasure_supported, a dedicated
+    # verdict, and surfaced on the report as a caveat rather than a genuine
+    # residual failure (the soft-delete case below) - spec §7 #8.
+    assert not tracing.erasure_supported
+    assert tracing.attestable_with_caveat
+    assert tracing.verdict == "ATTESTABLE WITH CAVEAT"
+    assert not report.genuine_residual
+    assert tracing in report.caveats
     # a caveat finding is emitted, distinct from a residual-after-erasure finding
     caveat_findings = [
         finding
@@ -192,6 +201,24 @@ def test_erasure_reports_a_caveat_when_observability_has_no_erasure_api() -> Non
     ]
     assert caveat_findings
     assert all(finding.finding_id.startswith("erasure-caveat-") for finding in caveat_findings)
+
+
+def test_erasure_caveat_is_distinct_from_a_soft_delete_failure() -> None:
+    # A soft-delete observability backend (delete is a no-op but the API
+    # exists) is a genuine residual FAILURE, not a caveat: erasure_supported
+    # stays True and the verdict is RESIDUAL DATA. This is the line the caveat
+    # path must not blur.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    obs = _seeded_observability(substrate, soft_delete=True)
+    report = ErasureProbe(substrate, vector=store, observability=obs).run(target)
+    tracing = {s.surface: s for s in report.surfaces}[Surface.TRACING]
+    assert tracing.erasure_supported
+    assert not tracing.attestable_with_caveat
+    assert tracing.verdict == "RESIDUAL DATA"
+    assert report.genuine_residual
+    assert report.caveats == ()
 
 
 def test_erasure_clears_memory_when_the_store_hard_deletes() -> None:

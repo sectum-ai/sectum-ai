@@ -82,6 +82,41 @@ def test_erasure_honors_only_observability_soft_delete_from_config(tmp_path: Pat
     assert "ERASURE FAILED" in result.output
 
 
+def test_erasure_attestable_with_caveat_when_observability_has_no_erasure_api(
+    tmp_path: Path,
+) -> None:
+    """A no-erasure observability backend is a caveat, not a flat failure.
+
+    The data genuinely remains (exit 2, never a clean PASS), but the operator
+    message must say ATTESTABLE WITH CAVEAT - distinct from the bare 'ERASURE
+    FAILED' a soft-delete (residual) surface produces - spec §7 #8.
+    """
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\n"
+        "adapters:\n"
+        "  vector_store: {kind: fake, soft_delete: false}\n"
+        "  observability: {kind: fake, no_erasure: true}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    assert result.exit_code == 2
+    assert "ATTESTABLE WITH CAVEAT" in result.output
+    # it is NOT misreported as a flat erasure failure
+    assert "ERASURE FAILED" not in result.output
+    # the surface verdict line reflects the caveat too
+    assert "-> ATTESTABLE WITH CAVEAT" in result.output
+    # and the signed evidence pack keeps the caveat out of the residue metric:
+    # tracing lands in erasure_caveats, not erasure_residue (which would
+    # otherwise conflate it with a failure in the pack + the baseline diff).
+    import json
+
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    metrics = pack["run_result"]["metrics"]
+    assert metrics["erasure_caveats"].get("tracing", 0) > 0
+    assert "tracing" not in metrics["erasure_residue"]
+
+
 def test_erasure_reports_the_memory_surface(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])

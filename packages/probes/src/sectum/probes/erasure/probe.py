@@ -9,6 +9,7 @@ than a plan/detect probe, so it exposes its own ``run`` entry point and returns
 an ``ErasureReport`` instead of a flat finding list.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -32,14 +33,30 @@ from sectum.spec import (
     Surface,
 )
 
+# One surface's pre/post scan (target + markers -> the markers still present)
+# and its erasure callable, threaded through the uniform _erase_surface helper.
+_Scan = Callable[[UUID, tuple[Marker, ...]], list[Marker]]
+_Delete = Callable[[UUID], None]
+
 
 @dataclass(frozen=True)
 class SurfaceErasure:
-    """The erasure outcome for one surface: markers seen before vs residual after."""
+    """The erasure outcome for one surface: markers seen before vs residual after.
+
+    ``erasure_supported`` is ``False`` when the surface's backend exposes no
+    programmatic per-tenant erasure API (it raised ``ErasureUnsupported`` from
+    ``delete``). That is materially different from a backend that was asked to
+    erase and didn't (soft-delete / residual): the data is presumed retained,
+    but the gap is a documented backend limitation, not a failure of the
+    customer's erasure flow - spec §7, Class 11, hiding place #8
+    ("attestable-with-caveat"). It defaults to ``True`` so every surface whose
+    backend does support erasure is unaffected.
+    """
 
     surface: Surface
     markers_before: int
     residual_after: int
+    erasure_supported: bool = True
 
     @property
     def erased(self) -> bool:
@@ -47,15 +64,31 @@ class SurfaceErasure:
 
         A surface with no markers before erasure yields no baseline, so its
         erasure cannot be attested - ``erased`` is ``False`` rather than
-        vacuously ``True``.
+        vacuously ``True``. A caveat surface (no programmatic erasure API) is
+        never ``erased``: its data is presumed retained.
         """
+        if not self.erasure_supported:
+            return False
         return self.markers_before > 0 and self.residual_after == 0
 
     @property
+    def attestable_with_caveat(self) -> bool:
+        """True when a baseline existed but the backend has no per-tenant erasure API.
+
+        The DPO-facing distinction: the tenant's data was present and the
+        backend cannot purge it per-tenant (Helicone, Datadog APM, ...), so it
+        is presumed retained until it ages out of the backend's retention
+        window. Itemized as a caveat, not conflated with a flow failure.
+        """
+        return not self.erasure_supported and self.markers_before > 0
+
+    @property
     def verdict(self) -> str:
-        """A human-readable verdict: ERASED, RESIDUAL DATA, or NO BASELINE."""
+        """Human-readable: ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, or NO BASELINE."""
         if self.markers_before == 0:
             return "NO BASELINE"
+        if not self.erasure_supported:
+            return "ATTESTABLE WITH CAVEAT"
         if self.residual_after == 0:
             return "ERASED"
         return "RESIDUAL DATA"
@@ -71,8 +104,27 @@ class ErasureReport:
 
     @property
     def erased(self) -> bool:
-        """True when every surface established a baseline and is now clear."""
+        """True when every surface established a baseline and is now clear.
+
+        A caveat surface (no programmatic erasure API) is not ``erased``, so a
+        run that includes one is never reported as a clean pass.
+        """
         return bool(self.surfaces) and all(surface.erased for surface in self.surfaces)
+
+    @property
+    def genuine_residual(self) -> bool:
+        """True when a surface that *supports* erasure still has residual data.
+
+        This is a real erasure failure (the backend was asked to erase and the
+        marker survived), distinct from a caveat surface that never offered a
+        per-tenant erasure API.
+        """
+        return any(s.erasure_supported and s.residual_after > 0 for s in self.surfaces)
+
+    @property
+    def caveats(self) -> tuple[SurfaceErasure, ...]:
+        """Surfaces whose backend exposes no per-tenant erasure API (spec §7 #8)."""
+        return tuple(s for s in self.surfaces if s.attestable_with_caveat)
 
 
 class ErasureProbe:
@@ -118,131 +170,75 @@ class ErasureProbe:
         surfaces: list[SurfaceErasure] = []
         findings: list[Finding] = []
 
-        vector_before = self._scan_vector(target, markers)
-        self._vector.delete(target)
-        vector_residual = self._scan_vector(target, markers)
-        surfaces.append(
-            SurfaceErasure(
-                surface=Surface.VECTOR_DB,
-                markers_before=len(vector_before),
-                residual_after=len(vector_residual),
-            )
-        )
-        findings.extend(
-            self._residual_finding(target, marker, Surface.VECTOR_DB) for marker in vector_residual
-        )
-
+        # Each configured surface runs the same pre/erase/post flow, so it is
+        # driven through one caveat-tolerant helper. The vector store is always
+        # present; the rest are optional. A backend that exposes no per-tenant
+        # erasure API (raising ``ErasureUnsupported``) is itemized as a caveat
+        # on *any* surface, not just observability - the contract is uniform.
+        plan: list[tuple[Surface, _Scan, _Delete]] = [
+            (Surface.VECTOR_DB, self._scan_vector, self._vector.delete),
+        ]
         if self._observability is not None:
-            obs_before = self._scan_observability(target, markers)
-            caveat = False
-            try:
-                self._observability.delete(target)
-            except ErasureUnsupported:
-                # The backend has no programmatic per-tenant erasure API; the
-                # data is presumed retained. Record the surface as residual
-                # (never a false PASS) and emit a caveat finding rather than
-                # crash the run - spec §7 Class 11 hiding place #8.
-                caveat = True
-            obs_residual = self._scan_observability(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.TRACING,
-                    markers_before=len(obs_before),
-                    residual_after=len(obs_residual),
-                )
-            )
-            if caveat:
-                findings.extend(
-                    self._caveat_finding(target, marker, Surface.TRACING) for marker in obs_before
-                )
-            else:
-                findings.extend(
-                    self._residual_finding(target, marker, Surface.TRACING)
-                    for marker in obs_residual
-                )
-
+            plan.append((Surface.TRACING, self._scan_observability, self._observability.delete))
         if self._memory is not None:
-            mem_before = self._scan_memory(target, markers)
-            self._memory.delete(target)
-            mem_residual = self._scan_memory(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.AGENT_MEMORY,
-                    markers_before=len(mem_before),
-                    residual_after=len(mem_residual),
-                )
-            )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.AGENT_MEMORY)
-                for marker in mem_residual
-            )
-
+            plan.append((Surface.AGENT_MEMORY, self._scan_memory, self._memory.delete))
         if self._cache is not None:
-            cache_before = self._scan_cache(target, markers)
-            self._cache.delete(target)
-            cache_residual = self._scan_cache(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.SEMANTIC_CACHE,
-                    markers_before=len(cache_before),
-                    residual_after=len(cache_residual),
-                )
-            )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.SEMANTIC_CACHE)
-                for marker in cache_residual
-            )
-
+            plan.append((Surface.SEMANTIC_CACHE, self._scan_cache, self._cache.delete))
         if self._model is not None:
-            model_before = self._scan_model(target, markers)
-            self._model.delete(target)
-            model_residual = self._scan_model(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.MODEL_ADAPTER,
-                    markers_before=len(model_before),
-                    residual_after=len(model_residual),
-                )
-            )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.MODEL_ADAPTER)
-                for marker in model_residual
-            )
-
+            plan.append((Surface.MODEL_ADAPTER, self._scan_model, self._model.delete))
         if self._search_index is not None:
-            search_before = self._scan_search(target, markers)
-            self._search_index.delete(target)
-            search_residual = self._scan_search(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.SEARCH_INDEX,
-                    markers_before=len(search_before),
-                    residual_after=len(search_residual),
-                )
-            )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.SEARCH_INDEX)
-                for marker in search_residual
-            )
-
+            plan.append((Surface.SEARCH_INDEX, self._scan_search, self._search_index.delete))
         if self._eval_set is not None:
-            eval_before = self._scan_eval(target, markers)
-            self._eval_set.delete(target)
-            eval_residual = self._scan_eval(target, markers)
-            surfaces.append(
-                SurfaceErasure(
-                    surface=Surface.EVAL_SET,
-                    markers_before=len(eval_before),
-                    residual_after=len(eval_residual),
-                )
+            plan.append((Surface.EVAL_SET, self._scan_eval, self._eval_set.delete))
+
+        for surface, scan, delete in plan:
+            surface_result, surface_findings = self._erase_surface(
+                target, markers, surface, scan, delete
             )
-            findings.extend(
-                self._residual_finding(target, marker, Surface.EVAL_SET) for marker in eval_residual
-            )
+            surfaces.append(surface_result)
+            findings.extend(surface_findings)
 
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
+
+    def _erase_surface(
+        self,
+        target: UUID,
+        markers: tuple[Marker, ...],
+        surface: Surface,
+        scan: _Scan,
+        delete: _Delete,
+    ) -> tuple[SurfaceErasure, list[Finding]]:
+        """Run the pre/erase/post flow for one surface; return its result + findings.
+
+        Catches ``ErasureUnsupported`` so a backend with no per-tenant erasure
+        API is recorded as *attestable-with-caveat* (data presumed retained,
+        never a false PASS) rather than crashing the run or being misreported
+        as a flow failure (spec §7, Class 11, hiding place #8).
+        """
+        before = scan(target, markers)
+        supported = True
+        try:
+            delete(target)
+        except ErasureUnsupported:
+            supported = False
+        residual = scan(target, markers)
+        surface_result = SurfaceErasure(
+            surface=surface,
+            markers_before=len(before),
+            residual_after=len(residual),
+            erasure_supported=supported,
+        )
+        if supported:
+            surface_findings = [
+                self._residual_finding(target, marker, surface) for marker in residual
+            ]
+        else:
+            # Nothing was deleted, so every marker that was present remains;
+            # itemize them all as caveats from the pre-erasure baseline.
+            surface_findings = [self._caveat_finding(target, marker, surface) for marker in before]
+        return surface_result, surface_findings
 
     def _scan_vector(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still observable on the vector store."""

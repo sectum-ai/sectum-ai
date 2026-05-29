@@ -244,7 +244,13 @@ class RunMetrics(SectumModel):
     confirmed_findings: int = 0
     retrieval_pivot_rate: float | None = None
     retrieval_pivot_rate_by_model: dict[str, float] = Field(default_factory=dict)
+    # Genuine residual: markers still present on a surface that *was* erased (an
+    # erasure failure). Caveat counts are tracked separately so a backend with
+    # no per-tenant erasure API (attestable-with-caveat, Class 11 hiding place
+    # #8) is never conflated with a failure here, in the baseline diff, or in
+    # the signed evidence pack.
     erasure_residue: dict[str, int] = Field(default_factory=dict)
+    erasure_caveats: dict[str, int] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
 
 
