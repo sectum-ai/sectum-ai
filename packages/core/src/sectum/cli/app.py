@@ -805,8 +805,19 @@ def erasure(
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(report.findings),
+            # Genuine residual (a surface that supports erasure but still holds
+            # the marker) is kept separate from caveat surfaces (no per-tenant
+            # erasure API) so the signed pack and the baseline diff never
+            # conflate a backend limitation with an erasure failure.
             erasure_residue={
-                surface.surface.value: surface.residual_after for surface in report.surfaces
+                surface.surface.value: surface.residual_after
+                for surface in report.surfaces
+                if surface.erasure_supported
+            },
+            erasure_caveats={
+                surface.surface.value: surface.residual_after
+                for surface in report.surfaces
+                if not surface.erasure_supported
             },
         ),
     )
@@ -830,13 +841,30 @@ def erasure(
             f"{surface.residual_after} after -> {surface.verdict}"
         )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
+    # A genuine erasure failure (a surface that supports erasure but still
+    # holds the marker) is the dominant signal and takes precedence.
+    if report.genuine_residual:
+        typer.echo("ERASURE FAILED: residual data remains.", err=True)
+        raise typer.Exit(code=2)
+    # A caveat surface (no programmatic per-tenant erasure API) holds data that
+    # is presumed retained - never a clean PASS, but a documented backend
+    # limitation rather than a flow failure. Exit non-zero (the data is still
+    # there) but say so distinctly so a DPO does not read it as an isolation
+    # defect (spec §7, Class 11, hiding place #8).
+    if report.caveats:
+        names = ", ".join(surface.surface.value for surface in report.caveats)
+        typer.echo(
+            f"ERASURE ATTESTABLE WITH CAVEAT: {names} expose no per-tenant erasure "
+            "API, so the tenant's data is presumed retained until it ages out of "
+            "the backend's retention window. Itemized as a caveat in the "
+            "attestation - a backend limitation, not a failure of the erasure flow.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     if report.erased:
         scanned = ", ".join(surface.surface.value for surface in report.surfaces)
         typer.echo(f"ERASURE VERIFIED: no residual marker on {scanned}.")
         return
-    if any(surface.residual_after > 0 for surface in report.surfaces):
-        typer.echo("ERASURE FAILED: residual data remains.", err=True)
-        raise typer.Exit(code=2)
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]

@@ -93,11 +93,24 @@ class DatadogObservability(ObservabilityAdapter):
                 hits.append(
                     TraceHit(
                         trace_id=str(event.get("id") or ""),
-                        project=tenant.hex,
+                        # Attribute the hit to the span's *own* tenant tag, not the
+                        # querying tenant: a leaky backend that surfaces a foreign
+                        # span must name its true owner so observed-in != owner is
+                        # visible. Falls back to the querier when the tag is absent.
+                        project=self._event_owner(event, tenant.hex),
                         snippet=snippet,
                     )
                 )
         return hits
+
+    def _event_owner(self, event: dict[str, Any], default: str) -> str:
+        attributes = event.get("attributes") or {}
+        if not isinstance(attributes, dict):
+            return default
+        tags = attributes.get("custom") or attributes.get("tags") or {}
+        if isinstance(tags, dict) and self._tenant_tag in tags:
+            return str(tags[self._tenant_tag])
+        return default
 
     def list_projects(self) -> list[str]:
         return sorted(self._client.tenant_values())
@@ -163,7 +176,13 @@ class _HttpDatadogClient:
 
 
 def _event_snippet(event: dict[str, Any]) -> str:
-    """Concatenate a span event's name + attribute values into a searchable string."""
+    """Concatenate a span event's name + attribute values into a searchable string.
+
+    Scans both ``custom`` (Sectum's tenant tag + caller-set attributes) and
+    ``meta`` - Datadog APM / LLM Observability stores span I/O (prompt and
+    completion text) under ``meta``, which is exactly where a planted marker in
+    a logged prompt would surface, so missing it would be a false erasure PASS.
+    """
     attributes = event.get("attributes")
     if not isinstance(attributes, dict):
         return ""
@@ -172,7 +191,8 @@ def _event_snippet(event: dict[str, Any]) -> str:
         value = attributes.get(key)
         if value:
             parts.append(str(value))
-    custom = attributes.get("custom")
-    if isinstance(custom, dict):
-        parts.extend(str(value) for value in custom.values())
+    for bag_key in ("custom", "meta"):
+        bag = attributes.get(bag_key)
+        if isinstance(bag, dict):
+            parts.extend(str(value) for value in bag.values())
     return " ".join(parts)

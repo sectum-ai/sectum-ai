@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Class 11 *attestable-with-caveat* distinction is now carried end to end,
+  not just on the finding. A review pass found that when an observability
+  backend raised `ErasureUnsupported` (Helicone / Datadog), the
+  `SurfaceErasure` verdict still read `RESIDUAL DATA`, the `sectum erasure`
+  CLI printed `ERASURE FAILED`, and it exited 2 — indistinguishable from a
+  genuine erasure failure, undercutting the caveat the finding documented.
+  `SurfaceErasure` now carries an `erasure_supported` flag; its verdict reads
+  `ATTESTABLE WITH CAVEAT`, the CLI prints a distinct caveat message
+  (still exit 2, since the data genuinely remains — never a false PASS), and
+  `ErasureReport` gains `genuine_residual` / `caveats` so a real failure
+  (soft-delete residual) is never blurred with a backend that has no per-tenant
+  erasure API.
+- The erasure probe's per-surface delete is now uniformly caveat-tolerant: the
+  six near-identical surface blocks collapse into one `_erase_surface` helper,
+  so `ErasureUnsupported` is handled on *every* surface rather than only
+  observability (previously the other five surface deletes were unguarded and
+  would crash the run if a future retention-governed adapter raised it).
+- `FakeObservability` gains a `no_erasure` knob (parallel to `soft_delete`)
+  that raises `ErasureUnsupported` from `delete`, so the caveat path is
+  reachable from `sectum.yaml` (`observability: {kind: fake, no_erasure: true}`)
+  and covered by a CLI-level test.
+
 ### Added
 
 - A per-package `README.md` for all five distributions (`sectum-ai`,

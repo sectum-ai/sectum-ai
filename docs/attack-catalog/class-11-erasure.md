@@ -20,6 +20,14 @@ erasure flow. Post-erasure, re-scan for any residual marker.
 A residual marker after erasure is an itemized erasure failure. A surface with
 no pre-erasure baseline is reported as inconclusive — never as a vacuous pass.
 
+A surface whose backend exposes **no programmatic per-tenant erasure API** at
+all (for example Helicone or Datadog APM, where deletion is governed by a
+retention policy) is reported as **attestable-with-caveat**, distinct from a
+failure: the tenant's data is presumed retained until it ages out of the
+retention window, but the gap is a documented backend limitation rather than a
+defect in the customer's erasure flow (the engineering spec, §7, Class 11,
+hiding place #8). It is never a clean pass — the data genuinely remains.
+
 ## Output
 
 `sectum erasure` produces an attestation pack — a PDF for the Data Protection

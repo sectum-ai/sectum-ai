@@ -28,13 +28,16 @@ class _FakeHelicone:
     def __init__(self) -> None:
         self._rows: dict[str, list[dict[str, Any]]] = {}
 
-    def add(self, tenant_hex: str, request_body: str) -> None:
+    def add(self, tenant_hex: str, request_body: str, owner: str | None = None) -> None:
+        # ``owner`` defaults to the query bucket's tenant (the isolated case);
+        # set it to a different tenant to model a leaky backend that returns a
+        # foreign tenant's row under this query.
         rows = self._rows.setdefault(tenant_hex, [])
         rows.append(
             {
                 "request_id": f"req-{len(rows):04d}",
                 "request_body": request_body,
-                "properties": {"tenant": tenant_hex},
+                "properties": {"tenant": owner or tenant_hex},
             }
         )
 
@@ -63,6 +66,17 @@ def test_helicone_search_is_scoped_to_a_tenant() -> None:
     assert adapter.search_traces(_TENANT_B, "SECTUM-CANARY-AAA") == []
 
 
+def test_helicone_attributes_a_leaked_row_to_its_true_owner() -> None:
+    # A leaky backend returns tenant B's request under tenant A's query; the
+    # hit must name B (the owner), not A (the querier), so the evidence shows
+    # observed-in != owner. The owner is read from the row's tenant property.
+    client = _FakeHelicone()
+    client.add(_TENANT_A.hex, "leaked SECTUM-CANARY-BBB", owner=_TENANT_B.hex)
+    hits = HeliconeObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-BBB")
+    assert hits
+    assert hits[0].project == _TENANT_B.hex
+
+
 def test_helicone_search_returns_nothing_when_marker_absent() -> None:
     client = _FakeHelicone()
     client.add(_TENANT_A.hex, "a benign request")
@@ -89,17 +103,24 @@ class _FakeDatadog:
     def __init__(self) -> None:
         self._events: dict[str, list[dict[str, Any]]] = {}
 
-    def add(self, tenant_hex: str, resource_name: str) -> None:
+    def add(
+        self,
+        tenant_hex: str,
+        resource_name: str,
+        owner: str | None = None,
+        meta: dict[str, str] | None = None,
+    ) -> None:
+        # ``owner`` defaults to the query bucket's tenant; ``meta`` models the
+        # Datadog span-I/O bag where prompt/completion text (and a planted
+        # marker) actually lands.
         events = self._events.setdefault(tenant_hex, [])
-        events.append(
-            {
-                "id": f"span-{len(events):04d}",
-                "attributes": {
-                    "resource_name": resource_name,
-                    "custom": {"tenant": tenant_hex},
-                },
-            }
-        )
+        attributes: dict[str, Any] = {
+            "resource_name": resource_name,
+            "custom": {"tenant": owner or tenant_hex},
+        }
+        if meta is not None:
+            attributes["meta"] = meta
+        events.append({"id": f"span-{len(events):04d}", "attributes": attributes})
 
     def search_spans(self, tenant_value: str) -> list[dict[str, Any]]:
         return self._events.get(tenant_value, [])
@@ -124,6 +145,27 @@ def test_datadog_search_is_scoped_to_a_tenant() -> None:
     assert hits[0].project == _TENANT_A.hex
     assert "SECTUM-CANARY-AAA" in hits[0].snippet
     assert adapter.search_traces(_TENANT_B, "SECTUM-CANARY-AAA") == []
+
+
+def test_datadog_attributes_a_leaked_span_to_its_true_owner() -> None:
+    # Same as the Helicone case: a leaked foreign span is attributed to its
+    # owning tenant (read from the span's tenant tag), not the querier.
+    client = _FakeDatadog()
+    client.add(_TENANT_A.hex, "llm.completion SECTUM-CANARY-BBB", owner=_TENANT_B.hex)
+    hits = DatadogObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-BBB")
+    assert hits
+    assert hits[0].project == _TENANT_B.hex
+
+
+def test_datadog_scans_the_meta_bag_where_span_io_lives() -> None:
+    # Datadog APM / LLM Observability stores prompt/completion text under
+    # attributes.meta - a marker living only there must still be found, or a
+    # residual canary would yield a false erasure PASS.
+    client = _FakeDatadog()
+    client.add(_TENANT_A.hex, "llm.completion", meta={"output": "see SECTUM-CANARY-AAA"})
+    hits = DatadogObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+    assert hits
+    assert "SECTUM-CANARY-AAA" in hits[0].snippet
 
 
 def test_datadog_lists_tenant_values() -> None:
