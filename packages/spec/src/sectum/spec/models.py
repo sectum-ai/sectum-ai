@@ -5,15 +5,39 @@ generation produces them and nothing mutates them afterwards, which keeps the
 reproducibility contract (the engineering spec, section 6.5) easy to reason about.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 from sectum.spec.enums import FindingStatus, MarkerType, PrincipalKind, Severity, Surface
 
-SCHEMA_VERSION = "0.1.0"
-"""Version stamped onto every aggregate model; bumped on any schema change."""
+SCHEMA_VERSION = "0.2.0"
+"""Version stamped onto every aggregate model; bumped on any schema change.
+
+0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
+mappings, pdf ref, transparency-log intent), not just the run record, and
+timestamps in the canonical form are normalized to UTC so the digest is
+reproducible regardless of the producer's local timezone.
+"""
+
+
+def _to_utc_iso(value: datetime) -> str:
+    """Serialize a datetime to a UTC ISO-8601 string for the canonical form.
+
+    The same instant must hash identically regardless of the producing
+    machine's timezone, so a tz-aware value is converted to UTC and a naive
+    value is assumed to already be UTC. This keeps ``canonical_hash`` injective
+    over equal instants (the reproducibility contract, the engineering spec
+    section 6.5, and the evidence chain, section 8).
+    """
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC).isoformat()
+
+
+# A datetime whose JSON/canonical form is always UTC ISO-8601.
+UtcDateTime = Annotated[datetime, PlainSerializer(_to_utc_iso, return_type=str)]
 
 
 class SectumModel(BaseModel):
@@ -260,8 +284,8 @@ class RunResult(SectumModel):
     run_id: str
     scenario_hash: str
     manifest_hash: str
-    started_at: datetime
-    finished_at: datetime
+    started_at: UtcDateTime
+    finished_at: UtcDateTime
     adapter_versions: dict[str, str] = Field(default_factory=dict)
     probe_versions: dict[str, str] = Field(default_factory=dict)
     findings: tuple[Finding, ...] = ()
@@ -286,4 +310,9 @@ class EvidencePack(SectumModel):
     rekor_proof: str | None = None
     control_mappings: tuple[ControlMapping, ...] = ()
     pdf_ref: str | None = None
+    # True when the pack was anchored in a transparency log at build time. The
+    # flag is bound into the anchored digest, so a verifier requires a valid
+    # Rekor inclusion proof whenever it is set: stripping ``rekor_proof`` to
+    # skip the check (a downgrade) no longer passes verification.
+    anchored_in_log: bool = False
     schema_version: str = SCHEMA_VERSION

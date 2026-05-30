@@ -16,7 +16,21 @@ from pydantic import BaseModel
 def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
     """Serialize an object to canonical JSON bytes: sorted keys, UTF-8, compact."""
     data: Any = obj.model_dump(mode="json") if isinstance(obj, BaseModel) else obj
-    text = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    try:
+        text = json.dumps(
+            data,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except ValueError as error:
+        # A non-finite float (NaN/Infinity) would serialize as a JavaScript
+        # literal that is not valid JSON (RFC 8259): a third-party verifier
+        # using a strict parser could not reproduce the digest, and every NaN
+        # collapses to the same token (a non-injective canonical form). Refuse
+        # it so the canonical form stays valid and injective.
+        raise ValueError(f"cannot canonicalize a non-finite float: {error}") from error
     return text.encode("utf-8")
 
 

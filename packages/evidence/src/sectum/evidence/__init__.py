@@ -34,6 +34,7 @@ __all__ = [
     "Timestamper",
     "TransparencyLog",
     "VerificationResult",
+    "attested_digest",
     "build_evidence_pack",
     "control_mappings",
     "rekor_keyring",
