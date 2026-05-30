@@ -135,7 +135,7 @@ class Marker(SectumModel):
     marker_type: MarkerType
     owner_tenant_id: UUID
     owner_user_id: UUID | None = None
-    plaintext: str
+    plaintext: str = Field(min_length=1)
     embedding_ref: str | None = None
     planted_locations: tuple[PlantedLocation, ...] = ()
 

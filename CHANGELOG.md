@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Detection hardening (zero false-positive / zero false-negative).** Four
+  fixes to the leak-detection pipeline, the technical moat:
+  - The judge now confirms a semantic candidate only when the marker's whole
+    phrase appears as a contiguous token run, not when the observation merely
+    *covers* the marker's tokens in any order — a benign sentence reusing an
+    entity's words could previously be reported as a confirmed cross-tenant leak.
+  - The exact canary scan is case-, Unicode- (NFKC), and zero-width-insensitive,
+    so a leaked `HARD_CANARY`/`SECRET_CANARY` that a surface re-cased, folded, or
+    split with a zero-width character is no longer missed.
+  - `Marker.plaintext` must be non-empty (`min_length=1`); an empty canary would
+    otherwise substring-match every observation and confirm a critical leak.
+  - `finding_id` carries the surface, so the same marker leaking on two surfaces
+    (e.g. a vector store and a model adapter) is two findings rather than one
+    silently de-duplicated away.
+
 ### Changed
 
 - **Evidence schema `0.1.0` → `0.2.0`.** `EvidencePack` gains an
