@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 
+from sectum.adapters import FakeVectorStore
 from sectum.runner import Runner, retrieval_pivot_rate
 from sectum.spec import AdapterError, ProbeStep
 from sectum.substrate import build_substrate, default_scenario
@@ -25,9 +26,10 @@ _ACTIONS = (
 )
 
 
-def _runner() -> Runner:
-    # No adapters supplied: every action handler must hit its guard.
-    return Runner(build_substrate(default_scenario(seed=1)))
+def _runner(vector: FakeVectorStore | None = None) -> Runner:
+    # No adapters supplied: every action handler must hit its guard. Pass a
+    # vector adapter to reach the payload-validation path inside vector.query.
+    return Runner(build_substrate(default_scenario(seed=1)), vector=vector)
 
 
 def _step(action: str) -> ProbeStep:
