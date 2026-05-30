@@ -64,19 +64,25 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(_normalize_for_match(text))
 
 
-# How many foreign tokens may sit *between* a marker's tokens and still count as
-# the entity surfacing. A real leak often paraphrases ("Project (internal)
-# Onyx-00002"), so a strictly contiguous run would miss it; allowing a few
-# interposed tokens stays robust without admitting a reordered coincidence.
-_MAX_INTERPOSED_TOKENS = 3
+# How many foreign tokens may sit *between* a marker's tokens and still count
+# as the entity surfacing. A real leak lightly paraphrases ("Project (internal)
+# Onyx-00002"), so a strictly contiguous run would miss it - but the entity
+# reuses common words ("project", a 5-digit serial), so a wide budget would
+# admit a benign coincidence ("our project ships onyx units; lot 00002 next").
+# One interposed token is the conservative floor: it catches the canonical
+# paraphrase without fabricating a leak. Heavier paraphrase is left to the
+# production LLM judge, which adjudicates meaning rather than token order; the
+# deterministic fake judge errs toward precision (a false "leak found" is worse
+# for a verification product than a missed subtle rephrase).
+_MAX_INTERPOSED_TOKENS = 1
 
 
-def _ordered_within_span(haystack: list[str], needle: list[str], max_interposed: int = 3) -> bool:
+def _ordered_within_span(haystack: list[str], needle: list[str], max_interposed: int = 1) -> bool:
     """Whether ``needle``'s tokens occur in order, close together, inside ``haystack``.
 
     The needle tokens must appear in the same order within a window of at most
     ``len(needle) + max_interposed`` tokens. This catches a leak that interposes
-    a few words between the entity's tokens, while rejecting both a reordered
+    a token between the entity's words, while rejecting both a reordered
     coincidence (every token present but out of order) and a scattered one (the
     tokens spread across an unrelated span). Greedy matching is exact for the
     distinct-token canary phrases this gates.
@@ -87,6 +93,10 @@ def _ordered_within_span(haystack: list[str], needle: list[str], max_interposed:
     for start in range(len(haystack)):
         if haystack[start] != needle[0]:
             continue
+        if len(needle) == 1:
+            # A single-token needle is satisfied by the anchor alone; returning
+            # here also avoids indexing ``needle[1]`` in the loop below.
+            return True
         matched = 1
         for pos in range(start + 1, min(start + max_span, len(haystack))):
             if haystack[pos] == needle[matched]:
