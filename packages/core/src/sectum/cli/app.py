@@ -227,6 +227,12 @@ app = typer.Typer(
     add_completion=False,
 )
 
+# The Class-2 probes whose steps feed the headline Retrieval-Pivot Rate: the
+# vector-store entity-bleed and the RAG-pipeline-end bleed. Counting only the
+# former understates the rate when a leak manifests solely at the pipeline
+# surface (it would read 0%).
+BLEED_PROBE_IDS = frozenset({RagEntityBleedProbe.id, RagPipelineBleedProbe.id})
+
 
 def _handle_typed_errors[**P, R](func: Callable[P, R]) -> Callable[P, R]:
     """Translate a ``SectumError`` raised inside a command into the section-10 exit code.
