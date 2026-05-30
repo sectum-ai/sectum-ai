@@ -8,6 +8,7 @@ from sectum.evidence.chain import (
     LocalTimestamper,
     Timestamper,
     TransparencyLog,
+    attested_digest,
     build_evidence_pack,
     run_digest,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "Timestamper",
     "TransparencyLog",
     "VerificationResult",
+    "attested_digest",
     "build_evidence_pack",
     "control_mappings",
     "rekor_keyring",

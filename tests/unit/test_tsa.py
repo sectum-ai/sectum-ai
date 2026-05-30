@@ -170,7 +170,7 @@ def test_verify_pack_routes_an_rfc3161_token_through_the_tsa_path(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
-    monkeypatch.setattr("sectum.evidence.verify.run_digest", lambda _run: _FIXTURE_DIGEST)
+    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
     result = verify_pack(rfc_pack, manifest)
     token_check = next(check for check in result.checks if check.name == "timestamp-token")
     assert token_check.ok
@@ -184,7 +184,7 @@ def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
-    monkeypatch.setattr("sectum.evidence.verify.run_digest", lambda _run: "f" * 64)
+    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: "f" * 64)
     result = verify_pack(rfc_pack, manifest)
     assert not result.passed
 

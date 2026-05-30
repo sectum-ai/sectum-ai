@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Evidence schema `0.1.0` → `0.2.0`.** `EvidencePack` gains an
+  `anchored_in_log` field, and the cryptographic anchors now bind the whole pack
+  (`attested_digest`) rather than only the run record. Packs produced under the
+  old scheme do not verify under the new verifier (pre-release; no packs in the
+  wild). See [ADR-0016](docs/adr/0016-anchor-the-whole-pack.md).
+
+### Security
+
+- **Evidence packs are tamper-evident across their whole attested surface.** The
+  timestamp and Rekor anchors now bind the control mappings, the PDF reference,
+  and the manifest hash — not just the run record — so forging the compliance
+  claims or repointing the audit PDF makes `sectum verify` fail.
+- **Transparency-log anchoring cannot be silently downgraded.** A pack that was
+  Rekor-anchored fails verification if its inclusion proof is stripped
+  (`anchored_in_log` is bound into the digest).
+- **Forged local timestamp tokens are rejected.** A `local-dev` token is reported
+  as *unanchored* (it binds the digest but is not an independent anchor); a JSON
+  token impersonating a real RFC 3161 TSA is refused.
+- Canonical hashing rejects non-finite floats (`NaN`/`Infinity`, which are
+  invalid JSON and non-injective) and normalizes timestamps to UTC, so the digest
+  is reproducible by any third-party verifier. See
+  [ADR-0007](docs/adr/0007-canonical-hashing-serializes-every-field.md).
+
 ### Fixed
 
 - The Class 11 *attestable-with-caveat* distinction is now carried end to end,

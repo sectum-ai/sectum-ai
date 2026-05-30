@@ -1,15 +1,16 @@
 """Independent verification of an ``EvidencePack`` (the engineering spec, section 8.2).
 
-``sectum verify`` recomputes the run digest from the pack's run record and
-checks it against the timestamp token; any edit to the run record changes the
-digest and fails verification.
+``sectum verify`` recomputes the pack digest from the pack's attested content -
+the run record, manifest hash, control mappings, PDF reference, and
+transparency-log flag - and checks it against the timestamp token; any edit to
+that content changes the digest and fails verification (ADR-0012).
 """
 
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from sectum.evidence.chain import run_digest
+from sectum.evidence.chain import LocalTimestamper, attested_digest
 from sectum.spec import EvidenceError, EvidencePack, GroundTruthManifest, canonical_hash
 
 
@@ -40,21 +41,35 @@ def verify_pack(
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
-    Recomputes the run digest, validates that the timestamp token attests it,
-    and checks that the run and the pack agree on the manifest hash. When
-    ``manifest`` is given, its canonical hash must also match the pack.
+    Recomputes the pack digest over the whole attested content, validates that
+    the timestamp token attests it, and checks that the run and the pack agree on
+    the manifest hash. A pack that claims a transparency-log anchor
+    (``anchored_in_log``) must carry a valid Rekor inclusion proof - stripping it
+    is a downgrade and fails. When ``manifest`` is given, its canonical hash must
+    also match the pack.
 
     For an RFC 3161 timestamp token, ``tsa_certificate``/``tsa_root`` override
     the built-in FreeTSA leaf/root to pin a customer's own TSA. When the pack
     carries a Rekor inclusion proof, it is verified too; ``rekor_keyring``
     (log id -> PEM key) overrides the built-in Rekor keys for a private instance.
     """
-    digest = run_digest(pack.run_result)
+    digest = attested_digest(pack)
     checks = [
         _check_token(pack.tsa_token, digest, tsa_certificate, tsa_root),
         _check_consistency(pack),
     ]
-    if pack.rekor_proof is not None:
+    if pack.anchored_in_log and pack.rekor_proof is None:
+        checks.append(
+            Check(
+                "rekor-inclusion",
+                ok=False,
+                detail=(
+                    "the pack claims a transparency-log anchor but carries no Rekor "
+                    "inclusion proof; the proof was stripped (a downgrade)"
+                ),
+            )
+        )
+    elif pack.rekor_proof is not None:
         checks.append(_check_rekor(pack.rekor_proof, digest, rekor_keyring))
     if manifest is not None:
         checks.append(_check_manifest(manifest, pack.manifest_hash))
@@ -72,7 +87,7 @@ def _check_rekor(proof: str, digest: str, rekor_keyring: Mapping[str, bytes] | N
     return Check(
         name,
         ok=True,
-        detail=f"run digest recorded in the Rekor transparency log at {integrated_at.isoformat()}",
+        detail=f"pack digest recorded in the Rekor transparency log at {integrated_at.isoformat()}",
     )
 
 
@@ -95,10 +110,29 @@ def _check_token(
         return Check(
             name,
             ok=False,
-            detail="the timestamp token attests a different digest; the run was altered",
+            detail="the timestamp token attests a different digest; the evidence pack was altered",
         )
-    tsa = parsed.get("tsa", "unknown")
-    return Check(name, ok=True, detail=f"run digest timestamped by {tsa}")
+    tsa = parsed.get("tsa")
+    if tsa != LocalTimestamper.tsa:
+        # A real TSA returns a signed binary RFC 3161 token (handled above as a
+        # non-JSON token), never a plain JSON object. A JSON token naming some
+        # other authority is forged to impersonate one, so it is refused.
+        return Check(
+            name,
+            ok=False,
+            detail=(
+                "unrecognized JSON timestamp token; a real RFC 3161 TSA returns a "
+                "signed binary token, not JSON, so this token is rejected"
+            ),
+        )
+    return Check(
+        name,
+        ok=True,
+        detail=(
+            "pack digest bound by a local development timestamp (unanchored: not an "
+            "independent RFC 3161 / Rekor anchor)"
+        ),
+    )
 
 
 def _check_rfc3161_token(
@@ -116,7 +150,7 @@ def _check_rfc3161_token(
     return Check(
         name,
         ok=True,
-        detail=f"run digest timestamped by an RFC 3161 TSA at {timestamped_at.isoformat()}",
+        detail=f"pack digest timestamped by an RFC 3161 TSA at {timestamped_at.isoformat()}",
     )
 
 

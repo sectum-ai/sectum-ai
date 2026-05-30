@@ -693,7 +693,12 @@ def verify(
     if not result.passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
-    typer.echo("VERIFIED: the evidence pack is intact")
+    typer.echo("VERIFIED: the evidence pack's attested content is intact and consistent.")
+    typer.echo(
+        "note: this confirms integrity and internal consistency; to also bind which "
+        "marker belonged to which tenant, re-run with the original ground-truth manifest.",
+        err=True,
+    )
 
 
 @app.command()
