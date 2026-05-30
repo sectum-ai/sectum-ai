@@ -8,6 +8,7 @@ from sectum.evidence.chain import (
     LocalTimestamper,
     Timestamper,
     TransparencyLog,
+    attested_digest,
     build_evidence_pack,
     run_digest,
 )

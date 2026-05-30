@@ -4,11 +4,13 @@ The engineering spec, section 15: ``build_evidence_pack`` then ``verify_pack``
 PASSES; mutating any part of the pack makes verification FAIL with a clear reason.
 """
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sectum.evidence import build_evidence_pack, verify_pack
+from sectum.evidence import attested_digest, build_evidence_pack, verify_pack
 from sectum.spec import (
+    ControlMapping,
     Finding,
     FindingStatus,
     GroundTruthManifest,
@@ -18,6 +20,28 @@ from sectum.spec import (
     Surface,
     canonical_hash,
 )
+
+
+class _StubTransparencyLog:
+    """A stand-in transparency log: records the digest into an opaque proof.
+
+    It is not a real Rekor signer, so a verifier refuses the proof - but the
+    pack it produces carries ``anchored_in_log=True`` and a ``rekor_proof``,
+    which is what the downgrade tests need.
+    """
+
+    def record(self, digest: str) -> str:
+        return f"stub-rekor-proof::{digest}"
+
+
+def _stub_controls() -> tuple[ControlMapping, ...]:
+    return (
+        ControlMapping(
+            framework="GDPR",
+            control_ids=("Article 17",),
+            assertion="erasure across the AI surfaces verified",
+        ),
+    )
 
 
 def _manifest() -> GroundTruthManifest:
@@ -195,3 +219,100 @@ def test_check_detail_strings_are_informative_on_happy_path() -> None:
     assert result.passed
     for check in result.checks:
         assert check.detail, f"check {check.name} returned an empty detail string"
+
+
+# --- the anchored digest binds the WHOLE pack, not just the run (ADR-0012) ---
+
+
+def test_tampering_with_control_mappings_fails_verification() -> None:
+    # The control-mapping table is the auditor-facing compliance claim and is
+    # rendered into the PDF; forging it (e.g. "fully isolated") must be detected.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest, control_mappings=_stub_controls())
+    forged = pack.model_copy(
+        update={
+            "control_mappings": (
+                ControlMapping(
+                    framework="SOC 2 (TSC)",
+                    control_ids=("CC6.1",),
+                    assertion="fully isolated, zero leakage",
+                ),
+            )
+        }
+    )
+    result = verify_pack(forged, manifest)
+    assert not result.passed
+    assert any(not c.ok and "altered" in c.detail for c in result.checks)
+
+
+def test_repointing_the_pdf_ref_fails_verification() -> None:
+    # pdf_ref points at the human-readable audit pack; repointing it at an
+    # attacker-controlled PDF must break verification.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest, pdf_ref="s3://acme/audit.pdf")
+    repointed = pack.model_copy(update={"pdf_ref": "s3://evil/forged.pdf"})
+    assert not verify_pack(repointed, manifest).passed
+
+
+def test_stripping_the_rekor_proof_from_an_anchored_pack_fails() -> None:
+    # Downgrade attack: a pack anchored in a transparency log must keep failing
+    # if its Rekor proof is stripped to skip the inclusion check. anchored_in_log
+    # is bound into the digest, so the verifier still demands the proof.
+    manifest = _manifest()
+    pack = build_evidence_pack(
+        _run_result(manifest), manifest, transparency_log=_StubTransparencyLog()
+    )
+    assert pack.anchored_in_log and pack.rekor_proof is not None
+    stripped = pack.model_copy(update={"rekor_proof": None})
+    result = verify_pack(stripped, manifest)
+    assert not result.passed
+    rekor = next(c for c in result.checks if c.name == "rekor-inclusion")
+    assert not rekor.ok and "stripped" in rekor.detail
+
+
+def test_flipping_the_anchored_flag_to_dodge_the_downgrade_check_fails() -> None:
+    # The other half of the downgrade: also flip anchored_in_log to False so the
+    # verifier won't demand a proof. anchored_in_log is in the digest, so the
+    # timestamp token no longer matches and verification fails.
+    manifest = _manifest()
+    pack = build_evidence_pack(
+        _run_result(manifest), manifest, transparency_log=_StubTransparencyLog()
+    )
+    dodged = pack.model_copy(update={"rekor_proof": None, "anchored_in_log": False})
+    result = verify_pack(dodged, manifest)
+    assert not result.passed
+    token = next(c for c in result.checks if c.name == "timestamp-token")
+    assert not token.ok and "altered" in token.detail
+
+
+def test_forging_a_local_token_naming_another_tsa_is_rejected() -> None:
+    # A local-dev JSON token binds the digest but is explicitly unanchored. A
+    # forged JSON token that names a real authority (impersonating FreeTSA) over
+    # the correct digest must be rejected - a real TSA returns a signed binary
+    # token, never JSON.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    forged_token = json.dumps(
+        {
+            "tsa": "freetsa.org",
+            "digest": attested_digest(pack),
+            "timestamped_at": "2020-01-01T00:00:00+00:00",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    impersonated = pack.model_copy(update={"tsa_token": forged_token})
+    result = verify_pack(impersonated, manifest)
+    assert not result.passed
+    token = next(c for c in result.checks if c.name == "timestamp-token")
+    assert not token.ok and "freetsa.org" in token.detail
+
+
+def test_a_local_dev_token_is_reported_as_unanchored() -> None:
+    # The default offline token verifies for integrity but the detail must make
+    # clear it is not an independent anchor, so a reader is not misled.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    token = next(c for c in verify_pack(pack, manifest).checks if c.name == "timestamp-token")
+    assert token.ok
+    assert "unanchored" in token.detail
