@@ -16,7 +16,7 @@ no fake-derived per-model rates.
 
 from sectum.adapters.fakes import FakeVectorStore
 from sectum.probes import RagEntityBleedProbe
-from sectum.runner import StepResult, retrieval_pivot_rate
+from sectum.runner import StepResult, _payload_int, retrieval_pivot_rate
 from sectum.spec import Observation, Substrate, Surface
 
 FAKE_EMBEDDING_STRENGTH: dict[str, float] = {
@@ -52,7 +52,7 @@ def embedding_model_sweep(substrate: Substrate, models: tuple[str, ...]) -> dict
             )
         results: list[StepResult] = []
         for step in steps:
-            k = int(step.payload.get("k", "5"))
+            k = _payload_int(step, "k", "5")
             hits = store.query(step.actor_tenant_id, step.payload["query"], k)
             observation = Observation(
                 step_id=step.step_id,

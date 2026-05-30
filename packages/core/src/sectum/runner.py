@@ -29,6 +29,32 @@ StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
 
 
+def _payload_int(step: ProbeStep, key: str, default: str) -> int:
+    """Read an integer payload value, raising a typed ``AdapterError`` on bad input.
+
+    A malformed step payload is a configuration error, not a crash: a bare
+    ``ValueError`` would escape the ``SectumError`` hierarchy and the CLI's
+    exit-code mapping (the engineering spec, sections 10 and 16).
+    """
+    raw = step.payload.get(key, default)
+    try:
+        return int(raw)
+    except ValueError as error:
+        raise AdapterError(
+            f"step {step.step_id} payload {key!r} must be an integer, got {raw!r}"
+        ) from error
+
+
+def _payload_required(step: ProbeStep, key: str) -> str:
+    """Read a required payload value, raising a typed ``AdapterError`` if absent."""
+    try:
+        return step.payload[key]
+    except KeyError as error:
+        raise AdapterError(
+            f"step {step.step_id} payload is missing required key {key!r}"
+        ) from error
+
+
 class Runner:
     """Runs a probe end to end: plan, execute each step via adapters, detect."""
 

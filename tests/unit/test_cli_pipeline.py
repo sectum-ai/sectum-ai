@@ -377,3 +377,47 @@ def test_probe_output_json_rejects_an_unknown_value(tmp_path: Path) -> None:
     assert result.exit_code != 0
     # nothing on disk gets written because the parser rejected the args before the command body
     assert not (tmp_path / "run.json").exists()
+
+
+def test_headline_rpr_counts_a_pipeline_bleed_only_leak() -> None:
+    # End-to-end C3 guard: a run where ONLY the rag-pipeline-bleed probe surfaced
+    # a leak must yield a non-zero headline Retrieval-Pivot Rate. The old filter
+    # (entity-bleed only) excluded the pipeline-bleed step and read 0%. Builds the
+    # 2-tuple StepResults the runner produces and replicates app.py's bleed filter.
+    from uuid import UUID
+
+    from sectum.cli.app import BLEED_PROBE_IDS
+    from sectum.probes import RagEntityBleedProbe, RagPipelineBleedProbe
+    from sectum.runner import retrieval_pivot_rate
+    from sectum.spec import Finding, FindingStatus, ProbeStep, Severity, Surface
+
+    tenant_a, tenant_b = UUID(int=0xA), UUID(int=0xB)
+
+    def _step(probe_id: str) -> ProbeStep:
+        return ProbeStep(
+            step_id=f"s-{probe_id}",
+            probe_id=probe_id,
+            actor_tenant_id=tenant_a,
+            action="rag.ask",
+            payload={"query": "q"},
+        )
+
+    leak = Finding(
+        finding_id="f-pipeline",
+        probe_id=RagPipelineBleedProbe.id,
+        severity=Severity.HIGH,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=tenant_b,
+        observed_in_tenant_id=tenant_a,
+        surface=Surface.RAG_PIPELINE,
+    )
+    # StepResult is (ProbeStep, list[Finding]); entity-bleed step found nothing,
+    # pipeline-bleed step found the leak.
+    step_results = [
+        (_step(RagEntityBleedProbe.id), []),
+        (_step(RagPipelineBleedProbe.id), [leak]),
+    ]
+    bleed_steps = [r for r in step_results if r[0].probe_id in BLEED_PROBE_IDS]
+    # both probes counted -> 1 of 2 leaked -> 0.5; entity-only would read 0.0.
+    assert retrieval_pivot_rate(bleed_steps) > 0

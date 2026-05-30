@@ -51,6 +51,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Regression baselines now catch per-model and per-probe regressions.**
+  `compare_metrics` compared only the aggregate Retrieval-Pivot Rate and total
+  confirmed count, so the canonical Phase-5 check — swap one embedding model,
+  spike that model's RPR while the aggregate holds — was silently missed. It now
+  also diffs `retrieval_pivot_rate_by_model` and `per_probe_findings` key by key.
+- **The headline Retrieval-Pivot Rate counts both Class-2 probes.** The `sectum
+  probe` RPR was computed from the vector-store entity-bleed probe only, reading
+  0% when a leak manifested solely at the RAG-pipeline-end surface; it now counts
+  steps from both bleed probes (`BLEED_PROBE_IDS`).
+- **Malformed probe-step payloads raise a typed error.** The runner's `k` int
+  coercion and required-key lookups raised bare `ValueError`/`KeyError`, escaping
+  the `SectumError` → exit-code-3 mapping; they now raise `AdapterError` (shared
+  `_payload_int`/`_payload_required` helpers, also used by the sweep).
+- Baseline metric comparison uses a small float tolerance so JSON round-trip
+  noise never reads as a regression.
 - The Class 11 *attestable-with-caveat* distinction is now carried end to end,
   not just on the finding. A review pass found that when an observability
   backend raised `ErasureUnsupported` (Helicone / Datadog), the

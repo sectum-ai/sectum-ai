@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 
+from sectum.adapters import FakeVectorStore
 from sectum.runner import Runner, retrieval_pivot_rate
 from sectum.spec import AdapterError, ProbeStep
 from sectum.substrate import build_substrate, default_scenario
@@ -25,9 +26,10 @@ _ACTIONS = (
 )
 
 
-def _runner() -> Runner:
-    # No adapters supplied: every action handler must hit its guard.
-    return Runner(build_substrate(default_scenario(seed=1)))
+def _runner(vector: FakeVectorStore | None = None) -> Runner:
+    # No adapters supplied: every action handler must hit its guard. Pass a
+    # vector adapter to reach the payload-validation path inside vector.query.
+    return Runner(build_substrate(default_scenario(seed=1)), vector=vector)
 
 
 def _step(action: str) -> ProbeStep:
@@ -47,3 +49,31 @@ def test_runner_rejects_an_unknown_action() -> None:
 
 def test_retrieval_pivot_rate_is_zero_without_steps() -> None:
     assert retrieval_pivot_rate([]) == 0.0
+
+
+def test_non_numeric_k_payload_raises_adapter_error() -> None:
+    # A malformed payload is a config error (typed SectumError -> exit 3), not a
+    # bare ValueError traceback (exit 1).
+    runner = _runner(vector=FakeVectorStore())
+    step = ProbeStep(
+        step_id="s",
+        probe_id="p",
+        actor_tenant_id=UUID(int=1),
+        action="vector.query",
+        payload={"k": "not-a-number", "query": "q"},
+    )
+    with pytest.raises(AdapterError, match="must be an integer"):
+        runner._execute(step)
+
+
+def test_missing_required_query_payload_raises_adapter_error() -> None:
+    runner = _runner(vector=FakeVectorStore())
+    step = ProbeStep(
+        step_id="s",
+        probe_id="p",
+        actor_tenant_id=UUID(int=1),
+        action="vector.query",
+        payload={},
+    )
+    with pytest.raises(AdapterError, match="missing required key"):
+        runner._execute(step)
