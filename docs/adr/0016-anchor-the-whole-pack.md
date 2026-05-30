@@ -1,14 +1,14 @@
-# ADR-0012: Anchor the whole evidence pack, not just the run
+# ADR-0016: Anchor the whole evidence pack, not just the run
 
 - Status: Accepted
 - Date: 2026-05-29
-- Supersedes the digest-scope decision in [ADR-0007](0007-evidence-chain-anchors.md)
+- Extends [ADR-0007](0007-canonical-hashing-serializes-every-field.md) (canonical hashing)
 
 ## Context
 
-[ADR-0007](0007-evidence-chain-anchors.md) anchored the **run digest**
-(`run_digest`, the SHA-256 of the run record's canonical form). The TSA token and
-Rekor proof bound only that digest.
+The evidence chain originally anchored the **run digest** (`run_digest`, the
+SHA-256 of the run record's canonical form). The TSA token and Rekor proof bound
+only that digest.
 
 But an `EvidencePack` carries more attested content *outside* the run record:
 
@@ -55,6 +55,10 @@ This is a schema change: `SCHEMA_VERSION` is bumped `0.1.0` → `0.2.0`, and pac
 produced under the old scheme do not verify under the new verifier (acceptable —
 v0.1.0 is not yet published and no packs are in the wild).
 
+The canonical form itself is also hardened (reject non-finite floats, normalize
+timestamps to UTC) — see the update note in
+[ADR-0007](0007-canonical-hashing-serializes-every-field.md).
+
 ## Consequences
 
 - Tamper-evidence now covers the full auditor-facing surface, not just the run record.
@@ -64,5 +68,3 @@ v0.1.0 is not yet published and no packs are in the wild).
   the manifest to bind ownership).
 - `tests/invariants/test_evidence_roundtrip.py` gained a tamper-each-field suite
   (control mappings, pdf ref, manifest hash, Rekor strip, flag flip, forged local token).
-- Canonical hashing also rejects non-finite floats and normalizes timestamps to UTC
-  (see [ADR-0011](0011-canonical-json-determinism.md)).

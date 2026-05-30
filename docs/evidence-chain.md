@@ -70,7 +70,7 @@ an altered hash — changes the digest and fails verification with a clear reaso
 and exit code 4. A pack anchored in the Rekor log fails if its proof is stripped
 (a downgrade), and a `local-dev` timestamp is reported as *unanchored*. Because
 `sectum verify` is part of the open-source core, anyone can verify a Sectum AI
-evidence pack without trusting Sectum AI. (See [ADR-0012](adr/0012-anchor-the-whole-pack.md).)
+evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 
 ## What the pack carries — and what it does not
 
