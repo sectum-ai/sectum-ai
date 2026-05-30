@@ -3,6 +3,7 @@
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from sectum.probes import FakeJudge
 from sectum.spec import (
@@ -48,12 +49,27 @@ def test_corpus_without_shared_entities_plants_no_pivots() -> None:
     assert all(not document.marker_ids for document in substrate.documents)
 
 
-def test_fake_judge_rejects_an_empty_marker() -> None:
+def test_marker_rejects_empty_plaintext() -> None:
+    # An empty canary would substring-match every observation and confirm a
+    # critical leak, so the model forbids it at construction (min_length=1).
+    with pytest.raises(ValidationError):
+        Marker(
+            marker_id="m-1",
+            marker_type=MarkerType.ENTITY_CANARY,
+            owner_tenant_id=UUID(int=1),
+            plaintext="",
+        )
+
+
+def test_fake_judge_rejects_a_marker_that_tokenizes_to_empty() -> None:
+    # Defense in depth: a non-empty plaintext that tokenizes to no tokens (e.g.
+    # only punctuation) must never adjudicate as a leak, independent of the
+    # model-level min_length guard.
     marker = Marker(
         marker_id="m-1",
         marker_type=MarkerType.ENTITY_CANARY,
         owner_tenant_id=UUID(int=1),
-        plaintext="",
+        plaintext="!!",
     )
     verdict = FakeJudge().judge("any observed text", marker)
     assert verdict.leak is False
