@@ -121,8 +121,8 @@ def _check_token(
             name,
             ok=False,
             detail=(
-                f"unrecognized JSON timestamp token claiming TSA {tsa!r}; a real "
-                "RFC 3161 TSA returns a signed binary token, not JSON"
+                "unrecognized JSON timestamp token; a real RFC 3161 TSA returns a "
+                "signed binary token, not JSON, so this token is rejected"
             ),
         )
     return Check(

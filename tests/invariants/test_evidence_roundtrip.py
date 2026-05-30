@@ -305,7 +305,9 @@ def test_forging_a_local_token_naming_another_tsa_is_rejected() -> None:
     result = verify_pack(impersonated, manifest)
     assert not result.passed
     token = next(c for c in result.checks if c.name == "timestamp-token")
-    assert not token.ok and "freetsa.org" in token.detail
+    # The forged token is rejected; the TSA name it claimed is deliberately NOT
+    # echoed back (it is attacker-controlled), so assert on the static reason.
+    assert not token.ok and "not JSON" in token.detail
 
 
 def test_a_local_dev_token_is_reported_as_unanchored() -> None:

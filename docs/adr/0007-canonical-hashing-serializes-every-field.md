@@ -57,3 +57,23 @@ Verifying a pack across schema versions in production — re-serializing old pac
 JSON through evolved models — is a separate concern (pin the verifier to the
 pack's `schema_version`, or hash stored canonical bytes rather than
 re-serializing) and warrants its own ADR if it arises. Out of scope here.
+
+## Update (2026-05-29): keep the canonical form valid and injective
+
+A hardening sweep added two constraints to `to_canonical_json` so the canonical
+form is always valid JSON and maps equal values to equal bytes:
+
+- **No non-finite floats.** `json.dumps` is called with `allow_nan=False`. A
+  `NaN`/`Infinity` would serialize as a bare JavaScript literal that is not valid
+  JSON (RFC 8259) — a strict third-party parser (Go, Rust, browsers) could not
+  reproduce the digest — and every `NaN` collapses to the same token, so distinct
+  content could collide. A non-finite metric is now refused at hash time with a
+  clear `ValueError`.
+- **Timestamps normalized to UTC.** Datetime fields use a `UtcDateTime`
+  annotation whose serializer emits the instant in UTC ISO-8601, so the same
+  instant hashes identically regardless of the producing machine's local timezone
+  (`12:00Z` and `14:00+02:00` are one digest), preserving the byte-for-byte
+  reproducibility contract (§6.5).
+
+The scope of *what* the evidence anchors bind (the whole pack, not just the run)
+is covered in [ADR-0016](0016-anchor-the-whole-pack.md).
