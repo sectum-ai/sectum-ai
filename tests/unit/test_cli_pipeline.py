@@ -377,3 +377,49 @@ def test_probe_output_json_rejects_an_unknown_value(tmp_path: Path) -> None:
     assert result.exit_code != 0
     # nothing on disk gets written because the parser rejected the args before the command body
     assert not (tmp_path / "run.json").exists()
+
+
+def test_headline_rpr_counts_a_pipeline_bleed_only_leak() -> None:
+    # The strong C3 guard: a run where ONLY the rag-pipeline-bleed probe surfaced
+    # a leak must yield a non-zero headline Retrieval-Pivot Rate. The old filter
+    # (entity-bleed only) excluded the pipeline-bleed step and read 0%. This pins
+    # the behaviour end to end (BLEED_PROBE_IDS + retrieval_pivot_rate), not just
+    # the constant's membership.
+    from uuid import UUID
+
+    from sectum.cli.app import BLEED_PROBE_IDS
+    from sectum.probes import RagEntityBleedProbe, RagPipelineBleedProbe
+    from sectum.runner import retrieval_pivot_rate
+    from sectum.spec import Finding, FindingStatus, Observation, ProbeStep, Severity, Surface
+
+    tenant_a, tenant_b = UUID(int=0xA), UUID(int=0xB)
+
+    def _step(probe_id: str) -> ProbeStep:
+        return ProbeStep(
+            step_id=f"s-{probe_id}",
+            probe_id=probe_id,
+            actor_tenant_id=tenant_a,
+            action="rag.ask",
+            payload={"query": "q"},
+        )
+
+    def _obs(step_id: str) -> Observation:
+        return Observation(step_id=step_id, raw_response="r", surface=Surface.RAG_PIPELINE)
+
+    leak = Finding(
+        finding_id="f-pipeline",
+        probe_id=RagPipelineBleedProbe.id,
+        severity=Severity.HIGH,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=tenant_b,
+        observed_in_tenant_id=tenant_a,
+        surface=Surface.RAG_PIPELINE,
+    )
+    step_results = [
+        (_step(RagEntityBleedProbe.id), _obs("s-entity"), []),
+        (_step(RagPipelineBleedProbe.id), _obs("s-pipeline"), [leak]),
+    ]
+    bleed_steps = [r for r in step_results if r[0].probe_id in BLEED_PROBE_IDS]
+    # both probes counted -> 1 of 2 steps leaked -> 0.5; entity-only would be 0.0.
+    assert retrieval_pivot_rate(bleed_steps) > 0
