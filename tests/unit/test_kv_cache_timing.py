@@ -137,7 +137,7 @@ def test_timing_statistics_are_deterministic() -> None:
 
 # --- Gate-arm and degenerate-input coverage (the avoid-over-claiming logic) ---
 
-from sectum.probes.kv_cache_timing.probe import TimingSignal, _welch  # noqa: E402
+from sectum.probes.kv_cache_timing.probe import TimingSignal  # noqa: E402
 
 
 def _signal(*, p_value: float, effect_size: float, mean_gap_ms: float) -> TimingSignal:
