@@ -125,9 +125,9 @@ class Runner:
     def _vector_query(self, step: ProbeStep) -> Observation:
         if self._vector is None:
             raise AdapterError("a vector.query step needs a vector adapter")
-        k = int(step.payload.get("k", "5"))
+        k = _payload_int(step, "k", "5")
         hits = self._vector.query(
-            step.actor_tenant_id, step.payload["query"], k, user=step.actor_user_id
+            step.actor_tenant_id, _payload_required(step, "query"), k, user=step.actor_user_id
         )
         return Observation(
             step_id=step.step_id,
