@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sectum.adapters import FakeModel
 from sectum.probes import KvCacheTimingProbe, confirmed_findings
-from sectum.spec import Scenario, SharedEntity, Surface, SyntheticTenantSpec
+from sectum.spec import Scenario, Severity, SharedEntity, Surface, SyntheticTenantSpec
 from sectum.substrate import build_substrate, default_scenario
 
 
@@ -133,3 +133,68 @@ def test_timing_statistics_are_deterministic() -> None:
     second = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
     assert [s.p_value for s in first.signals] == [s.p_value for s in second.signals]
     assert [s.ci_low_ms for s in first.signals] == [s.ci_low_ms for s in second.signals]
+
+
+# --- Gate-arm and degenerate-input coverage (the avoid-over-claiming logic) ---
+
+from sectum.probes.kv_cache_timing.probe import TimingSignal, _welch  # noqa: E402
+
+
+def _signal(*, p_value: float, effect_size: float, mean_gap_ms: float) -> TimingSignal:
+    """A TimingSignal with only the gate-relevant fields varied."""
+    return TimingSignal(
+        owner_tenant_id=UUID(int=1),
+        observed_in_tenant_id=UUID(int=2),
+        primed_mean_ms=40.0,
+        control_mean_ms=40.0 + mean_gap_ms,
+        mean_gap_ms=mean_gap_ms,
+        effect_size=effect_size,
+        t_statistic=0.0,
+        degrees_of_freedom=46.0,
+        p_value=p_value,
+        ci_low_ms=mean_gap_ms - 1.0,
+        ci_high_ms=mean_gap_ms + 1.0,
+    )
+
+
+def test_significant_requires_all_three_arms() -> None:
+    # The avoid-over-claiming gate is significant AND large AND directional.
+    assert _signal(p_value=0.001, effect_size=9.0, mean_gap_ms=5.0).significant
+    # significant + large but WRONG direction (primed slower) -> not a finding.
+    assert not _signal(p_value=0.001, effect_size=9.0, mean_gap_ms=-5.0).significant
+    # significant + directional but SMALL effect -> not a finding.
+    assert not _signal(p_value=0.001, effect_size=0.5, mean_gap_ms=5.0).significant
+    # large + directional but NOT significant -> not a finding.
+    assert not _signal(p_value=0.20, effect_size=9.0, mean_gap_ms=5.0).significant
+    # p exactly at alpha (0.01) is not significant (strict <).
+    assert not _signal(p_value=0.01, effect_size=9.0, mean_gap_ms=5.0).significant
+
+
+def test_finding_severity_scales_with_effect_size() -> None:
+    # _LARGE_EFFECT boundary (5.0): below is MEDIUM, at/above is HIGH.
+    probe = KvCacheTimingProbe(
+        build_substrate(default_scenario(seed=2026)), model=FakeModel(prefix_cache=True)
+    )
+    medium = probe._finding(_signal(p_value=0.001, effect_size=4.9, mean_gap_ms=5.0))
+    high = probe._finding(_signal(p_value=0.001, effect_size=5.1, mean_gap_ms=5.0))
+    assert medium.severity is Severity.MEDIUM
+    assert high.severity is Severity.HIGH
+
+
+def test_welch_handles_zero_variance_samples() -> None:
+    # A constant-latency backend yields zero within-group spread. The Welch test
+    # must not crash or claim a side channel: identical samples -> t=0, df=0;
+    # different-but-constant means -> infinite t but df=0 (conservatively p=1.0).
+    import math
+
+    from sectum.probes.kv_cache_timing.probe import _student_t_sf
+
+    t_eq, df_eq, se_eq = _welch([5.0, 5.0, 5.0, 5.0], [5.0, 5.0, 5.0, 5.0])
+    assert (t_eq, df_eq, se_eq) == (0.0, 0.0, 0.0)
+    assert _student_t_sf(t_eq, df_eq) == 1.0
+
+    t_ne, df_ne, se_ne = _welch([7.0, 7.0, 7.0, 7.0], [5.0, 5.0, 5.0, 5.0])
+    assert math.isinf(t_ne)
+    assert df_ne == 0.0 and se_ne == 0.0
+    # df <= 0 is conservatively non-significant, never a crash or false positive.
+    assert _student_t_sf(t_ne, df_ne) == 1.0
