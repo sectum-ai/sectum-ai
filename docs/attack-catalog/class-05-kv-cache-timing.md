@@ -15,11 +15,25 @@ and do not share the warmed prefix.
 
 ## Detection
 
-The probe computes the effect size (Cohen's d) of the timing gap between the
-primed and control conditions. An effect size above the large-effect threshold —
-clear of the per-prompt jitter noise floor — is a confirmed side-channel
-finding, with severity scaled by signal strength. The per-pair effect sizes are
-recorded in the run metrics.
+The probe runs a two-sided **Welch's t-test** (unequal-variance) on the primed
+vs. control latency samples and reports the t-statistic, the
+Welch–Satterthwaite degrees of freedom, the **p-value**, a **95% confidence
+interval** on the mean timing gap, and the standardised effect size (**Cohen's
+d**). A pair is a confirmed side-channel finding only when the gap is
+
+- **statistically significant** — p < 0.01 (a strict two-sided level),
+- **practically large** — Cohen's d ≥ 0.8 (above the per-prompt jitter noise
+  floor), and
+- **directional** — the primed prompt is the faster one (a positive gap),
+
+so a coincidental or wrong-direction gap is not over-claimed (the spec,
+section 7). Severity scales with the effect size; the per-pair effect sizes are
+recorded in the run metrics, and the finding's evidence span quotes the full
+test result (means, gap, CI, t, df, p, d) for the auditor.
+
+The statistics are pure standard library — the Student's t survival function via
+the regularized incomplete beta function, the CI critical value via bisection —
+so the probe adds no SciPy/NumPy dependency (the spec, section 13).
 
 ## Status
 

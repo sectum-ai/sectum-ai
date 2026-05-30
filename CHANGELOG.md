@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Class 5 (KV-cache timing) now runs a real statistical test.** The
+  side-channel probe performs a two-sided Welch's t-test on the primed-vs-control
+  latencies and reports the t-statistic, degrees of freedom, p-value, a 95%
+  confidence interval on the timing gap, and Cohen's d. A finding is confirmed
+  only when the gap is statistically significant (p < 0.01), practically large
+  (d ≥ 0.8), and directional (primed faster) — the spec §7 "avoid over-claiming"
+  requirement. Pure standard library (no SciPy/NumPy); the evidence span now
+  cites the full test result for the auditor.
 - **Evidence schema `0.1.0` → `0.2.0`.** `EvidencePack` gains an
   `anchored_in_log` field, and the cryptographic anchors now bind the whole pack
   (`attested_digest`) rather than only the run record. Packs produced under the
