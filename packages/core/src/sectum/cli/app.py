@@ -500,9 +500,7 @@ def probe(
     kv_findings = list(kv_report.findings) if kv_report is not None else []
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
-    bleed_steps = [
-        result for result in step_results if result[0].probe_id == RagEntityBleedProbe.id
-    ]
+    bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),

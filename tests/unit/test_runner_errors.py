@@ -47,3 +47,31 @@ def test_runner_rejects_an_unknown_action() -> None:
 
 def test_retrieval_pivot_rate_is_zero_without_steps() -> None:
     assert retrieval_pivot_rate([]) == 0.0
+
+
+def test_non_numeric_k_payload_raises_adapter_error() -> None:
+    # A malformed payload is a config error (typed SectumError -> exit 3), not a
+    # bare ValueError traceback (exit 1).
+    runner = _runner(vector=FakeVectorStore())
+    step = ProbeStep(
+        step_id="s",
+        probe_id="p",
+        actor_tenant_id=UUID(int=1),
+        action="vector.query",
+        payload={"k": "not-a-number", "query": "q"},
+    )
+    with pytest.raises(AdapterError, match="must be an integer"):
+        runner._execute(step)
+
+
+def test_missing_required_query_payload_raises_adapter_error() -> None:
+    runner = _runner(vector=FakeVectorStore())
+    step = ProbeStep(
+        step_id="s",
+        probe_id="p",
+        actor_tenant_id=UUID(int=1),
+        action="vector.query",
+        payload={},
+    )
+    with pytest.raises(AdapterError, match="missing required key"):
+        runner._execute(step)

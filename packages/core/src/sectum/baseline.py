@@ -23,8 +23,13 @@ class MetricDelta:
 
     @property
     def regressed(self) -> bool:
-        """True when the metric moved in the worse, higher-leakage direction."""
-        return self.current > self.baseline
+        """True when the metric moved in the worse, higher-leakage direction.
+
+        Compared with a small tolerance so floating-point round-trip noise (a
+        metric serialized to JSON and back) never reads as a regression; real
+        leakage changes are far larger than the epsilon.
+        """
+        return self.current > self.baseline + 1e-9
 
 
 @dataclass(frozen=True)
@@ -58,9 +63,16 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
 
     Higher means more leakage for every metric, so an increase is a regression.
     Confirmed findings and the Retrieval-Pivot Rate are compared directly; the
-    per-surface erasure residue and the per-pair side-channel effect sizes are
-    compared key by key. A Retrieval-Pivot Rate that was not measured, or a key
-    absent on one side, counts as ``0.0``.
+    per-model Retrieval-Pivot Rate, the per-probe finding counts, the per-surface
+    erasure residue, and the per-pair side-channel effect sizes are compared key
+    by key. A Retrieval-Pivot Rate that was not measured, or a key absent on one
+    side, counts as ``0.0``.
+
+    The per-model RPR and per-probe counts matter because an aggregate can hide a
+    regression: swapping one embedding model can spike that model's RPR (the
+    canonical Phase-5 check, the engineering spec section 14) while the overall
+    rate is unchanged, and one probe can start leaking as another stops with no
+    change to the total confirmed count.
     """
     deltas: list[MetricDelta] = [
         MetricDelta(
@@ -74,6 +86,20 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             current=current.retrieval_pivot_rate or 0.0,
         ),
     ]
+    deltas.extend(
+        _dict_deltas(
+            "retrieval_pivot_rate_by_model",
+            baseline.retrieval_pivot_rate_by_model,
+            current.retrieval_pivot_rate_by_model,
+        )
+    )
+    deltas.extend(
+        _dict_deltas(
+            "per_probe_findings",
+            {key: float(value) for key, value in baseline.per_probe_findings.items()},
+            {key: float(value) for key, value in current.per_probe_findings.items()},
+        )
+    )
     deltas.extend(
         _dict_deltas("erasure_residue", baseline.erasure_residue, current.erasure_residue)
     )
