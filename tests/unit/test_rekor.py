@@ -215,7 +215,7 @@ def test_verify_pack_checks_a_rekor_proof(monkeypatch: pytest.MonkeyPatch) -> No
     # token over that same digest so only the Rekor path is under test here.
     local_token = json.dumps({"tsa": "local-dev", "digest": _FIXTURE_DIGEST})
     rekor_pack = pack.model_copy(update={"rekor_proof": _PROOF, "tsa_token": local_token})
-    monkeypatch.setattr("sectum.evidence.verify.run_digest", lambda _run: _FIXTURE_DIGEST)
+    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
     result = verify_pack(rekor_pack, manifest, rekor_keyring=_STAGING_KEYRING)
     rekor_check = next(check for check in result.checks if check.name == "rekor-inclusion")
     assert rekor_check.ok
@@ -228,7 +228,7 @@ def test_verify_pack_fails_a_rekor_proof_when_the_digest_was_altered(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rekor_pack = pack.model_copy(update={"rekor_proof": _PROOF})
-    monkeypatch.setattr("sectum.evidence.verify.run_digest", lambda _run: "f" * 64)
+    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: "f" * 64)
     assert not verify_pack(rekor_pack, manifest, rekor_keyring=_STAGING_KEYRING).passed
 
 
