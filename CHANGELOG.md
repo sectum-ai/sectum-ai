@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`sectum diff` — compare two runs or evidence packs.** Reports finding-level
+  changes (which leaks appeared, were resolved, or persist) on top of the
+  `baseline --compare` metric deltas, and exits `2` when the later run regressed
+  — a worsened metric or a newly confirmed finding (a fresh finding id, or an
+  in-place unverified→confirmed upgrade) — so a run-to-run check gates a CI
+  pipeline. Takes a `run.json` or an `evidence.json` on either
+  side, plus `--output json`.
+
 ### Security
 
 - **Detection hardening (zero false-positive / zero false-negative).** Four

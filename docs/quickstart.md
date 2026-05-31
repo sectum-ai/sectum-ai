@@ -33,6 +33,7 @@ uv run sectum verify .sectum/evidence.json
 | `sectum verify` | Independently verify an evidence pack. |
 | `sectum erasure` | Run the GDPR Article 17 erasure-verification workflow. |
 | `sectum baseline` | Save a regression baseline, or compare a run against it. |
+| `sectum diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
 | `sectum adapters` | List installed adapters and their capabilities. |
 
 Exit codes: `0` no confirmed leaks; `2` confirmed leaks present; `3` config or
