@@ -43,7 +43,7 @@ def _finding(**overrides: object) -> Finding:
         "remediation_pointer": "Scope retrieval by tenant.",
     }
     base.update(overrides)
-    return Finding(**base)  # type: ignore[arg-type]
+    return Finding(**base)
 
 
 def _pack(*findings: Finding) -> EvidencePack:
