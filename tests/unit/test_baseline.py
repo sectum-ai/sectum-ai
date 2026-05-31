@@ -150,3 +150,12 @@ def test_erasure_residue_regresses_while_a_caveat_does_not() -> None:
     residue = next(d for d in comparison.deltas if d.name == "erasure_residue[vector_db]")
     assert not caveat.regressed and caveat.informational
     assert residue.regressed and not residue.informational
+
+
+def test_severity_rank_covers_every_severity() -> None:
+    # Guard against a future Severity member being added without a rank entry,
+    # which would KeyError in FindingChange.severity_escalated at runtime.
+    from sectum.baseline import _SEVERITY_RANK
+    from sectum.spec import Severity
+
+    assert set(_SEVERITY_RANK) == set(Severity)

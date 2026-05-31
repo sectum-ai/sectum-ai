@@ -328,3 +328,17 @@ def test_cli_diff_erasure_residue_still_regresses(tmp_path: Path) -> None:
     new = _write(tmp_path / "new.json", _run(metrics=RunMetrics(erasure_residue={"vector_db": 3})))
     result = runner.invoke(app, ["diff", str(old), str(new)])
     assert result.exit_code == 2
+
+
+def test_unverified_to_confirmed_with_severity_rise_is_newly_confirmed_not_escalation() -> None:
+    # A finding upgraded unverified->confirmed that ALSO rises in severity is
+    # gated via newly_confirmed, not severity_escalations (which requires
+    # confirmed-in-both). The two gating sets stay disjoint by status.
+    earlier = _run(_finding("x", status=FindingStatus.UNVERIFIED, severity=Severity.LOW))
+    later = _run(_finding("x", status=FindingStatus.CONFIRMED, severity=Severity.CRITICAL))
+    result = diff_runs(earlier, later)
+    assert [f.finding_id for f in result.findings.newly_confirmed] == ["x"]
+    assert result.findings.severity_escalations == ()
+    # It is still reported as an in-place change for visibility.
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert result.regressed
