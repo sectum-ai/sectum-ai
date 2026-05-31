@@ -970,8 +970,13 @@ def _load_run_artifact(path: Path) -> RunResult:
         raise ConfigError(f"{path} is not a sectum run or evidence pack: {error}") from error
 
 
-def _finding_row(finding: Finding) -> dict[str, str]:
-    """A JSON-safe, comparison-relevant subset of a finding for diff output."""
+def _finding_row(finding: Finding) -> dict[str, str | None]:
+    """A JSON-safe, comparison-relevant subset of a finding for diff output.
+
+    The user dimension (ADR-0006) is included when set, so two distinct
+    cross-user leaks within one tenant do not collapse to the same row; both
+    user fields are ``null`` for a tenant-level finding.
+    """
     return {
         "finding_id": finding.finding_id,
         "probe_id": finding.probe_id,
@@ -980,20 +985,24 @@ def _finding_row(finding: Finding) -> dict[str, str]:
         "surface": finding.surface.value,
         "owner_tenant_id": str(finding.owner_tenant_id),
         "observed_in_tenant_id": str(finding.observed_in_tenant_id),
+        "owner_user_id": str(finding.owner_user_id) if finding.owner_user_id else None,
+        "observed_in_user_id": (
+            str(finding.observed_in_user_id) if finding.observed_in_user_id else None
+        ),
     }
 
 
 def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     """Print the human-readable diff: finding changes, metric deltas, verdict."""
     findings = result.findings
-    confirmed = len(findings.appeared_confirmed)
     typer.echo(f"sectum diff: {earlier} -> {later}")
     typer.echo("")
     typer.echo("Findings:")
     typer.echo(
-        f"  + {len(findings.appeared)} appeared ({confirmed} confirmed), "
+        f"  + {len(findings.appeared)} appeared, "
         f"- {len(findings.resolved)} resolved, "
-        f"= {len(findings.persisting)} persisting"
+        f"= {len(findings.persisting)} persisting, "
+        f"! {len(findings.newly_confirmed)} newly confirmed"
     )
 
     def _line(sign: str, finding: Finding) -> str:
@@ -1032,8 +1041,8 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "findings": {
             "appeared": [_finding_row(f) for f in result.findings.appeared],
             "resolved": [_finding_row(f) for f in result.findings.resolved],
+            "newly_confirmed": [_finding_row(f) for f in result.findings.newly_confirmed],
             "persisting_count": len(result.findings.persisting),
-            "appeared_confirmed_count": len(result.findings.appeared_confirmed),
         },
         "metrics": [
             {
@@ -1076,7 +1085,7 @@ def diff(
 
     Compares metric deltas (as ``baseline --compare`` does) and, in addition, the
     findings themselves keyed by id. Exits with code 2 when the later run
-    regressed - any worsened metric or a newly appeared confirmed finding - else
+    regressed - any worsened metric or a newly confirmed finding - else
     0, so the command can gate a CI pipeline (the engineering spec, section 10).
     """
     earlier_run = _load_run_artifact(earlier)

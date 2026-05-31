@@ -126,17 +126,13 @@ class FindingDiff:
     appeared: tuple[Finding, ...]
     resolved: tuple[Finding, ...]
     persisting: tuple[Finding, ...]
-
-    @property
-    def appeared_confirmed(self) -> tuple[Finding, ...]:
-        """Newly appeared findings that are confirmed leaks, not unverified ones.
-
-        Only confirmed appearances drive a regression verdict: an unverified
-        candidate is kept out of the headline count (the false-positive control,
-        the engineering spec section 6.4), so it must never flip a diff to a
-        regression on its own.
-        """
-        return tuple(f for f in self.appeared if f.status is FindingStatus.CONFIRMED)
+    # Findings confirmed in the later run whose id was not already confirmed in
+    # the earlier run -- the regression signal. Broader than "confirmed and
+    # newly appeared by id": it also catches a finding that persisted by id but
+    # was upgraded unverified -> confirmed between the runs. An unverified
+    # candidate never appears here (the false-positive control, the engineering
+    # spec section 6.4), so it cannot flip a diff to a regression on its own.
+    newly_confirmed: tuple[Finding, ...]
 
 
 @dataclass(frozen=True)
@@ -151,22 +147,30 @@ class RunDiff:
         """True when the later run is worse than the earlier one.
 
         A regression is any worsened metric (the baseline rule) *or* a newly
-        appeared confirmed finding. The finding check catches a swap the metric
-        counts miss: one confirmed leak resolving as a different one appears
-        leaves ``confirmed_findings`` unchanged yet is a new leak.
+        confirmed finding. The finding check catches what the metric counts
+        miss: a confirmed leak that is new -- by a fresh id, or by an in-place
+        unverified -> confirmed upgrade -- can leave ``confirmed_findings``
+        unchanged when another confirmed leak resolves in the same run, yet it
+        is still a new leak.
         """
-        return self.metrics.regressed or bool(self.findings.appeared_confirmed)
+        return self.metrics.regressed or bool(self.findings.newly_confirmed)
 
 
 def diff_findings(earlier: Sequence[Finding], later: Sequence[Finding]) -> FindingDiff:
-    """Diff two finding sequences by ``finding_id`` into appeared/resolved/persisting.
+    """Diff two finding sequences by ``finding_id`` into the four diff buckets.
 
-    Each side is de-duplicated by ``finding_id`` (first occurrence wins) so a
-    repeated id never lists a finding twice. Runs are de-duplicated upstream;
-    this only guards a hand-built input.
+    ``appeared``/``resolved``/``persisting`` partition by ``finding_id``;
+    ``newly_confirmed`` is every finding confirmed in ``later`` whose id was not
+    already confirmed in ``earlier`` (a fresh id, or an in-place upgrade). Each
+    side is de-duplicated by ``finding_id`` (first occurrence wins) so a repeated
+    id never lists a finding twice. Runs are de-duplicated upstream; this only
+    guards a hand-built input.
     """
     earlier_ids = {finding.finding_id for finding in earlier}
     later_ids = {finding.finding_id for finding in later}
+    earlier_confirmed_ids = {
+        finding.finding_id for finding in earlier if finding.status is FindingStatus.CONFIRMED
+    }
 
     def _select(findings: Sequence[Finding], keep: Callable[[str], bool]) -> tuple[Finding, ...]:
         seen: set[str] = set()
@@ -178,10 +182,15 @@ def diff_findings(earlier: Sequence[Finding], later: Sequence[Finding]) -> Findi
             chosen.append(finding)
         return tuple(chosen)
 
+    newly_confirmed = _select(
+        [finding for finding in later if finding.status is FindingStatus.CONFIRMED],
+        lambda fid: fid not in earlier_confirmed_ids,
+    )
     return FindingDiff(
         appeared=_select(later, lambda fid: fid not in earlier_ids),
         resolved=_select(earlier, lambda fid: fid not in later_ids),
         persisting=_select(later, lambda fid: fid in earlier_ids),
+        newly_confirmed=newly_confirmed,
     )
 
 
