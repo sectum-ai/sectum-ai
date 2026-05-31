@@ -58,6 +58,7 @@ nav:
       - adr/0008-adapter-user-dimension.md
       - adr/0009-atlas-technique-review-process.md
       - adr/0016-anchor-the-whole-pack.md
+      - adr/0017-pdf-engine.md
   - Maintainers:
       - Releasing: RELEASING.md
 

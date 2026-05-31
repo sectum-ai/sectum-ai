@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Optional weasyprint PDF engine for the audit pack.** `sectum report
+  --pdf-engine weasyprint` (or `render_audit_pack(..., engine=PdfEngine.WEASYPRINT)`)
+  renders the auditor pack from an HTML/CSS template — severity badges, typographic
+  tables, page footers — as an alternative to the default reportlab renderer.
+  weasyprint is an optional extra (`pip install "sectum-ai[weasyprint]"`); the base
+  install stays pure-Python and reportlab remains the default, and both engines
+  render identical content. Resolves the spec §21 PDF-engine decision; see
+  [ADR-0017](docs/adr/0017-pdf-engine.md).
 - **`sectum diff` — compare two runs or evidence packs.** Reports finding-level
   changes — which leaks appeared, were resolved, persist, or changed in place
   (status or severity) — on top of the `baseline --compare` metric deltas, and

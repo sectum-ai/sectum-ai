@@ -46,6 +46,7 @@ from sectum.config import (
 )
 from sectum.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum.evidence import (
+    PdfEngine,
     RekorTransparencyLog,
     Rfc3161Timestamper,
     Timestamper,
@@ -626,6 +627,18 @@ def report(
         bool,
         typer.Option("--rekor", help="Also record the run digest in a Sigstore Rekor log."),
     ] = False,
+    pdf_engine: Annotated[
+        PdfEngine,
+        typer.Option(
+            "--pdf-engine",
+            help=(
+                "Audit-pack PDF renderer. 'reportlab' (default) is pure Python; "
+                "'weasyprint' is an HTML/CSS-templated alternative and needs the "
+                "weasyprint extra (pip install 'sectum-ai[weasyprint]')."
+            ),
+            case_sensitive=False,
+        ),
+    ] = PdfEngine.REPORTLAB,
 ) -> None:
     """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
     loaded = load_config(config) if config is not None else SectumConfig()
@@ -645,7 +658,7 @@ def report(
     json_path = workdir / "evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
     pdf_path = workdir / "audit-pack.pdf"
-    render_audit_pack(pack, pdf_path)
+    render_audit_pack(pack, pdf_path, engine=pdf_engine)
     intoto_path = workdir / "attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
     typer.echo(f"evidence pack -> {json_path}")
