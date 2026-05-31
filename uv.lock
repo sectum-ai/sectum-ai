@@ -4005,6 +4005,9 @@ dependencies = [
 encryption = [
     { name = "cryptography" },
 ]
+weasyprint = [
+    { name = "sectum-ai-evidence" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -4012,11 +4015,12 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
     { name = "sectum-ai-evidence", editable = "packages/evidence" },
+    { name = "sectum-ai-evidence", extras = ["weasyprint"], marker = "extra == 'weasyprint'", editable = "packages/evidence" },
     { name = "sectum-ai-probes", editable = "packages/probes" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["encryption"]
+provides-extras = ["encryption", "weasyprint"]
 
 [[package]]
 name = "sectum-ai-adapters"

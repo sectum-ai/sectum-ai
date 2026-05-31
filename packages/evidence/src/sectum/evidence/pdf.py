@@ -5,6 +5,7 @@ system libraries). ADR-0002 keeps the renderer theme-pluggable; a richer,
 HTML-templated theme is a later refinement.
 """
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
@@ -16,6 +17,20 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from sectum.evidence.chain import run_digest
 from sectum.evidence.controls import COVERAGE_DISCLAIMER
 from sectum.spec import ControlMapping, EvidencePack, Finding, FindingStatus
+
+
+class PdfEngine(StrEnum):
+    """Which renderer produces the audit-pack PDF (the engineering spec, section 21).
+
+    ``reportlab`` is the default: pure Python, no system libraries, always
+    available. ``weasyprint`` is an HTML/CSS-templated alternative with a richer
+    auditor-facing layout; it needs the ``weasyprint`` extra (and its system
+    libraries) and is selected explicitly. Both engines render the same content.
+    """
+
+    REPORTLAB = "reportlab"
+    WEASYPRINT = "weasyprint"
+
 
 # Static scope/methodology narrative (the engineering spec, sections 8.3, 6.4,
 # and 8.4). Factual and anti-hype (section 20): what was tested, how detection
@@ -121,8 +136,8 @@ def _control_lines(mappings: tuple[ControlMapping, ...]) -> list[str]:
     ]
 
 
-def render_audit_pack(pack: EvidencePack, output: Path) -> None:
-    """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``."""
+def _render_reportlab(pack: EvidencePack, output: Path) -> None:
+    """Render an ``EvidencePack`` to an auditor-facing PDF via reportlab."""
     styles = getSampleStyleSheet()
     heading = styles["Heading2"]
     body = styles["BodyText"]
@@ -174,3 +189,23 @@ def render_audit_pack(pack: EvidencePack, output: Path) -> None:
 
     document = SimpleDocTemplate(str(output), pagesize=LETTER, title="Sectum AI Evidence Pack")
     document.build(flow)
+
+
+def render_audit_pack(
+    pack: EvidencePack, output: Path, *, engine: PdfEngine = PdfEngine.REPORTLAB
+) -> None:
+    """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``.
+
+    ``engine`` selects the renderer (the engineering spec, section 21). The
+    default ``reportlab`` is pure Python and always available; ``weasyprint`` is
+    the HTML/CSS-templated alternative and needs the ``weasyprint`` extra - it
+    raises :class:`~sectum.spec.EvidenceError` with an install hint when the
+    extra is absent. Both engines render the same content.
+    """
+    if engine is PdfEngine.WEASYPRINT:
+        # Imported lazily so the base install never pulls in weasyprint.
+        from sectum.evidence.pdf_weasyprint import render_weasyprint
+
+        render_weasyprint(pack, output)
+        return
+    _render_reportlab(pack, output)
