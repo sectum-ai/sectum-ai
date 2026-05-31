@@ -32,6 +32,10 @@ rfc3161 = ["rfc3161-client>=1.0.3"]
 # Rekor inclusion proof needs ECDSA/Ed25519 signing and verification; the Merkle
 # proof itself is standard-library only.
 rekor = ["cryptography>=43"]
+# weasyprint HTML/CSS audit-pack renderer (the engineering spec, sections 13 and
+# 21). Optional: the default reportlab renderer is pure Python with no system
+# libraries; weasyprint adds the pango/cairo/gdk-pixbuf system libraries.
+weasyprint = ["weasyprint>=60"]
 
 [project.urls]
 Homepage = "https://sectum.ai"

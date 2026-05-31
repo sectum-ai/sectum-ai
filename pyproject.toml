@@ -83,8 +83,8 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-# reportlab ships no type information; treat it as opaque.
-module = ["reportlab", "reportlab.*"]
+# reportlab and weasyprint ship no type information; treat them as opaque.
+module = ["reportlab", "reportlab.*", "weasyprint", "weasyprint.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

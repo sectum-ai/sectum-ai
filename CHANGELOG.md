@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   weasyprint is an optional extra (`pip install "sectum-ai[weasyprint]"`); the base
   install stays pure-Python and reportlab remains the default, and both engines
   render identical content. Resolves the spec §21 PDF-engine decision; see
-  [ADR-0017](adr/0017-pdf-engine.md).
+  [ADR-0017](docs/adr/0017-pdf-engine.md).
 - **`sectum diff` — compare two runs or evidence packs.** Reports finding-level
   changes — which leaks appeared, were resolved, persist, or changed in place
   (status or severity) — on top of the `baseline --compare` metric deltas, and

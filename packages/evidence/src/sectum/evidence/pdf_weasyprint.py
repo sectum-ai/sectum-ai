@@ -50,9 +50,15 @@ _CSS = """
     color: #888;
   }
 }
-body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1c1c1c; font-size: 10pt; line-height: 1.45; }
+body {
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  color: #1c1c1c; font-size: 10pt; line-height: 1.45;
+}
 h1 { font-size: 20pt; margin: 0 0 2pt 0; color: #14233a; }
-h2 { font-size: 13pt; margin: 18pt 0 6pt 0; color: #14233a; border-bottom: 1px solid #d8dee6; padding-bottom: 3pt; }
+h2 {
+  font-size: 13pt; margin: 18pt 0 6pt 0; color: #14233a;
+  border-bottom: 1px solid #d8dee6; padding-bottom: 3pt;
+}
 .run-id { color: #5a6675; font-size: 9pt; margin: 0 0 4pt 0; }
 table.kv { border-collapse: collapse; width: 100%; margin: 4pt 0; }
 table.kv td { padding: 3pt 6pt; vertical-align: top; border-bottom: 1px solid #eef1f5; }

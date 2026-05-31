@@ -150,3 +150,22 @@ def test_default_engine_is_reportlab(tmp_path: Path) -> None:
     out = tmp_path / "default.pdf"
     render_audit_pack(_pack(), out)
     assert out.read_bytes()[:5] == b"%PDF-"
+
+
+def test_weasyprint_extra_chain_terminates_in_the_package() -> None:
+    # Guard the install chain: sectum-ai[weasyprint] -> sectum-ai-evidence
+    # [weasyprint] -> weasyprint. A pure-import test cannot catch an empty extra
+    # (weasyprint may be present in the dev env regardless), so the documented
+    # `pip install "sectum-ai[weasyprint]"` could install nothing and the feature
+    # be unreachable. This parses the manifests and asserts the chain resolves.
+    import tomllib
+
+    root = Path(__file__).resolve().parents[2]
+    core = tomllib.loads((root / "packages/core/pyproject.toml").read_text())
+    evidence = tomllib.loads((root / "packages/evidence/pyproject.toml").read_text())
+
+    core_extra = core["project"]["optional-dependencies"]["weasyprint"]
+    assert any("sectum-ai-evidence[weasyprint]" in dep for dep in core_extra)
+
+    evidence_extra = evidence["project"]["optional-dependencies"]["weasyprint"]
+    assert any(dep.split(">=")[0].split("[")[0].strip() == "weasyprint" for dep in evidence_extra)
