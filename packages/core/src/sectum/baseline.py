@@ -10,7 +10,7 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from sectum.spec import Finding, FindingStatus, RunMetrics, RunResult
+from sectum.spec import Finding, FindingStatus, RunMetrics, RunResult, Severity
 
 
 @dataclass(frozen=True)
@@ -20,15 +20,24 @@ class MetricDelta:
     name: str
     baseline: float
     current: float
+    # An informational metric is reported for visibility but never counts as a
+    # regression: an erasure *caveat* (a backend with no per-tenant erasure API,
+    # Class 11 hiding place #8) is a coverage limitation, not an isolation
+    # failure. It is kept distinct from erasure *residue*, which is a real
+    # failure and does regress.
+    informational: bool = False
 
     @property
     def regressed(self) -> bool:
         """True when the metric moved in the worse, higher-leakage direction.
 
-        Compared with a small tolerance so floating-point round-trip noise (a
-        metric serialized to JSON and back) never reads as a regression; real
-        leakage changes are far larger than the epsilon.
+        Always ``False`` for an informational metric. Compared with a small
+        tolerance so floating-point round-trip noise (a metric serialized to
+        JSON and back) never reads as a regression; real leakage changes are far
+        larger than the epsilon.
         """
+        if self.informational:
+            return False
         return self.current > self.baseline + 1e-9
 
 
@@ -45,7 +54,11 @@ class BaselineComparison:
 
 
 def _dict_deltas(
-    label: str, baseline: Mapping[str, float], current: Mapping[str, float]
+    label: str,
+    baseline: Mapping[str, float],
+    current: Mapping[str, float],
+    *,
+    informational: bool = False,
 ) -> list[MetricDelta]:
     """A MetricDelta per key across both mappings; a key absent on a side is 0.0."""
     return [
@@ -53,6 +66,7 @@ def _dict_deltas(
             name=f"{label}[{key}]",
             baseline=float(baseline.get(key, 0.0)),
             current=float(current.get(key, 0.0)),
+            informational=informational,
         )
         for key in sorted(set(baseline) | set(current))
     ]
@@ -73,6 +87,10 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
     canonical Phase-5 check, the engineering spec section 14) while the overall
     rate is unchanged, and one probe can start leaking as another stops with no
     change to the total confirmed count.
+
+    Per-surface erasure *caveats* are also reported, but as informational deltas
+    that never count as a regression: a caveat is a coverage limitation of the
+    backend (Class 11 hiding place #8), not an isolation failure like residue.
     """
     deltas: list[MetricDelta] = [
         MetricDelta(
@@ -110,7 +128,52 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             current.side_channel_effect_sizes,
         )
     )
+    deltas.extend(
+        _dict_deltas(
+            "erasure_caveats",
+            baseline.erasure_caveats,
+            current.erasure_caveats,
+            informational=True,
+        )
+    )
     return BaselineComparison(deltas=tuple(deltas))
+
+
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.INFO: 0,
+    Severity.LOW: 1,
+    Severity.MEDIUM: 2,
+    Severity.HIGH: 3,
+    Severity.CRITICAL: 4,
+}
+
+
+@dataclass(frozen=True)
+class FindingChange:
+    """A finding present in both runs (same ``finding_id``) that changed in place.
+
+    ``previous`` is its earlier-run copy and ``current`` its later-run copy. A
+    change is a difference in status (e.g. unverified -> confirmed) or severity
+    (e.g. low -> critical) for what is, by id, the same leak.
+    """
+
+    previous: Finding
+    current: Finding
+
+    @property
+    def status_changed(self) -> bool:
+        """True when the finding's status differs between the runs."""
+        return self.previous.status is not self.current.status
+
+    @property
+    def severity_changed(self) -> bool:
+        """True when the finding's severity differs between the runs."""
+        return self.previous.severity is not self.current.severity
+
+    @property
+    def severity_escalated(self) -> bool:
+        """True when the severity rose (a worse posture), not fell."""
+        return _SEVERITY_RANK[self.current.severity] > _SEVERITY_RANK[self.previous.severity]
 
 
 @dataclass(frozen=True)
@@ -133,6 +196,28 @@ class FindingDiff:
     # candidate never appears here (the false-positive control, the engineering
     # spec section 6.4), so it cannot flip a diff to a regression on its own.
     newly_confirmed: tuple[Finding, ...]
+    # Findings present in both runs whose status or severity changed in place
+    # (matched by id), for visibility. The subset that gates a regression is
+    # ``severity_escalations``.
+    changed: tuple[FindingChange, ...]
+
+    @property
+    def severity_escalations(self) -> tuple[FindingChange, ...]:
+        """Persisting findings, confirmed in both runs, whose severity rose.
+
+        A leak that was already a confirmed cross-tenant finding becoming more
+        severe (e.g. low -> critical) is a worse isolation posture between the
+        runs, so it gates as a regression. Requiring confirmed-in-both keeps this
+        disjoint from ``newly_confirmed`` (which covers unverified -> confirmed)
+        and clear of the false-positive control.
+        """
+        return tuple(
+            change
+            for change in self.changed
+            if change.severity_escalated
+            and change.previous.status is FindingStatus.CONFIRMED
+            and change.current.status is FindingStatus.CONFIRMED
+        )
 
 
 @dataclass(frozen=True)
@@ -146,31 +231,41 @@ class RunDiff:
     def regressed(self) -> bool:
         """True when the later run is worse than the earlier one.
 
-        A regression is any worsened metric (the baseline rule) *or* a newly
-        confirmed finding. The finding check catches what the metric counts
+        A regression is any worsened metric (the baseline rule), a newly
+        confirmed finding, *or* an in-place severity escalation of a finding
+        confirmed in both runs. The finding checks catch what the metric counts
         miss: a confirmed leak that is new -- by a fresh id, or by an in-place
         unverified -> confirmed upgrade -- can leave ``confirmed_findings``
-        unchanged when another confirmed leak resolves in the same run, yet it
-        is still a new leak.
+        unchanged when another confirmed leak resolves in the same run; and a
+        known leak growing more severe (low -> critical) is a worse posture the
+        counts do not see at all.
         """
-        return self.metrics.regressed or bool(self.findings.newly_confirmed)
+        return (
+            self.metrics.regressed
+            or bool(self.findings.newly_confirmed)
+            or bool(self.findings.severity_escalations)
+        )
 
 
 def diff_findings(earlier: Sequence[Finding], later: Sequence[Finding]) -> FindingDiff:
-    """Diff two finding sequences by ``finding_id`` into the four diff buckets.
+    """Diff two finding sequences by ``finding_id`` into the diff buckets.
 
     ``appeared``/``resolved``/``persisting`` partition by ``finding_id``;
     ``newly_confirmed`` is every finding confirmed in ``later`` whose id was not
-    already confirmed in ``earlier`` (a fresh id, or an in-place upgrade). Each
-    side is de-duplicated by ``finding_id`` (first occurrence wins) so a repeated
-    id never lists a finding twice. Runs are de-duplicated upstream; this only
-    guards a hand-built input.
+    already confirmed in ``earlier`` (a fresh id, or an in-place upgrade);
+    ``changed`` is every persisting finding whose status or severity differs
+    between the runs. Each side is de-duplicated by ``finding_id`` (first
+    occurrence wins) so a repeated id never lists a finding twice. Runs are
+    de-duplicated upstream; this only guards a hand-built input.
     """
     earlier_ids = {finding.finding_id for finding in earlier}
     later_ids = {finding.finding_id for finding in later}
     earlier_confirmed_ids = {
         finding.finding_id for finding in earlier if finding.status is FindingStatus.CONFIRMED
     }
+    earlier_by_id: dict[str, Finding] = {}
+    for finding in earlier:
+        earlier_by_id.setdefault(finding.finding_id, finding)
 
     def _select(findings: Sequence[Finding], keep: Callable[[str], bool]) -> tuple[Finding, ...]:
         seen: set[str] = set()
@@ -186,11 +281,22 @@ def diff_findings(earlier: Sequence[Finding], later: Sequence[Finding]) -> Findi
         [finding for finding in later if finding.status is FindingStatus.CONFIRMED],
         lambda fid: fid not in earlier_confirmed_ids,
     )
+    changed: list[FindingChange] = []
+    changed_seen: set[str] = set()
+    for finding in later:
+        fid = finding.finding_id
+        if fid in changed_seen or fid not in earlier_by_id:
+            continue
+        changed_seen.add(fid)
+        previous = earlier_by_id[fid]
+        if previous.status is not finding.status or previous.severity is not finding.severity:
+            changed.append(FindingChange(previous=previous, current=finding))
     return FindingDiff(
         appeared=_select(later, lambda fid: fid not in earlier_ids),
         resolved=_select(earlier, lambda fid: fid not in later_ids),
         persisting=_select(later, lambda fid: fid in earlier_ids),
         newly_confirmed=newly_confirmed,
+        changed=tuple(changed),
     )
 
 

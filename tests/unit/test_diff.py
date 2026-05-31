@@ -125,16 +125,54 @@ def test_run_diff_flags_an_in_place_status_upgrade() -> None:
     assert result.regressed
 
 
-def test_in_place_severity_escalation_is_not_gated() -> None:
-    # A finding confirmed in BOTH runs whose severity escalates (low -> critical)
-    # is not, in v1, a regression: the gate fires on newly confirmed leaks, not
-    # on severity changes to an already-confirmed leak. This pins that scope
-    # decision consciously (a severity-escalation gate is a tracked follow-up).
+def test_in_place_severity_escalation_is_gated() -> None:
+    # A finding confirmed in BOTH runs whose severity rises (low -> critical) is
+    # a worse isolation posture between the runs, so it gates -- even though no
+    # metric count moved and it is "persisting", not "appeared".
     metrics = RunMetrics(confirmed_findings=1, per_probe_findings={"rag-entity-bleed": 1})
     earlier = _run(_finding("x", severity=Severity.LOW), metrics=metrics)
     later = _run(_finding("x", severity=Severity.CRITICAL), metrics=metrics)
     result = diff_runs(earlier, later)
+    assert not result.metrics.regressed
     assert result.findings.newly_confirmed == ()
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert [c.current.finding_id for c in result.findings.severity_escalations] == ["x"]
+    assert result.regressed
+
+
+def test_severity_de_escalation_is_a_change_but_not_a_regression() -> None:
+    # critical -> low on a confirmed finding is an improvement: shown as a
+    # change, never a regression.
+    metrics = RunMetrics(confirmed_findings=1, per_probe_findings={"rag-entity-bleed": 1})
+    earlier = _run(_finding("x", severity=Severity.CRITICAL), metrics=metrics)
+    later = _run(_finding("x", severity=Severity.LOW), metrics=metrics)
+    result = diff_runs(earlier, later)
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert result.findings.severity_escalations == ()
+    assert not result.regressed
+
+
+def test_status_downgrade_is_a_change_but_not_a_regression() -> None:
+    # confirmed -> unverified is an improvement (the leak is now only a
+    # candidate): shown as a change, never a regression.
+    earlier = _run(_finding("x", status=FindingStatus.CONFIRMED))
+    later = _run(_finding("x", status=FindingStatus.UNVERIFIED))
+    result = diff_runs(earlier, later)
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert result.findings.severity_escalations == ()
+    assert not result.regressed
+
+
+def test_severity_escalation_on_an_unverified_finding_is_not_gated() -> None:
+    # Severity rising on a finding that is not confirmed in both runs does not
+    # gate (the false-positive control): an unverified candidate's severity is
+    # not a confirmed-leak posture. If it became confirmed, newly_confirmed
+    # would cover it instead.
+    earlier = _run(_finding("x", status=FindingStatus.UNVERIFIED, severity=Severity.LOW))
+    later = _run(_finding("x", status=FindingStatus.UNVERIFIED, severity=Severity.CRITICAL))
+    result = diff_runs(earlier, later)
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert result.findings.severity_escalations == ()
     assert not result.regressed
 
 
@@ -231,3 +269,76 @@ def test_cli_diff_wrong_shape_json_exits_3(tmp_path: Path) -> None:
     wrong.write_text("[]")
     result = runner.invoke(app, ["diff", str(good), str(wrong)])
     assert result.exit_code == 3
+
+
+def test_cli_diff_changed_finding_in_json(tmp_path: Path) -> None:
+    old = _write(tmp_path / "old.json", _run(_finding("x", severity=Severity.LOW)))
+    new = _write(tmp_path / "new.json", _run(_finding("x", severity=Severity.CRITICAL)))
+    result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
+    assert result.exit_code == 2
+    payload = json.loads(result.output)
+    changed = payload["findings"]["changed"]
+    assert [c["finding_id"] for c in changed] == ["x"]
+    assert changed[0]["previous_severity"] == "low"
+    assert changed[0]["severity"] == "critical"
+    assert payload["findings"]["severity_escalation_count"] == 1
+    assert payload["regressed"] is True
+
+
+def test_cli_diff_changed_section_in_text(tmp_path: Path) -> None:
+    old = _write(tmp_path / "old.json", _run(_finding("x", severity=Severity.LOW)))
+    new = _write(tmp_path / "new.json", _run(_finding("x", severity=Severity.CRITICAL)))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert result.exit_code == 2
+    assert "changed:" in result.output
+    assert "low -> " in result.output and "critical" in result.output
+
+
+def test_cli_diff_caveat_increase_is_informational_not_a_regression(tmp_path: Path) -> None:
+    # A new erasure caveat (a backend coverage limitation) is reported but does
+    # not gate: exit 0, the delta is flagged informational, regressed stays False.
+    old = _write(
+        tmp_path / "old.json",
+        _run(_finding("x"), metrics=RunMetrics(erasure_caveats={"backup": 0})),
+    )
+    new = _write(
+        tmp_path / "new.json",
+        _run(_finding("x"), metrics=RunMetrics(erasure_caveats={"backup": 3})),
+    )
+    result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    delta = next(d for d in payload["metrics"] if d["name"] == "erasure_caveats[backup]")
+    assert delta["informational"] is True
+    assert delta["regressed"] is False
+    assert payload["regressed"] is False
+
+
+def test_cli_diff_caveat_verdict_label_in_text(tmp_path: Path) -> None:
+    old = _write(tmp_path / "old.json", _run(metrics=RunMetrics(erasure_caveats={"backup": 0})))
+    new = _write(tmp_path / "new.json", _run(metrics=RunMetrics(erasure_caveats={"backup": 3})))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert result.exit_code == 0
+    assert "[info] erasure_caveats[backup]" in result.output
+
+
+def test_cli_diff_erasure_residue_still_regresses(tmp_path: Path) -> None:
+    # Guard the contrast: residue (a real failure) must still gate, unlike a caveat.
+    old = _write(tmp_path / "old.json", _run(metrics=RunMetrics(erasure_residue={"vector_db": 0})))
+    new = _write(tmp_path / "new.json", _run(metrics=RunMetrics(erasure_residue={"vector_db": 3})))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert result.exit_code == 2
+
+
+def test_unverified_to_confirmed_with_severity_rise_is_newly_confirmed_not_escalation() -> None:
+    # A finding upgraded unverified->confirmed that ALSO rises in severity is
+    # gated via newly_confirmed, not severity_escalations (which requires
+    # confirmed-in-both). The two gating sets stay disjoint by status.
+    earlier = _run(_finding("x", status=FindingStatus.UNVERIFIED, severity=Severity.LOW))
+    later = _run(_finding("x", status=FindingStatus.CONFIRMED, severity=Severity.CRITICAL))
+    result = diff_runs(earlier, later)
+    assert [f.finding_id for f in result.findings.newly_confirmed] == ["x"]
+    assert result.findings.severity_escalations == ()
+    # It is still reported as an in-place change for visibility.
+    assert [c.current.finding_id for c in result.findings.changed] == ["x"]
+    assert result.regressed

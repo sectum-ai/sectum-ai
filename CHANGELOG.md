@@ -10,12 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`sectum diff` — compare two runs or evidence packs.** Reports finding-level
-  changes (which leaks appeared, were resolved, or persist) on top of the
-  `baseline --compare` metric deltas, and exits `2` when the later run regressed
-  — a worsened metric or a newly confirmed finding (a fresh finding id, or an
-  in-place unverified→confirmed upgrade) — so a run-to-run check gates a CI
-  pipeline. Takes a `run.json` or an `evidence.json` on either
-  side, plus `--output json`.
+  changes — which leaks appeared, were resolved, persist, or changed in place
+  (status or severity) — on top of the `baseline --compare` metric deltas, and
+  exits `2` when the later run regressed: a worsened metric, a newly confirmed
+  finding (a fresh finding id, or an in-place unverified→confirmed upgrade), or a
+  severity escalation of a finding confirmed in both runs. Takes a `run.json` or
+  an `evidence.json` on either side, plus `--output json`.
 
 ### Security
 
@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Regression comparison reports per-surface erasure _caveats_** as
+  informational metric deltas (in `sectum diff` and `sectum baseline --compare`).
+  A caveat is a backend coverage limitation (Class 11 hiding place #8), not an
+  isolation failure, so it is surfaced for visibility but never counts as a
+  regression — kept distinct from erasure _residue_, which does.
 - **Class 5 (KV-cache timing) now runs a real statistical test.** The
   side-channel probe performs a two-sided Welch's t-test on the primed-vs-control
   latencies and reports the t-statistic, degrees of freedom, p-value, a 95%
