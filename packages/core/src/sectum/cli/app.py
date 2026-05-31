@@ -29,7 +29,7 @@ from sectum.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum.baseline import RunDiff, compare_metrics, diff_runs
+from sectum.baseline import FindingChange, MetricDelta, RunDiff, compare_metrics, diff_runs
 from sectum.config import (
     AdapterConfig,
     EvidenceConfig,
@@ -904,6 +904,13 @@ def init(
     typer.echo(f"wrote {output}")
 
 
+def _delta_verdict(delta: MetricDelta) -> str:
+    """The status tag for a metric delta line: regression, informational, or ok."""
+    if delta.informational:
+        return "info"
+    return "REGRESSED" if delta.regressed else "ok"
+
+
 @app.command()
 def baseline(
     workdir: Annotated[
@@ -940,8 +947,9 @@ def baseline(
     saved = RunMetrics.model_validate_json(baseline_path.read_text())
     comparison = compare_metrics(saved, run.metrics)
     for delta in comparison.deltas:
-        verdict = "REGRESSED" if delta.regressed else "ok"
-        typer.echo(f"[{verdict}] {delta.name}: {delta.baseline:g} -> {delta.current:g}")
+        typer.echo(
+            f"[{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+        )
     if comparison.regressed:
         typer.echo("BASELINE REGRESSION: a metric moved in the worse direction.", err=True)
         raise typer.Exit(code=2)
@@ -992,6 +1000,14 @@ def _finding_row(finding: Finding) -> dict[str, str | None]:
     }
 
 
+def _change_row(change: FindingChange) -> dict[str, str | None]:
+    """A finding row for an in-place change, carrying its previous status/severity."""
+    row = _finding_row(change.current)
+    row["previous_status"] = change.previous.status.value
+    row["previous_severity"] = change.previous.severity.value
+    return row
+
+
 def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     """Print the human-readable diff: finding changes, metric deltas, verdict."""
     findings = result.findings
@@ -1002,7 +1018,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
         f"  + {len(findings.appeared)} appeared, "
         f"- {len(findings.resolved)} resolved, "
         f"= {len(findings.persisting)} persisting, "
-        f"! {len(findings.newly_confirmed)} newly confirmed"
+        f"! {len(findings.newly_confirmed)} newly confirmed, "
+        f"~ {len(findings.changed)} changed"
     )
 
     def _line(sign: str, finding: Finding) -> str:
@@ -1014,6 +1031,23 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f"({finding.surface.value})  {finding.finding_id[:12]}"
         )
 
+    escalation_ids = {change.current.finding_id for change in findings.severity_escalations}
+
+    def _change_line(change: FindingChange) -> str:
+        finding = change.current
+        owner = str(finding.owner_tenant_id)[:8]
+        observed = str(finding.observed_in_tenant_id)[:8]
+        sign = "!" if finding.finding_id in escalation_ids else "~"
+        transition = (
+            f"{change.previous.status.value}/{change.previous.severity.value}"
+            f" -> {finding.status.value}/{finding.severity.value}"
+        )
+        return (
+            f"    {sign} [{transition}] {finding.probe_id}  "
+            f"{owner} -> {observed}  ({finding.surface.value})  "
+            f"{finding.finding_id[:12]}"
+        )
+
     if findings.appeared:
         typer.echo("  appeared:")
         for finding in findings.appeared:
@@ -1022,12 +1056,17 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
         typer.echo("  resolved:")
         for finding in findings.resolved:
             typer.echo(_line("-", finding))
+    if findings.changed:
+        typer.echo("  changed:")
+        for change in findings.changed:
+            typer.echo(_change_line(change))
 
     typer.echo("")
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
-        verdict = "REGRESSED" if delta.regressed else "ok"
-        typer.echo(f"  [{verdict}] {delta.name}: {delta.baseline:g} -> {delta.current:g}")
+        typer.echo(
+            f"  [{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+        )
 
     typer.echo("")
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
@@ -1042,6 +1081,8 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
             "appeared": [_finding_row(f) for f in result.findings.appeared],
             "resolved": [_finding_row(f) for f in result.findings.resolved],
             "newly_confirmed": [_finding_row(f) for f in result.findings.newly_confirmed],
+            "changed": [_change_row(c) for c in result.findings.changed],
+            "severity_escalation_count": len(result.findings.severity_escalations),
             "persisting_count": len(result.findings.persisting),
         },
         "metrics": [
@@ -1050,6 +1091,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
                 "baseline": delta.baseline,
                 "current": delta.current,
                 "regressed": delta.regressed,
+                "informational": delta.informational,
             }
             for delta in result.metrics.deltas
         ],
@@ -1081,12 +1123,14 @@ def diff(
         ),
     ] = OutputFormat.TEXT,
 ) -> None:
-    """Diff two runs (or evidence packs): new, resolved, and persisting findings.
+    """Diff two runs (or evidence packs): new, resolved, changed, persisting findings.
 
     Compares metric deltas (as ``baseline --compare`` does) and, in addition, the
-    findings themselves keyed by id. Exits with code 2 when the later run
-    regressed - any worsened metric or a newly confirmed finding - else
-    0, so the command can gate a CI pipeline (the engineering spec, section 10).
+    findings themselves keyed by id - including in-place changes (status or
+    severity). Exits with code 2 when the later run regressed - any worsened
+    metric, a newly confirmed finding, or a severity escalation of a finding
+    confirmed in both runs - else 0, so the command can gate a CI pipeline (the
+    engineering spec, section 10).
     """
     earlier_run = _load_run_artifact(earlier)
     later_run = _load_run_artifact(later)

@@ -124,3 +124,29 @@ def test_per_model_rpr_epsilon_boundary() -> None:
     beyond = RunMetrics(retrieval_pivot_rate_by_model={"m": 0.5 + 2e-9})
     assert not compare_metrics(base, within).regressed
     assert compare_metrics(base, beyond).regressed
+
+
+def test_erasure_caveats_are_informational_not_a_regression() -> None:
+    # A caveat is a backend coverage limitation (Class 11 hiding place #8), not
+    # an isolation failure: it is reported but never counts as a regression.
+    base = RunMetrics(erasure_caveats={"backup": 0})
+    current = RunMetrics(erasure_caveats={"backup": 3})
+    comparison = compare_metrics(base, current)
+    assert not comparison.regressed
+    delta = next(d for d in comparison.deltas if d.name == "erasure_caveats[backup]")
+    assert delta.informational
+    assert not delta.regressed
+    assert delta.current == 3.0
+
+
+def test_erasure_residue_regresses_while_a_caveat_does_not() -> None:
+    # The deliberate distinction (task #78): residue is a failure and gates;
+    # a caveat on another surface, even rising, does not flip the verdict.
+    base = RunMetrics(erasure_residue={"vector_db": 0}, erasure_caveats={"backup": 0})
+    current = RunMetrics(erasure_residue={"vector_db": 2}, erasure_caveats={"backup": 9})
+    comparison = compare_metrics(base, current)
+    assert comparison.regressed  # driven by residue, not the caveat
+    caveat = next(d for d in comparison.deltas if d.name == "erasure_caveats[backup]")
+    residue = next(d for d in comparison.deltas if d.name == "erasure_residue[vector_db]")
+    assert not caveat.regressed and caveat.informational
+    assert residue.regressed and not residue.informational
