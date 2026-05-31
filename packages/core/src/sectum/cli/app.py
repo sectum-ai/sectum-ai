@@ -1,7 +1,7 @@
 """Entry point for the ``sectum`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, ``init``, and ``baseline``.
+``verify``, ``erasure``, ``init``, ``baseline``, and ``diff``.
 """
 
 import functools
@@ -14,6 +14,7 @@ from typing import Annotated
 from uuid import UUID
 
 import typer
+from pydantic import ValidationError
 
 from sectum.adapters import (
     AdapterRegistry,
@@ -28,7 +29,7 @@ from sectum.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum.baseline import compare_metrics
+from sectum.baseline import RunDiff, compare_metrics, diff_runs
 from sectum.config import (
     AdapterConfig,
     EvidenceConfig,
@@ -945,6 +946,148 @@ def baseline(
         typer.echo("BASELINE REGRESSION: a metric moved in the worse direction.", err=True)
         raise typer.Exit(code=2)
     typer.echo("no regression against the baseline")
+
+
+def _load_run_artifact(path: Path) -> RunResult:
+    """Load a :class:`RunResult` from a ``run.json`` or an evidence pack of one.
+
+    Accepts either the run record written by ``sectum probe`` or an
+    ``evidence.json`` pack (whose ``run_result`` is unwrapped), so two signed
+    packs compare directly. Raises :class:`ConfigError` for a missing file,
+    malformed JSON, or a payload that is neither shape.
+    """
+    if not path.exists():
+        raise ConfigError(f"no such run file: {path}")
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise ConfigError(f"{path} is not valid JSON: {error}") from error
+    try:
+        if isinstance(data, dict) and "run_result" in data:
+            return EvidencePack.model_validate(data).run_result
+        return RunResult.model_validate(data)
+    except ValidationError as error:
+        raise ConfigError(f"{path} is not a sectum run or evidence pack: {error}") from error
+
+
+def _finding_row(finding: Finding) -> dict[str, str]:
+    """A JSON-safe, comparison-relevant subset of a finding for diff output."""
+    return {
+        "finding_id": finding.finding_id,
+        "probe_id": finding.probe_id,
+        "severity": finding.severity.value,
+        "status": finding.status.value,
+        "surface": finding.surface.value,
+        "owner_tenant_id": str(finding.owner_tenant_id),
+        "observed_in_tenant_id": str(finding.observed_in_tenant_id),
+    }
+
+
+def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
+    """Print the human-readable diff: finding changes, metric deltas, verdict."""
+    findings = result.findings
+    confirmed = len(findings.appeared_confirmed)
+    typer.echo(f"sectum diff: {earlier} -> {later}")
+    typer.echo("")
+    typer.echo("Findings:")
+    typer.echo(
+        f"  + {len(findings.appeared)} appeared ({confirmed} confirmed), "
+        f"- {len(findings.resolved)} resolved, "
+        f"= {len(findings.persisting)} persisting"
+    )
+
+    def _line(sign: str, finding: Finding) -> str:
+        owner = str(finding.owner_tenant_id)[:8]
+        observed = str(finding.observed_in_tenant_id)[:8]
+        return (
+            f"    {sign} [{finding.status.value}/{finding.severity.value}] "
+            f"{finding.probe_id}  {owner} -> {observed}  "
+            f"({finding.surface.value})  {finding.finding_id[:12]}"
+        )
+
+    if findings.appeared:
+        typer.echo("  appeared:")
+        for finding in findings.appeared:
+            typer.echo(_line("+", finding))
+    if findings.resolved:
+        typer.echo("  resolved:")
+        for finding in findings.resolved:
+            typer.echo(_line("-", finding))
+
+    typer.echo("")
+    typer.echo("Metrics:")
+    for delta in result.metrics.deltas:
+        verdict = "REGRESSED" if delta.regressed else "ok"
+        typer.echo(f"  [{verdict}] {delta.name}: {delta.baseline:g} -> {delta.current:g}")
+
+    typer.echo("")
+    typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
+
+
+def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
+    """Print the diff as one machine-parseable JSON object on stdout."""
+    payload = {
+        "earlier": str(earlier),
+        "later": str(later),
+        "findings": {
+            "appeared": [_finding_row(f) for f in result.findings.appeared],
+            "resolved": [_finding_row(f) for f in result.findings.resolved],
+            "persisting_count": len(result.findings.persisting),
+            "appeared_confirmed_count": len(result.findings.appeared_confirmed),
+        },
+        "metrics": [
+            {
+                "name": delta.name,
+                "baseline": delta.baseline,
+                "current": delta.current,
+                "regressed": delta.regressed,
+            }
+            for delta in result.metrics.deltas
+        ],
+        "regressed": result.regressed,
+    }
+    typer.echo(json.dumps(payload, indent=2))
+
+
+@app.command()
+@_handle_typed_errors
+def diff(
+    earlier: Annotated[
+        Path,
+        typer.Argument(help="The earlier/reference run.json or evidence.json."),
+    ],
+    later: Annotated[
+        Path,
+        typer.Argument(help="The later run.json or evidence.json under scrutiny."),
+    ],
+    output: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--output",
+            help=(
+                "Render the diff on stdout. `text` is human-readable (default); "
+                "`json` emits a single machine-parseable object for CI pipelines."
+            ),
+            case_sensitive=False,
+        ),
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Diff two runs (or evidence packs): new, resolved, and persisting findings.
+
+    Compares metric deltas (as ``baseline --compare`` does) and, in addition, the
+    findings themselves keyed by id. Exits with code 2 when the later run
+    regressed - any worsened metric or a newly appeared confirmed finding - else
+    0, so the command can gate a CI pipeline (the engineering spec, section 10).
+    """
+    earlier_run = _load_run_artifact(earlier)
+    later_run = _load_run_artifact(later)
+    result = diff_runs(earlier_run, later_run)
+    if output is OutputFormat.JSON:
+        _render_diff_json(earlier, later, result)
+    else:
+        _render_diff_text(earlier, later, result)
+    if result.regressed:
+        raise typer.Exit(code=2)
 
 
 if __name__ == "__main__":  # pragma: no cover
