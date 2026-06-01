@@ -250,7 +250,20 @@ class FakeJudge:
 
 
 def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
-    return sum(x * y for x, y in zip(left, right, strict=True))
+    """Cosine similarity of two equal-length vectors, in [-1, 1].
+
+    Normalizes by the product of L2 norms, so a real (non-unit) embedder cannot
+    yield a score above 1.0 - a bare dot product can, and that would overflow the
+    ``Finding.confidence`` 0..1 bound and crash finding construction. The fake
+    embedder already returns unit vectors, so this leaves its scores unchanged. A
+    zero-norm vector has no direction, so its similarity is defined as 0.0.
+    """
+    dot = sum(x * y for x, y in zip(left, right, strict=True))
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return dot / (left_norm * right_norm)
 
 
 def _token_windows(tokens: list[str], size: int) -> Iterator[list[str]]:
@@ -430,7 +443,10 @@ class DetectionPipeline:
                     surface,
                     probe_id,
                     severity=Severity.HIGH if leak.leak else Severity.INFO,
-                    confidence=round(similarity, 4),
+                    # Clamp defensively: a true cosine is already <= 1.0, but float
+                    # rounding can nudge it just past 1.0, which would violate
+                    # Finding.confidence's 0..1 bound.
+                    confidence=round(min(1.0, similarity), 4),
                     status=FindingStatus.CONFIRMED if leak.leak else FindingStatus.UNVERIFIED,
                     evidence=evidence,
                 )
