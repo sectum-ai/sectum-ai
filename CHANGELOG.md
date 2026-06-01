@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Typer reported as an opaque exit `1` rather than the documented config-error
   exit `3`. Each load now catches the error and exits `3` with a message naming
   the bad file.
+- **`sectum baseline --compare` now gates on the full run diff, not metrics
+  alone.** It compared only the headline metric counts, so a leak that newly
+  *confirmed* (an `UNVERIFIED`→`CONFIRMED` upgrade or a fresh confirmed id) or a
+  confirmed leak that *escalated in severity* (e.g. low→critical) between the
+  baseline and the current run was reported as "no regression" whenever the
+  counts happened to stay level. `--save` now persists the full `RunResult` (not
+  just `RunMetrics`) and `--compare` runs `diff_runs` — the same gate as `sectum
+  diff` — so a newly confirmed or escalated leak exits `2`. **Breaking:** a
+  baseline saved by an earlier version holds only metrics; re-run `sectum
+  baseline --save` to refresh it.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
