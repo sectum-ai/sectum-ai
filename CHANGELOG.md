@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A confirmed leak can no longer be dropped from the headline count by an
+  earlier unverified duplicate.** `dedupe_findings` collapsed findings that share
+  a `finding_id` by keeping the *first* one seen, status-blind — and the
+  `finding_id` does not encode status. So when the same marker surfaced on the
+  same surface across multiple steps of one probe as both a semantic-only
+  `UNVERIFIED` candidate and a judge-`CONFIRMED` leak, whichever came first won;
+  an `UNVERIFIED`-first ordering silently discarded the `CONFIRMED` finding and
+  undercounted the cross-tenant-leak headline. Dedupe is now status-aware —
+  `CONFIRMED` outranks `UNVERIFIED`, then higher severity, then higher confidence
+  — so a real leak is always retained regardless of detection order.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant

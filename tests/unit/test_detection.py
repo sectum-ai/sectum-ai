@@ -106,6 +106,37 @@ def test_dedupe_keeps_the_same_leak_found_by_different_probes() -> None:
     assert len(dedupe_findings(across)) == 2
 
 
+def test_dedupe_keeps_confirmed_over_an_earlier_unverified_of_the_same_id() -> None:
+    # A semantic-only candidate (UNVERIFIED) and a judge-confirmed leak (CONFIRMED)
+    # of the same marker on the same surface share a finding_id - the id does not
+    # encode status. dedupe must keep the CONFIRMED even when the UNVERIFIED was
+    # appended first, or the headline confirmed-leak count silently drops a real
+    # leak in favor of the weaker duplicate.
+    substrate = _substrate()
+    pipeline = DetectionPipeline(substrate)
+    observer = substrate.tenants[1].tenant_id
+    text = f"retrieved chunk: {_foreign_hard_marker(substrate).plaintext}"
+    [confirmed] = pipeline.detect(observer, text, Surface.VECTOR_DB, probe_id="rag-entity-bleed")
+    assert confirmed.status is FindingStatus.CONFIRMED
+    unverified = confirmed.model_copy(
+        update={
+            "status": FindingStatus.UNVERIFIED,
+            "severity": Severity.INFO,
+            "confidence": 0.4,
+        }
+    )
+    assert unverified.finding_id == confirmed.finding_id  # same id, weaker status
+
+    # UNVERIFIED appears first; the status-blind first-wins dedupe would drop the
+    # CONFIRMED. The status-aware dedupe keeps it regardless of order.
+    deduped = dedupe_findings([unverified, confirmed])
+    assert len(deduped) == 1
+    assert deduped[0].status is FindingStatus.CONFIRMED
+    assert confirmed_findings(deduped) == [confirmed]
+    # Symmetric: order must not matter.
+    assert dedupe_findings([confirmed, unverified])[0].status is FindingStatus.CONFIRMED
+
+
 # --- Cluster-2 hardening regression tests (zero-FP / zero-FN) ----------------
 
 _TA = UUID(int=0xA)
