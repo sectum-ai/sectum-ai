@@ -56,7 +56,7 @@ Each Class 1 finding carries:
 
 - the owning tenant + the observing tenant of the cross-tenant fetch
 - the leaked marker id + plaintext + `evidence_span`
-- the surface (`VECTOR_DB` or `API`)
+- the surface (`VECTOR_DB` — the surface this probe emits)
 - OWASP / ATLAS / NIST control IDs
 - a remediation pointer naming the standard counter-measure:
   per-tenant namespace scoping (Pinecone namespaces, Weaviate

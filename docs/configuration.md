@@ -39,7 +39,7 @@ Settings that drive substrate generation.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `seed` | int | `2026` | Drives every deterministic generator. |
-| `corpus_profile` | str | `demo` | Placeholder for profile-driven corpora. |
+| `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 
 ## `workdir`
 

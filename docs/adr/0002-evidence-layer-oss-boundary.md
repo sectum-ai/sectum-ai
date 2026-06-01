@@ -27,9 +27,10 @@ ship under Apache-2.0.
   v1) runs the chain on the customer's own machine and lets only signed evidence
   leave; the construction code must therefore be in the distributed CLI. An open
   verifier also necessarily reveals the canonicalization algorithm.
-- **`controls.py` — open source.** Section 18 already places the control-mapping
-  table in `sectum-ai-spec`. Publishing the mappings is the category-authority
-  play.
+- **`controls.py` — open source.** The control-mapping table (the engineering
+  spec, section 18) is implemented here in the evidence package and ships in the
+  open CLI, so a third party can read exactly which controls each finding
+  asserts. Publishing the mappings is the category-authority play.
 - **`pdf.py` — open source, built with a pluggable theme.** The open-source
   default theme renders a complete, substantively full, verifiable document. The
   private `platform` repository supplies a branded theme asset only.

@@ -39,3 +39,15 @@ so the probe adds no SciPy/NumPy dependency (the spec, section 13).
 
 Implemented in Phase 5. Like the Class 11 erasure probe, Class 5 is a
 statistical workflow with its own entry point rather than a plan/detect probe.
+
+## Backends and limitations
+
+The probe can only observe a side channel the backend actually exposes. It needs
+a model endpoint whose latency reflects a **prefix cache shared across
+principals** — the hosted, multi-tenant inference setting this attack targets.
+Run against a single-process or per-tenant-isolated backend (the local
+HuggingFace LoRA adapter, or `FakeModel(prefix_cache=False)`) there is no shared
+cache to leak through, so the probe reports no significant timing gap **by
+construction**. That absence is *not* evidence of isolation on a shared backend —
+it only means this backend has no shared prefix cache to measure. Point Class 5
+at the same shared inference tier your tenants actually use.

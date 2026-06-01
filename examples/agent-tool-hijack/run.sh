@@ -10,9 +10,10 @@
 # The Class 7 probe today verifies the *MCP surface* (Class 7 v1 per the
 # engineering spec, section 7). The story this example tells is the
 # agent-adapter half of that surface: who *calls* the MCP server, and how to
-# swap that caller between the four shipped agent kinds (fake, http,
-# langgraph, autogen, crewai) so the same leak shows up regardless of which
-# agent framework a customer uses. The wiring snippets and connect-time
+# swap that caller between the seven shipped agent kinds (fake, http,
+# langgraph, autogen, crewai, openai-assistants, anthropic-tooluse) so the same
+# leak shows up regardless of which agent framework a customer uses. The wiring
+# snippets and connect-time
 # factory functions live alongside this script in factories.py.
 set -euo pipefail
 
