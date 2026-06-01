@@ -35,3 +35,19 @@ def test_different_seed_yields_a_different_manifest() -> None:
     one = build_substrate(default_scenario(seed=1))
     two = build_substrate(default_scenario(seed=2))
     assert canonical_hash(one.manifest) != canonical_hash(two.manifest)
+
+
+def test_default_scenario_hashes_match_the_published_golden() -> None:
+    # A fixed golden value turns an *accidental* change to corpus generation,
+    # marker planting, or canonicalization into a test failure - the determinism
+    # tests above only catch run-to-run drift, not a shift in the output itself.
+    # The reproducibility contract (spec section 6.5) makes these stable across
+    # machines and Python versions. Update these literals only with a deliberate
+    # substrate change.
+    substrate = build_substrate(default_scenario(seed=2026))
+    assert substrate.manifest.scenario_hash == (
+        "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d"
+    )
+    assert canonical_hash(substrate.manifest) == (
+        "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de"
+    )
