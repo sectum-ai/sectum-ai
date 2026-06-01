@@ -433,6 +433,69 @@ def test_build_agent_langgraph_rejects_a_malformed_factory_path() -> None:
         build_agent(AdapterConfig(kind="langgraph", factory="not_dotted"))
 
 
+def test_build_rag_langchain_imports_and_wraps_the_named_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``kind: langchain`` imports ``module:callable`` and wraps its return value.
+
+    The factory returns any object exposing ``invoke(input)``; the resolver
+    calls it once and hands the chain to ``LangChainRAGPipeline``.
+    """
+    import sys
+    import types
+
+    from sectum.adapters.rag.langchain import LangChainRAGPipeline
+
+    class _StubChain:
+        def invoke(self, input: object) -> str:
+            return "answer"
+
+    module = types.ModuleType("sectum_test_langchain_factory")
+    module.make_chain = lambda: _StubChain()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "sectum_test_langchain_factory", module)
+
+    adapter = build_rag(
+        AdapterConfig(kind="langchain", factory="sectum_test_langchain_factory:make_chain")
+    )
+    assert isinstance(adapter, LangChainRAGPipeline)
+
+
+def test_build_rag_langchain_rejects_a_malformed_factory_path() -> None:
+    with pytest.raises(ConfigError, match=r"module\.path:callable"):
+        build_rag(AdapterConfig(kind="langchain", factory="not_dotted"))
+
+
+def test_build_observability_otel_builds_from_a_base_url() -> None:
+    from sectum.adapters.observability.otel import OtelObservability
+
+    adapter = build_observability(AdapterConfig(kind="otel", base_url="https://otel.example.com"))
+    assert isinstance(adapter, OtelObservability)
+
+
+def test_build_observability_helicone_builds_from_an_api_key() -> None:
+    from sectum.adapters.observability.helicone import HeliconeObservability
+
+    adapter = build_observability(AdapterConfig(kind="helicone", api_key="hc-test-key"))
+    assert isinstance(adapter, HeliconeObservability)
+
+
+def test_build_observability_datadog_builds_from_api_and_application_keys() -> None:
+    from sectum.adapters.observability.datadog import DatadogObservability
+
+    adapter = build_observability(
+        AdapterConfig(kind="datadog", api_key="dd-test-key", application_key="dd-app-key")
+    )
+    assert isinstance(adapter, DatadogObservability)
+
+
+def test_build_model_huggingface_requires_a_base_model_id() -> None:
+    # The huggingface branch validates its required fields before importing the
+    # heavy transformers/peft stack, so this is deterministic in CI (where the
+    # extra is not installed) while still exercising the resolver dispatch.
+    with pytest.raises(ConfigError, match="base_model_id"):
+        build_model(AdapterConfig(kind="huggingface"))
+
+
 def test_build_agent_langgraph_rejects_a_missing_factory_attribute(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

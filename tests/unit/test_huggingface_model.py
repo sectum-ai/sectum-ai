@@ -209,11 +209,16 @@ def test_huggingface_lora_wraps_delete_failures_in_adapter_error() -> None:
         model.delete(_TENANT_A)
 
 
-def test_huggingface_lora_train_with_empty_texts_is_a_noop() -> None:
+def test_huggingface_lora_train_with_empty_texts_surfaces_no_memorized_content() -> None:
+    # The adapter does not special-case an empty corpus: it delegates
+    # train_lora(scope, []) to the backend, and the stand-in records the scope
+    # with an empty text list. The meaningful, adapter-level contract is that
+    # inference under that scope surfaces no memorized content - a tenant that
+    # trained on nothing has nothing that can leak.
     backend = _FakeBackend()
     model = HuggingFaceLoraModel(backend)
     model.train_adapter(_TENANT_A, [])
-    # No scope was created and no inference would surface anything; the
-    # adapter does not write an empty LoRA dir.
-    assert _TENANT_A.hex in backend.trained  # stand-in writes empty list
-    assert backend.trained[_TENANT_A.hex] == []
+    assert backend.trained.get(_TENANT_A.hex) == []
+    # The stand-in returns "<scope>:<prompt>:<memorized>".rstrip(":"); with no
+    # memorized text the response echoes the prompt but carries no canary.
+    assert model.infer(_TENANT_A, "what") == f"{_TENANT_A.hex}:what"

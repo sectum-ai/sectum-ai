@@ -114,6 +114,23 @@ def test_a_confirmed_finding_carries_p_value_and_confidence_interval() -> None:
     assert "Welch t=" in span
 
 
+def test_finding_confidence_is_a_bounded_probability_tracking_the_p_value() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    report = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    findings = confirmed_findings(report.findings)
+    assert findings
+    signal_by_pair = {
+        (signal.owner_tenant_id, signal.observed_in_tenant_id): signal for signal in report.signals
+    }
+    for finding in findings:
+        # Confidence is a probability: it must stay within [0, 1] for any
+        # p-value, and equal 1 - p clamped at 1.0 (a near-zero p-value must not
+        # push it past 1.0). Guards the pin in the finding builder.
+        assert 0.0 <= finding.confidence <= 1.0
+        signal = signal_by_pair[(finding.owner_tenant_id, finding.observed_in_tenant_id)]
+        assert finding.confidence == round(min(1.0, 1.0 - signal.p_value), 4)
+
+
 def test_no_cache_signals_are_not_statistically_significant() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     report = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=False)).run()
