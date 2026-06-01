@@ -373,6 +373,7 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
             adapter_bleed=_bool(extras, "adapter_bleed", False),
             prefix_cache=_bool(extras, "prefix_cache", False),
             soft_delete=_bool(extras, "soft_delete", False),
+            user_scoped=_bool(extras, "user_scoped", False),
         )
     if config.kind == "huggingface":
         # A live HuggingFace + PEFT LoRA model. Like the agent live kinds,
@@ -405,6 +406,7 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         return FakeMCP(
             confused_deputy=_bool(extras, "confused_deputy", False),
             token_passthrough=_bool(extras, "token_passthrough", False),
+            user_scoped=_bool(extras, "user_scoped", False),
         )
     if config.kind == "stdio":
         from sectum.adapters.mcp.client import StdioMCPClient
@@ -434,6 +436,7 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
         return FakeMemory(
             shared_memory=_bool(extras, "shared_memory", False),
             soft_delete=_bool(extras, "soft_delete", False),
+            user_scoped=_bool(extras, "user_scoped", False),
         )
     raise _unsupported("memory", config.kind)
 
