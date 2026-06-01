@@ -342,9 +342,17 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
                 err=True,
             )
             raise typer.Exit(code=3)
-        return Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+        try:
+            return Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+        except ValueError as error:
+            typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
     if plain.exists():
-        return Substrate.model_validate_json(plain.read_text())
+        try:
+            return Substrate.model_validate_json(plain.read_text())
+        except ValueError as error:
+            typer.echo(f"the substrate at {plain} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
     typer.echo(f"no substrate at {plain}; run 'sectum seed' first", err=True)
     raise typer.Exit(code=3)
 
@@ -355,7 +363,11 @@ def _load_run(workdir: Path) -> RunResult:
     if not path.exists():
         typer.echo(f"no run at {path}; run 'sectum probe' first", err=True)
         raise typer.Exit(code=3)
-    return RunResult.model_validate_json(path.read_text())
+    try:
+        return RunResult.model_validate_json(path.read_text())
+    except ValueError as error:
+        typer.echo(f"the run at {path} is malformed: {error}", err=True)
+        raise typer.Exit(code=3) from error
 
 
 def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
@@ -963,7 +975,11 @@ def baseline(
     if not baseline_path.exists():
         typer.echo(f"no baseline at {baseline_path}; run 'sectum baseline --save' first", err=True)
         raise typer.Exit(code=3)
-    saved = RunMetrics.model_validate_json(baseline_path.read_text())
+    try:
+        saved = RunMetrics.model_validate_json(baseline_path.read_text())
+    except ValueError as error:
+        typer.echo(f"the baseline at {baseline_path} is malformed: {error}", err=True)
+        raise typer.Exit(code=3) from error
     comparison = compare_metrics(saved, run.metrics)
     for delta in comparison.deltas:
         typer.echo(

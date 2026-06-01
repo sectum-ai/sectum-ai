@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   escape, bypassing the CLI's typed-error exit code (`3`) and surfacing as an
   opaque traceback. Each now raises `AdapterError` (matching the OTel `purge`
   path), so an unreachable or misbehaving backend fails cleanly.
+- **A present-but-corrupt `substrate.json` / `run.json` / `baseline.json` now
+  exits `3` (config error) instead of crashing.** The CLI's `_load_substrate`,
+  `_load_run`, and `sectum baseline --compare` called `model_validate_json`
+  unguarded, so a malformed artifact raised an unhandled `ValidationError` that
+  Typer reported as an opaque exit `1` rather than the documented config-error
+  exit `3`. Each load now catches the error and exits `3` with a message naming
+  the bad file.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
