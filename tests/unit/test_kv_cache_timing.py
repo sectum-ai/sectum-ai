@@ -57,9 +57,14 @@ def test_two_low_valued_tenants_yield_distinct_finding_ids() -> None:
     substrate = build_substrate(scenario)
     report = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
     finding_ids = [finding.finding_id for finding in report.findings]
-    # both ordered pairs (A->C, C->A) are detected, and their ids do not collide
     assert len(finding_ids) >= 2
-    assert len(set(finding_ids)) == len(finding_ids)
+    assert len(set(finding_ids)) == len(finding_ids)  # no id collisions
+    # Pin the underlying distinctness a truncated id would have merged: both
+    # ordered cross-tenant pairs (A->C and C->A) are present as their own
+    # findings, keyed on the full-hex principals.
+    pairs = {(f.owner_tenant_id, f.observed_in_tenant_id) for f in report.findings}
+    assert (UUID(int=0xA), UUID(int=0xC)) in pairs
+    assert (UUID(int=0xC), UUID(int=0xA)) in pairs
 
 
 # --- Statistical-rigor tests (spec §7 Class 5: t-test, p-value, CI) ----------

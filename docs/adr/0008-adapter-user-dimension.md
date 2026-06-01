@@ -78,9 +78,15 @@ and Class 10 (ikea-extraction) each verify user isolation with a positive
 (tenant-only store leaks) and a negative (user-scoped store does not) case.
 
 The **RAG pipeline** family (`RAGPipelineAdapter.ask`) was *not* given a user
-dimension: no probe issues a `rag.ask` step (the retrieval probes confirm via
-`vector.query`), so there was nothing to thread it through. `ModelAdapter.
-measure_latency` likewise stays tenant-level - the KV-cache timing side channel
-(Class 5) is shared infrastructure, not a per-principal scope. The live adapters
-still accept `user` for conformance without yet enforcing it (the per-backend
-follow-on above).
+dimension at the time of this decision. `ModelAdapter.measure_latency` likewise
+stays tenant-level - the KV-cache timing side channel (Class 5) is shared
+infrastructure, not a per-principal scope. The live adapters still accept `user`
+for conformance without yet enforcing it (the per-backend follow-on above).
+
+> **Update (2026-06-01):** the original rationale here ("no probe issues a
+> `rag.ask` step") is now out of date - the `rag-pipeline-bleed` probe (Class 2,
+> RAG-pipeline end) issues a per-principal `rag.ask` step with `actor_user_id`
+> set, but `RAGPipelineAdapter.ask` still takes no `user` argument, so the runner
+> drops the user at that boundary. The RAG family's user dimension is therefore
+> *unverified* rather than *unneeded*; threading `user` through `ask` (with a
+> user-scoped fake) remains the open follow-on.

@@ -51,11 +51,13 @@ Copy `sectum.yaml.example` to `/etc/sectum/sectum.yaml` and edit:
 - Choose the scenario seed (default `2026` is the spec-recommended
   starting point; reproducible).
 
-Run a one-shot to validate:
+Scaffold a config, then validate it parses by seeding into a scratch workdir you
+discard afterwards (`sectum seed` has no dry-run mode):
 
 ```sh
 sectum init --output /etc/sectum/sectum.yaml.draft
-sectum seed --workdir /var/lib/sectum --config /etc/sectum/sectum.yaml --dry-run
+sectum seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum.yaml
+rm -rf /tmp/sectum-validate
 ```
 
 ### 3. Install the wrapper + cron (one-time)

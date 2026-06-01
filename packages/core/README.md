@@ -25,7 +25,7 @@ This pulls the full family: `sectum-ai-spec` (data models), `sectum-ai-probes`
 sectum seed      # provision synthetic tenants + plant canary markers
 sectum probe     # run the attack catalog from each tenant's session
 sectum report    # assemble a signed, control-mapped evidence pack (JSON + PDF)
-sectum verify out/evidence.json   # independently re-verify the pack
+sectum verify .sectum/evidence.json   # independently re-verify the pack
 ```
 
 ## Links
