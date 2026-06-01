@@ -2,13 +2,24 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 import typer
 from typer.testing import CliRunner
 
 from sectum.cli.app import _handle_typed_errors, _load_run, _load_substrate, app
-from sectum.spec import AdapterError, ConfigError, EvidenceError, RunMetrics, RunResult
+from sectum.spec import (
+    AdapterError,
+    ConfigError,
+    EvidenceError,
+    Finding,
+    FindingStatus,
+    RunMetrics,
+    RunResult,
+    Severity,
+    Surface,
+)
 
 _runner = CliRunner()
 
@@ -110,3 +121,39 @@ def test_baseline_compare_rejects_a_corrupt_baseline_file(tmp_path: Path) -> Non
     (tmp_path / "baseline.json").write_text("{ not valid json")
     result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 3
+
+
+def _run_with(findings: tuple[Finding, ...]) -> RunResult:
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    return RunResult(
+        run_id="r-1",
+        scenario_hash="s",
+        manifest_hash="m",
+        started_at=moment,
+        finished_at=moment,
+        findings=findings,
+        metrics=RunMetrics(),
+    )
+
+
+def test_baseline_compare_flags_a_newly_confirmed_finding(tmp_path: Path) -> None:
+    # baseline --compare now runs the full run diff (like `sectum diff`), so a leak
+    # that newly confirms between the baseline and the current run is a regression
+    # (exit 2) even when the headline metric counts are unchanged.
+    leak = Finding(
+        finding_id="finding-rag-entity-bleed-1",
+        probe_id="rag-entity-bleed",
+        severity=Severity.HIGH,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=UUID(int=1),
+        observed_in_tenant_id=UUID(int=2),
+        surface=Surface.VECTOR_DB,
+        evidence_span="leaked canary",
+        owasp_llm="LLM08:2025",
+    )
+    (tmp_path / "baseline.json").write_text(_run_with(()).model_dump_json())
+    (tmp_path / "run.json").write_text(_run_with((leak,)).model_dump_json())
+    result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 2
+    assert "newly confirmed" in result.output.lower()

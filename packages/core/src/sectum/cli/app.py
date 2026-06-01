@@ -29,7 +29,7 @@ from sectum.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum.baseline import FindingChange, MetricDelta, RunDiff, compare_metrics, diff_runs
+from sectum.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum.config import (
     AdapterConfig,
     EvidenceConfig,
@@ -948,7 +948,7 @@ def baseline(
         Path | None, typer.Option(help="Directory holding the recorded run.")
     ] = None,
     save: Annotated[
-        bool, typer.Option("--save", help="Save the current run's metrics as the baseline.")
+        bool, typer.Option("--save", help="Save the current run as the baseline.")
     ] = False,
     compare: Annotated[
         bool,
@@ -966,7 +966,7 @@ def baseline(
     run = _load_run(workdir)
     baseline_path = workdir / "baseline.json"
     if save:
-        baseline_path.write_text(run.metrics.model_dump_json(indent=2))
+        baseline_path.write_text(run.model_dump_json(indent=2))
         typer.echo(f"baseline saved -> {baseline_path}")
         return
     if not compare:
@@ -976,17 +976,35 @@ def baseline(
         typer.echo(f"no baseline at {baseline_path}; run 'sectum baseline --save' first", err=True)
         raise typer.Exit(code=3)
     try:
-        saved = RunMetrics.model_validate_json(baseline_path.read_text())
+        saved = RunResult.model_validate_json(baseline_path.read_text())
     except ValueError as error:
-        typer.echo(f"the baseline at {baseline_path} is malformed: {error}", err=True)
+        typer.echo(
+            f"the baseline at {baseline_path} is malformed "
+            f"(re-run 'sectum baseline --save' to refresh it): {error}",
+            err=True,
+        )
         raise typer.Exit(code=3) from error
-    comparison = compare_metrics(saved, run.metrics)
-    for delta in comparison.deltas:
+    # Use the full run diff (the same logic as `sectum diff`), not a metric-only
+    # comparison: a leak that newly confirmed or escalated in severity is a
+    # regression the headline counts can miss.
+    result = diff_runs(saved, run)
+    for delta in result.metrics.deltas:
         typer.echo(
             f"[{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
         )
-    if comparison.regressed:
-        typer.echo("BASELINE REGRESSION: a metric moved in the worse direction.", err=True)
+    for change in result.findings.severity_escalations:
+        typer.echo(
+            f"[REGRESSED] severity escalated: {change.previous.finding_id} "
+            f"{change.previous.severity.value} -> {change.current.severity.value}"
+        )
+    for finding in result.findings.newly_confirmed:
+        typer.echo(f"[REGRESSED] newly confirmed leak: {finding.finding_id}")
+    if result.regressed:
+        typer.echo(
+            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
+            "or a confirmed leak escalated in severity.",
+            err=True,
+        )
         raise typer.Exit(code=2)
     typer.echo("no regression against the baseline")
 

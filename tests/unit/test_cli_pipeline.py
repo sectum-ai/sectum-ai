@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 from sectum.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum.config import EvidenceConfig
 from sectum.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum.spec import RunMetrics
+from sectum.spec import RunMetrics, RunResult
 
 _runner = CliRunner()
 
@@ -123,10 +123,17 @@ def test_baseline_saves_and_compares_clean_against_an_unchanged_run(tmp_path: Pa
 
 def test_baseline_compare_flags_an_injected_regression(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
-    # a baseline taken from a then-clean stack: no leaks, no retrieval pivot
-    (tmp_path / "baseline.json").write_text(
-        RunMetrics(confirmed_findings=0, retrieval_pivot_rate=0.0).model_dump_json()
+    # A baseline taken from a then-clean stack: the same run, but with no leaks
+    # and no retrieval pivot. (The baseline is now a full RunResult, not just
+    # metrics, so `--compare` can run the same finding-level diff as `sectum diff`.)
+    run = RunResult.model_validate_json((tmp_path / "run.json").read_text())
+    clean = run.model_copy(
+        update={
+            "findings": (),
+            "metrics": RunMetrics(confirmed_findings=0, retrieval_pivot_rate=0.0),
+        }
     )
+    (tmp_path / "baseline.json").write_text(clean.model_dump_json())
     result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 2
     assert "REGRESSION" in result.output
