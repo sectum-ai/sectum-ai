@@ -145,6 +145,17 @@ def test_baseline_compare_without_a_saved_baseline_fails(tmp_path: Path) -> None
     assert result.exit_code == 3
 
 
+def test_baseline_without_save_or_compare_is_a_usage_error(tmp_path: Path) -> None:
+    # Invoked with neither --save nor --compare, `baseline` is a usage error: it
+    # exits 3 (config/usage, per the CLI spec) and points the user at the two
+    # valid modes rather than doing nothing silently.
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3
+    assert "pass --save" in result.output
+    assert "--compare" in result.output
+
+
 def test_report_builds_an_evidence_pack_and_pdf(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
