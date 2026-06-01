@@ -181,7 +181,7 @@ import urllib.request  # noqa: E402
 import pytest  # noqa: E402
 
 from sectum.adapters.observability.otel import _HttpOtelTraceStore  # noqa: E402
-from sectum.spec import AdapterError  # noqa: E402
+from sectum.spec import AdapterError, ErasureUnsupported  # noqa: E402
 
 
 def _http_store() -> _HttpOtelTraceStore:
@@ -218,15 +218,27 @@ def test_http_store_rejects_a_non_http_base_url() -> None:
         )
 
 
-@pytest.mark.parametrize("code", [404, 405, 501])
-def test_http_purge_swallows_no_delete_api_codes(
+def test_http_purge_swallows_404_as_idempotent_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 404 means the tenant's spans are already absent, so erasure is an
+    # idempotent no-op success - purge must NOT raise.
+    monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(404))
+    _http_store().purge(_TENANT_A.hex)  # must not raise
+
+
+@pytest.mark.parametrize("code", [405, 501])
+def test_http_purge_raises_caveat_when_no_delete_api(
     code: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A trace store with no programmatic delete advertises it via 404/405/501;
-    # the idempotent erasure contract treats those as no-ops (residue then
-    # surfaces at the next scan), so purge must NOT raise.
+    # 405 (Method Not Allowed) / 501 (Not Implemented) mean the store exposes no
+    # programmatic delete - the same "no per-tenant erasure API" condition the
+    # Helicone/Datadog adapters report. purge must raise ErasureUnsupported so
+    # Class 11 records the surface as attestable-with-caveat, not a false
+    # erasure success (which is what swallowing these codes would produce).
     monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(code))
-    _http_store().purge(_TENANT_A.hex)  # must not raise
+    with pytest.raises(ErasureUnsupported, match="no programmatic"):
+        _http_store().purge(_TENANT_A.hex)
 
 
 @pytest.mark.parametrize("code", [403, 500, 502])

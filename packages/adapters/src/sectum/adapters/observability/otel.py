@@ -29,10 +29,14 @@ that ignores the tenant filter is itself caught as a leak (defense in depth,
 the same posture the other observability adapters take).
 
 Erasure: ``delete`` issues ``DELETE {base_url}{query_path}?tenant=<hex>``.
-A trace store with no programmatic delete returns 404/405/501; the adapter
-treats those idempotently (a missing delete API is a no-op here and shows up
-as residue at the next scan, which is the honest Class 11 signal). Only the
-standard library is used, so this adapter needs no optional extra.
+A 404 means the tenant's spans are already absent, so erasure is an idempotent
+no-op success. A 405 (Method Not Allowed) or 501 (Not Implemented) means the
+trace store exposes no programmatic delete at all - the same "no per-tenant
+erasure API" condition the Helicone and Datadog adapters report - so ``delete``
+raises ``ErasureUnsupported`` and Class 11 itemizes the surface as
+*attestable-with-caveat* (data presumed retained) rather than a false erasure
+success. Only the standard library is used, so this adapter needs no optional
+extra.
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum.adapters.base import Capability, ObservabilityAdapter, TraceHit
-from sectum.spec import AdapterError
+from sectum.spec import AdapterError, ErasureUnsupported
 
 _DEFAULT_QUERY_PATH = "/v1/traces/query"
 
@@ -64,7 +68,11 @@ class _OtelTraceStore(Protocol):
         """Return every distinct tenant attribute value the store has seen."""
 
     def purge(self, tenant_hex: str) -> None:
-        """Delete the tenant's spans; idempotent when the store has no delete API."""
+        """Delete the tenant's spans.
+
+        Idempotent when the spans are already absent; raises
+        ``ErasureUnsupported`` when the store exposes no delete API at all.
+        """
 
 
 class OtelObservability(ObservabilityAdapter):
@@ -187,12 +195,20 @@ class _HttpOtelTraceStore:
             with urllib.request.urlopen(request, timeout=self._timeout):
                 return
         except urllib.error.HTTPError as error:
-            # A trace store with no programmatic delete advertises that by
-            # returning Not Found / Method Not Allowed / Not Implemented; the
-            # erasure contract is idempotent, so those are treated as no-ops
-            # (residue then surfaces at the next scan - the honest signal).
-            if error.code in (404, 405, 501):
+            # 404 means the spans are already gone - erasure is an idempotent
+            # no-op success.
+            if error.code == 404:
                 return
+            # 405 (Method Not Allowed) / 501 (Not Implemented) mean the store
+            # exposes no programmatic delete - the same "no per-tenant erasure
+            # API" condition Helicone/Datadog report. Signal the caveat so
+            # Class 11 itemizes the surface as attestable-with-caveat (data
+            # presumed retained) instead of a false erasure success.
+            if error.code in (405, 501):
+                raise ErasureUnsupported(
+                    f"OTel trace store at {self._url} exposes no programmatic "
+                    f"delete (HTTP {error.code}); erasure is attestable-with-caveat"
+                ) from error
             raise AdapterError(f"OTel trace purge failed: {error}") from error
 
 

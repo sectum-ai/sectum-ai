@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and flags any principal whose query retrieves a *foreign* principal's canary;
   Class 10 runs a fixed three-turn benign sequence per shared entity and flags
   any turn whose retrieved context surfaces a foreign canary.
+- **A generic OpenTelemetry trace store with no delete API is now
+  attestable-with-caveat, not a false erasure success.** When `DELETE` against
+  the OTLP-JSON query endpoint returns `405` (Method Not Allowed) or `501` (Not
+  Implemented) — the store exposes no programmatic per-tenant delete — the
+  adapter now raises `ErasureUnsupported`, so Class 11 itemizes the surface as
+  *attestable-with-caveat* (data presumed retained), exactly like the Helicone
+  and Datadog adapters. Previously these codes were swallowed as a no-op, so the
+  post-erasure re-scan reported the un-deletable spans as a `CONFIRMED` residual
+  (gating `sectum diff` / `baseline --compare`) — inconsistent with the other
+  observability backends for the same real condition. A `404` still means the
+  spans are already absent and remains an idempotent erasure success.
 
 ### Added
 
