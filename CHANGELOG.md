@@ -111,6 +111,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The audit-pack PDF is now bound into the tamper-evident digest.** The
+  DPO/auditor-facing PDF was never covered by the attested digest, so it could be
+  silently swapped while `sectum verify` still reported PASS. `sectum report` /
+  `sectum erasure` now render the PDF first, hash its bytes, and bind that SHA-256
+  as the pack's `pdf_ref` (which `attested_digest` already covers), so the signed
+  digest commits to the exact PDF. `sectum verify` re-hashes the audit PDF when it
+  sits beside the pack (`audit-pack.pdf` / `erasure-attestation.pdf`) and fails on
+  a mismatch, while still verifying from `evidence.json` alone when the PDF is
+  absent. To make the PDF a pure function of pre-signature content (so it hashes
+  deterministically before signing), the raw timestamp-token row was dropped from
+  the rendered PDF — the token remains in `evidence.json`, and the PDF still
+  directs the reader to run `sectum verify`. Both PDF engines render the same
+  digest-stable content.
 - **Detection hardening (zero false-positive / zero false-negative).** Four
   fixes to the leak-detection pipeline, the technical moat:
   - The judge now confirms a semantic candidate only when the marker's tokens

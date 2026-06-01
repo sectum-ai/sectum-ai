@@ -17,7 +17,6 @@ pack asserts identical facts whichever engine produced it.
 """
 
 from html import escape
-from pathlib import Path
 
 from sectum.evidence.chain import run_digest
 from sectum.evidence.controls import COVERAGE_DISCLAIMER
@@ -136,7 +135,6 @@ def build_audit_html(pack: EvidencePack) -> str:
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
-        ("Timestamp token", pack.tsa_token or "none"),
     )
 
     methodology = "".join(f'<p class="method">{escape(text)}</p>' for text in _SCOPE_METHODOLOGY)
@@ -178,12 +176,13 @@ def build_audit_html(pack: EvidencePack) -> str:
     )
 
 
-def render_weasyprint(pack: EvidencePack, output: Path) -> None:
-    """Render ``pack`` to a PDF at ``output`` via weasyprint.
+def render_weasyprint(pack: EvidencePack) -> bytes:
+    """Render ``pack`` to auditor-facing PDF bytes via weasyprint.
 
     Imports weasyprint lazily so the base install (reportlab only) never pulls
     it in. Raises :class:`EvidenceError` with an install hint when the
-    ``weasyprint`` extra is not installed.
+    ``weasyprint`` extra is not installed. Renders the same digest-stable content
+    as the reportlab engine (no post-sign timestamp token).
     """
     try:
         from weasyprint import HTML
@@ -192,4 +191,5 @@ def render_weasyprint(pack: EvidencePack, output: Path) -> None:
             "the weasyprint PDF engine requires the 'weasyprint' extra: "
             "pip install 'sectum-ai[weasyprint]'"
         ) from error
-    HTML(string=build_audit_html(pack)).write_pdf(str(output))
+    pdf: bytes = HTML(string=build_audit_html(pack)).write_pdf()
+    return pdf

@@ -183,6 +183,16 @@ def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
     assert result.exit_code == 4
 
 
+def test_verify_fails_when_the_audit_pdf_is_swapped(tmp_path: Path) -> None:
+    # The audit PDF's SHA-256 is bound into the attested digest and re-hashed by
+    # verify; replacing the sibling PDF (without touching the json) fails (exit 4).
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "audit-pack.pdf").write_bytes(b"%PDF-1.4 forged audit pack")
+    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    assert result.exit_code == 4
+
+
 def test_verify_on_a_malformed_pack_exits_cleanly(tmp_path: Path) -> None:
     # The OSS verifier runs on packs it did not produce, so a malformed file must
     # exit with a code (3), not a traceback.

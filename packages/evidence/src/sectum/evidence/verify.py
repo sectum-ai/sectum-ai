@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum.evidence.chain import LocalTimestamper, attested_digest
-from sectum.spec import EvidenceError, EvidencePack, GroundTruthManifest, canonical_hash
+from sectum.spec import EvidenceError, EvidencePack, GroundTruthManifest, canonical_hash, sha256_hex
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ def verify_pack(
     tsa_certificate: bytes | None = None,
     tsa_root: bytes | None = None,
     rekor_keyring: Mapping[str, bytes] | None = None,
+    pdf_bytes: bytes | None = None,
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
@@ -52,6 +53,10 @@ def verify_pack(
     the built-in FreeTSA leaf/root to pin a customer's own TSA. When the pack
     carries a Rekor inclusion proof, it is verified too; ``rekor_keyring``
     (log id -> PEM key) overrides the built-in Rekor keys for a private instance.
+
+    ``pdf_bytes`` are the bytes of the audit PDF when it sits alongside the pack;
+    when given (and the pack binds a ``pdf_ref``) they are re-hashed and checked
+    against that bound digest, so a swapped audit PDF fails verification.
     """
     digest = attested_digest(pack)
     checks = [
@@ -73,7 +78,26 @@ def verify_pack(
         checks.append(_check_rekor(pack.rekor_proof, digest, rekor_keyring))
     if manifest is not None:
         checks.append(_check_manifest(manifest, pack.manifest_hash))
+    if pack.pdf_ref is not None and pdf_bytes is not None:
+        checks.append(_check_pdf(pack.pdf_ref, pdf_bytes))
     return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
+
+
+def _check_pdf(pdf_ref: str, pdf_bytes: bytes) -> Check:
+    """Re-hash the audit PDF and check it against the digest bound in the pack."""
+    name = "audit-pdf"
+    if sha256_hex(pdf_bytes) != pdf_ref:
+        return Check(
+            name,
+            ok=False,
+            detail=(
+                "the audit PDF does not match the SHA-256 bound into the attested "
+                "digest; it was altered or replaced after signing"
+            ),
+        )
+    return Check(
+        name, ok=True, detail="the audit PDF matches the SHA-256 bound into the attested digest"
+    )
 
 
 def _check_rekor(proof: str, digest: str, rekor_keyring: Mapping[str, bytes] | None) -> Check:
