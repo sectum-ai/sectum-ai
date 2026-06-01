@@ -4,12 +4,18 @@ import json
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from sectum.spec import (
     SCHEMA_VERSION,
+    Finding,
+    FindingStatus,
     GroundTruthManifest,
     Marker,
     MarkerType,
+    RunMetrics,
+    Severity,
+    Surface,
     canonical_hash,
     json_schemas,
     to_canonical_json,
@@ -109,3 +115,61 @@ def test_ground_truth_manifest_rejects_an_unknown_field_on_json_load() -> None:
     GroundTruthManifest.model_validate_json(json.dumps(data))
     with pytest.raises(ValueError, match="smuggled"):
         GroundTruthManifest.model_validate_json(json.dumps({**data, "smuggled": "x"}))
+
+
+def test_built_models_are_frozen() -> None:
+    # ConfigDict(frozen=True): once built, a model cannot be mutated, so a run or
+    # manifest hashed into the evidence chain cannot be altered in place.
+    marker = Marker(
+        marker_id="mkr-1",
+        marker_type=MarkerType.HARD_CANARY,
+        owner_tenant_id=UUID(int=1),
+        plaintext="SECTUM-CANARY-X",
+    )
+    with pytest.raises(ValidationError):
+        marker.plaintext = "tampered"  # type: ignore[misc]  # the point: frozen rejects it
+
+
+def test_marker_rejects_an_empty_plaintext() -> None:
+    # plaintext has min_length=1: an empty canary would substring-match every
+    # observation and confirm a spurious critical leak, so it is refused.
+    with pytest.raises(ValidationError):
+        Marker(
+            marker_id="mkr-1",
+            marker_type=MarkerType.HARD_CANARY,
+            owner_tenant_id=UUID(int=1),
+            plaintext="",
+        )
+
+
+def _finding_with_confidence(confidence: float) -> Finding:
+    return Finding(
+        finding_id="f-1",
+        probe_id="rag-entity-bleed",
+        severity=Severity.CRITICAL,
+        confidence=confidence,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=UUID(int=0xB),
+        observed_in_tenant_id=UUID(int=0xA),
+        surface=Surface.VECTOR_DB,
+    )
+
+
+def test_finding_confidence_must_be_a_probability() -> None:
+    # confidence is Field(ge=0.0, le=1.0): a value outside [0, 1] is rejected, so
+    # a miscalibrated detector cannot emit an out-of-range probability into a
+    # signed artifact.
+    assert _finding_with_confidence(1.0).confidence == 1.0
+    with pytest.raises(ValidationError):
+        _finding_with_confidence(1.5)
+    with pytest.raises(ValidationError):
+        _finding_with_confidence(-0.1)
+
+
+def test_canonicalizing_a_model_with_a_non_finite_float_is_refused() -> None:
+    # The non-finite refusal must hold on the *model* path, not just a raw dict:
+    # retrieval_pivot_rate is an unconstrained float, so an inf/NaN constructs but
+    # must not yield a digest a strict third-party verifier could not reproduce.
+    metrics = RunMetrics(retrieval_pivot_rate=float("inf"))
+    with pytest.raises(ValueError, match="non-finite float"):
+        canonical_hash(metrics)
