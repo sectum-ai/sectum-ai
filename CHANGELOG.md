@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   undercounted the cross-tenant-leak headline. Dedupe is now status-aware —
   `CONFIRMED` outranks `UNVERIFIED`, then higher severity, then higher confidence
   — so a real leak is always retained regardless of detection order.
+- **The CLI config resolver now threads `user_scoped` into the model, memory, and
+  MCP fakes.** Only the vector-store and cache fake branches passed the
+  `user_scoped` knob through; the `model`, `memory`, and `mcp` fakes dropped it,
+  so a `sectum.yaml` requesting per-user (ADR-0006) isolation on those families
+  silently built a tenant-only fake and verified the wrong boundary. All three
+  fake branches now thread `user_scoped`, with resolver parity tests.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant

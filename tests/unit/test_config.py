@@ -177,6 +177,24 @@ def test_build_memory_fake_with_a_shared_memory_knob() -> None:
     assert shared.supports(Capability.SHARED_MEMORY)
 
 
+def test_model_memory_mcp_fakes_thread_user_scoped_from_config() -> None:
+    # ADR-0006: the user-isolation dimension must be reachable from config, not
+    # only when a fake is built directly in a test. The model/memory/MCP fake
+    # branches previously dropped the `user_scoped` knob (unlike vector/cache),
+    # so a user-scoped verification silently ran against a tenant-only fake.
+    assert build_model(AdapterConfig(kind="fake", user_scoped=True)).supports(
+        Capability.USER_SCOPED
+    )
+    assert build_memory(AdapterConfig(kind="fake", user_scoped=True)).supports(
+        Capability.USER_SCOPED
+    )
+    assert build_mcp(AdapterConfig(kind="fake", user_scoped=True)).supports(Capability.USER_SCOPED)
+    # The default stays tenant-only for all three.
+    assert not build_model(AdapterConfig(kind="fake")).supports(Capability.USER_SCOPED)
+    assert not build_memory(AdapterConfig(kind="fake")).supports(Capability.USER_SCOPED)
+    assert not build_mcp(AdapterConfig(kind="fake")).supports(Capability.USER_SCOPED)
+
+
 def test_build_adapters_defaults_missing_families_to_plain_fakes() -> None:
     bundle = build_adapters(SectumConfig())
     assert isinstance(bundle.vector, FakeVectorStore)
