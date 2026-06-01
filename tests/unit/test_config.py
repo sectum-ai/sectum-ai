@@ -219,6 +219,34 @@ def test_build_adapters_respects_per_family_knobs() -> None:
     assert not bundle.cache.supports(Capability.TENANT_SCOPED_KEYS)
 
 
+# The eight adapter-family keys `build_adapters` reads (config.py). A key in a
+# config file that is NOT one of these is silently ignored - the resolver falls
+# back to the fake - so the shipped example must use exactly these names.
+_RESOLVER_FAMILIES = {
+    "vector_store",
+    "cache",
+    "model",
+    "mcp",
+    "memory",
+    "rag",
+    "observability",
+    "agent",
+}
+
+
+def test_example_config_uses_only_adapter_keys_the_resolver_reads() -> None:
+    # sectum.yaml.example must use the exact family keys build_adapters consumes:
+    # a copied-and-edited example with a stray key (e.g. `vector:` instead of
+    # `vector_store:`) silently runs against the in-memory fake with no error,
+    # which defeats real-stack probing. Guards that footgun against regressing.
+    example = Path(__file__).resolve().parents[2] / "sectum.yaml.example"
+    config = load_config(example)
+    unknown = set(config.adapters) - _RESOLVER_FAMILIES
+    assert not unknown, (
+        f"sectum.yaml.example has adapter keys the resolver ignores: {sorted(unknown)}"
+    )
+
+
 # --- live adapter wirings ---------------------------------------------------
 
 

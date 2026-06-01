@@ -37,7 +37,7 @@ workdir: .sectum
 # -----------------------------------------------------------------------------
 adapters:
 
-  vector:
+  vector_store:
     # kind: fake               # in-memory, deterministic (the default)
     # kind: pgvector           # Postgres + pgvector
     #   dsn_env: SECTUM_PGVECTOR_DSN
