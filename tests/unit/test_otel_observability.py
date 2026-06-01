@@ -250,3 +250,14 @@ def test_http_purge_propagates_other_http_errors(
     monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(code))
     with pytest.raises(AdapterError, match="OTel trace purge failed"):
         _http_store().purge(_TENANT_A.hex)
+
+
+def test_http_query_wraps_a_transport_error_in_adapter_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A failed trace query (here a 500, an HTTPError which is a URLError) must
+    # surface as AdapterError, not a raw urllib error, so the CLI's typed-error
+    # exit path is honored rather than an opaque crash mid-scan.
+    monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(500))
+    with pytest.raises(AdapterError, match="OTel trace query"):
+        _http_store().query(_TENANT_A.hex, "SECTUM-CANARY-AAA")

@@ -173,8 +173,11 @@ class _HttpOtelTraceStore:
             method="POST",
             headers={"Content-Type": "application/json", **self._headers},
         )
-        with urllib.request.urlopen(request, timeout=self._timeout) as response:
-            body = json.loads(response.read())
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                body = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise AdapterError(f"OTel trace query to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(
                 f"OTel query response must be a JSON object, got {type(body).__name__}"
@@ -183,8 +186,11 @@ class _HttpOtelTraceStore:
 
     def tenant_values(self) -> set[str]:
         request = urllib.request.Request(self._url, method="GET", headers=self._headers)
-        with urllib.request.urlopen(request, timeout=self._timeout) as response:
-            body = json.loads(response.read())
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                body = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise AdapterError(f"OTel tenant listing at {self._url} failed: {error}") from error
         values = body.get("tenants") if isinstance(body, dict) else None
         return {str(value) for value in values} if isinstance(values, list) else set()
 

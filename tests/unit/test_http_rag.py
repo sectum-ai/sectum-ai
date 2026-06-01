@@ -29,6 +29,14 @@ class _StubHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         request = json.loads(self.rfile.read(length))
+        if self.path == "/notjson":
+            raw = b"<html>not json</html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
         if self.path == "/badresponse":
             payload: object = ["not", "an", "object"]
         elif self.path == "/baditem":
@@ -89,6 +97,14 @@ def test_http_rag_rejects_a_non_http_url() -> None:
 def test_http_rag_rejects_a_non_object_response(rag_url: str) -> None:
     rag = HttpRAGPipeline(rag_url + "badresponse")
     with pytest.raises(AdapterError, match="JSON object"):
+        rag.ask(_TENANT, "anything")
+
+
+def test_http_rag_wraps_a_non_json_response_in_adapter_error(rag_url: str) -> None:
+    # A non-JSON body must surface as AdapterError, not a raw json.JSONDecodeError,
+    # so the CLI's typed-error exit path is honored rather than an opaque crash.
+    rag = HttpRAGPipeline(rag_url + "notjson")
+    with pytest.raises(AdapterError, match="failed"):
         rag.ask(_TENANT, "anything")
 
 
