@@ -35,10 +35,10 @@ Every pack here verifies under the open-source `sectum verify`:
 uv run sectum verify docs/samples/erasure-attestation-evidence.json
 ```
 
-A `VERIFIED` outcome means the run digest matches the timestamped token and
-the manifest hash agrees between the run and the pack. Mutating a single
-byte in the JSON makes `verify` exit `4` with a `[FAIL]` line — that
-demonstrates the tamper-evident property end to end.
+A `VERIFIED` outcome means the whole-pack attested digest matches the
+timestamped token and the manifest hash agrees between the run and the pack.
+Mutating a single byte of the attested content makes `verify` exit `4` with a
+`[FAIL]` line — that demonstrates the tamper-evident property end to end.
 
 ## Regenerating
 
