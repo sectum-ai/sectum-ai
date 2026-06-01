@@ -5,7 +5,7 @@ hijacking. Where the [`mcp-tenant-boundary`](../mcp-tenant-boundary/)
 walkthrough tells the story from the MCP-server end (the leaky lookup
 service), this one tells it from the *agent* end (the framework that
 makes the call) — and shows how to swap the agent caller between the
-six shipped agent adapters (`fake`, `http`, `langgraph`, `autogen`,
+seven shipped agent adapters (`fake`, `http`, `langgraph`, `autogen`,
 `crewai`, `openai-assistants`, `anthropic-tooluse`) so the same probe
 verifies isolation regardless of which agent framework a customer's
 stack happens to use.
@@ -64,9 +64,9 @@ results. The PDF page-3 findings table itemises each.
 The probe consumes whatever `agent.kind` resolves to in
 `sectum.yaml`. The default (no config) is the in-memory `FakeAgent`,
 which is what `run.sh` uses. To drive the same probe through a real
-agent framework, point `agent.kind` at one of the four shipped
-adapters and supply a factory callable that constructs the runtime
-object.
+agent framework, point `agent.kind` at one of the five factory-driven
+adapters below and supply a factory callable that constructs the
+runtime object (`http` needs only a URL; `fake` needs nothing).
 
 [`factories.py`](factories.py) in this directory holds copy-pasteable
 factory functions for each agent kind. Pick the one your stack uses
