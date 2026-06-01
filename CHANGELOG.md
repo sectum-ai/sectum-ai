@@ -91,6 +91,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   observability backends for the same real condition. A `404` still means the
   spans are already absent and remains an idempotent erasure success.
 
+### Documentation
+
+- **`sectum.yaml.example` used the wrong vector adapter key.** The example
+  config keyed the vector store under `vector:`, but the CLI resolver reads
+  `vector_store:` (matching `docs/configuration.md`), so a user who copied the
+  example and pointed it at a live vector store had that block silently ignored
+  and fell back to the in-memory fake. Renamed the block to `vector_store:`; a new
+  resolver-parity test asserts every adapter key in the example is one of the
+  eight families the resolver actually reads. Pre-existing since v0.1.0.
+- **Docs and example walkthroughs corrected to match shipped behavior.**
+  - The Class 2 flagship example (`examples/retrieval-pivot`) no longer claims
+    *every* benign cross-tenant query pivots at 100%; it reports the measured
+    retrieval-pivot rate from a real run and frames RPR as the fraction of the
+    flagship benign queries that surface a foreign marker.
+  - The erasure example (`examples/erasure-attestation`) and the Class 11 catalog
+    page now state the seven surfaces the probe actually scans (vector store,
+    tracing, agent memory, semantic cache, model adapter, search index, eval set)
+    with the full per-surface verdict, instead of describing only the vector store
+    as wired.
+  - `SECURITY.md` lists v0.1.0 as the first supported release instead of "no
+    stable release exists"; `glossary.md` describes `SECRET_CANARY` as the branded
+    `SECTUM-SECRET-<base32>` token matched exactly (not an "API-key/SSN-shaped"
+    string); the core-package quickstart verifies `.sectum/evidence.json` and the
+    BYOC example validates with a scratch-workdir seed instead of a nonexistent
+    `--dry-run` flag.
+  - ADR-0008 carries a dated note that the `rag-pipeline-bleed` probe now issues a
+    per-principal `rag.ask` step, so the RAG family's user dimension is
+    *unverified* rather than *unneeded* — correcting the original "no probe issues
+    a `rag.ask` step" rationale.
+
 ### Added
 
 - **Optional weasyprint PDF engine for the audit pack.** `sectum report

@@ -35,11 +35,13 @@ Officer and a JSON evidence pack — control-mapped to GDPR Articles 17 and 32.
 
 ## Status
 
-Implemented for the vector-store surface (Phase 3) and, in post-Phase-5
-hardening, the observability / tracing, agent / long-term memory, semantic /
-application cache, and model / fine-tune-adapter surfaces: `ErasureProbe`
-accepts a vector-store plus optional observability, memory, cache, and model
-adapters, scans each independently, and reports a per-surface verdict. The
-remaining "ten hiding places" (backups, derived indexes, and the rest) follow
-as their adapter families gain a `delete` primitive. Walkthrough:
+Implemented for **seven surfaces**: the vector store (Phase 3) and, in
+post-Phase-5 hardening, observability / tracing, agent / long-term memory,
+semantic / application cache, model / fine-tune adapter, derived search index,
+and eval golden set. `ErasureProbe` accepts a vector store plus optional
+observability, memory, cache, model, search-index, and eval-set adapters, scans
+each independently, and reports a per-surface verdict. The remaining hiding
+places — backup snapshots and third-party subprocessor residue — follow as their
+adapter families gain a `delete` primitive (subprocessor residue is
+attestable-with-caveat). Walkthrough:
 [`examples/erasure-attestation`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/erasure-attestation).

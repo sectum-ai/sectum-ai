@@ -25,10 +25,12 @@ A Data Protection Officer needs evidence, not assurances.
    `erasure-attestation.pdf` (for the DPO) and `erasure-evidence.json`.
 3. **`sectum verify`** independently re-checks the attestation's integrity.
 
-Phase 3 verifies erasure on the **vector store**. The other surfaces named
-above — logs, caches, fine-tuning sets, backups, derived indexes — are part of
-the erasure roadmap and are wired in later phases; the attestation always
-states which surfaces it covers.
+The probe verifies erasure across **seven surfaces** — the vector store,
+observability / tracing, agent / long-term memory, semantic / application cache,
+model / fine-tune adapter, derived search index, and eval golden set — scanning
+each independently and reporting a per-surface verdict. Surfaces with no adapter
+configured are skipped; backup snapshots and third-party subprocessor residue
+remain on the roadmap. The attestation always states which surfaces it covers.
 
 ## Run it
 
@@ -40,12 +42,19 @@ Artifacts are written to `out/`.
 
 ## Expected result
 
-Against a store that hard-deletes, every marker is gone after erasure and the
-run reports:
+Against backends that hard-delete, every marker is gone after erasure and the
+run reports a per-surface verdict:
 
 ```
 vector_db: 2 markers before, 0 after -> ERASED
-ERASURE VERIFIED: no residual marker on vector_db.
+tracing: 2 markers before, 0 after -> ERASED
+agent_memory: 2 markers before, 0 after -> ERASED
+semantic_cache: 2 markers before, 0 after -> ERASED
+model_adapter: 2 markers before, 0 after -> ERASED
+search_index: 2 markers before, 0 after -> ERASED
+eval_set: 2 markers before, 0 after -> ERASED
+ERASURE VERIFIED: no residual marker on vector_db, tracing, agent_memory,
+semantic_cache, model_adapter, search_index, eval_set.
 ```
 
 `sectum verify` then confirms the attestation pack is intact.

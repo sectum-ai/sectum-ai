@@ -44,19 +44,21 @@ Artifacts are written to `out/`.
 ## Expected result
 
 The demo stack is a single shared index — the worst case, zero tenant
-isolation. Every benign cross-tenant query retrieves a foreign canary, so the
-headline **Retrieval-Pivot Rate is 100%**:
+isolation. Most benign cross-tenant queries retrieve a foreign canary, so the
+headline **Retrieval-Pivot Rate is high**:
 
 ```
-ran 10 probes: 255 confirmed cross-tenant findings
-retrieval-pivot rate: 100%
+ran 12 probes: 321 confirmed cross-tenant findings
+retrieval-pivot rate: 81%
 ```
 
 `sectum probe` exits with code 2 because it confirmed cross-tenant leaks, and
 `sectum verify` confirms the evidence pack is intact.
 
-The Retrieval-Pivot Rate measures the *stack under test*, not the tool. Point
-the vector-store adapter at a properly isolated store — one namespace per
-tenant — and the same probe reports **0%**. That contrast is the evidence: the
-rate is a property of the configuration, and Sectum AI proves which one is
-running.
+The Retrieval-Pivot Rate is the fraction of the flagship Class 2 benign queries
+that surfaced a foreign tenant's marker — not every benign query pivots, so even
+this fully-shared index sits well below 100%. It measures the *stack under
+test*, not the tool: point the vector-store adapter at a properly isolated store
+— one namespace per tenant — and the same probe reports **0%**. That contrast is
+the evidence: the rate is a property of the configuration, and Sectum AI proves
+which one is running.

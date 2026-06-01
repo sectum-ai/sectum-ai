@@ -27,8 +27,8 @@ principal's session proves a leak. Three types
 - **ENTITY_CANARY** — a unique synthetic entity (fabricated person,
   codename, account number) owned by exactly one principal. Tested by
   semantic similarity plus exact match.
-- **SECRET_CANARY** — a fake-but-plausible secret (API-key-shaped,
-  fake-SSN-shaped). Exact + format detector.
+- **SECRET_CANARY** — a branded high-entropy secret token
+  (`SECTUM-SECRET-<base32>`). Exact substring or regex match, like HARD_CANARY.
 
 ## Ground-truth manifest
 The authoritative record of which marker belongs to which principal:
