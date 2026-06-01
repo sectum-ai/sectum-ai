@@ -6,6 +6,7 @@ round-trip against a live Rekor instance is opt-in (set ``SECTUM_RUN_LIVE_REKOR`
 """
 
 import base64
+import hashlib
 import json
 import os
 from datetime import UTC, datetime
@@ -21,7 +22,11 @@ from sectum.evidence import (
     verify_pack,
     verify_rekor_proof,
 )
-from sectum.evidence.rekor import _builtin_keyring
+from sectum.evidence.rekor import (
+    _builtin_keyring,
+    _hash_children,
+    _root_from_inclusion_proof,
+)
 from sectum.spec import (
     EvidenceError,
     GroundTruthManifest,
@@ -91,6 +96,49 @@ def _v1_api_entry() -> dict[str, Any]:
             }
         },
     }
+
+
+def _leaf(data: bytes) -> bytes:
+    # RFC 6962 leaf hash: 0x00 || data.
+    return hashlib.sha256(b"\x00" + data).digest()
+
+
+def test_inclusion_proof_recomputes_root_for_a_non_rightmost_leaf() -> None:
+    # The committed staging fixture is a rightmost leaf (leaf_index == tree_size-1),
+    # so inner == 0 and the audit-path inner loop never runs. Build a 5-leaf RFC-6962
+    # tree and prove leaf_index=2: inner == 3, so the loop runs and exercises BOTH a
+    # right-sibling step (bit 0) and a left-sibling step (bit 1) - the branch the
+    # only committed fixture leaves dead.
+    data = [f"leaf-{i}".encode() for i in range(5)]
+    leaves = [_leaf(d) for d in data]
+    a = _hash_children(leaves[0], leaves[1])
+    b = _hash_children(leaves[2], leaves[3])
+    root = _hash_children(_hash_children(a, b), leaves[4])
+    proof = {
+        "leaf_index": 2,
+        "tree_size": 5,
+        "hashes": [base64.b64encode(h).decode() for h in (leaves[3], a, leaves[4])],
+    }
+    body_b64 = base64.b64encode(data[2]).decode()
+    assert _root_from_inclusion_proof(proof, body_b64) == root
+
+
+def test_inclusion_proof_rejects_a_swapped_sibling() -> None:
+    # Swapping two audit-path siblings recomputes a different root, so the
+    # checkpoint-root comparison rejects the tampered proof.
+    data = [f"leaf-{i}".encode() for i in range(5)]
+    leaves = [_leaf(d) for d in data]
+    a = _hash_children(leaves[0], leaves[1])
+    b = _hash_children(leaves[2], leaves[3])
+    root = _hash_children(_hash_children(a, b), leaves[4])
+    tampered = {
+        "leaf_index": 2,
+        "tree_size": 5,
+        # L3 and A swapped (wrong order at the first two levels).
+        "hashes": [base64.b64encode(h).decode() for h in (a, leaves[3], leaves[4])],
+    }
+    body_b64 = base64.b64encode(data[2]).decode()
+    assert _root_from_inclusion_proof(tampered, body_b64) != root
 
 
 def test_a_real_inclusion_proof_verifies_offline() -> None:
