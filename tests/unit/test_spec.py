@@ -2,6 +2,8 @@
 
 from uuid import UUID
 
+import pytest
+
 from sectum.spec import (
     SCHEMA_VERSION,
     Marker,
@@ -48,3 +50,17 @@ def test_json_schemas_cover_the_core_models() -> None:
 def test_aggregate_models_carry_the_schema_version() -> None:
     manifest = build_substrate(default_scenario(seed=3)).manifest
     assert manifest.schema_version == SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
+def test_canonicalizing_a_non_finite_float_is_refused(non_finite: float) -> None:
+    """A NaN/Infinity has no valid JSON literal (RFC 8259) and every NaN
+    collapses to the same token, so canonicalization must refuse it rather than
+    emit a digest a strict third-party verifier could not reproduce. Guards the
+    ``allow_nan=False`` contract in ``to_canonical_json`` (and via it
+    ``canonical_hash``), which the evidence chain relies on.
+    """
+    with pytest.raises(ValueError, match="non-finite float"):
+        to_canonical_json({"gap_ms": non_finite})
+    with pytest.raises(ValueError, match="non-finite float"):
+        canonical_hash({"gap_ms": non_finite})
