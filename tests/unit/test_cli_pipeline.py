@@ -194,6 +194,49 @@ def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
     assert result.exit_code == 4
 
 
+def test_cli_version_is_the_installed_package_version_and_is_stamped(tmp_path: Path) -> None:
+    # The embedded version must match the packaged release (not a hard-coded
+    # 0.0.0): it is stamped into every evidence pack's adapter/probe versions and
+    # the audit PDF, so a drift falsifies the tamper-evident artifact.
+    from importlib.metadata import version
+
+    from sectum.cli.app import __version__
+
+    assert __version__ == version("sectum-ai")
+    assert __version__ != "0.0.0"
+    _seed_and_probe(tmp_path)
+    run = RunResult.model_validate_json((tmp_path / "run.json").read_text())
+    assert run.adapter_versions
+    assert set(run.adapter_versions.values()) == {__version__}
+    assert set(run.probe_versions.values()) == {__version__}
+
+
+def test_version_flag_prints_the_package_version() -> None:
+    from importlib.metadata import version
+
+    result = _runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert version("sectum-ai") in result.output
+
+
+def test_verify_rechecks_the_in_toto_sidecar(tmp_path: Path) -> None:
+    # report writes attestation.intoto.json beside the pack; verify must re-check
+    # it -- the one shipped artifact the verifier previously ignored.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    ok = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    assert ok.exit_code == 0
+    assert "in-toto-attestation" in ok.output
+    # a sidecar swapped to attest a different run digest fails verification (exit 4)
+    intoto = tmp_path / "attestation.intoto.json"
+    statement = json.loads(intoto.read_text())
+    statement["subject"][0]["digest"]["sha256"] = "0" * 64
+    intoto.write_text(json.dumps(statement))
+    bad = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    assert bad.exit_code == 4
+    assert "in-toto-attestation" in bad.output
+
+
 def test_verify_fails_when_the_audit_pdf_is_swapped(tmp_path: Path) -> None:
     # The audit PDF's SHA-256 is bound into the attested digest and re-hashed by
     # verify; replacing the sibling PDF (without touching the json) fails (exit 4).

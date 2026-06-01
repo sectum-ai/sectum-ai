@@ -40,8 +40,8 @@ fact. Optionally encrypted at rest (see the security note below).
 The fraction of benign cross-tenant queries that surfaced a foreign
 marker — the headline metric for [Class 2](attack-catalog/class-02-rag-entity-bleed.md),
 the flagship probe. Reproduces the *Retrieval Pivot Attacks in Hybrid RAG*
-result (95.4% of benign queries leaked across tenants on a shared vector
-index).
+result ([arXiv:2602.08668](https://arxiv.org/abs/2602.08668); 95.4% of benign
+queries leaked across tenants on a shared vector index).
 
 ## Surface
 A place tenant data can live or leak. The catalog covers: API, vector DB,

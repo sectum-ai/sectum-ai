@@ -4,7 +4,7 @@
     {
       "name": "run-sectum-demo-2026",
       "digest": {
-        "sha256": "5850e9c615249557442c0835b050febce6ccfc918bfa70aef21773dbe68a970d"
+        "sha256": "16a69a06407b9922801774961c9fae4091801da07e6ccfe5258ab8c83826f64c"
       }
     }
   ],
@@ -13,8 +13,8 @@
     "schema_version": "0.2.0",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
     "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-01T17:25:46.334427+00:00",
-    "finished_at": "2026-06-01T17:25:49.141281+00:00",
+    "started_at": "2026-06-01T22:02:19.963250+00:00",
+    "finished_at": "2026-06-01T22:02:22.688812+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,
@@ -112,7 +112,7 @@
       }
     ],
     "anchors": {
-      "timestamp": true,
+      "timestamp": false,
       "transparency_log": false
     }
   }

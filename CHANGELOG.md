@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The embedded tool version now comes from the installed package, not a
+  hard-coded `0.0.0`.** `cli/app.py` defined `__version__ = "0.0.0"`, and that
+  literal was stamped into every `RunResult`'s `adapter_versions` /
+  `probe_versions` — so every signed, timestamped evidence pack and audit PDF
+  attested tool version `0.0.0` on the shipped `0.1.0` release (and `sectum
+  --version` printed it), corrupting the tamper-evident artifact and making
+  `baseline` / `diff` version-blind. It now resolves via
+  `importlib.metadata.version("sectum-ai")` (with a `0.0.0+unknown` fallback for an
+  uninstalled tree); the committed `docs/samples/` packs were regenerated so the
+  published samples attest `0.1.0`.
+- **`sectum verify` now re-checks the in-toto attestation sidecar.** `report` /
+  `erasure` write `attestation.intoto.json` beside the pack, but `verify` never
+  re-verified it, so a swapped sidecar handed to an in-toto-aware pipeline got no
+  protection from the OSS verifier. `verify` now re-runs `verify_in_toto_statement`
+  against any sibling sidecar (itemized as an `in-toto-attestation` check; a
+  statement that no longer binds the pack's run digest fails with exit `4`), and
+  the command is wrapped in the typed-error decorator so an escaping `SectumError`
+  maps to the documented exit code rather than an opaque `1`.
 - **A confirmed leak can no longer be dropped from the headline count by an
   earlier unverified duplicate.** `dedupe_findings` collapsed findings that share
   a `finding_id` by keeping the *first* one seen, status-blind — and the
@@ -119,6 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Trust-artifact accuracy pass.** The flagship *Retrieval Pivot Attacks in
+  Hybrid RAG* result is now cited with its canonical identifier
+  [arXiv:2602.08668](https://arxiv.org/abs/2602.08668) (README, glossary) rather
+  than a bare "(arXiv, 2026)"; `docs/configuration.md` no longer
+  lists `verify` among the commands that accept `--config` (it has none);
+  `docs/samples/README.md` reports the retrieval-pivot pack's real size and
+  finding count (~33 KB, 321 findings); and ADR-0016's consequences now reflect
+  that `pdf_ref` is bound *and populated* end-to-end (it previously stated the CLI
+  did not populate it).
 - **`sectum.yaml.example` used the wrong vector adapter key.** The example
   config keyed the vector store under `vector:`, but the CLI resolver reads
   `vector_store:` (matching `docs/configuration.md`), so a user who copied the
