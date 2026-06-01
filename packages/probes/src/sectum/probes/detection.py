@@ -267,22 +267,51 @@ def confirmed_findings(findings: Iterable[Finding]) -> list[Finding]:
     return [finding for finding in findings if finding.status is FindingStatus.CONFIRMED]
 
 
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.CRITICAL: 4,
+    Severity.HIGH: 3,
+    Severity.MEDIUM: 2,
+    Severity.LOW: 1,
+    Severity.INFO: 0,
+}
+
+
+def _finding_strength(finding: Finding) -> tuple[int, int, float]:
+    """Rank a finding so dedupe keeps the strongest of a shared finding id.
+
+    A CONFIRMED leak must always outrank an UNVERIFIED candidate - it is what the
+    headline ``confirmed_findings`` count reports - so status is the primary key;
+    ties break on severity then confidence.
+    """
+    status_rank = 1 if finding.status is FindingStatus.CONFIRMED else 0
+    return (status_rank, _SEVERITY_RANK.get(finding.severity, 0), finding.confidence)
+
+
 def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
-    """Collapse findings that share a finding id, keeping the first occurrence.
+    """Collapse findings that share a finding id, keeping the strongest.
 
     The same cross-tenant leak - a marker observed in a tenant - can be detected
     by more than one probe step: a confused-deputy and a token-passthrough
     lookup that both resolve the same resource, or repeated adapter recalls.
-    Each detection builds an identical Finding; the run record keeps one.
+    Each detection builds a Finding with the same id; the run record keeps one.
+
+    When the duplicates disagree on status - a semantic-only UNVERIFIED candidate
+    and a judge-CONFIRMED leak of the same marker on the same surface, which share
+    a finding id because the id does not encode status - the CONFIRMED one is kept
+    (then higher severity, then higher confidence). A real leak is therefore never
+    dropped from the headline count in favor of an earlier UNVERIFIED duplicate.
+    First-seen order is preserved.
     """
-    seen: set[str] = set()
-    unique: list[Finding] = []
+    best: dict[str, Finding] = {}
+    order: list[str] = []
     for finding in findings:
-        if finding.finding_id in seen:
-            continue
-        seen.add(finding.finding_id)
-        unique.append(finding)
-    return unique
+        existing = best.get(finding.finding_id)
+        if existing is None:
+            best[finding.finding_id] = finding
+            order.append(finding.finding_id)
+        elif _finding_strength(finding) > _finding_strength(existing):
+            best[finding.finding_id] = finding
+    return [best[finding_id] for finding_id in order]
 
 
 class DetectionPipeline:
