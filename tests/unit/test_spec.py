@@ -68,6 +68,18 @@ def test_canonicalizing_a_non_finite_float_is_refused(non_finite: float) -> None
         canonical_hash({"gap_ms": non_finite})
 
 
+def test_canonicalizing_a_non_json_native_value_is_refused() -> None:
+    """A raw dict/list (not a BaseModel, which json-normalizes first via
+    model_dump) can carry a value json cannot serialize - a UUID or bytes.
+    to_canonical_json must surface a clear, typed canonicalization failure, not
+    leak json's bare TypeError.
+    """
+    with pytest.raises(TypeError, match="non-JSON-native value"):
+        to_canonical_json({"owner": UUID(int=0xA)})
+    with pytest.raises(TypeError, match="non-JSON-native value"):
+        canonical_hash([b"raw-bytes"])
+
+
 def test_marker_rejects_an_unknown_field_on_json_load() -> None:
     # SectumModel sets extra="forbid": loading JSON that carries a smuggled unknown
     # field must fail, so a tampered evidence artifact is rejected at the load path

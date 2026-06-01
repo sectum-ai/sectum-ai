@@ -220,3 +220,21 @@ def test_welch_handles_zero_variance_samples() -> None:
     assert df_ne == 0.0 and se_ne == 0.0
     # df <= 0 is conservatively non-significant, never a crash or false positive.
     assert _student_t_sf(t_ne, df_ne) == 1.0
+
+
+def test_welch_handles_a_single_sample_group() -> None:
+    # An asymmetric (n=1, n>1) input: the n=1 group has no variance estimate, so
+    # its Welch-Satterthwaite denominator term must be skipped, not divide by
+    # (n-1)=0. Guards against a ZeroDivisionError in _welch.
+    import math
+
+    t_stat, df, std_error = _welch([5.0], [1.0, 2.0, 3.0, 4.0])
+    assert math.isfinite(t_stat)
+    assert std_error > 0.0
+    # the single-sample group contributes 0 df, so df reduces to the other
+    # group's n - 1 = 3.
+    assert df == 3.0
+    # both groups n=1: zero spread routes through the std_error==0 branch, not a
+    # crash.
+    t_one, df_one, se_one = _welch([5.0], [9.0])
+    assert math.isinf(t_one) and df_one == 0.0 and se_one == 0.0

@@ -205,7 +205,12 @@ def _welch(slow: list[float], fast: list[float]) -> tuple[float, float, float]:
         # Degenerate: identical spreads. Distinguishable iff the means differ.
         return (math.inf if mean_diff else 0.0), 0.0, 0.0
     t_statistic = mean_diff / std_error
-    denominator = (term_slow**2) / (n_slow - 1) + (term_fast**2) / (n_fast - 1)
+    # A group with n < 2 has no variance estimate (var_* is 0 there), so it
+    # adds nothing to the Welch-Satterthwaite denominator; guarding the (n-1)
+    # division avoids a ZeroDivisionError on an asymmetric (n=1, n>1) input.
+    df_slow = (term_slow**2) / (n_slow - 1) if n_slow > 1 else 0.0
+    df_fast = (term_fast**2) / (n_fast - 1) if n_fast > 1 else 0.0
+    denominator = df_slow + df_fast
     df = (term_slow + term_fast) ** 2 / denominator if denominator > 0.0 else 0.0
     return t_statistic, df, std_error
 
