@@ -3,7 +3,7 @@
 ``sectum verify`` recomputes the pack digest from the pack's attested content -
 the run record, manifest hash, control mappings, PDF reference, and
 transparency-log flag - and checks it against the timestamp token; any edit to
-that content changes the digest and fails verification (ADR-0012).
+that content changes the digest and fails verification (ADR-0016).
 """
 
 import json

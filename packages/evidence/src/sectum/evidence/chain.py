@@ -7,8 +7,8 @@ token, so any edit to the attested content is detected.
 The anchored digest binds the *whole* attested pack - the run record, the
 manifest hash, the control mappings, the PDF reference, and whether the pack was
 recorded in a transparency log - not just the run record. Editing the compliance
-claims, repointing the PDF, or stripping the Rekor proof therefore all change
-the digest and fail verification (ADR-0012).
+claims, altering the recorded PDF reference, or stripping the Rekor proof
+therefore all change the digest and fail verification (ADR-0016).
 
 The RFC 3161 TSA and Sigstore Rekor anchors are pluggable behind the
 ``Timestamper`` protocol; this module ships a deterministic local timestamper

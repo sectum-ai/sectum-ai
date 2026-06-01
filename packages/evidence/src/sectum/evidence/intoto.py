@@ -32,11 +32,13 @@ PREDICATE_TYPE = "https://sectum.ai/attestation/multi-tenant-verification/v1"
 def to_in_toto_statement(pack: EvidencePack) -> dict[str, Any]:
     """Wrap an evidence pack as an in-toto Statement (v1).
 
-    The subject is the run, bound by the SHA-256 of its canonical form (the same
-    digest the timestamp and transparency-log anchors attest). The predicate is
-    the verification result: the scenario and manifest hashes, the run metrics,
-    the finding count, the control mappings, and which integrity anchors are
-    present.
+    The subject is the run, bound by the SHA-256 of its canonical form - the run
+    identifier. (The timestamp and transparency-log anchors bind the broader
+    whole-pack ``attested_digest``, a superset that also covers the manifest
+    hash, control mappings, PDF reference, and log flag; see ADR-0016.) The
+    predicate is the verification result: the scenario and manifest hashes, the
+    run metrics, the finding count, the control mappings, and which integrity
+    anchors are present.
     """
     run = pack.run_result
     return {

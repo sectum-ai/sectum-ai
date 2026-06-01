@@ -10,7 +10,7 @@ interface so probes can declare what they require:
 
 - **Vector stores** — Pinecone, pgvector, Weaviate, Chroma
 - **RAG pipelines** — generic HTTP, LangChain
-- **Observability** — Langfuse, LangSmith, Phoenix, Datadog APM, generic OpenTelemetry
+- **Observability** — Langfuse, LangSmith, Phoenix, Helicone, Datadog APM, generic OpenTelemetry
 - **Agents** — LangGraph, AutoGen, CrewAI, OpenAI Assistants, Anthropic tool-use, generic HTTP
 - **MCP** — stdio + streamable-HTTP Model Context Protocol clients
 - **Cache** — Redis
