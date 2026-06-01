@@ -335,3 +335,37 @@ def test_same_marker_same_surface_same_probe_collapses() -> None:
         pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")[0],
     ]
     assert len(dedupe_findings(twice)) == 1
+
+
+def test_cosine_is_a_true_cosine_bounded_by_one() -> None:
+    from sectum.probes.detection import _cosine
+
+    # Identical direction is 1.0 regardless of magnitude. A bare dot product would
+    # return 25.0 here and overflow Finding.confidence's 0..1 bound.
+    assert _cosine((3.0, 4.0), (3.0, 4.0)) == 1.0
+    assert _cosine((1.0, 0.0), (0.0, 1.0)) == 0.0  # orthogonal
+    assert abs(_cosine((1.0, 0.0), (-1.0, 0.0)) + 1.0) < 1e-9  # opposite direction
+    assert _cosine((0.0, 0.0), (1.0, 1.0)) == 0.0  # a zero vector has no direction
+
+
+def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
+    # A real embedder need not return unit vectors. With a true cosine the
+    # semantic score stays <= 1.0, so Finding.confidence never overflows its 0..1
+    # bound and detection does not crash mid-scan (a bare dot product would).
+    class _NonUnitEmbedder:
+        def embed(self, text: str) -> tuple[float, ...]:
+            magnitude = sum(ord(char) for char in text) or 1
+            return (float(magnitude), float(magnitude % 7 + 1), float(magnitude % 5 + 1))
+
+    substrate = _substrate()
+    entity = next(
+        marker
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.ENTITY_CANARY
+        and marker.owner_tenant_id == substrate.tenants[0].tenant_id
+    )
+    observer = substrate.tenants[1].tenant_id
+    pipeline = DetectionPipeline(substrate, embedder=_NonUnitEmbedder(), semantic_threshold=0.0)
+    findings = pipeline.detect(observer, f"context {entity.plaintext} trailer", Surface.VECTOR_DB)
+    assert findings  # threshold 0.0 lets the candidate through to the judge
+    assert all(0.0 <= finding.confidence <= 1.0 for finding in findings)

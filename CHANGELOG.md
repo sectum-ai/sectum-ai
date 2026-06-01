@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diff` — so a newly confirmed or escalated leak exits `2`. **Breaking:** a
   baseline saved by an earlier version holds only metrics; re-run `sectum
   baseline --save` to refresh it.
+- **Semantic detection uses a true cosine, so a real embedder can't crash finding
+  construction.** `_cosine` was a bare dot product (no normalization); a live
+  embedding provider that returns non-unit vectors could yield a similarity above
+  `1.0`, which overflows `Finding.confidence`'s `0..1` bound and aborts the scan
+  with a `ValidationError`. It now normalizes by the product of L2 norms (a
+  zero-norm vector scores `0.0`), and the semantic confidence is clamped to `1.0`
+  defensively. The fake embedder already returns unit vectors, so offline scores
+  are unchanged.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
