@@ -4,10 +4,11 @@
 #
 # Reproduces Attack Class 10 - IKEA-style implicit benign extraction -
 # end to end (the engineering spec, section 7). A multi-turn benign
-# query strategy from tenant Y incrementally reconstructs tenant X
-# content via a shared RAG pipeline; no prompt injection required.
-# Based on the Silent Leaks / IKEA paper (arXiv 2505.15420): 91%
-# extraction efficiency, 96% attack success via benign queries.
+# query sequence from tenant Y surfaces tenant X content from a
+# shared vector index; no prompt injection required. The pattern is
+# from the Silent Leaks / IKEA paper (arXiv 2505.15420), which
+# reported 91% extraction efficiency and 96% attack success against
+# an adaptive attacker.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +24,7 @@ echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
 sectum seed --workdir "$out"
 
 echo
-echo "==> 2/4  Probe IKEA-style benign extraction (multi-turn reconstruction)"
+echo "==> 2/4  Probe IKEA-style benign extraction (benign multi-turn sequence)"
 sectum probe --workdir "$out" --probe ikea-extraction || true
 
 echo

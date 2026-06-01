@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Article 17 wedge path. Completes the "caveats never regress" contract on the
   finding paths, not just the `erasure_caveats` metric. Regenerated sample packs
   in `docs/samples/` also now verify under the post-ADR-0016 whole-pack digest.
+- **Example walkthroughs now describe the probes they actually run.** The
+  `rag-poisoning` and `ikea-extraction` example READMEs and `run.sh` headers
+  documented detection mechanisms the probes do not implement: a
+  "baseline-vs-post-poisoning marker-bleed delta" with a `poison_pivot` document
+  (Class 3), and a "cumulative-recall / efficiency-threshold" detector running
+  against a `FakeRAGPipeline` on a `RAG_PIPELINE` surface (Class 10). Both are
+  rewritten to match the shipped single-pass `vector.query` / `VECTOR_DB` probes:
+  Class 3 plants one poison document per hard canary under a fixed lure phrase
+  and flags any principal whose query retrieves a *foreign* principal's canary;
+  Class 10 runs a fixed three-turn benign sequence per shared entity and flags
+  any turn whose retrieved context surfaces a foreign canary.
 
 ### Added
 

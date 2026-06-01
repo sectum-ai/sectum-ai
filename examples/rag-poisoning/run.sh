@@ -5,9 +5,9 @@
 # Reproduces Attack Class 3 - adversarial RAG poisoning - end to end
 # (the engineering spec, section 7). Tenant Y plants poisoned content
 # into the shared vector index that is designed to act as a retrieval
-# pivot; the probe measures the marker-bleed delta between the
-# baseline run and the post-poisoning run. A bleed delta > 0 is a
-# confirmed poisoning vulnerability.
+# pivot; the probe then queries the poison's lure from every tenant
+# and flags any query whose retrieved context carries Y's canary. A
+# retrieved foreign canary is a confirmed poisoning vulnerability.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
