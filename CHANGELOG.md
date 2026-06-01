@@ -90,6 +90,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (gating `sectum diff` / `baseline --compare`) — inconsistent with the other
   observability backends for the same real condition. A `404` still means the
   spans are already absent and remains an idempotent erasure success.
+- **`sectum erasure` now itemizes an attestable-with-caveat surface even when a
+  genuine residual co-exists.** When a soft-deleting surface (a real erasure
+  failure) and a no-erasure-API surface (a caveat) were both present, the
+  dominant `ERASURE FAILED` message returned early and the caveat surface was
+  never printed, so a DPO reading the CLI summary could miss that a second
+  surface still held data. Both are now reported before the exit `2`.
+- **In-toto attestations no longer over-claim a timestamp anchor for a local
+  development token.** The predicate's `anchors.timestamp` was `true` whenever a
+  token was present, but `sectum verify` treats the `local-dev` JSON token as
+  *unanchored* (it binds the digest but is not an independent RFC 3161 / Rekor
+  anchor). The flag now matches `verify_pack` — only a real (non-JSON, binary)
+  TSA token counts as an external timestamp anchor.
+- **Canonical hashing raises a clear, typed error for a non-JSON-native value.**
+  `to_canonical_json` already refused non-finite floats (`NaN`/`Infinity`); a raw
+  `dict`/`list` carrying a `UUID`, `datetime`, `bytes`, or non-`str` key still
+  leaked `json`'s bare `TypeError`. It now raises a `TypeError` naming the cause
+  ("cannot canonicalize a non-JSON-native value"), so a caller sees why the
+  digest could not be computed. Models are unaffected — they normalize via
+  `model_dump(mode="json")` first.
+- **The KV-cache timing Welch's t-test no longer divides by zero on a
+  single-sample group.** `_welch` computed each group's
+  `(variance²)/(n-1)` Welch–Satterthwaite term unconditionally; an asymmetric
+  `(n=1, n>1)` input raised `ZeroDivisionError`. A group with `n < 2` (no
+  variance estimate) now contributes nothing to the denominator. The probe
+  collects symmetric trial counts, so this hardens the helper without changing
+  any run.
 
 ### Documentation
 
@@ -120,6 +146,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     per-principal `rag.ask` step, so the RAG family's user dimension is
     *unverified* rather than *unneeded* — correcting the original "no probe issues
     a `rag.ask` step" rationale.
+  - Doc-tail accuracy nits: `docs/quickstart.md` exit code `2` now spans
+    confirmed leaks (`probe`), a regression (`diff` / `baseline --compare`), and
+    residual / attestable-with-caveat data (`erasure`), not only "confirmed
+    leaks present"; ADR-0002 states the control-mapping table lives in
+    `evidence/controls.py` (not `sectum-ai-spec`); the `agent-tool-hijack`
+    example README and `run.sh` adapter counts are corrected to the seven shipped
+    kinds; the `tenant-boundary-fetch` README drops the `API` surface its probe
+    never emits; the Class-5 (KV-cache) page documents that a backend with no
+    shared prefix cache yields no signal by construction (absence ≠ isolation);
+    `configuration.md` clarifies `corpus_profile` is accepted but not yet
+    applied.
 
 ### Added
 

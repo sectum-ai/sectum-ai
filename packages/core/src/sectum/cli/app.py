@@ -919,6 +919,17 @@ def erasure(
     # holds the marker) is the dominant signal and takes precedence.
     if report.genuine_residual:
         typer.echo("ERASURE FAILED: residual data remains.", err=True)
+        # A caveat surface can co-exist with a genuine failure; itemize it too
+        # rather than letting the dominant failure hide it - the data on a
+        # no-erasure-API backend is still presumed retained.
+        if report.caveats:
+            caveat_names = ", ".join(surface.surface.value for surface in report.caveats)
+            typer.echo(
+                f"  also attestable-with-caveat: {caveat_names} expose no per-tenant "
+                "erasure API, so that data is presumed retained (a backend "
+                "limitation, itemized in the attestation).",
+                err=True,
+            )
         raise typer.Exit(code=2)
     # A caveat surface (no programmatic per-tenant erasure API) holds data that
     # is presumed retained - never a clean PASS, but a documented backend

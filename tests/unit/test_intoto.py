@@ -85,7 +85,10 @@ def test_predicate_carries_the_verification_result() -> None:
     assert predicate["finding_count"] == 1
     assert predicate["metrics"]["confirmed_findings"] == 1
     assert predicate["control_mappings"][0]["control_ids"] == ["CC6.1"]
-    assert predicate["anchors"] == {"timestamp": True, "transparency_log": False}
+    # The default LocalTimestamper emits a JSON token verify_pack treats as
+    # unanchored, so the predicate's timestamp anchor is False (the dedicated
+    # local-dev / real-token tests below pin both sides).
+    assert predicate["anchors"] == {"timestamp": False, "transparency_log": False}
 
 
 def test_the_statement_is_json_serializable() -> None:
@@ -129,6 +132,22 @@ def test_anchors_reflect_a_transparency_log_when_present() -> None:
     pack = _pack().model_copy(update={"rekor_proof": "{}"})
     predicate = to_in_toto_statement(pack)["predicate"]
     assert predicate["anchors"]["transparency_log"] is True
+
+
+def test_anchors_timestamp_is_false_for_a_local_dev_token() -> None:
+    # The default LocalTimestamper emits a JSON token that verify_pack binds but
+    # reports as *unanchored* (not an independent RFC 3161 / Rekor anchor). The
+    # in-toto predicate must agree, so its timestamp anchor reads False.
+    predicate = to_in_toto_statement(_pack())["predicate"]
+    assert predicate["anchors"]["timestamp"] is False
+
+
+def test_anchors_timestamp_is_true_for_a_real_binary_token() -> None:
+    # A genuine RFC 3161 TSA returns a signed *binary* token (not JSON) - a real
+    # external anchor, so the predicate's timestamp flag is True.
+    pack = _pack().model_copy(update={"tsa_token": "MIIB-binary-rfc3161-token"})
+    predicate = to_in_toto_statement(pack)["predicate"]
+    assert predicate["anchors"]["timestamp"] is True
 
 
 @pytest.mark.parametrize(

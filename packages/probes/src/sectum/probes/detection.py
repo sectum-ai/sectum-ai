@@ -504,5 +504,8 @@ class DetectionPipeline:
             surface=surface,
             marker_id=marker.marker_id,
             evidence_span=evidence,
+            # Required-field default only: detect() re-stamps owasp_llm/atlas/nist
+            # on every finding via model_copy, centralizing control-ID tagging in
+            # one place for both _exact and _semantic. This value never ships.
             owasp_llm=_OWASP_MULTI_TENANT,
         )

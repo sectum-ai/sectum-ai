@@ -202,3 +202,24 @@ def test_erasure_warns_when_soft_delete_is_combined_with_config(tmp_path: Path) 
     # and exits 0; the warning tells the user the flag was ignored
     assert result.exit_code == 0
     assert "--soft-delete is ignored" in result.output
+
+
+def test_erasure_itemizes_a_caveat_alongside_a_genuine_residual(tmp_path: Path) -> None:
+    """A genuine residual (soft-delete) and a caveat (no-erasure-API) can
+    co-exist; the dominant failure must not hide the caveat - both are reported
+    so a DPO sees every surface that still holds data (exit 2)."""
+    config_path = tmp_path / "sectum.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\n"
+        "adapters:\n"
+        "  vector_store: {kind: fake, soft_delete: true}\n"
+        "  observability: {kind: fake, no_erasure: true}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
+    assert result.exit_code == 2
+    # the dominant genuine failure is reported ...
+    assert "ERASURE FAILED" in result.output
+    # ... and the co-existing caveat surface is still itemized, not hidden
+    assert "also attestable-with-caveat" in result.output
+    assert "tracing" in result.output

@@ -31,6 +31,13 @@ def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
         # collapses to the same token (a non-injective canonical form). Refuse
         # it so the canonical form stays valid and injective.
         raise ValueError(f"cannot canonicalize a non-finite float: {error}") from error
+    except TypeError as error:
+        # A raw dict/list (a BaseModel is normalized first via
+        # model_dump(mode="json")) can carry a value json cannot serialize - a
+        # UUID, datetime, bytes, or a non-str key. json raises a bare TypeError;
+        # surface it as a clear, typed canonicalization failure so a caller sees
+        # why the digest could not be computed instead of an opaque traceback.
+        raise TypeError(f"cannot canonicalize a non-JSON-native value: {error}") from error
     return text.encode("utf-8")
 
 

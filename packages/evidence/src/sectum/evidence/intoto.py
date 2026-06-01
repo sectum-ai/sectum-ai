@@ -17,6 +17,7 @@ signed distribution; that envelope is left to the caller.
 This module is standard-library only.
 """
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -27,6 +28,25 @@ from sectum.spec import EvidenceError, EvidencePack
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
 # Sectum AI's predicate type: a multi-tenant isolation verification result.
 PREDICATE_TYPE = "https://sectum.ai/attestation/multi-tenant-verification/v1"
+
+
+def _is_external_timestamp_anchor(token: str | None) -> bool:
+    """True only for a real external RFC 3161 timestamp anchor.
+
+    A genuine TSA returns a signed *binary* token (not JSON); the local
+    development timestamper returns a JSON token that ``sectum verify`` binds to
+    the digest but reports as *unanchored* (no independent time or authority).
+    The predicate's anchor flags must match ``verify_pack``, so a JSON token -
+    the local-dev token, or anything impersonating a TSA - does not count as an
+    external anchor; only a non-JSON binary token does.
+    """
+    if token is None:
+        return False
+    try:
+        json.loads(token)
+    except (json.JSONDecodeError, ValueError):
+        return True
+    return False
 
 
 def to_in_toto_statement(pack: EvidencePack) -> dict[str, Any]:
@@ -57,7 +77,7 @@ def to_in_toto_statement(pack: EvidencePack) -> dict[str, Any]:
                 mapping.model_dump(mode="json") for mapping in pack.control_mappings
             ],
             "anchors": {
-                "timestamp": pack.tsa_token is not None,
+                "timestamp": _is_external_timestamp_anchor(pack.tsa_token),
                 "transparency_log": pack.rekor_proof is not None,
             },
         },
