@@ -1,11 +1,13 @@
 """Unit tests for the sectum.spec models, hashing, and schema export."""
 
+import json
 from uuid import UUID
 
 import pytest
 
 from sectum.spec import (
     SCHEMA_VERSION,
+    GroundTruthManifest,
     Marker,
     MarkerType,
     canonical_hash,
@@ -64,3 +66,34 @@ def test_canonicalizing_a_non_finite_float_is_refused(non_finite: float) -> None
         to_canonical_json({"gap_ms": non_finite})
     with pytest.raises(ValueError, match="non-finite float"):
         canonical_hash({"gap_ms": non_finite})
+
+
+def test_marker_rejects_an_unknown_field_on_json_load() -> None:
+    # SectumModel sets extra="forbid": loading JSON that carries a smuggled unknown
+    # field must fail, so a tampered evidence artifact is rejected at the load path
+    # (the CLI loads EvidencePack / GroundTruthManifest via model_validate_json),
+    # not silently accepted. Pins the guard against a future extra="allow"/"ignore"
+    # regression. (pydantic's ValidationError is a ValueError.)
+    data = json.loads(
+        Marker(
+            marker_id="m-1",
+            marker_type=MarkerType.HARD_CANARY,
+            owner_tenant_id=UUID(int=1),
+            plaintext="canary",
+        ).model_dump_json()
+    )
+    Marker.model_validate_json(json.dumps(data))  # the clean payload round-trips
+    with pytest.raises(ValueError, match="smuggled"):
+        Marker.model_validate_json(json.dumps({**data, "smuggled": "x"}))
+
+
+def test_ground_truth_manifest_rejects_an_unknown_field_on_json_load() -> None:
+    # The evidence chain loads the manifest via model_validate_json in verify_pack;
+    # the same shared extra="forbid" base guard (which EvidencePack inherits too)
+    # rejects a smuggled field.
+    data = json.loads(
+        GroundTruthManifest(manifest_id="m", scenario_hash="h", markers=()).model_dump_json()
+    )
+    GroundTruthManifest.model_validate_json(json.dumps(data))
+    with pytest.raises(ValueError, match="smuggled"):
+        GroundTruthManifest.model_validate_json(json.dumps({**data, "smuggled": "x"}))
