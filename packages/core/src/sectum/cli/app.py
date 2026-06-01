@@ -827,7 +827,13 @@ def erasure(
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
         metrics=RunMetrics(
-            confirmed_findings=len(report.findings),
+            # Count only genuinely confirmed findings (residual-after-erasure),
+            # not the whole list: attestable-with-caveat findings are UNVERIFIED
+            # (a same-tenant backend limitation, not a confirmed leak), so
+            # counting len(report.findings) would inflate the headline count and
+            # make `sectum diff`/`baseline` read a no-per-tenant-erasure-API
+            # backend as a regression. confirmed_findings() filters to confirmed.
+            confirmed_findings=len(confirmed_findings(report.findings)),
             # Genuine residual (a surface that supports erasure but still holds
             # the marker) is kept separate from caveat surfaces (no per-tenant
             # erasure API) so the signed pack and the baseline diff never
