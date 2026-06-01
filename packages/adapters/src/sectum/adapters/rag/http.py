@@ -19,6 +19,7 @@ standard library is used, so this adapter needs no optional extra.
 """
 
 import json
+import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 from uuid import UUID
@@ -53,8 +54,11 @@ class HttpRAGPipeline(RAGPipelineAdapter):
             method="POST",
             headers={"Content-Type": "application/json", **self._headers},
         )
-        with urllib.request.urlopen(request, timeout=self._timeout) as response:
-            body = json.loads(response.read())
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                body = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise AdapterError(f"RAG HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"RAG response must be a JSON object, got {type(body).__name__}")
         retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))

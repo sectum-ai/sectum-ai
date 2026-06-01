@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a `sectum.yaml` requesting per-user (ADR-0006) isolation on those families
   silently built a tenant-only fake and verified the wrong boundary. All three
   fake branches now thread `user_scoped`, with resolver parity tests.
+- **The stdlib HTTP adapters now wrap transport and JSON errors in
+  `AdapterError`.** The generic HTTP agent (`agent/http.py`), HTTP RAG pipeline
+  (`rag/http.py`), and the OpenTelemetry trace store's `query`/`tenant_values`
+  (`observability/otel.py`) let a raw `urllib` error (connection refused,
+  timeout, HTTP error) or a `json.JSONDecodeError` from a non-JSON response
+  escape, bypassing the CLI's typed-error exit code (`3`) and surfacing as an
+  opaque traceback. Each now raises `AdapterError` (matching the OTel `purge`
+  path), so an unreachable or misbehaving backend fails cleanly.
 - **Erasure attestable-with-caveat findings no longer trigger a false
   regression.** A surface whose backend exposes no per-tenant erasure API
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
