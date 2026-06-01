@@ -21,7 +21,11 @@ from pathlib import Path
 
 from sectum.evidence.chain import run_digest
 from sectum.evidence.controls import COVERAGE_DISCLAIMER
-from sectum.evidence.pdf import _SCOPE_METHODOLOGY, _finding_controls
+from sectum.evidence.pdf import (
+    _SCOPE_METHODOLOGY,
+    _VERIFICATION_INSTRUCTION,
+    _finding_controls,
+)
 from sectum.spec import EvidenceError, EvidencePack, Finding, FindingStatus
 
 # Severity -> CSS accent colour for the finding badge. A muted, print-safe
@@ -130,7 +134,7 @@ def build_audit_html(pack: EvidencePack) -> str:
         ("Confirmed cross-tenant findings", str(confirmed)),
     )
     integrity = (
-        ("Run digest (SHA-256)", run_digest(run)),
+        ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
         ("Timestamp token", pack.tsa_token or "none"),
     )
@@ -165,8 +169,7 @@ def build_audit_html(pack: EvidencePack) -> str:
         f'<p class="disclaimer">{escape(COVERAGE_DISCLAIMER)}</p>'
         "<h2>Integrity and independent verification</h2>"
         f"{_kv_table(integrity, mono_values=True)}"
-        '<p class="verify">Verify this pack independently by recomputing the run '
-        "digest and checking it against the timestamp token (the sectum verify command).</p>"
+        f'<p class="verify">{escape(_VERIFICATION_INSTRUCTION)}</p>'
     )
     return (
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
