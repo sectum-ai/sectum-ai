@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Erasure attestable-with-caveat findings no longer trigger a false
+  regression.** A surface whose backend exposes no per-tenant erasure API
+  (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
+  backend limitation, not a confirmed cross-tenant leak. These findings are now
+  `UNVERIFIED` (not `CONFIRMED`), and the erasure run's confirmed-findings count
+  excludes them, so onboarding such a backend no longer makes `sectum diff` /
+  `sectum baseline --compare` report a regression (exit 2) on the GDPR
+  Article 17 wedge path. Completes the "caveats never regress" contract on the
+  finding paths, not just the `erasure_caveats` metric. Regenerated sample packs
+  in `docs/samples/` also now verify under the post-ADR-0016 whole-pack digest.
+
 ### Added
 
 - **Optional weasyprint PDF engine for the audit pack.** `sectum report

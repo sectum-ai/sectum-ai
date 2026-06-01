@@ -373,13 +373,22 @@ class ErasureProbe:
         and must be purged via the backend's own retention policy or console.
         The distinction matters to a DPO, so it is carried in the remediation
         pointer rather than conflated with a residual-after-erasure finding.
+
+        Status is ``UNVERIFIED``, not ``CONFIRMED``: a caveat is a backend
+        coverage limitation on the *same* tenant (``owner == observed``), not a
+        confirmed cross-tenant leak. Holding it in the unverified bucket (the
+        false-positive control) keeps it out of the confirmed-findings count and
+        the ``sectum diff`` / ``baseline`` regression gates (``newly_confirmed``),
+        so onboarding a no-per-tenant-erasure-API backend never reads as a
+        regression - the "caveats never regress" contract applied to the finding
+        paths, not just the ``erasure_caveats`` metric dict.
         """
         return Finding(
             finding_id=f"erasure-caveat-{surface.value}-{marker.marker_id}",
             probe_id=self.id,
             severity=Severity.MEDIUM,
             confidence=1.0,
-            status=FindingStatus.CONFIRMED,
+            status=FindingStatus.UNVERIFIED,
             owner_tenant_id=target,
             observed_in_tenant_id=target,
             surface=surface,

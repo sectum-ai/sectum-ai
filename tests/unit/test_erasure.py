@@ -9,6 +9,7 @@ from sectum.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
+from sectum.adapters.base import ObservabilityAdapter
 from sectum.probes import ErasureProbe
 from sectum.spec import MarkerType, Substrate, Surface
 from sectum.substrate import build_substrate, default_scenario
@@ -364,3 +365,80 @@ def test_erasure_fails_when_the_eval_set_soft_deletes() -> None:
     assert surfaces[Surface.EVAL_SET].residual_after > 0
     assert not report.erased
     assert any(finding.surface is Surface.EVAL_SET for finding in report.findings)
+
+
+def _no_erasure_observability(substrate: Substrate) -> ObservabilityAdapter:
+    """A FakeObservability whose delete() raises ErasureUnsupported (caveat path)."""
+    from uuid import UUID
+
+    from sectum.adapters.base import TraceHit
+    from sectum.spec import ErasureUnsupported
+
+    class _NoErasureObservability(ObservabilityAdapter):
+        def __init__(self, seeded: FakeObservability) -> None:
+            super().__init__("no-erasure-obs")
+            self._seeded = seeded
+
+        def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
+            return self._seeded.search_traces(tenant, marker)
+
+        def list_projects(self) -> list[str]:
+            return self._seeded.list_projects()
+
+        def delete(self, tenant: UUID) -> None:
+            raise ErasureUnsupported("backend exposes no per-tenant erasure API")
+
+    return _NoErasureObservability(_seeded_observability(substrate, soft_delete=False))
+
+
+def test_attestable_with_caveat_finding_is_unverified_not_confirmed() -> None:
+    # An attestable-with-caveat finding is a same-tenant backend limitation, not
+    # a confirmed cross-tenant leak. It must be UNVERIFIED so the false-positive
+    # control (confirmed-count, sectum diff/baseline gates) never treats a
+    # no-per-tenant-erasure-API backend as a confirmed finding (spec §7 #8).
+    from sectum.spec import FindingStatus
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(
+        substrate, vector=store, observability=_no_erasure_observability(substrate)
+    ).run(target)
+    caveat_findings = [
+        finding for finding in report.findings if finding.finding_id.startswith("erasure-caveat-")
+    ]
+    assert caveat_findings
+    # Every caveat finding is UNVERIFIED, on the same tenant (not a cross-tenant leak).
+    assert all(finding.status is FindingStatus.UNVERIFIED for finding in caveat_findings)
+    assert all(
+        finding.owner_tenant_id == finding.observed_in_tenant_id for finding in caveat_findings
+    )
+
+
+def test_onboarding_a_caveat_backend_is_not_a_diff_regression() -> None:
+    # The "caveats never regress" contract end to end: a later erasure
+    # attestation that differs from a clean baseline only by an added
+    # no-per-tenant-erasure-API surface must NOT read as a regression in
+    # `sectum diff` (no newly-confirmed finding, no confirmed-count bump).
+    from sectum.baseline import diff_findings
+    from sectum.probes import confirmed_findings
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+
+    # Baseline: every surface erases cleanly (vector store hard-deletes, no obs).
+    clean = ErasureProbe(substrate, vector=_seeded_store(substrate, soft_delete=False)).run(target)
+    # Later: identical except a tracing backend with no per-tenant erasure API.
+    with_caveat = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_no_erasure_observability(substrate),
+    ).run(target)
+
+    # The added surface contributes only caveat findings...
+    assert any(f.finding_id.startswith("erasure-caveat-") for f in with_caveat.findings)
+    # ...which are unverified, so they do not bump the confirmed count...
+    assert len(confirmed_findings(with_caveat.findings)) == len(confirmed_findings(clean.findings))
+    # ...and do not appear as newly-confirmed in a finding-level diff.
+    diff = diff_findings(clean.findings, with_caveat.findings)
+    assert diff.newly_confirmed == ()
