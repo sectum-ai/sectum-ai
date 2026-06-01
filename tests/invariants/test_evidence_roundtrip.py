@@ -5,7 +5,7 @@ PASSES; mutating any part of the pack makes verification FAIL with a clear reaso
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 from sectum.evidence import attested_digest, build_evidence_pack, verify_pack
@@ -318,3 +318,65 @@ def test_a_local_dev_token_is_reported_as_unanchored() -> None:
     token = next(c for c in verify_pack(pack, manifest).checks if c.name == "timestamp-token")
     assert token.ok
     assert "unanchored" in token.detail
+
+
+def _run_at(started: datetime, finished: datetime) -> RunResult:
+    """A minimal RunResult with the given start/finish instants (no findings)."""
+    manifest = _manifest()
+    return RunResult(
+        run_id="run-tz",
+        scenario_hash="scenario-hash",
+        manifest_hash=canonical_hash(manifest),
+        started_at=started,
+        finished_at=finished,
+        metrics=RunMetrics(),
+    )
+
+
+def test_canonical_hash_is_timezone_invariant_for_the_same_instant() -> None:
+    # The reproducibility contract (spec 6.5 / evidence chain 8): the same
+    # instant must hash identically regardless of the producing machine's
+    # timezone. UtcDateTime (_to_utc_iso) normalizes to UTC before serializing,
+    # so a run timestamped in UTC and the SAME instant timestamped in US/Eastern
+    # (-05:00) must yield an identical canonical hash. Pins _to_utc_iso so a
+    # future drop of .astimezone(UTC) cannot silently break cross-timezone
+    # digest reproducibility while the suite stays green.
+    eastern = timezone(timedelta(hours=-5))
+    utc_run = _run_at(
+        datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+        datetime(2026, 5, 17, 13, 30, tzinfo=UTC),
+    )
+    # 07:00-05:00 and 08:30-05:00 are the SAME two instants as above.
+    eastern_run = _run_at(
+        datetime(2026, 5, 17, 7, 0, tzinfo=eastern),
+        datetime(2026, 5, 17, 8, 30, tzinfo=eastern),
+    )
+    assert utc_run.started_at == eastern_run.started_at  # same instant, different tz
+    assert canonical_hash(utc_run) == canonical_hash(eastern_run)
+
+
+def test_a_naive_datetime_is_treated_as_utc_in_the_digest() -> None:
+    # _to_utc_iso assumes a tz-naive value is already UTC, so a naive run and
+    # the tz-aware UTC run for the same wall-clock time hash identically.
+    aware = _run_at(
+        datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+        datetime(2026, 5, 17, 13, 30, tzinfo=UTC),
+    )
+    naive = _run_at(
+        datetime(2026, 5, 17, 12, 0),
+        datetime(2026, 5, 17, 13, 30),
+    )
+    assert canonical_hash(aware) == canonical_hash(naive)
+
+
+def test_a_pack_built_in_a_non_utc_zone_still_verifies() -> None:
+    # End to end: a pack whose run was timestamped in a non-UTC zone builds and
+    # verifies — the attested digest is over the UTC-normalized canonical form.
+    manifest = _manifest()
+    eastern = timezone(timedelta(hours=-5))
+    run = _run_at(
+        datetime(2026, 5, 17, 7, 0, tzinfo=eastern),
+        datetime(2026, 5, 17, 8, 30, tzinfo=eastern),
+    )
+    pack = build_evidence_pack(run, manifest)
+    assert verify_pack(pack, manifest).passed

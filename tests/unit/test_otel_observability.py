@@ -7,7 +7,8 @@ stand-in for the trace store. The live HTTP path is exercised only opt-in.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, NoReturn
 from uuid import UUID
 
 from sectum.adapters.base import Capability, ObservabilityAdapter
@@ -165,3 +166,75 @@ def test_otel_honours_a_custom_tenant_attribute() -> None:
     adapter = OtelObservability(_CustomStore(), tenant_attribute="service.tenant")
     hits = adapter.search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
     assert hits and hits[0].project == _TENANT_A.hex
+
+
+# --- the live HTTP trace store: URL guard + erasure (purge) branches ----------
+# These exercise _HttpOtelTraceStore directly (the production path used when a
+# real OTLP-JSON endpoint is configured) by monkeypatching urllib's urlopen, so
+# the erasure-critical 404/405/501-swallow-vs-raise logic and the base_url guard
+# are covered without a live server. The 85% coverage gate excludes
+# adapters/observability, so this branch would otherwise ship untested.
+
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+import pytest  # noqa: E402
+
+from sectum.adapters.observability.otel import _HttpOtelTraceStore  # noqa: E402
+from sectum.spec import AdapterError  # noqa: E402
+
+
+def _http_store() -> _HttpOtelTraceStore:
+    return _HttpOtelTraceStore(
+        "https://otel.example.com",
+        query_path="/v1/traces/query",
+        headers=None,
+        timeout=5.0,
+        tenant_attribute="tenant.id",
+    )
+
+
+def _raise_http_error(code: int) -> Callable[..., NoReturn]:
+    def _urlopen(*_args: object, **_kwargs: object) -> NoReturn:
+        raise urllib.error.HTTPError(
+            url="https://otel.example.com/v1/traces/query",
+            code=code,
+            msg=f"HTTP {code}",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=None,
+        )
+
+    return _urlopen
+
+
+def test_http_store_rejects_a_non_http_base_url() -> None:
+    with pytest.raises(AdapterError, match="must be an http"):
+        _HttpOtelTraceStore(
+            "ftp://otel.example.com",
+            query_path="/q",
+            headers=None,
+            timeout=5.0,
+            tenant_attribute="tenant.id",
+        )
+
+
+@pytest.mark.parametrize("code", [404, 405, 501])
+def test_http_purge_swallows_no_delete_api_codes(
+    code: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A trace store with no programmatic delete advertises it via 404/405/501;
+    # the idempotent erasure contract treats those as no-ops (residue then
+    # surfaces at the next scan), so purge must NOT raise.
+    monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(code))
+    _http_store().purge(_TENANT_A.hex)  # must not raise
+
+
+@pytest.mark.parametrize("code", [403, 500, 502])
+def test_http_purge_propagates_other_http_errors(
+    code: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A real failure (auth, server error) must surface as AdapterError, never be
+    # silently swallowed into a false-clean erasure verdict.
+    monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(code))
+    with pytest.raises(AdapterError, match="OTel trace purge failed"):
+        _http_store().purge(_TENANT_A.hex)
