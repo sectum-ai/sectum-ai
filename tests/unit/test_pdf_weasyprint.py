@@ -104,6 +104,22 @@ def test_html_includes_the_coverage_disclaimer_and_integrity_digests() -> None:
     assert "m-hash" in html  # the manifest hash appears in the integrity table
 
 
+def test_verification_instruction_points_at_the_attested_digest_not_the_run_digest() -> None:
+    # After ADR-0016 the timestamp token attests the whole-pack attested digest,
+    # not the run digest. The auditor-facing instruction must NOT tell the reader
+    # to recompute the run digest and check it against the token (doing so always
+    # mismatches and reads as tampering). The run digest is shown only as a run
+    # identifier. Guards the prose against regressing to the pre-ADR-0016 wording.
+    html = build_audit_html(_pack())
+    assert "sectum verify" in html
+    assert "attested digest" in html.lower()
+    assert "run identifier" in html.lower()  # the displayed run digest is labelled as such
+    # The stale instruction (recompute the RUN digest, check it against the token)
+    # must be gone.
+    assert "recomputing the run digest" not in html
+    assert "recompute the run digest" not in html
+
+
 def test_html_handles_a_run_with_no_findings() -> None:
     run = RunResult(
         run_id="empty",

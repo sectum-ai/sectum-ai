@@ -52,6 +52,22 @@ _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "changes - and this pack asserts test coverage, not legal certification.",
 )
 
+# The verification instruction rendered by both PDF engines. The cryptographic
+# anchor is the whole-pack attested digest, NOT the run digest (ADR-0016): the
+# timestamp token attests a hash over the run record, the manifest hash, the
+# control mappings, the PDF reference, and the transparency-log flag. The run
+# digest shown above is only a run identifier, so the instruction must not tell
+# the reader to check it against the token (mirrors docs/evidence-chain.md).
+_VERIFICATION_INSTRUCTION: str = (
+    "Verify this pack independently by running 'sectum verify' on it. That "
+    "recomputes the whole-pack attested digest - over the run record, the "
+    "manifest hash, the control mappings, and the PDF reference - and checks it "
+    "against the timestamp token (and the Rekor inclusion proof when present). "
+    "The run digest above is the run's identifier, not the value checked against "
+    "the token; any edit to the attested content changes the attested digest and "
+    "fails verification."
+)
+
 
 def _finding_controls(finding: Finding) -> str:
     """Return a finding's mapped control IDs as ``OWASP ...; ATLAS ...; NIST ...``.
@@ -172,20 +188,14 @@ def _render_reportlab(pack: EvidencePack, output: Path) -> None:
 
     flow += [Spacer(1, 12), Paragraph("Integrity and independent verification", heading)]
     integrity = (
-        ("Run digest (SHA-256)", run_digest(run)),
+        ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
         ("Timestamp token", pack.tsa_token or "none"),
     )
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in integrity
     ]
-    flow.append(
-        Paragraph(
-            "Verify this pack independently by recomputing the run digest and "
-            "checking it against the timestamp token (the sectum verify command).",
-            body,
-        )
-    )
+    flow.append(Paragraph(escape(_VERIFICATION_INSTRUCTION), body))
 
     document = SimpleDocTemplate(str(output), pagesize=LETTER, title="Sectum AI Evidence Pack")
     document.build(flow)
