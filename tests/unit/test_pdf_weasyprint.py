@@ -142,14 +142,14 @@ def test_html_severity_badge_uses_a_known_colour() -> None:
 
 
 def test_weasyprint_engine_without_the_extra_raises_evidence_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Force `import weasyprint` to fail (None in sys.modules raises ImportError),
     # so the missing-extra branch runs deterministically even when the extra is
     # installed. The error must name the extra so the user knows the fix.
     monkeypatch.setitem(sys.modules, "weasyprint", None)
     with pytest.raises(EvidenceError, match=r"sectum-ai\[weasyprint\]"):
-        render_weasyprint(_pack(), tmp_path / "never.pdf")
+        render_weasyprint(_pack())
 
 
 def test_render_audit_pack_weasyprint_writes_a_pdf(tmp_path: Path) -> None:

@@ -54,7 +54,7 @@ from sectum.evidence import (
     build_evidence_pack,
     control_mappings,
     rekor_keyring,
-    render_audit_pack,
+    render_audit_pack_and_hash,
     to_in_toto_statement,
     verify_pack,
 )
@@ -660,22 +660,45 @@ def report(
     run = _load_run(workdir)
     timestamper = _resolve_timestamper(loaded.evidence, tsa)
     transparency_log = _resolve_transparency_log(loaded.evidence, rekor)
+    controls = control_mappings()
+    # Render the audit PDF first and bind its hash as pdf_ref so the signed
+    # attested digest covers the PDF; the PDF renders only digest-stable content,
+    # so the on-disk file re-hashes to this pdf_ref and `sectum verify` catches a
+    # swap.
+    pdf_path = workdir / "audit-pack.pdf"
+    pdf_ref = render_audit_pack_and_hash(
+        run, canonical_hash(substrate.manifest), controls, pdf_path, engine=pdf_engine
+    )
     pack = build_evidence_pack(
         run,
         substrate.manifest,
-        control_mappings=control_mappings(),
+        control_mappings=controls,
+        pdf_ref=pdf_ref,
         timestamper=timestamper,
         transparency_log=transparency_log,
     )
     json_path = workdir / "evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
-    pdf_path = workdir / "audit-pack.pdf"
-    render_audit_pack(pack, pdf_path, engine=pdf_engine)
     intoto_path = workdir / "attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
     typer.echo(f"evidence pack -> {json_path}")
     typer.echo(f"audit pack -> {pdf_path}")
     typer.echo(f"in-toto attestation -> {intoto_path}")
+
+
+def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
+    """Return the bytes of the audit PDF written beside ``pack_path``, if present.
+
+    The ``report`` and ``erasure`` commands write the audit PDF next to the
+    evidence json (``audit-pack.pdf`` / ``erasure-attestation.pdf``). When one is
+    present, ``sectum verify`` re-hashes it against the pack's bound ``pdf_ref``;
+    when absent, verification still proceeds from the json alone.
+    """
+    for name in ("audit-pack.pdf", "erasure-attestation.pdf"):
+        candidate = pack_path.parent / name
+        if candidate.exists():
+            return candidate.read_bytes()
+    return None
 
 
 @app.command()
@@ -712,11 +735,16 @@ def verify(
     except ValueError as error:
         typer.echo(f"not a valid evidence pack at {pack}: {error}", err=True)
         raise typer.Exit(code=3) from error
+    # Re-hash the audit PDF if it sits beside the pack (report/erasure write
+    # audit-pack.pdf / erasure-attestation.pdf next to the json); its hash is
+    # bound into the attested digest, so a swapped PDF fails verification.
+    pdf_bytes = _sibling_audit_pdf(pack)
     result = verify_pack(
         evidence,
         tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
         tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
         rekor_keyring=_rekor_keyring_override(rekor_key),
+        pdf_bytes=pdf_bytes,
     )
     for check in result.checks:
         typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
@@ -862,17 +890,22 @@ def erasure(
             },
         ),
     )
+    controls = control_mappings()
+    # Bind the audit PDF into the attested digest (see `report`).
+    pdf_path = workdir / "erasure-attestation.pdf"
+    pdf_ref = render_audit_pack_and_hash(
+        run, canonical_hash(substrate.manifest), controls, pdf_path
+    )
     pack = build_evidence_pack(
         run,
         substrate.manifest,
-        control_mappings=control_mappings(),
+        control_mappings=controls,
+        pdf_ref=pdf_ref,
         timestamper=_resolve_timestamper(loaded.evidence, None),
         transparency_log=_resolve_transparency_log(loaded.evidence, False),
     )
     json_path = workdir / "erasure-evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))
-    pdf_path = workdir / "erasure-attestation.pdf"
-    render_audit_pack(pack, pdf_path)
     intoto_path = workdir / "erasure-attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
 

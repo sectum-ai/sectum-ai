@@ -19,6 +19,7 @@ from sectum.spec import (
     Severity,
     Surface,
     canonical_hash,
+    sha256_hex,
 )
 
 
@@ -245,13 +246,28 @@ def test_tampering_with_control_mappings_fails_verification() -> None:
     assert any(not c.ok and "altered" in c.detail for c in result.checks)
 
 
-def test_repointing_the_pdf_ref_fails_verification() -> None:
-    # pdf_ref points at the human-readable audit pack; repointing it at an
-    # attacker-controlled PDF must break verification.
+def test_altering_the_bound_pdf_hash_fails_verification() -> None:
+    # pdf_ref is the SHA-256 of the audit PDF, bound into the attested digest;
+    # altering it (to match a different/forged PDF) must break verification.
     manifest = _manifest()
-    pack = build_evidence_pack(_run_result(manifest), manifest, pdf_ref="s3://acme/audit.pdf")
-    repointed = pack.model_copy(update={"pdf_ref": "s3://evil/forged.pdf"})
+    pack = build_evidence_pack(_run_result(manifest), manifest, pdf_ref=sha256_hex(b"genuine pdf"))
+    repointed = pack.model_copy(update={"pdf_ref": sha256_hex(b"forged pdf")})
     assert not verify_pack(repointed, manifest).passed
+
+
+def test_a_mutated_audit_pdf_fails_verification() -> None:
+    # The audit PDF's SHA-256 is bound into the attested digest, and verify
+    # re-hashes the PDF when its bytes are supplied: the genuine bytes pass the
+    # audit-pdf check, and any mutation fails it.
+    manifest = _manifest()
+    pdf_bytes = b"%PDF-1.4 genuine audit pack bytes"
+    pack = build_evidence_pack(_run_result(manifest), manifest, pdf_ref=sha256_hex(pdf_bytes))
+    ok = verify_pack(pack, manifest, pdf_bytes=pdf_bytes)
+    assert ok.passed
+    assert any(check.name == "audit-pdf" and check.ok for check in ok.checks)
+    bad = verify_pack(pack, manifest, pdf_bytes=pdf_bytes + b" tampered")
+    assert not bad.passed
+    assert any(check.name == "audit-pdf" and not check.ok for check in bad.checks)
 
 
 def test_stripping_the_rekor_proof_from_an_anchored_pack_fails() -> None:

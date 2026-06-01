@@ -5,6 +5,7 @@ system libraries). ADR-0002 keeps the renderer theme-pluggable; a richer,
 HTML-templated theme is a later refinement.
 """
 
+import io
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from sectum.evidence.chain import run_digest
 from sectum.evidence.controls import COVERAGE_DISCLAIMER
-from sectum.spec import ControlMapping, EvidencePack, Finding, FindingStatus
+from sectum.spec import ControlMapping, EvidencePack, Finding, FindingStatus, RunResult, sha256_hex
 
 
 class PdfEngine(StrEnum):
@@ -152,8 +153,14 @@ def _control_lines(mappings: tuple[ControlMapping, ...]) -> list[str]:
     ]
 
 
-def _render_reportlab(pack: EvidencePack, output: Path) -> None:
-    """Render an ``EvidencePack`` to an auditor-facing PDF via reportlab."""
+def _render_reportlab(pack: EvidencePack) -> bytes:
+    """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
+
+    Renders only digest-stable content (run digest, manifest hash, control
+    mappings, findings) - never the post-sign timestamp token - so the bytes are
+    a pure function of the pack's bound content and re-hash deterministically for
+    the ``pdf_ref`` binding (ADR-0016).
+    """
     styles = getSampleStyleSheet()
     heading = styles["Heading2"]
     body = styles["BodyText"]
@@ -190,32 +197,63 @@ def _render_reportlab(pack: EvidencePack, output: Path) -> None:
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
-        ("Timestamp token", pack.tsa_token or "none"),
     )
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in integrity
     ]
     flow.append(Paragraph(escape(_VERIFICATION_INSTRUCTION), body))
 
-    document = SimpleDocTemplate(str(output), pagesize=LETTER, title="Sectum AI Evidence Pack")
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(buffer, pagesize=LETTER, title="Sectum AI Evidence Pack")
     document.build(flow)
+    return buffer.getvalue()
 
 
 def render_audit_pack(
     pack: EvidencePack, output: Path, *, engine: PdfEngine = PdfEngine.REPORTLAB
-) -> None:
-    """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``.
+) -> bytes:
+    """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``; return its bytes.
 
     ``engine`` selects the renderer (the engineering spec, section 21). The
     default ``reportlab`` is pure Python and always available; ``weasyprint`` is
     the HTML/CSS-templated alternative and needs the ``weasyprint`` extra - it
     raises :class:`~sectum.spec.EvidenceError` with an install hint when the
-    extra is absent. Both engines render the same content.
+    extra is absent. Both engines render the same (digest-stable) content. The
+    returned bytes are exactly what was written to ``output``, so a caller can
+    hash them for the ``pdf_ref`` binding.
     """
     if engine is PdfEngine.WEASYPRINT:
         # Imported lazily so the base install never pulls in weasyprint.
         from sectum.evidence.pdf_weasyprint import render_weasyprint
 
-        render_weasyprint(pack, output)
-        return
-    _render_reportlab(pack, output)
+        data = render_weasyprint(pack)
+    else:
+        data = _render_reportlab(pack)
+    output.write_bytes(data)
+    return data
+
+
+def render_audit_pack_and_hash(
+    run_result: RunResult,
+    manifest_hash: str,
+    control_mappings: tuple[ControlMapping, ...],
+    output: Path,
+    *,
+    engine: PdfEngine = PdfEngine.REPORTLAB,
+) -> str:
+    """Render the audit pack to ``output`` and return the SHA-256 of its bytes.
+
+    Breaks the bind cycle: the audit PDF must be hashed *before* the pack is
+    signed (so ``pdf_ref`` can enter the attested digest), yet the renderer takes
+    a pack. The PDF renders only digest-stable content (no post-sign timestamp
+    token), so it is rendered here from a throwaway unsigned pack carrying just
+    the run, manifest hash, and control mappings; the written file re-hashes to
+    the returned digest, which the caller binds as ``pdf_ref``.
+    """
+    render_only = EvidencePack(
+        run_result=run_result,
+        manifest_hash=manifest_hash,
+        tsa_token="",
+        control_mappings=control_mappings,
+    )
+    return sha256_hex(render_audit_pack(render_only, output, engine=engine))
