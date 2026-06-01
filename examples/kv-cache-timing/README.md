@@ -32,24 +32,25 @@ across customers.
 *statistical* rather than plan/detect: the probe runs **24 paired
 trials per (owner, observer) tenant pair**, half with a primed prefix
 (the cache-hit condition) and half with an unrelated control prefix
-(the cache-miss baseline), then reports the **Cohen's d effect size**
-between the two latency distributions.
+(the cache-miss baseline), then runs a two-sided **Welch's t-test** on
+the two latency distributions and reports the t-statistic, degrees of
+freedom, p-value, a 95% confidence interval on the gap, and Cohen's d.
 
 1. **`sectum seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
 2. **`sectum probe --probe kv-cache-timing`** runs the timing trials
    against the demo config's fake model with `prefix_cache=true`
-   (the leaky condition Class 5 is built to catch). A confirmed
-   finding lands when the effect size crosses the **0.8 boundary**
-   pinned by the probe (the conventional "large effect" threshold);
-   a very large effect (≈5.0+) is reported as a high-confidence side
-   channel an attacker could exploit in production. The probe exits
-   `2` when it confirms at least one side channel — the success
-   signal on the leaky demo stack.
+   (the leaky condition Class 5 is built to catch). A finding is
+   confirmed only when the timing gap is **statistically significant**
+   (Welch t-test p < 0.01), **practically large** (Cohen's d ≥ 0.8),
+   and **directional** (the primed prefix is faster) — the spec §7
+   "avoid over-claiming" bar. The probe exits `2` when it confirms at
+   least one side channel — the success signal on the leaky demo stack.
 3. **`sectum report`** assembles the tamper-evident evidence pack
    (PDF + JSON + in-toto envelope). The audit-pack PDF carries the
-   per-pair effect sizes + the primed/control means so a reviewer
-   can sanity-check the statistical strength themselves.
+   per-pair t-statistic, p-value, confidence interval, effect size,
+   and primed/control means so a reviewer can sanity-check the
+   statistical strength themselves.
 4. **`sectum verify`** independently re-checks the pack's integrity.
 
 ## Run it
@@ -60,7 +61,7 @@ between the two latency distributions.
 
 Expect to see one timing finding per cross-tenant pair (12 pairs in
 the default 4-tenant scenario). The headline metric on page 1 of the
-PDF is the count of pairs that crossed the effect-size gate.
+PDF is the count of pairs that cleared the significance gate.
 
 ## What the report tells you
 
@@ -69,9 +70,10 @@ Each Class 5 finding carries:
 - the owning tenant + the observing tenant of the timing pair
 - the primed-prefix mean latency (cache-hit condition) in ms
 - the control-prefix mean latency (cache-miss baseline) in ms
-- the Cohen's d effect size — the standardised gap between the two
-- the surface (`INFERENCE_ENDPOINT`) + OWASP / ATLAS / NIST control
-  IDs the finding maps to
+- the Welch t-statistic, degrees of freedom, and p-value
+- the 95% confidence interval on the timing gap, and Cohen's d
+- the surface (`KV_CACHE`) + OWASP / ATLAS / NIST control IDs the
+  finding maps to
 
 The remediation pointer in the finding row names the standard
 counter-measure: per-tenant prefix-cache scoping (vLLM 0.5+'s
@@ -87,10 +89,10 @@ shared deployments.
   `huggingface` kind covers the local PEFT case, and a hosted-API
   adapter is the next surface the spec calls for.
 - **A statistical baseline against load.** A noisy production
-  endpoint may swamp the effect size even when the cache is leaky;
-  the probe's 24 trials + 0.8-d gate is calibrated for the in-memory
-  fake's clean noise floor. Production runs warrant more trials and
-  a re-baselined effect threshold.
+  endpoint may swamp the signal even when the cache is leaky; the
+  probe's 24 trials + (p < 0.01, d ≥ 0.8) gate is calibrated for the
+  in-memory fake's clean noise floor. Production runs warrant more
+  trials and a re-baselined threshold.
 - **Mitigation of the side channel.** Sectum verifies and attests;
   Class 5 findings point at the remediation, but the engineering
   team owns the prefix-cache scoping change in production.

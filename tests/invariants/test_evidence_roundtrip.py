@@ -221,7 +221,7 @@ def test_check_detail_strings_are_informative_on_happy_path() -> None:
         assert check.detail, f"check {check.name} returned an empty detail string"
 
 
-# --- the anchored digest binds the WHOLE pack, not just the run (ADR-0012) ---
+# --- the anchored digest binds the WHOLE pack, not just the run (ADR-0016) ---
 
 
 def test_tampering_with_control_mappings_fails_verification() -> None:

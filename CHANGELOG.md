@@ -64,10 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Detection hardening (zero false-positive / zero false-negative).** Four
   fixes to the leak-detection pipeline, the technical moat:
-  - The judge now confirms a semantic candidate only when the marker's whole
-    phrase appears as a contiguous token run, not when the observation merely
-    *covers* the marker's tokens in any order — a benign sentence reusing an
-    entity's words could previously be reported as a confirmed cross-tenant leak.
+  - The judge now confirms a semantic candidate only when the marker's tokens
+    appear *in order within a short span* (light paraphrase such as a single
+    interposed token is tolerated), not when the observation merely *covers* the
+    marker's tokens in any order — a benign sentence reusing an entity's words
+    could previously be reported as a confirmed cross-tenant leak.
   - The exact canary scan is case-, Unicode- (NFKC), and zero-width-insensitive,
     so a leaked `HARD_CANARY`/`SECRET_CANARY` that a surface re-cased, folded, or
     split with a zero-width character is no longer missed.
@@ -101,9 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Evidence packs are tamper-evident across their whole attested surface.** The
-  timestamp and Rekor anchors now bind the control mappings, the PDF reference,
-  and the manifest hash — not just the run record — so forging the compliance
-  claims or repointing the audit PDF makes `sectum verify` fail.
+  timestamp and Rekor anchors now bind the control mappings, the recorded PDF
+  reference, and the manifest hash — not just the run record — so forging the
+  compliance claims or altering the recorded PDF reference makes `sectum verify`
+  fail.
 - **Transparency-log anchoring cannot be silently downgraded.** A pack that was
   Rekor-anchored fails verification if its inclusion proof is stripped
   (`anchored_in_log` is bound into the digest).
