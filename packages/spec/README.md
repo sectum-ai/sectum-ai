@@ -17,6 +17,26 @@ pip install sectum-ai-spec
 Most users install the umbrella package [`sectum-ai`](https://pypi.org/project/sectum-ai/)
 instead, which pulls this in automatically.
 
+## JSON Schema
+
+Every model is also published as a standalone JSON Schema document under
+`sectum/spec/schemas/<Model>.schema.json` (shipped in the wheel). Each carries a
+`$schema` dialect (draft 2020-12) and a version-pinned `$id`
+(`https://schemas.sectum.ai/<schema_version>/<Model>.schema.json`), so external
+tooling can validate Sectum artifacts without importing Python:
+
+```python
+from sectum.spec import json_schemas
+from sectum.spec.schema import SCHEMA_DIR  # the committed, packaged artifacts
+
+finding_schema = json_schemas()["Finding"]
+```
+
+The Pydantic models are authoritative; the schemas are generated from them.
+Regenerate after a model change with `uv run python scripts/gen_schemas.py`
+(a test fails if a committed artifact drifts). The `schema_version` field
+versions the models — bump it for a backward-incompatible change, then regenerate.
+
 - Documentation: <https://docs.sectum.ai>
 - Source: <https://github.com/sectum-ai/sectum-ai>
 

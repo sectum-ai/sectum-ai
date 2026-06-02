@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "Surface": {
+      "description": "A place tenant data can live or leak (the engineering spec, section 23).",
+      "enum": [
+        "api",
+        "vector_db",
+        "rag_pipeline",
+        "prompt_logs",
+        "semantic_cache",
+        "kv_cache",
+        "agent_memory",
+        "agent_framework",
+        "mcp",
+        "model_adapter",
+        "eval_set",
+        "backup",
+        "search_index",
+        "tracing"
+      ],
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.2.0/Observation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A response or observation captured for a probe step.",
+  "properties": {
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "raw_response": {
+      "title": "Raw Response",
+      "type": "string"
+    },
+    "step_id": {
+      "title": "Step Id",
+      "type": "string"
+    },
+    "structured": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Structured"
+    },
+    "surface": {
+      "$ref": "#/$defs/Surface"
+    }
+  },
+  "required": [
+    "step_id",
+    "surface",
+    "raw_response"
+  ],
+  "title": "Observation",
+  "type": "object"
+}
