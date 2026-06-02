@@ -14,6 +14,7 @@ from sectum.adapters import (
     Capability,
     EvalSetAdapter,
     FakeAgent,
+    FakeBackup,
     FakeCache,
     FakeEvalSet,
     FakeMCP,
@@ -80,6 +81,7 @@ def _all_fakes() -> list[Adapter]:
         FakeMemory(),
         FakeSearchIndex(),
         FakeEvalSet(),
+        FakeBackup(),
     ]
 
 
@@ -106,6 +108,16 @@ def test_each_fake_belongs_to_the_expected_family() -> None:
     assert FakeMemory().family is AdapterFamily.MEMORY
     assert FakeSearchIndex().family is AdapterFamily.SEARCH_INDEX
     assert FakeEvalSet().family is AdapterFamily.EVAL_SET
+    assert FakeBackup().family is AdapterFamily.BACKUP
+
+
+def test_every_adapter_family_has_a_fake_under_the_contract_suite() -> None:
+    # No adapter family may ship without a fake exercised by the shared contract
+    # suite — the gap that let the Backup family (hiding place #7) land
+    # uncovered. This meta-test pins the invariant so a new family cannot.
+    covered = {adapter.family for adapter in _all_fakes()}
+    missing = sorted(family.value for family in AdapterFamily if family not in covered)
+    assert not missing, f"AdapterFamily values with no fake in _all_fakes(): {missing}"
 
 
 def test_isolated_vector_store_does_not_leak_across_tenants() -> None:

@@ -232,6 +232,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The backup surface is now covered everywhere, and a meta-test stops a new
+  adapter family from landing uncovered.** The `BackupAdapter` family (Class 11
+  hiding place #7) shipped but was skipped at every coverage seam: `FakeBackup`
+  now runs the shared adapter contract suite, `sectum adapters` lists it (with the
+  search-index and eval-set fakes, also previously absent), and `sectum erasure`
+  seeds and scans a `FakeBackup` so the backup surface is attested in the erasure
+  evidence pack (`adapter_versions`). A new contract meta-test asserts *every*
+  `AdapterFamily` has a fake under the suite, so the gap that let backup slip
+  cannot recur.
 - **Real embedding-provider sweep for the Class 2 per-model Retrieval-Pivot
   Rate.** `retrieval_pivot_rate_by_model` modelled embedding strength with a
   recall knob on the in-memory `FakeVectorStore`, and the CLI recorded it only
