@@ -150,6 +150,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **ADR-0019 records the job-runner decision; the adapters package declares its
+  direct dependencies.** [ADR-0019](docs/adr/0019-job-runner-abstraction.md)
+  resolves the spec §21 open decision — the engine binds to the `JobRunner`
+  protocol with local serial/thread runners and a distributed backend (Temporal /
+  Prefect) stays swappable — and reads the §13 "Async" wording as a thread pool
+  (a swap-ability test covers a custom runner dropping in). `sectum-ai-adapters`
+  now declares `pydantic` directly (used by `base.py`) and `httpx` in the
+  `phoenix` extra (used by the Phoenix adapter), rather than relying on transitive
+  resolution (§13 dependency discipline).
 - **All six build-plan phases now record ✅ Met.** With the `embedding_models`
   CLI wiring shipped, `PHASES.md` Phase 5 moves to Met (cited to the new full-CLI
   sweep E2E `test_full_cli_sweep_records_per_model_rpr` and the existing baseline
