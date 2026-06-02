@@ -137,6 +137,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **`docs/adapters.md` live-adapter narrative refreshed to the current set.** The
+  prose documented only the early adapters; it now covers the observability
+  adapters (Helicone, Datadog, generic OpenTelemetry) and their
+  attestable-with-caveat erasure behaviour for Class 11, the LangChain RAG
+  pipeline, the framework-native agents (LangGraph, CrewAI, AutoGen, OpenAI
+  Assistants, Anthropic tool-use), the HuggingFace LoRA model, and the HTTP MCP
+  client — as prose, cross-linked to `docs/configuration.md` for the full field
+  reference.
 - **Honest build status + repo trust fixes.** The README status note no longer
   overclaims "all six phases complete" — it mirrors `PHASES.md`, which is the
   authoritative gate record and is now published on the docs site
