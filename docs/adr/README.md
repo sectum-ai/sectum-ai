@@ -19,3 +19,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0009](0009-atlas-technique-review-process.md) | ATLAS technique IDs are validated against the live MITRE catalog before each release | Accepted |
 | [0016](0016-anchor-the-whole-pack.md) | Anchor the whole evidence pack, not just the run | Accepted |
 | [0017](0017-pdf-engine.md) | weasyprint is an optional audit-pack engine; reportlab stays the default | Accepted |
+| [0018](0018-embedding-provider-sweep.md) | Real embedding providers are opt-in extras; a deterministic hashing model is the default | Accepted |

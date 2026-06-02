@@ -35,6 +35,12 @@ encryption = ["cryptography>=43"]
 # Optional: the default reportlab renderer is pure Python with no system
 # libraries; weasyprint adds the pango/cairo system libraries.
 weasyprint = ["sectum-ai-evidence[weasyprint]"]
+# Real embedding providers for the Class 2 per-model RPR sweep (embedding_models:
+# ["st:all-mpnet-base-v2", ...]). Optional: the default hashing/recall sweep is
+# pure-Python. sentence-transformers runs locally (BYOC-safe); openai is a
+# hosted call. See packages/core/src/sectum/embeddings.py.
+sentence-transformers = ["sentence-transformers>=3"]
+openai = ["openai>=1.40"]
 
 [project.scripts]
 sectum = "sectum.cli.app:app"

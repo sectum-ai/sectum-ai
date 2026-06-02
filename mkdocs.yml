@@ -60,6 +60,7 @@ nav:
       - adr/0009-atlas-technique-review-process.md
       - adr/0016-anchor-the-whole-pack.md
       - adr/0017-pdf-engine.md
+      - adr/0018-embedding-provider-sweep.md
   - Maintainers:
       - Releasing: RELEASING.md
 

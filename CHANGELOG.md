@@ -187,6 +187,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Real embedding-provider sweep for the Class 2 per-model Retrieval-Pivot
+  Rate.** `retrieval_pivot_rate_by_model` modelled embedding strength with a
+  recall knob on the in-memory `FakeVectorStore`, and the CLI recorded it only
+  when the configured store *was* that fake — so the flagship "stronger
+  embeddings leak more" gradient (arXiv:2602.08668) vanished on a live POC. A new
+  provider-agnostic `EmbeddingModel` interface (`sectum.embeddings`) adds a
+  deterministic offline `HashingEmbedding` (the CI/demo default) plus opt-in
+  `SentenceTransformerEmbedding` (extra `sectum-ai[sentence-transformers]`, local
+  and BYOC-safe — the MiniLM-vs-mpnet research pair) and `OpenAIEmbedding` (extra
+  `sectum-ai[openai]`). `embedding_provider_sweep` embeds the corpus and benign
+  queries with each real model and retrieves by cosine, so the per-model rate
+  reflects the actual embeddings and is recorded for **any** vector store;
+  `embedding_models` entries resolve by prefix (`st:` / `openai:` / `hash-`), with
+  legacy `fake-*` names keeping the recall illustration (still gated to the
+  in-memory store). See [ADR-0018](docs/adr/0018-embedding-provider-sweep.md).
 - **The docker-compose integration tests now run in CI.** The
   `tests/integration/` suite exercises each live adapter's isolation contract
   against a real backend, but nothing ran it on CI — the default test job skips

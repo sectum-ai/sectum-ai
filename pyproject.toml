@@ -88,6 +88,14 @@ module = ["reportlab", "reportlab.*", "weasyprint", "weasyprint.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Optional embedding providers (the sentence-transformers / openai extras): not
+# installed in the default env and ship no/partial stubs. Treat as opaque; the
+# embeddings module's own API is fully typed.
+module = ["sentence_transformers", "sentence_transformers.*", "openai", "openai.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # redis-py's command return types are broad runtime unions; treat the client
 # as opaque - the Redis adapter's own API is fully typed.
 module = ["redis", "redis.*"]

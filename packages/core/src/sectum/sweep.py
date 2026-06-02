@@ -14,7 +14,10 @@ that use the in-memory store, so a live vector adapter's evidence pack carries
 no fake-derived per-model rates.
 """
 
+from collections.abc import Sequence
+
 from sectum.adapters.fakes import FakeVectorStore
+from sectum.embeddings import EmbeddingModel, cosine
 from sectum.probes import RagEntityBleedProbe
 from sectum.runner import StepResult, _payload_int, retrieval_pivot_rate
 from sectum.spec import Observation, Substrate, Surface
@@ -61,4 +64,44 @@ def embedding_model_sweep(substrate: Substrate, models: tuple[str, ...]) -> dict
             )
             results.append((step, probe.detect(step, observation, substrate)))
         rates[model] = retrieval_pivot_rate(results)
+    return rates
+
+
+def embedding_provider_sweep(
+    substrate: Substrate, models: Sequence[EmbeddingModel]
+) -> dict[str, float]:
+    """Run the Class 2 bleed probe under each *real* embedding model; return per-model RPR.
+
+    Unlike :func:`embedding_model_sweep` - a deterministic recall illustration on a
+    ``FakeVectorStore`` that is meaningful only for the in-memory fake - this embeds
+    every document and benign query with the model's real vectors and retrieves the
+    top-k by cosine over a single shared index across all tenants. The per-model
+    gradient therefore reflects the actual embeddings ("stronger embeddings leak
+    more"), so it is recorded for any configured stack, not only the fake.
+
+    Documents and queries are each embedded in one batch per model to keep a remote
+    provider to two calls per model.
+    """
+    probe = RagEntityBleedProbe()
+    steps = probe.plan(substrate)
+    documents = list(substrate.documents)
+    rates: dict[str, float] = {}
+    for model in models:
+        document_vectors = model.embed([f"{doc.title} {doc.content}" for doc in documents])
+        index = list(zip(documents, document_vectors, strict=True))
+        query_vectors = model.embed([step.payload["query"] for step in steps])
+        results: list[StepResult] = []
+        for step, query_vector in zip(steps, query_vectors, strict=True):
+            k = _payload_int(step, "k", "5")
+            ranked = sorted(
+                ((cosine(query_vector, vector), doc) for doc, vector in index),
+                key=lambda scored: (-scored[0], scored[1].doc_id),
+            )[:k]
+            observation = Observation(
+                step_id=step.step_id,
+                surface=Surface.VECTOR_DB,
+                raw_response="\n".join(doc.content for _, doc in ranked),
+            )
+            results.append((step, probe.detect(step, observation, substrate)))
+        rates[model.name] = retrieval_pivot_rate(results)
     return rates
