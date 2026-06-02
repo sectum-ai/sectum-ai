@@ -3,6 +3,9 @@
 This is the ``sectum.adapters`` namespace package (the engineering spec, section 11).
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _dist_version
+
 from sectum.adapters.base import (
     Adapter,
     AdapterFamily,
@@ -71,4 +74,19 @@ __all__ = [
     "TraceHit",
     "VectorHit",
     "VectorStoreAdapter",
+    "version",
 ]
+
+
+def version() -> str:
+    """Return the installed ``sectum-ai-adapters`` distribution version.
+
+    Stamped into ``RunResult.adapter_versions`` so an evidence pack attests the
+    version of the *adapters* distribution that produced it, not the core CLI's
+    (the engineering spec, section 8.2). Falls back to ``0.0.0+unknown`` in an
+    uninstalled / editable tree.
+    """
+    try:
+        return _dist_version("sectum-ai-adapters")
+    except PackageNotFoundError:  # pragma: no cover - only in an uninstalled tree
+        return "0.0.0+unknown"

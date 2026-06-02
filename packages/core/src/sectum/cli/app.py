@@ -32,6 +32,9 @@ from sectum.adapters import (
     FakeVectorStore,
     VectorStoreAdapter,
 )
+from sectum.adapters import (
+    version as _adapters_version,
+)
 from sectum.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum.config import (
     AdapterConfig,
@@ -108,6 +111,11 @@ try:
     __version__ = version("sectum-ai")
 except PackageNotFoundError:  # running from an uninstalled / editable tree
     __version__ = "0.0.0+unknown"
+
+# Adapters live in their own distribution (sectum-ai-adapters); stamp adapter
+# entries with that distribution's version so the pack attests the version of the
+# code that actually drove each surface, not the core CLI's.
+_ADAPTERS_VERSION = _adapters_version()
 
 _DEFAULT_WORKDIR = Path(".sectum")
 _DEFAULT_CONFIG = Path("sectum.yaml")
@@ -607,14 +615,14 @@ def probe(
         started_at=started,
         finished_at=finished,
         adapter_versions={
-            vector.name: __version__,
-            cache.name: __version__,
-            model.name: __version__,
-            mcp.name: __version__,
-            memory.name: __version__,
-            bundle.rag.name: __version__,
-            bundle.observability.name: __version__,
-            bundle.agent.name: __version__,
+            vector.name: _ADAPTERS_VERSION,
+            cache.name: _ADAPTERS_VERSION,
+            model.name: _ADAPTERS_VERSION,
+            mcp.name: _ADAPTERS_VERSION,
+            memory.name: _ADAPTERS_VERSION,
+            bundle.rag.name: _ADAPTERS_VERSION,
+            bundle.observability.name: _ADAPTERS_VERSION,
+            bundle.agent.name: _ADAPTERS_VERSION,
         },
         probe_versions={
             **{instance.id: __version__ for instance in suite},
@@ -961,14 +969,14 @@ def erasure(
         started_at=started,
         finished_at=finished,
         adapter_versions={
-            store.name: __version__,
-            obs.name: __version__,
-            memory.name: __version__,
-            cache.name: __version__,
-            model.name: __version__,
-            search.name: __version__,
-            evalset.name: __version__,
-            backup.name: __version__,
+            store.name: _ADAPTERS_VERSION,
+            obs.name: _ADAPTERS_VERSION,
+            memory.name: _ADAPTERS_VERSION,
+            cache.name: _ADAPTERS_VERSION,
+            model.name: _ADAPTERS_VERSION,
+            search.name: _ADAPTERS_VERSION,
+            evalset.name: _ADAPTERS_VERSION,
+            backup.name: _ADAPTERS_VERSION,
         },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,

@@ -52,6 +52,21 @@ def test_seed_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
     assert "unknown embedding model" in result.output
 
 
+def test_probe_stamps_the_adapters_distribution_version(tmp_path: Path) -> None:
+    # A run's adapter_versions must attest the sectum-ai-adapters distribution
+    # version (the code that drove each surface), resolved via adapters.version()
+    # — not the core CLI's hard-coded __version__.
+    from importlib.metadata import version as dist_version
+
+    from sectum.adapters import version as adapters_version
+
+    assert adapters_version() == dist_version("sectum-ai-adapters")
+    _seed_and_probe(tmp_path)
+    adapter_versions = json.loads((tmp_path / "run.json").read_text())["adapter_versions"]
+    assert adapter_versions
+    assert set(adapter_versions.values()) == {adapters_version()}
+
+
 def test_seed_writes_a_substrate(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--seed", "2026"])
     assert result.exit_code == 0
