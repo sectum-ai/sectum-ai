@@ -88,3 +88,21 @@ not a per-PR enforcement.
 - This ADR does not commit to any particular ATLAS version: the catalog is
   versioned, and the next release records the ATLAS revision it was
   validated against.
+- An **offline existence + format tripwire** (`tests/unit/test_atlas_ids.py`)
+  pins the set of IDs verified by the most recent sweep and rejects any malformed
+  ID (`AML.TOO24`) per PR. It closes the typo gap this ADR names while staying
+  offline, so it does **not** reintroduce the rejected network dependency: it
+  cannot judge renames or fit (that stays the manual release-time sweep), only
+  that every ID in use is well-formed and was verified in the log below.
+
+## Validation log
+
+- **2026-06-01** — swept every probe's `atlas_techniques` against the MISP galaxy
+  ATLAS mirror. All assigned IDs are present with unchanged canonical names:
+  `AML.T0020` (Poison Training Data), `AML.T0024` (Exfiltration via ML Inference
+  API), `AML.T0024.000` (Infer Training Data Membership), `AML.T0024.001` (Invert
+  ML Model), `AML.T0053` (LLM Plugin Compromise), `AML.T0057` (LLM Data Leakage).
+  No ID was retired or renamed and no newly-added technique was judged a better
+  fit. `AML.T0024.000` is confirmed valid — ATLAS sub-techniques are numbered
+  from `.000`, unlike MITRE ATT&CK. This verified set is pinned in
+  `tests/unit/test_atlas_ids.py`.
