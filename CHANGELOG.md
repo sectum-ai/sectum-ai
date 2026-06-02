@@ -232,6 +232,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI enforces the §15 per-package coverage floors.** A new CI step fails the
+  build if `core`, `probes`, or `evidence` drops below 85% line coverage
+  (`coverage report --include="packages/<pkg>/src/*" --fail-under=85`, reusing the
+  test step's `.coverage`). The gate was specified but previously unenforced;
+  current coverage is core 94.6% / probes 97.7% / evidence 91.1%.
 - **`adapter_versions` is stamped from the `sectum-ai-adapters` distribution.** A
   run's `adapter_versions` recorded the core CLI's `__version__` for every
   adapter; it now resolves the adapters distribution version via the new

@@ -40,6 +40,17 @@ jobs:
       - name: Tests
         run: uv run pytest -n auto --cov=sectum --cov-report=term-missing
 
+      # Per-package floors (the engineering spec, §15): core, probes, and evidence
+      # must each stay at or above 85% line coverage. Reuses the .coverage written
+      # by the Tests step; fails the build if any package regresses below the bar.
+      - name: Coverage floors (core / probes / evidence >= 85%)
+        run: |
+          for pkg in core probes evidence; do
+            echo "::group::coverage floor: $pkg"
+            uv run coverage report --include="packages/$pkg/src/*" --fail-under=85
+            echo "::endgroup::"
+          done
+
       - name: Example walkthroughs (e2e)
         run: uv run pytest -m e2e -q
         env:
