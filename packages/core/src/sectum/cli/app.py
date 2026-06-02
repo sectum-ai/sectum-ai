@@ -29,6 +29,7 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeSearchIndex,
     FakeVectorStore,
+    VectorStoreAdapter,
 )
 from sectum.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum.config import (
@@ -46,6 +47,7 @@ from sectum.config import (
     load_config,
 )
 from sectum.crypto import load_key_from_env, seal_bytes, unseal_bytes
+from sectum.embeddings import resolve_embedding_model
 from sectum.evidence import (
     PdfEngine,
     RekorTransparencyLog,
@@ -95,7 +97,7 @@ from sectum.spec import (
 )
 from sectum.substrate import build_substrate, default_scenario
 from sectum.suites import SUITES
-from sectum.sweep import embedding_model_sweep
+from sectum.sweep import embedding_model_sweep, embedding_provider_sweep
 
 # Source the version from the installed package metadata so every evidence pack
 # and audit PDF attests the real shipped version (it is stamped into
@@ -387,6 +389,29 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
+def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str, float]:
+    """Per-embedding-model Retrieval-Pivot Rate for the run, or ``{}`` if not applicable.
+
+    Needs two or more configured embedding models to be a comparison. Names that
+    resolve to *real* providers (``st:``/``openai:``/``hash-``) run the genuine
+    cosine sweep, which reflects the real embedding-strength gradient and is
+    therefore recorded for any vector store - this is what makes the "stronger
+    embeddings leak more" effect visible on a live stack. Legacy ``fake-*`` names
+    fall back to the deterministic recall illustration, which is meaningful only
+    for the in-memory ``FakeVectorStore`` and so is omitted from a live run's
+    evidence.
+    """
+    names = substrate.scenario.embedding_models
+    if len(names) <= 1:
+        return {}
+    real = [model for name in names if (model := resolve_embedding_model(name)) is not None]
+    if real:
+        return embedding_provider_sweep(substrate, real)
+    if isinstance(vector, FakeVectorStore):
+        return embedding_model_sweep(substrate, names)
+    return {}
+
+
 def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
     """Resolve a target tenant by display name, defaulting to the first tenant."""
     if name is None:
@@ -572,15 +597,10 @@ def probe(
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps) if bleed_steps else None,
-            # The sweep is a fake-substrate illustration of the embedding-strength
-            # effect, so it is recorded only for in-memory-store runs - a live
-            # vector adapter's evidence carries no fake-derived per-model rates.
-            retrieval_pivot_rate_by_model=(
-                embedding_model_sweep(substrate, substrate.scenario.embedding_models)
-                if isinstance(vector, FakeVectorStore)
-                and len(substrate.scenario.embedding_models) > 1
-                else {}
-            ),
+            # Real embedding providers (st:/openai:/hash-) record a genuine
+            # per-model gradient for any stack; legacy fake names fall back to the
+            # in-memory recall illustration. See _per_model_rpr.
+            retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
             per_probe_findings=_per_probe_counts(confirmed),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
         ),

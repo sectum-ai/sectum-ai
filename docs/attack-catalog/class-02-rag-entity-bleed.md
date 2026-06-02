@@ -27,13 +27,28 @@ on a shared index with no isolation, 0% on a per-tenant-namespace store.
 ## Embedding-model sweep
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
-Retrieval-Pivot Rate rises with embedding strength. When the run uses the in-memory store and a scenario lists more than one
-`embedding_models` entry, `sectum probe` runs the probe once per model and
-reports a per-model rate (`retrieval_pivot_rate_by_model`). The gradient is a
-fake-substrate illustration — embedding strength is modelled by a per-model
-retrieval recall, and a run that uses a live vector adapter records no per-model
-rates. Configuring real embedding providers (a later phase) makes the sweep
-reflect the actual models.
+Retrieval-Pivot Rate rises with embedding strength. When a scenario lists more
+than one `embedding_models` entry, `sectum probe` runs the probe once per model
+and reports a per-model rate (`retrieval_pivot_rate_by_model`).
+
+Each entry is resolved to an embedding model:
+
+- `st:<model>` — a local [sentence-transformers](https://www.sbert.net/) model
+  (opt-in extra `sectum-ai[sentence-transformers]`). The research pair is
+  `st:all-MiniLM-L6-v2` (weaker) vs `st:all-mpnet-base-v2` (stronger); sweeping
+  them reproduces the published gradient (arXiv:2602.08668). Runs locally, so no
+  data leaves the box (BYOC-safe).
+- `openai:<model>` — OpenAI embeddings (opt-in extra `sectum-ai[openai]`, key in
+  `OPENAI_API_KEY`). Sends the synthetic corpus to OpenAI, so it is not BYOC-safe.
+- `hash-<dim>` — a deterministic, offline hashing embedder for CI and demos.
+- `fake-*` — the legacy recall illustration (embedding strength modelled by a
+  per-model retrieval recall on the in-memory store).
+
+With **real** providers (`st:`/`openai:`/`hash-`) the per-model rate comes from
+actual cosine retrieval over the embedded corpus, so it is recorded for any
+configured stack — the "stronger embeddings leak more" gradient no longer
+vanishes off the in-memory fake. The legacy `fake-*` recall illustration is
+recorded only for an in-memory-store run.
 
 ## Status
 

@@ -1,11 +1,17 @@
 """Tests for the Class 2 embedding-model sweep (the engineering spec, section 7)."""
 
+from sectum.adapters import FakeVectorStore
 from sectum.baseline import compare_metrics
-from sectum.spec import RunMetrics
+from sectum.cli.app import _per_model_rpr
+from sectum.spec import RunMetrics, Scenario
 from sectum.substrate import build_substrate, default_scenario
 from sectum.sweep import embedding_model_sweep, model_recall
 
 _MODELS = ("fake-mini", "fake-base", "fake-strong")
+
+
+def _scenario_with_models(*models: str, seed: int = 2026) -> Scenario:
+    return default_scenario(seed=seed).model_copy(update={"embedding_models": models})
 
 
 def test_sweep_reports_a_rate_per_model() -> None:
@@ -45,3 +51,24 @@ def test_embedding_model_swap_is_flagged_as_a_regression() -> None:
     baseline = RunMetrics(retrieval_pivot_rate_by_model=weak)
     current = RunMetrics(retrieval_pivot_rate_by_model=strong)
     assert compare_metrics(baseline, current).regressed
+
+
+def test_per_model_rpr_uses_real_providers_even_on_a_non_fake_intent() -> None:
+    # Two real (hashing) providers -> the genuine cosine sweep, recorded whatever
+    # the production store is. This is the P5 fix: the per-model gradient no longer
+    # vanishes off the in-memory fake.
+    substrate = build_substrate(_scenario_with_models("hash-32", "hash-256"))
+    rates = _per_model_rpr(substrate, FakeVectorStore())
+    assert set(rates) == {"hash-32", "hash-256"}
+    assert rates["hash-32"] < rates["hash-256"]
+
+
+def test_per_model_rpr_falls_back_to_the_recall_illustration_for_fake_names() -> None:
+    substrate = build_substrate(_scenario_with_models(*_MODELS))
+    rates = _per_model_rpr(substrate, FakeVectorStore())
+    assert rates["fake-mini"] < rates["fake-base"] < rates["fake-strong"]
+
+
+def test_per_model_rpr_is_empty_for_a_single_model() -> None:
+    substrate = build_substrate(_scenario_with_models("hash-256"))
+    assert _per_model_rpr(substrate, FakeVectorStore()) == {}

@@ -40,6 +40,7 @@ Settings that drive substrate generation.
 |---|---|---|---|
 | `seed` | int | `2026` | Drives every deterministic generator. |
 | `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
+| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
 
