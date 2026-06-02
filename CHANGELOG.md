@@ -187,6 +187,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The docker-compose integration tests now run in CI.** The
+  `tests/integration/` suite exercises each live adapter's isolation contract
+  against a real backend, but nothing ran it on CI — the default test job skips
+  those tests when no backend is reachable, so the pgvector, Chroma, Weaviate,
+  Redis, and Phoenix surfaces went untested on every PR while the suite still
+  reported green. A dedicated **Integration** job brings the
+  [`compose.yaml`](compose.yaml) backends up and runs `pytest -m integration`
+  against them; the three backends without an in-container healthcheck (Chroma,
+  Weaviate, Phoenix) are gated by an explicit HTTP readiness poll so their
+  fixtures cannot silently *skip* and leave a surface untested while the job
+  passes. `CONTRIBUTING.md` documents the local workflow.
 - **Backup / snapshot surface for erasure verification — the seventh hiding
   place.** A new `BackupAdapter` family (`search`/`delete` over a backup or
   snapshot store) lets `ErasureProbe` attest a configured backup as a first-class

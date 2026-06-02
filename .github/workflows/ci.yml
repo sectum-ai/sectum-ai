@@ -60,3 +60,54 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           chmod +x /tmp/gitleaks
           /tmp/gitleaks dir . --no-banner --redact
+
+  integration:
+    name: Integration (docker-compose backends)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      # pgvector and redis ship in-container healthchecks, so --wait blocks until
+      # they are ready. chroma, weaviate, and phoenix do not, so they are started
+      # separately and gated by an HTTP readiness poll below — without it their
+      # fixtures would silently *skip* (not fail) and the surface would go
+      # untested while the job still passed.
+      - name: Start backends with healthchecks
+        run: docker compose up -d --wait pgvector redis
+
+      - name: Start HTTP backends
+        run: docker compose up -d chroma weaviate phoenix
+
+      - name: Wait for HTTP backends to be ready
+        run: |
+          wait_for() {
+            local name="$1" url="$2"
+            for _ in $(seq 1 90); do
+              if curl -sSf -o /dev/null "$url"; then echo "ready: $name"; return 0; fi
+              sleep 2
+            done
+            echo "::error::$name not ready after 180s ($url)"
+            return 1
+          }
+          wait_for chroma   http://localhost:8001/api/v2/heartbeat
+          wait_for weaviate http://localhost:8082/v1/.well-known/ready
+          wait_for phoenix  http://localhost:6007/healthz
+
+      - name: Integration tests
+        run: uv run pytest -m integration -q
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100
+
+      - name: Stop backends
+        if: always()
+        run: docker compose down -v
