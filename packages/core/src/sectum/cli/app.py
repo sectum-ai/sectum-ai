@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from sectum.adapters import (
     AdapterRegistry,
     FakeAgent,
+    FakeBackup,
     FakeCache,
     FakeEvalSet,
     FakeMCP,
@@ -305,6 +306,9 @@ def list_adapters() -> None:
         FakeCache(),
         FakeModel(),
         FakeMemory(),
+        FakeSearchIndex(),
+        FakeEvalSet(),
+        FakeBackup(),
     ):
         registry.register(fake)
     typer.echo(f"{'ADAPTER':<22}{'FAMILY':<18}CAPABILITIES")
@@ -909,6 +913,7 @@ def erasure(
     _fake_soft_delete = bool((fake_default.model_extra or {}).get("soft_delete"))
     search = FakeSearchIndex(soft_delete=_fake_soft_delete)
     evalset = FakeEvalSet(soft_delete=_fake_soft_delete)
+    backup = FakeBackup(soft_delete=_fake_soft_delete)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -933,6 +938,7 @@ def erasure(
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
         search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
         evalset.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
+        backup.add(marker.owner_tenant_id, f"backup snapshot mentioning {marker.plaintext}")
 
     started = datetime.now(UTC)
     report = ErasureProbe(
@@ -944,6 +950,7 @@ def erasure(
         model=model,
         search_index=search,
         eval_set=evalset,
+        backup=backup,
     ).run(target)
     finished = datetime.now(UTC)
 
@@ -961,6 +968,7 @@ def erasure(
             model.name: __version__,
             search.name: __version__,
             evalset.name: __version__,
+            backup.name: __version__,
         },
         probe_versions={ErasureProbe.id: __version__},
         findings=report.findings,
