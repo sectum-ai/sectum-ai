@@ -32,6 +32,7 @@ class AdapterFamily(StrEnum):
     MEMORY = "memory"
     SEARCH_INDEX = "search_index"
     EVAL_SET = "eval_set"
+    BACKUP = "backup"
 
 
 class Capability(StrEnum):
@@ -401,6 +402,33 @@ class EvalSetAdapter(Adapter):
         Class 11 (erasure verification) uses this to model the upstream stack
         purging the tenant's fixtures from the eval set, then re-scans to confirm
         no residue remains.
+        """
+
+
+class BackupAdapter(Adapter):
+    """Adapter for a backup snapshot / export store derived from tenant data.
+
+    Backup snapshots are the seventh of the spec's "ten hiding places": a tenant's
+    data routinely survives a primary-store erasure inside a backup or export.
+    Class 11 uses this to confirm the data does not survive there after an erasure
+    request - and, because many backup stores are immutable or expose no
+    per-tenant delete, to record the surface as *attestable-with-caveat* (the
+    engineering spec, section 7, hiding place #7) when no programmatic purge exists.
+    """
+
+    family = AdapterFamily.BACKUP
+
+    @abstractmethod
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return the backup snippets in ``tenant``'s scope matching ``query``."""
+
+    @abstractmethod
+    def delete(self, tenant: UUID) -> None:
+        """Delete ``tenant``'s data from the backups.
+
+        Class 11 re-scans afterward to confirm no residue remains. A store with no
+        per-tenant purge raises ``ErasureUnsupported`` so the surface is recorded
+        as attestable-with-caveat rather than a false PASS.
         """
 
 

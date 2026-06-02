@@ -16,6 +16,9 @@ capabilities it needs and an adapter reports its isolation posture honestly.
 | Cache | Read and write cache entries; report key tenancy. |
 | Model | Train per-tenant adapters, run inference, and measure inference latency. |
 | Memory | Write and recall long-term agent-memory entries for a tenant. |
+| Search index | Search and delete a tenant's entries in a derived full-text index (Class 11). |
+| Eval set | Search and delete a tenant's golden eval-set fixtures (Class 11). |
+| Backup | Search and delete a tenant's data in a backup / snapshot store; reports attestable-with-caveat when no per-tenant purge exists (Class 11, hiding place #7). |
 
 ## Fakes and live adapters
 

@@ -1,6 +1,7 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
 from sectum.adapters import (
+    FakeBackup,
     FakeCache,
     FakeEvalSet,
     FakeMemory,
@@ -202,6 +203,60 @@ def test_erasure_reports_a_caveat_when_observability_has_no_erasure_api() -> Non
     ]
     assert caveat_findings
     assert all(finding.finding_id.startswith("erasure-caveat-") for finding in caveat_findings)
+
+
+def _seeded_backup(
+    substrate: Substrate, *, soft_delete: bool = False, no_erasure: bool = False
+) -> FakeBackup:
+    backup = FakeBackup(soft_delete=soft_delete, no_erasure=no_erasure)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            backup.add(marker.owner_tenant_id, f"backup snapshot mentioning {marker.plaintext}")
+    return backup
+
+
+def test_erasure_clears_backup_when_it_hard_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, backup=_seeded_backup(substrate)).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert Surface.BACKUP in surfaces
+    assert surfaces[Surface.BACKUP].markers_before > 0
+    assert surfaces[Surface.BACKUP].residual_after == 0
+    assert report.erased
+
+
+def test_erasure_fails_when_backup_soft_deletes() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(
+        substrate, vector=store, backup=_seeded_backup(substrate, soft_delete=True)
+    ).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.BACKUP].residual_after > 0
+    assert not report.erased
+    assert any(finding.surface is Surface.BACKUP for finding in report.findings)
+
+
+def test_erasure_reports_a_caveat_when_backup_has_no_erasure_api() -> None:
+    # An immutable backup with no per-tenant purge (hiding place #7) is the
+    # canonical caveat: data presumed retained, never a clean PASS, and distinct
+    # from a genuine residual failure.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(
+        substrate, vector=store, backup=_seeded_backup(substrate, no_erasure=True)
+    ).run(target)
+    backup = {surface.surface: surface for surface in report.surfaces}[Surface.BACKUP]
+    assert backup.markers_before > 0
+    assert backup.residual_after == backup.markers_before
+    assert not backup.erasure_supported
+    assert backup.attestable_with_caveat
+    assert not report.genuine_residual
+    assert backup in report.caveats
 
 
 def test_erasure_caveat_is_distinct_from_a_soft_delete_failure() -> None:

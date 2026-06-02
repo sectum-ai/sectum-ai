@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from sectum.adapters import (
+    BackupAdapter,
     CacheAdapter,
     EvalSetAdapter,
     MemoryAdapter,
@@ -149,6 +150,7 @@ class ErasureProbe:
         model: ModelAdapter | None = None,
         search_index: SearchIndexAdapter | None = None,
         eval_set: EvalSetAdapter | None = None,
+        backup: BackupAdapter | None = None,
     ) -> None:
         self._substrate = substrate
         self._vector = vector
@@ -158,6 +160,7 @@ class ErasureProbe:
         self._model = model
         self._search_index = search_index
         self._eval_set = eval_set
+        self._backup = backup
         self._documents = {document.doc_id: document for document in substrate.documents}
 
     def run(self, target: UUID) -> ErasureReport:
@@ -190,6 +193,8 @@ class ErasureProbe:
             plan.append((Surface.SEARCH_INDEX, self._scan_search, self._search_index.delete))
         if self._eval_set is not None:
             plan.append((Surface.EVAL_SET, self._scan_eval, self._eval_set.delete))
+        if self._backup is not None:
+            plan.append((Surface.BACKUP, self._scan_backup, self._backup.delete))
 
         for surface, scan, delete in plan:
             surface_result, surface_findings = self._erase_surface(
@@ -307,6 +312,17 @@ class ErasureProbe:
             marker
             for marker in markers
             if any(marker.plaintext in hit for hit in eval_set.search(target, marker.plaintext))
+        ]
+
+    def _scan_backup(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
+        """Return the target's hard-canary markers still present in the backups."""
+        if self._backup is None:
+            return []
+        backup = self._backup
+        return [
+            marker
+            for marker in markers
+            if any(marker.plaintext in hit for hit in backup.search(target, marker.plaintext))
         ]
 
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:

@@ -187,6 +187,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Backup / snapshot surface for erasure verification — the seventh hiding
+  place.** A new `BackupAdapter` family (`search`/`delete` over a backup or
+  snapshot store) lets `ErasureProbe` attest a configured backup as a first-class
+  surface: it scans the target tenant's hard canaries pre- and post-erasure like
+  every other surface, and — when the store exposes no per-tenant purge API (the
+  common immutable-snapshot case) — records it *attestable-with-caveat* rather
+  than a clean pass or a failure, exactly as the observability adapters do. Ships
+  with a `FakeBackup` (hard-delete, soft-delete, and no-erasure-API knobs) and
+  closes Class 11 hiding place #7 (the engineering spec, §7); only third-party
+  subprocessor residue (#8) now remains roadmap.
+- **Phase-acceptance record + model-swap regression E2E.** `PHASES.md` records
+  each build phase against its §14 acceptance criteria, and a new end-to-end test
+  exercises the Phase-5 acceptance bar — build the substrate, run the
+  embedding-model sweep with a weak then a strong model, and assert the stronger
+  model's higher Retrieval-Pivot Rate is flagged by `compare_metrics().regressed`
+  — so "baseline compare detects an injected regression" is enforced in CI rather
+  than asserted in prose.
 - **Named, sellable probe suites — `sectum probe --suite <name>`.** A *suite*
   fixes a probe set plus the compliance frameworks it provides evidence for, so an
   operator runs a named, control-mapped subset for a specific SKU instead of
