@@ -78,6 +78,23 @@ def test_load_config_parses_the_init_template_shape(tmp_path: Path) -> None:
     assert config.evidence.tsa_url == "https://freetsa.org/tsr"
 
 
+def test_load_config_parses_embedding_models_and_corpus_size(tmp_path: Path) -> None:
+    path = tmp_path / "sectum.yaml"
+    path.write_text(
+        "scenario:\n  seed: 7\n  corpus_size: 48\n  embedding_models: [hash-32, hash-256]\n"
+    )
+    config = load_config(path)
+    assert config.scenario.corpus_size == 48
+    assert config.scenario.embedding_models == ("hash-32", "hash-256")
+
+
+def test_load_config_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
+    path = tmp_path / "sectum.yaml"
+    path.write_text("scenario:\n  embedding_models: [minilm]\n")
+    with pytest.raises(ConfigError, match="unknown embedding model"):
+        load_config(path)
+
+
 def test_load_config_raises_when_the_file_is_missing(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="not found"):
         load_config(tmp_path / "missing.yaml")

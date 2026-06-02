@@ -18,6 +18,40 @@ def _seed_and_probe(workdir: Path) -> None:
     _runner.invoke(app, ["probe", "--workdir", str(workdir)])
 
 
+def test_full_cli_sweep_records_per_model_rpr(tmp_path: Path) -> None:
+    # The P5 wiring, end to end: a multi-embedding-model scenario makes `sectum
+    # probe` record a per-model Retrieval-Pivot Rate. Before embedding_models was
+    # threaded through config -> seed -> substrate it was always {} on real runs.
+    seed = _runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            "hash-32",
+            "--embedding-model",
+            "hash-256",
+        ],
+    )
+    assert seed.exit_code == 0
+    probe = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert probe.exit_code == 2  # the shared-index demo leaks
+    metrics = json.loads((tmp_path / "run.json").read_text())["metrics"]
+    rates = metrics["retrieval_pivot_rate_by_model"]
+    assert set(rates) == {"hash-32", "hash-256"}
+    # the stronger (higher-dim, fewer-collision) model surfaces more cross-tenant pivots
+    assert rates["hash-32"] < rates["hash-256"]
+
+
+def test_seed_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
+    result = _runner.invoke(
+        app, ["seed", "--workdir", str(tmp_path), "--embedding-model", "minilm"]
+    )
+    assert result.exit_code == 3
+    assert "unknown embedding model" in result.output
+
+
 def test_seed_writes_a_substrate(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--seed", "2026"])
     assert result.exit_code == 0

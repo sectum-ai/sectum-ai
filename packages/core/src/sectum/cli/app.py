@@ -47,7 +47,7 @@ from sectum.config import (
     load_config,
 )
 from sectum.crypto import load_key_from_env, seal_bytes, unseal_bytes
-from sectum.embeddings import resolve_embedding_model
+from sectum.embeddings import resolve_embedding_model, validate_embedding_spec
 from sectum.evidence import (
     PdfEngine,
     RekorTransparencyLog,
@@ -433,12 +433,35 @@ def seed(
         Path | None,
         typer.Option("--config", help="Read defaults from this sectum.yaml file."),
     ] = None,
+    embedding_model: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--embedding-model",
+            help=(
+                "Embedding model for the Class 2 per-model sweep; repeat for two or "
+                "more to record a per-model Retrieval-Pivot Rate. Overrides the config. "
+                "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Provision synthetic tenants, generate corpora, and plant canary markers."""
     loaded = load_config(config) if config is not None else SectumConfig()
     effective_seed = scenario_seed if scenario_seed is not None else loaded.scenario.seed
     effective_workdir = workdir if workdir is not None else loaded.workdir
-    substrate = build_substrate(default_scenario(seed=effective_seed))
+    if embedding_model:
+        for spec in embedding_model:
+            validate_embedding_spec(spec)  # ConfigError -> exit 3
+        embedding_models = tuple(embedding_model)
+    else:
+        embedding_models = loaded.scenario.embedding_models
+    substrate = build_substrate(
+        default_scenario(
+            seed=effective_seed,
+            corpus_size=loaded.scenario.corpus_size,
+            embedding_models=embedding_models,
+        )
+    )
     effective_workdir.mkdir(parents=True, exist_ok=True)
     path = _write_substrate(substrate, effective_workdir, _resolve_manifest_key(loaded.security))
     typer.echo(
