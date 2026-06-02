@@ -150,6 +150,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **All six build-plan phases now record ✅ Met.** With the `embedding_models`
+  CLI wiring shipped, `PHASES.md` Phase 5 moves to Met (cited to the new full-CLI
+  sweep E2E `test_full_cli_sweep_records_per_model_rpr` and the existing baseline
+  regression tests), and its follow-on note marks P5 shipped. The README status
+  note drops the "one criterion still being closed" caveat — pre-alpha now
+  reflects API maturity, not missing phases — and still points to `PHASES.md` as
+  the authoritative gate record.
 - **`docs/adapters.md` live-adapter narrative refreshed to the current set.** The
   prose documented only the early adapters; it now covers the observability
   adapters (Helicone, Datadog, generic OpenTelemetry) and their

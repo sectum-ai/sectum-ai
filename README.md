@@ -6,16 +6,15 @@ probes from each tenant's session, and detects cross-tenant data leakage across
 every surface — producing tamper-evident, control-mapped evidence that an
 auditor accepts.
 
-> **Status: pre-alpha.** The Class 1–11 attack catalog and the tamper-evident
-> evidence chain (Class 12) ship, alongside the marker substrate, the
-> leak-detection pipeline, the adapter SDK (live adapters for vector stores,
-> caches, observability, RAG, agents, and MCP, exercised by a docker-compose
-> integration-CI job), the probe interface, the regression-baseline engine, the
-> `sectum` CLI, a mkdocs documentation site, and the threat model. Of the six
-> build-plan phases (the spec, §14), one acceptance criterion is still being
-> closed — the **full-CLI embedding-model-swap regression path** (Phase 5),
-> tracked by follow-on **P5**. [`PHASES.md`](PHASES.md) is the authoritative,
-> per-phase gate record — trust it over this headline.
+> **Status: pre-alpha.** All six build-plan phases (the spec, §14) have met their
+> acceptance criteria: the marker substrate, the leak-detection pipeline, the
+> Class 1–11 attack catalog, the tamper-evident evidence chain (Class 12), the
+> adapter SDK (live adapters for vector stores, caches, observability, RAG,
+> agents, and MCP, exercised by a docker-compose integration-CI job), the probe
+> interface, the regression-baseline engine, the `sectum` CLI, a mkdocs
+> documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
+> authoritative, per-phase gate record (with the test/example that enforces each
+> criterion). Pre-alpha reflects API maturity, not missing phases.
 
 ## The problem
 
