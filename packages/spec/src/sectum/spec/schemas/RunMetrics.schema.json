@@ -1,0 +1,62 @@
+{
+  "$id": "https://schemas.sectum.ai/0.2.0/RunMetrics.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Aggregate metrics for a run (the engineering spec, section 9).",
+  "properties": {
+    "confirmed_findings": {
+      "default": 0,
+      "title": "Confirmed Findings",
+      "type": "integer"
+    },
+    "erasure_caveats": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Erasure Caveats",
+      "type": "object"
+    },
+    "erasure_residue": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Erasure Residue",
+      "type": "object"
+    },
+    "per_probe_findings": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Per Probe Findings",
+      "type": "object"
+    },
+    "retrieval_pivot_rate": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Pivot Rate"
+    },
+    "retrieval_pivot_rate_by_model": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Retrieval Pivot Rate By Model",
+      "type": "object"
+    },
+    "side_channel_effect_sizes": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Side Channel Effect Sizes",
+      "type": "object"
+    }
+  },
+  "title": "RunMetrics",
+  "type": "object"
+}

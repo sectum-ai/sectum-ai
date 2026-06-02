@@ -1,0 +1,394 @@
+{
+  "$defs": {
+    "ControlMapping": {
+      "additionalProperties": false,
+      "description": "A mapping from findings to a compliance framework's controls.",
+      "properties": {
+        "assertion": {
+          "title": "Assertion",
+          "type": "string"
+        },
+        "control_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Control Ids",
+          "type": "array"
+        },
+        "framework": {
+          "title": "Framework",
+          "type": "string"
+        }
+      },
+      "required": [
+        "framework",
+        "control_ids",
+        "assertion"
+      ],
+      "title": "ControlMapping",
+      "type": "object"
+    },
+    "Finding": {
+      "additionalProperties": false,
+      "description": "A detected cross-tenant leakage result (the engineering spec, section 9).\n\nFrozen like every other aggregate model. The detection pipeline classifies\neach finding as confirmed or unverified - the false-positive control (the\nengineering spec, section 6.4) - when it constructs the finding.",
+      "properties": {
+        "atlas": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Atlas",
+          "type": "array"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "evidence_span": {
+          "default": "",
+          "title": "Evidence Span",
+          "type": "string"
+        },
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "marker_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Marker Id"
+        },
+        "nist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Nist",
+          "type": "array"
+        },
+        "observed_in_tenant_id": {
+          "format": "uuid",
+          "title": "Observed In Tenant Id",
+          "type": "string"
+        },
+        "observed_in_user_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed In User Id"
+        },
+        "owasp_llm": {
+          "default": "",
+          "title": "Owasp Llm",
+          "type": "string"
+        },
+        "owner_tenant_id": {
+          "format": "uuid",
+          "title": "Owner Tenant Id",
+          "type": "string"
+        },
+        "owner_user_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner User Id"
+        },
+        "probe_id": {
+          "title": "Probe Id",
+          "type": "string"
+        },
+        "remediation_pointer": {
+          "default": "",
+          "title": "Remediation Pointer",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "status": {
+          "$ref": "#/$defs/FindingStatus"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        }
+      },
+      "required": [
+        "finding_id",
+        "probe_id",
+        "severity",
+        "confidence",
+        "status",
+        "owner_tenant_id",
+        "observed_in_tenant_id",
+        "surface"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "FindingStatus": {
+      "description": "Whether a finding is manifest-confirmed or merely a candidate.",
+      "enum": [
+        "confirmed",
+        "unverified"
+      ],
+      "title": "FindingStatus",
+      "type": "string"
+    },
+    "RunMetrics": {
+      "additionalProperties": false,
+      "description": "Aggregate metrics for a run (the engineering spec, section 9).",
+      "properties": {
+        "confirmed_findings": {
+          "default": 0,
+          "title": "Confirmed Findings",
+          "type": "integer"
+        },
+        "erasure_caveats": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Erasure Caveats",
+          "type": "object"
+        },
+        "erasure_residue": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Erasure Residue",
+          "type": "object"
+        },
+        "per_probe_findings": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Per Probe Findings",
+          "type": "object"
+        },
+        "retrieval_pivot_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Pivot Rate"
+        },
+        "retrieval_pivot_rate_by_model": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Retrieval Pivot Rate By Model",
+          "type": "object"
+        },
+        "side_channel_effect_sizes": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Side Channel Effect Sizes",
+          "type": "object"
+        }
+      },
+      "title": "RunMetrics",
+      "type": "object"
+    },
+    "RunResult": {
+      "additionalProperties": false,
+      "description": "The canonical record of one probe run (the engineering spec, section 9).",
+      "properties": {
+        "adapter_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Adapter Versions",
+          "type": "object"
+        },
+        "findings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "finished_at": {
+          "format": "date-time",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "manifest_hash": {
+          "title": "Manifest Hash",
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/$defs/RunMetrics"
+        },
+        "probe_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Probe Versions",
+          "type": "object"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "scenario_hash": {
+          "title": "Scenario Hash",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "0.2.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "scenario_hash",
+        "manifest_hash",
+        "started_at",
+        "finished_at"
+      ],
+      "title": "RunResult",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Finding severity levels.",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Surface": {
+      "description": "A place tenant data can live or leak (the engineering spec, section 23).",
+      "enum": [
+        "api",
+        "vector_db",
+        "rag_pipeline",
+        "prompt_logs",
+        "semantic_cache",
+        "kv_cache",
+        "agent_memory",
+        "agent_framework",
+        "mcp",
+        "model_adapter",
+        "eval_set",
+        "backup",
+        "search_index",
+        "tracing"
+      ],
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.2.0/EvidencePack.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A signed, control-mapped evidence bundle (the engineering spec, section 8).",
+  "properties": {
+    "anchored_in_log": {
+      "default": false,
+      "title": "Anchored In Log",
+      "type": "boolean"
+    },
+    "control_mappings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ControlMapping"
+      },
+      "title": "Control Mappings",
+      "type": "array"
+    },
+    "manifest_hash": {
+      "title": "Manifest Hash",
+      "type": "string"
+    },
+    "pdf_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pdf Ref"
+    },
+    "rekor_proof": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rekor Proof"
+    },
+    "run_result": {
+      "$ref": "#/$defs/RunResult"
+    },
+    "schema_version": {
+      "default": "0.2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tsa_token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tsa Token"
+    }
+  },
+  "required": [
+    "run_result",
+    "manifest_hash"
+  ],
+  "title": "EvidencePack",
+  "type": "object"
+}

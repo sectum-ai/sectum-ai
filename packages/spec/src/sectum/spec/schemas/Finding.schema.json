@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "FindingStatus": {
+      "description": "Whether a finding is manifest-confirmed or merely a candidate.",
+      "enum": [
+        "confirmed",
+        "unverified"
+      ],
+      "title": "FindingStatus",
+      "type": "string"
+    },
+    "Severity": {
+      "description": "Finding severity levels.",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Surface": {
+      "description": "A place tenant data can live or leak (the engineering spec, section 23).",
+      "enum": [
+        "api",
+        "vector_db",
+        "rag_pipeline",
+        "prompt_logs",
+        "semantic_cache",
+        "kv_cache",
+        "agent_memory",
+        "agent_framework",
+        "mcp",
+        "model_adapter",
+        "eval_set",
+        "backup",
+        "search_index",
+        "tracing"
+      ],
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.2.0/Finding.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A detected cross-tenant leakage result (the engineering spec, section 9).\n\nFrozen like every other aggregate model. The detection pipeline classifies\neach finding as confirmed or unverified - the false-positive control (the\nengineering spec, section 6.4) - when it constructs the finding.",
+  "properties": {
+    "atlas": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Atlas",
+      "type": "array"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "evidence_span": {
+      "default": "",
+      "title": "Evidence Span",
+      "type": "string"
+    },
+    "finding_id": {
+      "title": "Finding Id",
+      "type": "string"
+    },
+    "marker_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Marker Id"
+    },
+    "nist": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Nist",
+      "type": "array"
+    },
+    "observed_in_tenant_id": {
+      "format": "uuid",
+      "title": "Observed In Tenant Id",
+      "type": "string"
+    },
+    "observed_in_user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed In User Id"
+    },
+    "owasp_llm": {
+      "default": "",
+      "title": "Owasp Llm",
+      "type": "string"
+    },
+    "owner_tenant_id": {
+      "format": "uuid",
+      "title": "Owner Tenant Id",
+      "type": "string"
+    },
+    "owner_user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner User Id"
+    },
+    "probe_id": {
+      "title": "Probe Id",
+      "type": "string"
+    },
+    "remediation_pointer": {
+      "default": "",
+      "title": "Remediation Pointer",
+      "type": "string"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "status": {
+      "$ref": "#/$defs/FindingStatus"
+    },
+    "surface": {
+      "$ref": "#/$defs/Surface"
+    }
+  },
+  "required": [
+    "finding_id",
+    "probe_id",
+    "severity",
+    "confidence",
+    "status",
+    "owner_tenant_id",
+    "observed_in_tenant_id",
+    "surface"
+  ],
+  "title": "Finding",
+  "type": "object"
+}

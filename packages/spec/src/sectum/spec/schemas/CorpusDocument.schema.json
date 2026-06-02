@@ -1,0 +1,66 @@
+{
+  "$id": "https://schemas.sectum.ai/0.2.0/CorpusDocument.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One synthetic document in a tenant's corpus (the engineering spec, section 6.2).",
+  "properties": {
+    "content": {
+      "title": "Content",
+      "type": "string"
+    },
+    "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+    },
+    "doc_type": {
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "marker_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Marker Ids",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Metadata",
+      "type": "object"
+    },
+    "owner_user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner User Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "doc_id",
+    "tenant_id",
+    "doc_type",
+    "title",
+    "content"
+  ],
+  "title": "CorpusDocument",
+  "type": "object"
+}
