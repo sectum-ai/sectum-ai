@@ -40,8 +40,10 @@ post-Phase-5 hardening, observability / tracing, agent / long-term memory,
 semantic / application cache, model / fine-tune adapter, derived search index,
 and eval golden set. `ErasureProbe` accepts a vector store plus optional
 observability, memory, cache, model, search-index, and eval-set adapters, scans
-each independently, and reports a per-surface verdict. The remaining hiding
-places — backup snapshots and third-party subprocessor residue — follow as their
-adapter families gain a `delete` primitive (subprocessor residue is
-attestable-with-caveat). Walkthrough:
+each independently, and reports a per-surface verdict. A `BackupAdapter` family
+(hiding place #7) also ships: `ErasureProbe` attests a configured backup /
+snapshot store, recording it *attestable-with-caveat* when the store exposes no
+per-tenant erasure API (the common immutable-snapshot case). The remaining hiding
+place — third-party subprocessor residue — is attestable-with-caveat and follows
+as its adapter family lands. Walkthrough:
 [`examples/erasure-attestation`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/erasure-attestation).

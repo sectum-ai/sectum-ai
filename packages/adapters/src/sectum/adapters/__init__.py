@@ -9,6 +9,7 @@ from sectum.adapters.base import (
     AdapterRegistry,
     AgentAdapter,
     AgentResult,
+    BackupAdapter,
     CacheAdapter,
     Capability,
     EvalSetAdapter,
@@ -26,6 +27,7 @@ from sectum.adapters.base import (
 )
 from sectum.adapters.fakes import (
     FakeAgent,
+    FakeBackup,
     FakeCache,
     FakeEvalSet,
     FakeMCP,
@@ -43,10 +45,12 @@ __all__ = [
     "AdapterRegistry",
     "AgentAdapter",
     "AgentResult",
+    "BackupAdapter",
     "CacheAdapter",
     "Capability",
     "EvalSetAdapter",
     "FakeAgent",
+    "FakeBackup",
     "FakeCache",
     "FakeEvalSet",
     "FakeMCP",

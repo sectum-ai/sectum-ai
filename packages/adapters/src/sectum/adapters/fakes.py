@@ -17,6 +17,7 @@ from uuid import UUID
 from sectum.adapters.base import (
     AgentAdapter,
     AgentResult,
+    BackupAdapter,
     CacheAdapter,
     Capability,
     EvalSetAdapter,
@@ -729,3 +730,47 @@ class FakeEvalSet(EvalSetAdapter):
         if self._soft_delete:
             return
         self._entries.pop(tenant, None)
+
+
+class FakeBackup(BackupAdapter):
+    """A deterministic in-memory backup / snapshot store.
+
+    Backup snapshots are the seventh of the spec's "ten hiding places". With
+    ``no_erasure=True`` a ``delete`` raises ``ErasureUnsupported`` - the common
+    case of an immutable backup or one with no per-tenant purge, which Class 11
+    records as *attestable-with-caveat* (data presumed retained). With
+    ``soft_delete=True`` a ``delete`` is acknowledged but leaves the snapshot in
+    place - the residue Class 11 is built to catch. Both default to off.
+    """
+
+    def __init__(
+        self, name: str = "fake-backup", *, soft_delete: bool = False, no_erasure: bool = False
+    ) -> None:
+        capabilities = {Capability.TEXT_SEARCH}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
+        self._soft_delete = soft_delete
+        self._no_erasure = no_erasure
+        self._snapshots: dict[UUID, list[str]] = {}
+
+    def add(self, tenant: UUID, text: str) -> None:
+        """Add a backup snapshot entry for ``tenant`` (test helper; not the interface)."""
+        self._snapshots.setdefault(tenant, []).append(text)
+
+    def search(self, tenant: UUID, query: str) -> list[str]:
+        """Return ``tenant``'s backup snippets whose tokens overlap ``query``."""
+        query_tokens = _tokens(query)
+        return [text for text in self._snapshots.get(tenant, []) if query_tokens & _tokens(text)]
+
+    def delete(self, tenant: UUID) -> None:
+        if self._no_erasure:
+            raise ErasureUnsupported(
+                "the backup store exposes no per-tenant erasure API; data is "
+                "presumed retained until the snapshot ages out"
+            )
+        # A soft-delete backup acknowledges the request but keeps the snapshot -
+        # the residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
+        self._snapshots.pop(tenant, None)
