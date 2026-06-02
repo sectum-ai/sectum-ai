@@ -10,12 +10,10 @@ vulnerabilities.** Public disclosure puts users at risk.
 
 Report privately, by either route:
 
-- Email **security@sectum.ai**. Encrypt sensitive reports with our PGP key.
-  PGP key fingerprint: `0000 0000 0000 0000 0000  0000 0000 0000 0000 0000`
-  (Phase 0 placeholder — the production key will be published here and at
-  `https://sectum.ai/.well-known/security.txt`).
-- Or use GitHub's private vulnerability reporting on this repository
-  ("Report a vulnerability" under the **Security** tab).
+- **Preferred:** use GitHub's private vulnerability reporting on this repository
+  ("Report a vulnerability" under the **Security** tab). It is encrypted, needs no
+  key exchange, and threads the fix and advisory in one place.
+- Or email **security@sectum.ai**.
 
 Please include: the affected version or commit, a description of the issue,
 steps to reproduce, and any proof-of-concept. Do not include real customer data.
