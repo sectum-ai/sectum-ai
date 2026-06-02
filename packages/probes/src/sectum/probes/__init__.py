@@ -6,7 +6,7 @@ This is the ``sectum.probes`` namespace package (the engineering spec, section
 
 from sectum.probes.agent_framework_hijack import AgentFrameworkHijackProbe
 from sectum.probes.agent_tool_hijack import AgentToolHijackProbe
-from sectum.probes.base import Probe, ProbeRegistry
+from sectum.probes.base import Probe, ProbeRegistry, load_probe_manifest
 from sectum.probes.detection import (
     DetectingProbe,
     DetectionPipeline,
@@ -71,4 +71,5 @@ __all__ = [
     "confirmed_findings",
     "dedupe_findings",
     "is_cross_principal",
+    "load_probe_manifest",
 ]
