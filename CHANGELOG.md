@@ -187,6 +187,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Named, sellable probe suites — `sectum probe --suite <name>`.** A *suite*
+  fixes a probe set plus the compliance frameworks it provides evidence for, so an
+  operator runs a named, control-mapped subset for a specific SKU instead of
+  hand-picking probes. Ships `soc2-tenant-isolation` (the curated cross-tenant
+  isolation checks → SOC 2 CC6.1/CC6.6/CC6.7, ISO 27001 A.8.3/A.8.12) and
+  `owasp-llm08` (the full catalog). `--suite` and `--probe` are mutually exclusive;
+  an unknown suite exits `3`. Suite definitions live in `sectum.suites`, their
+  probe sets validated against the live catalog. New `docs/skus.md` maps the four
+  SKUs (Erasure Attestation, SOC 2 pack, Continuous Verification, Open Sectum) to
+  their commands and the OSS-vs-Cloud boundary.
+- **An offline ATLAS-ID tripwire guards the manual technique-review gate.** Every
+  probe's `atlas_techniques` were re-validated against the MISP galaxy ATLAS mirror
+  (all current; `AML.T0024.000`/`.001` are valid ATLAS sub-techniques);
+  `tests/unit/test_atlas_ids.py` now pins the verified set and rejects a malformed
+  or not-yet-swept id per PR, complementing ADR-0009's manual release-time sweep
+  without the network dependency that ADR rejected.
 - **Every probe now ships a `probe.yaml` manifest (the engineering spec, §7.0).**
   Each of the 13 probes carries a declarative manifest beside its module — id,
   name, OWASP/ATLAS/NIST mappings, surfaces, required adapters, and a runnable

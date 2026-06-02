@@ -94,6 +94,7 @@ from sectum.spec import (
     canonical_hash,
 )
 from sectum.substrate import build_substrate, default_scenario
+from sectum.suites import SUITES
 from sectum.sweep import embedding_model_sweep
 
 # Source the version from the installed package metadata so every evidence pack
@@ -430,6 +431,10 @@ def probe(
     only: Annotated[
         str | None, typer.Option("--probe", help="Run only the probe with this id.")
     ] = None,
+    suite_name: Annotated[
+        str | None,
+        typer.Option("--suite", help="Run a named, control-mapped probe suite (see docs/skus.md)."),
+    ] = None,
     config: Annotated[
         Path | None,
         typer.Option("--config", help="Read adapters and workdir from this sectum.yaml file."),
@@ -466,6 +471,19 @@ def probe(
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
     suite = _build_suite(build_detection_providers(loaded.detection))
     run_kv_timing = True
+    if only is not None and suite_name is not None:
+        typer.echo("pass at most one of --probe and --suite", err=True)
+        raise typer.Exit(code=3)
+    if suite_name is not None:
+        spec = SUITES.get(suite_name)
+        if spec is None:
+            typer.echo(
+                f"unknown suite '{suite_name}'; available: {', '.join(sorted(SUITES))}", err=True
+            )
+            raise typer.Exit(code=3)
+        suite = tuple(instance for instance in suite if instance.id in spec.probe_ids)
+        run_kv_timing = spec.include_kv_timing
+        typer.echo(f"suite {spec.name}: {', '.join(spec.frameworks)}", err=True)
     if only is not None:
         available = [instance.id for instance in suite] + [KvCacheTimingProbe.id]
         if only not in available:
