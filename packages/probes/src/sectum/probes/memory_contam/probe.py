@@ -19,7 +19,7 @@ class MemoryContamProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0057",)
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.AGENT_MEMORY,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("memory",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per hard canary: write it to its owner, recall from foreign principals.

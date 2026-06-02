@@ -25,7 +25,7 @@ class AgentToolHijackProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MCP,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("mcp",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per hard canary, a direct and a token-bearing MCP lookup from foreign principals.

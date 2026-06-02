@@ -12,4 +12,5 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - rag_pipeline
-requires_adapters: []
+requires_adapters:
+- rag

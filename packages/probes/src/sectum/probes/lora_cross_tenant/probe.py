@@ -21,7 +21,7 @@ class LoraCrossTenantProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0024.000", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MODEL_ADAPTER,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("model",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per hard canary: train its owning principal's adapter, infer as foreigners.

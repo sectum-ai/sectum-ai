@@ -25,7 +25,7 @@ class IkeaExtractionProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("vector",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan a multi-turn benign query sequence per shared entity and principal.

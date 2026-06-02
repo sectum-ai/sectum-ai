@@ -232,6 +232,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Probes declare `requires_adapters`, and the runner preflights them.** Each
+  plan/detect probe now names the adapter family it drives (the spec §7.0 / §11
+  contract; all eleven were previously `()`), and `Runner.preflight` raises a
+  config error (exit `3`) up front when a required adapter is not configured —
+  instead of failing partway through a probe at the first missing-adapter step.
+  The 13 `probe.yaml` manifests were regenerated, and a parity test asserts every
+  probe's declared `requires_adapters` equals the slots its `plan()` actually
+  drives, so the declaration can never drift from reality.
 - **CI enforces the §15 per-package coverage floors.** A new CI step fails the
   build if `core`, `probes`, or `evidence` drops below 85% line coverage
   (`coverage report --include="packages/<pkg>/src/*" --fail-under=85`, reusing the

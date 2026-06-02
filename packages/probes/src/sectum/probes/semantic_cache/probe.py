@@ -23,7 +23,7 @@ class SemanticCacheProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0057",)
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.SEMANTIC_CACHE,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("cache",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan a prime-then-fetch sequence for every hard canary across principals.

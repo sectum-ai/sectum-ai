@@ -12,5 +12,6 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - agent_framework
-requires_adapters: []
+requires_adapters:
+- agent
 example: examples/agent-framework-hijack

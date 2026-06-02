@@ -26,7 +26,7 @@ class RagPipelineBleedProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.RAG_PIPELINE,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("rag",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan one benign shared-entity query per principal, dispatched via ``rag.ask``."""

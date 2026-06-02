@@ -12,5 +12,6 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - mcp
-requires_adapters: []
+requires_adapters:
+- mcp
 example: examples/agent-tool-hijack
