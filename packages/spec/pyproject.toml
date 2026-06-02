@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.9",
+    "structlog>=24.4",
 ]
 
 [project.urls]

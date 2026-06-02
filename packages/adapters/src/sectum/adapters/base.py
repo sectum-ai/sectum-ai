@@ -16,7 +16,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from sectum.spec import CorpusDocument
+from sectum.spec import CorpusDocument, get_logger
+
+_log = get_logger(__name__)
 
 
 class AdapterFamily(StrEnum):
@@ -443,6 +445,14 @@ class AdapterRegistry:
         if adapter.name in self._adapters:
             raise ValueError(f"adapter already registered: {adapter.name}")
         self._adapters[adapter.name] = adapter
+        # Name, family, and capability flags only - adapters never hold or log
+        # credentials (the engineering spec, sections 11 and 16). DEBUG-only.
+        _log.debug(
+            "adapter.registered",
+            adapter=adapter.name,
+            family=adapter.family.value,
+            capabilities=sorted(c.value for c in adapter.capabilities),
+        )
 
     def get(self, name: str) -> Adapter:
         """Return the adapter registered as ``name``."""

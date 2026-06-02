@@ -32,7 +32,10 @@ from sectum.spec import (
     Severity,
     Substrate,
     Surface,
+    get_logger,
 )
+
+_log = get_logger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _OWASP_MULTI_TENANT = "LLM08:2025"
@@ -377,10 +380,25 @@ class DetectionPipeline:
         observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
         findings = self._exact(observer, observation_text, surface, probe_id)
         findings.extend(self._semantic(observer, observation_text, surface, probe_id))
-        return [
+        stamped = [
             finding.model_copy(update={"owasp_llm": owasp_llm, "atlas": atlas, "nist": nist})
             for finding in findings
         ]
+        for finding in stamped:
+            if finding.status is FindingStatus.CONFIRMED:
+                # The core security event: a foreign marker surfaced in this
+                # principal's session. Only IDs and the control class are logged -
+                # never the evidence span or marker plaintext (the spec, §16).
+                _log.warning(
+                    "detect.cross_tenant_leak",
+                    probe=finding.probe_id,
+                    marker_id=str(finding.marker_id),
+                    owner_tenant=str(finding.owner_tenant_id),
+                    observed_in_tenant=str(finding.observed_in_tenant_id),
+                    surface=finding.surface.value,
+                    severity=finding.severity.value,
+                )
+        return stamped
 
     def _foreign(self, observer: Principal, marker_type: MarkerType) -> list[Marker]:
         return [

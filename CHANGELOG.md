@@ -232,6 +232,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Structured logging with redaction, the last unimplemented §16 convention.**
+  The spec requires `structlog`-based logging that never emits secrets or raw
+  tenant content above DEBUG, with DEBUG off by default — and the library logged
+  nothing at all. `sectum.spec` now exports `get_logger` / `configure_logging` /
+  `redact_sensitive`: a JSON renderer to **stderr** (stdout stays reserved for
+  command output), DEBUG suppressed by default, and a processor that replaces
+  secret-bearing and raw-tenant-content keys with `<redacted>` for every event
+  above DEBUG. It is threaded through the runner (run completion), detection (a
+  WARNING per confirmed cross-tenant leak — IDs only, never the span), the
+  evidence chain (pack assembly), and the adapter registry; the CLI gained a
+  global `--debug` flag (env `SECTUM_DEBUG`). `structlog` joins `sectum-ai-spec`'s
+  dependencies (ADR-0020).
 - **The data models ship as committed, version-pinned JSON Schema artifacts.**
   The spec §9 promise to "publish JSON Schema in `sectum-ai-spec`" was only half
   kept: the export *functions* existed but no schemas were committed or packaged,

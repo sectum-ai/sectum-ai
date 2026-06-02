@@ -98,6 +98,7 @@ from sectum.spec import (
     SectumError,
     Substrate,
     canonical_hash,
+    configure_logging,
 )
 from sectum.substrate import build_substrate, default_scenario
 from sectum.suites import SUITES
@@ -297,8 +298,19 @@ def main(
             is_eager=True,
         ),
     ] = False,
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug",
+            help="Verbose DEBUG logging to stderr (may include raw content); off by default.",
+            envvar="SECTUM_DEBUG",
+        ),
+    ] = False,
 ) -> None:
     """Sectum AI - multi-tenant AI verification."""
+    # Structured JSON logging to stderr; stdout stays reserved for command output
+    # (e.g. `probe --output json`). DEBUG is opt-in (the spec, section 16).
+    configure_logging(debug=debug)
 
 
 @app.command(name="adapters")

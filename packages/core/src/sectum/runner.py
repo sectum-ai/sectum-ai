@@ -24,7 +24,10 @@ from sectum.spec import (
     ProbeStep,
     Substrate,
     Surface,
+    get_logger,
 )
+
+_log = get_logger(__name__)
 
 StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
@@ -104,6 +107,16 @@ class Runner:
         for step in probe.plan(self._substrate):
             observation = self._execute(step)
             results.append((step, probe.detect(step, observation, self._substrate)))
+        # Operational metadata only — step payloads and observations (tenant
+        # content) are never logged here (the engineering spec, section 16).
+        confirmed = sum(len(confirmed_findings(findings)) for _, findings in results)
+        _log.info(
+            "probe.run.complete",
+            probe=probe.id,
+            steps=len(results),
+            findings=sum(len(findings) for _, findings in results),
+            confirmed_leaks=confirmed,
+        )
         return results
 
     def run(self, probe: Probe) -> list[Finding]:

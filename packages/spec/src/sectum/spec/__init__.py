@@ -1,5 +1,6 @@
 """Sectum AI data models and JSON Schema (the ``sectum.spec`` namespace package)."""
 
+from sectum.spec._logging import configure_logging, get_logger, redact_sensitive
 from sectum.spec.enums import FindingStatus, MarkerType, PrincipalKind, Severity, Surface
 from sectum.spec.errors import (
     AdapterError,
@@ -65,7 +66,10 @@ __all__ = [
     "SyntheticTenantSpec",
     "SyntheticUserSpec",
     "canonical_hash",
+    "configure_logging",
+    "get_logger",
     "json_schemas",
+    "redact_sensitive",
     "sha256_hex",
     "to_canonical_json",
     "write_json_schemas",
