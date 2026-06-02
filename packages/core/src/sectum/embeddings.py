@@ -33,6 +33,7 @@ __all__ = [
     "SentenceTransformerEmbedding",
     "cosine",
     "resolve_embedding_model",
+    "validate_embedding_spec",
 ]
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -182,3 +183,26 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
     if spec.startswith(("hash-", "hash:")):
         return HashingEmbedding(spec, dim=_hash_dim(spec))
     return None
+
+
+def validate_embedding_spec(spec: str) -> None:
+    """Raise :class:`~sectum.spec.ConfigError` if ``spec`` is not a recognised model name.
+
+    A lightweight, side-effect-free check (it does not load any provider, so it
+    needs no API key or optional extra) used to reject an unknown ``embedding_models``
+    entry at config-load / CLI-parse time rather than letting it silently become a
+    no-op sweep. Accepts the legacy ``fake-*`` recall names, a deterministic
+    ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` provider
+    prefixes (their install / key is checked lazily when the sweep runs).
+    """
+    if spec.startswith(("st:", "openai:")):
+        return
+    if spec.startswith(("hash-", "hash:")):
+        _hash_dim(spec)
+        return
+    if spec.startswith("fake-"):
+        return
+    raise ConfigError(
+        f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
+        "st:<model>, or openai:<model>"
+    )

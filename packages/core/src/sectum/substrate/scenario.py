@@ -15,13 +15,21 @@ _SHARED_ENTITIES: tuple[SharedEntity, ...] = (
 )
 
 
-def default_scenario(seed: int, corpus_size: int = 24) -> Scenario:
-    """Build the default four-tenant demo scenario with shared organic entities."""
+def default_scenario(
+    seed: int,
+    corpus_size: int = 24,
+    embedding_models: tuple[str, ...] = ("fake-deterministic",),
+) -> Scenario:
+    """Build the default four-tenant demo scenario with shared organic entities.
+
+    ``embedding_models`` carries through to the Class 2 per-model sweep: two or more
+    entries make ``sectum probe`` record a per-model Retrieval-Pivot Rate.
+    """
     return Scenario(
         scenario_id=f"sectum-demo-{seed}",
         seed=seed,
         tenants=default_tenant_specs(seed, corpus_size),
         corpus_profile="demo",
         shared_entities=_SHARED_ENTITIES,
-        embedding_models=("fake-deterministic",),
+        embedding_models=embedding_models,
     )

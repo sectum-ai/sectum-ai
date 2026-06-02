@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from sectum.adapters import (
     AgentAdapter,
@@ -49,6 +49,7 @@ from sectum.adapters import (
     RAGPipelineAdapter,
     VectorStoreAdapter,
 )
+from sectum.embeddings import validate_embedding_spec
 from sectum.probes import (
     AnthropicJudge,
     DetectionProviders,
@@ -67,6 +68,19 @@ class ScenarioConfig(BaseModel):
 
     seed: int = 2026
     corpus_profile: str = "demo"
+    corpus_size: int = 24
+    embedding_models: tuple[str, ...] = ("fake-deterministic",)
+
+    @field_validator("embedding_models")
+    @classmethod
+    def _check_embedding_models(cls, models: tuple[str, ...]) -> tuple[str, ...]:
+        """Reject an unknown embedding-model name at config-load time (not silently)."""
+        for spec in models:
+            try:
+                validate_embedding_spec(spec)
+            except ConfigError as error:
+                raise ValueError(str(error)) from error
+        return models
 
 
 class AdapterConfig(BaseModel):

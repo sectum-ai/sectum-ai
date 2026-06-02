@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`scenario.embedding_models` is now wired end to end, so the per-model
+  Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
+  `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
+  `sectum.yaml` that set the documented key was rejected — and `sectum seed` built
+  the scenario from the seed alone, so `retrieval_pivot_rate_by_model` was always
+  `{}` off a real `seed`→`probe` run (the flagship "stronger embeddings leak more"
+  gradient only ever appeared in unit tests). `ScenarioConfig` now carries both
+  fields, `seed` threads them through `default_scenario`, and a repeatable
+  `sectum seed --embedding-model <spec>` overrides them; an unknown spec is
+  rejected with a config error (exit `3`) at load/parse time rather than silently
+  becoming an empty sweep. A full-CLI E2E seeds two embedding models and asserts
+  the per-model rate is recorded with the expected gradient.
+
 - **The embedded tool version now comes from the installed package, not a
   hard-coded `0.0.0`.** `cli/app.py` defined `__version__ = "0.0.0"`, and that
   literal was stamped into every `RunResult`'s `adapter_versions` /
