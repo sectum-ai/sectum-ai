@@ -11,5 +11,6 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - agent_memory
-requires_adapters: []
+requires_adapters:
+- memory
 example: examples/memory-contamination

@@ -19,7 +19,7 @@ class TenantBoundaryProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024",)
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("vector",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, for every hard-canary document, a direct fetch from each foreign principal.

@@ -12,5 +12,6 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - vector_db
-requires_adapters: []
+requires_adapters:
+- vector
 example: examples/embedding-inversion

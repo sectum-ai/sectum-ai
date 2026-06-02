@@ -11,5 +11,6 @@ nist_rmf:
 - MEASURE 2.7
 surfaces:
 - semantic_cache
-requires_adapters: []
+requires_adapters:
+- cache
 example: examples/semantic-cache

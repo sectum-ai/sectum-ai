@@ -10,6 +10,7 @@ from uuid import UUID
 
 import pytest
 
+import sectum.probes as probes
 from sectum.adapters import (
     FakeAgent,
     FakeCache,
@@ -20,8 +21,9 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
+from sectum.probes import RagEntityBleedProbe
 from sectum.runner import Runner
-from sectum.spec import AdapterError, CorpusDocument, ProbeStep, Substrate, Surface
+from sectum.spec import AdapterError, ConfigError, CorpusDocument, ProbeStep, Substrate, Surface
 from sectum.substrate import build_substrate, default_scenario
 
 
@@ -454,3 +456,43 @@ def test_runner_memory_recall_without_a_memory_adapter_raises() -> None:
     runner = Runner(substrate)
     with pytest.raises(AdapterError, match="needs a memory"):
         runner._execute(_step(substrate.tenants[0].tenant_id, "memory.recall", {"query": "x"}))
+
+
+def test_preflight_fails_fast_when_a_required_adapter_is_missing() -> None:
+    # rag-entity-bleed requires a vector adapter; a runner without one must fail
+    # the preflight (exit-3 ConfigError) before any step runs, not partway through.
+    substrate = _substrate()
+    runner = Runner(substrate)
+    with pytest.raises(ConfigError, match=r"requires adapter.*vector"):
+        runner.preflight(RagEntityBleedProbe())
+
+
+def test_preflight_passes_when_required_adapters_are_present() -> None:
+    substrate = _substrate()
+    runner = Runner(substrate, vector=FakeVectorStore(shared_index=True))
+    runner.preflight(RagEntityBleedProbe())  # no raise
+
+
+def test_declared_requires_adapters_match_what_each_probe_plans() -> None:
+    # Every plan/detect probe's declared requires_adapters must equal the adapter
+    # slots its plan() actually drives (the action prefix), so the declaration —
+    # and the probe.yaml manifest generated from it — can never drift from reality.
+    substrate = _substrate()
+    checked = 0
+    for name in probes.__all__:
+        cls = getattr(probes, name)
+        if not (
+            isinstance(cls, type) and hasattr(cls, "requires_adapters") and hasattr(cls, "plan")
+        ):
+            continue
+        try:
+            probe = cls()
+            steps = probe.plan(substrate)
+        except (TypeError, AttributeError):
+            continue  # workflow-style probes (e.g. erasure) construct/plan differently
+        used = {step.action.split(".")[0] for step in steps}
+        assert set(probe.requires_adapters) == used, (
+            f"{probe.id}: {probe.requires_adapters} != {used}"
+        )
+        checked += 1
+    assert checked >= 11  # all plan/detect probes were covered

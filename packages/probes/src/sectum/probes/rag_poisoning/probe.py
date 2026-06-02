@@ -23,7 +23,7 @@ class RagPoisoningProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0020", "AML.T0024")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("vector",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan: each hard canary's owning principal plants a poison, then all query the lure.

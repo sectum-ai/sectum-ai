@@ -20,7 +20,7 @@ class EmbeddingInversionProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0024.001")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("vector",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per entity canary, a partial-fragment query from each foreign principal.

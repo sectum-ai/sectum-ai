@@ -17,6 +17,7 @@ from sectum.adapters import (
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import (
     AdapterError,
+    ConfigError,
     CorpusDocument,
     Finding,
     Observation,
@@ -81,8 +82,24 @@ class Runner:
         self._observability = observability
         self._agent = agent
 
+    def preflight(self, probe: Probe) -> None:
+        """Raise ``ConfigError`` if the probe's declared adapters are not configured.
+
+        A probe names the adapter families it drives in ``requires_adapters`` (the
+        engineering spec, §7.0 / §11). This checks them up front so an unsatisfied
+        run fails fast with a clear message (exit ``3``) instead of partway through
+        a probe when the first step hits a missing adapter.
+        """
+        missing = [slot for slot in probe.requires_adapters if getattr(self, f"_{slot}") is None]
+        if missing:
+            raise ConfigError(
+                f"probe {probe.id!r} requires adapter(s) {', '.join(sorted(missing))}, "
+                "but they are not configured"
+            )
+
     def run_per_step(self, probe: Probe) -> list[StepResult]:
         """Plan and run the probe, pairing each step with the findings it produced."""
+        self.preflight(probe)
         results: list[StepResult] = []
         for step in probe.plan(self._substrate):
             observation = self._execute(step)

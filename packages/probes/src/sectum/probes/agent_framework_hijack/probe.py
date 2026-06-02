@@ -32,7 +32,7 @@ class AgentFrameworkHijackProbe(DetectingProbe):
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.AGENT_FRAMEWORK,)
-    requires_adapters: tuple[str, ...] = ()
+    requires_adapters: tuple[str, ...] = ("agent",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan a direct and a token-bearing ``agent.run`` per hard canary per foreign principal.
