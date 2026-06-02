@@ -137,6 +137,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Honest build status + repo trust fixes.** The README status note no longer
+  overclaims "all six phases complete" — it mirrors `PHASES.md`, which is the
+  authoritative gate record and is now published on the docs site
+  (`docs/phases.md`, embedded via a snippet). `PHASES.md` Phase 2 moved to **Met**
+  (the docker-compose integration CI shipped); Phase 5's full-CLI
+  embedding-model-swap path is the one criterion still being closed. Added
+  `.github/FUNDING.yml`, and `SECURITY.md` now leads with GitHub private
+  vulnerability reporting instead of an all-zeros placeholder PGP fingerprint.
 - **Trust-artifact accuracy pass.** The flagship *Retrieval Pivot Attacks in
   Hybrid RAG* result is now cited with its canonical identifier
   [arXiv:2602.08668](https://arxiv.org/abs/2602.08668) (README, glossary) rather
