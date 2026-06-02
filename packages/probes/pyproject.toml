@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "sectum-ai-spec",
+    "pyyaml>=6",
 ]
 
 [project.urls]
