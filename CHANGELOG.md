@@ -232,6 +232,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`adapter_versions` is stamped from the `sectum-ai-adapters` distribution.** A
+  run's `adapter_versions` recorded the core CLI's `__version__` for every
+  adapter; it now resolves the adapters distribution version via the new
+  `sectum.adapters.version()` (with a `0.0.0+unknown` fallback) at both the probe
+  and erasure sites, so an evidence pack attests the version of the code that
+  actually drove each surface. Values are unchanged today (all packages ship in
+  lockstep), so there is no canonical-hash or sample-pack change.
 - **The backup surface is now covered everywhere, and a meta-test stops a new
   adapter family from landing uncovered.** The `BackupAdapter` family (Class 11
   hiding place #7) shipped but was skipped at every coverage seam: `FakeBackup`
