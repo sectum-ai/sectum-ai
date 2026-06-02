@@ -21,7 +21,7 @@ routinely:
 
 - **OWASP LLM08:2025 — Vector and Embedding Weaknesses** names multi-tenant
   context leakage a top-10 LLM risk.
-- **Retrieval Pivot Attacks in Hybrid RAG** (arXiv, 2026): 95.4% of *benign*
+- **Retrieval Pivot Attacks in Hybrid RAG** ([arXiv:2602.08668](https://arxiv.org/abs/2602.08668), 2026): 95.4% of *benign*
   queries triggered cross-tenant leakage via shared organic entities.
 - **Silent Leaks** (arXiv 2505.15420): 91% extraction efficiency via benign
   queries, with no prompt injection required.
@@ -113,7 +113,7 @@ To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## References
 
 - OWASP LLM08:2025 — Vector and Embedding Weaknesses
-- Retrieval Pivot Attacks in Hybrid RAG (arXiv, 2026)
+- Retrieval Pivot Attacks in Hybrid RAG ([arXiv:2602.08668](https://arxiv.org/abs/2602.08668), 2026)
 - Silent Leaks (arXiv 2505.15420)
 
 ## Support

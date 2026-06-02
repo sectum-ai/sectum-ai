@@ -3,19 +3,19 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
     "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-01T17:25:50.309298+00:00",
-    "finished_at": "2026-06-01T17:25:50.309843+00:00",
+    "started_at": "2026-06-01T22:02:57.622171+00:00",
+    "finished_at": "2026-06-01T22:02:57.622650+00:00",
     "adapter_versions": {
-      "fake-vector": "0.0.0",
-      "fake-observability": "0.0.0",
-      "fake-memory": "0.0.0",
-      "fake-cache": "0.0.0",
-      "fake-model": "0.0.0",
-      "fake-search": "0.0.0",
-      "fake-eval-set": "0.0.0"
+      "fake-vector": "0.1.0",
+      "fake-observability": "0.1.0",
+      "fake-memory": "0.1.0",
+      "fake-cache": "0.1.0",
+      "fake-model": "0.1.0",
+      "fake-search": "0.1.0",
+      "fake-eval-set": "0.1.0"
     },
     "probe_versions": {
-      "gdpr-erasure-verification": "0.0.0"
+      "gdpr-erasure-verification": "0.1.0"
     },
     "findings": [],
     "metrics": {
@@ -38,7 +38,7 @@
     "schema_version": "0.2.0"
   },
   "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-  "tsa_token": "{\"digest\":\"cc8ed4c856ee3da55cd4334f9514436c0d1ef06ab0fc1384902ad4458876c003\",\"timestamped_at\":\"2026-06-01T17:25:50.315202+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"05e5e4c1eb24ef5120a24952d63f1ba821587f3a5d7047eb107a95daa29eb5ea\",\"timestamped_at\":\"2026-06-01T22:02:57.627785+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -100,7 +100,7 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "17df6d16f9ace4df88497db11cdce2c647de749c6a784fe594a8fc06b8d2b7da",
+  "pdf_ref": "e7205aaa66b8d7cf8a097c829d7ffe6c7846e4710c35e53e33a28579b656493a",
   "anchored_in_log": false,
   "schema_version": "0.2.0"
 }

@@ -9,6 +9,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -56,6 +57,7 @@ from sectum.evidence import (
     rekor_keyring,
     render_audit_pack_and_hash,
     to_in_toto_statement,
+    verify_in_toto_statement,
     verify_pack,
 )
 from sectum.jobs import build_job_runner
@@ -94,7 +96,14 @@ from sectum.spec import (
 from sectum.substrate import build_substrate, default_scenario
 from sectum.sweep import embedding_model_sweep
 
-__version__ = "0.0.0"
+# Source the version from the installed package metadata so every evidence pack
+# and audit PDF attests the real shipped version (it is stamped into
+# RunResult.adapter_versions / probe_versions). A hard-coded literal silently
+# drifts from the release and corrupts the tamper-evident artifact.
+try:
+    __version__ = version("sectum-ai")
+except PackageNotFoundError:  # running from an uninstalled / editable tree
+    __version__ = "0.0.0+unknown"
 
 _DEFAULT_WORKDIR = Path(".sectum")
 _DEFAULT_CONFIG = Path("sectum.yaml")
@@ -701,7 +710,23 @@ def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
     return None
 
 
+def _sibling_intoto(pack_path: Path) -> Path | None:
+    """Return the in-toto sidecar written beside ``pack_path``, if present.
+
+    ``report``/``erasure`` write ``attestation.intoto.json`` /
+    ``erasure-attestation.intoto.json`` next to the evidence json. When present,
+    ``sectum verify`` re-checks that it binds this pack's run digest; when absent,
+    verification proceeds from the json alone (the pack is self-sufficient).
+    """
+    for name in ("attestation.intoto.json", "erasure-attestation.intoto.json"):
+        candidate = pack_path.parent / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
 @app.command()
+@_handle_typed_errors
 def verify(
     pack: Annotated[Path, typer.Argument(help="Path to an evidence.json pack.")],
     tsa_cert: Annotated[
@@ -748,7 +773,19 @@ def verify(
     )
     for check in result.checks:
         typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
-    if not result.passed:
+    passed = result.passed
+    # Re-verify the in-toto sidecar if report/erasure wrote one beside the pack:
+    # a swapped or corrupt statement that no longer binds this pack's run digest
+    # is itemized as a failed check, never silently trusted.
+    intoto_path = _sibling_intoto(pack)
+    if intoto_path is not None:
+        try:
+            verify_in_toto_statement(json.loads(intoto_path.read_text()), evidence)
+            typer.echo("[ok] in-toto-attestation: sidecar binds this pack's run digest")
+        except (ValueError, EvidenceError) as error:
+            typer.echo(f"[FAIL] in-toto-attestation: {error}")
+            passed = False
+    if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
     typer.echo("VERIFIED: the evidence pack's attested content is intact and consistent.")

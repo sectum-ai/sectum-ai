@@ -1,8 +1,8 @@
 # Configuration
 
 `sectum init` scaffolds a `sectum.yaml` configuration file; every CLI command
-that runs a workflow (`seed`, `probe`, `report`, `verify`, `erasure`,
-`baseline`) accepts `--config sectum.yaml` to read its defaults from that
+that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`) accepts
+`--config sectum.yaml` to read its defaults from that
 file. Explicit CLI flags — for example `--seed` or `--workdir` — always
 override the values the config supplies.
 

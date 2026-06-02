@@ -68,8 +68,9 @@ timestamps to UTC) — see the update note in
   the manifest to bind ownership).
 - `tests/invariants/test_evidence_roundtrip.py` gained a tamper-each-field suite
   (control mappings, pdf ref, manifest hash, Rekor strip, flag flip, forged local token).
-- `pdf_ref` is bound into the digest, but the CLI does not currently populate it
-  (`sectum report` writes the audit PDF to a conventional path rather than recording
-  a reference). So in the CLI flow the demonstrable tamper vectors are the control
-  mappings, manifest hash, and transparency-log flag; the `pdf_ref` binding protects
-  programmatic callers that set it (and future CLI wiring) from a silent repoint.
+- `pdf_ref` is bound into the digest and the CLI now populates it: `sectum report`
+  and `sectum erasure` render the audit PDF first, record `pdf_ref` as the SHA-256 of
+  its bytes, and `sectum verify` re-hashes the sibling PDF against it (failing on a
+  mismatch). So a swapped audit PDF and a repointed reference both fail verification
+  in the CLI flow, alongside the control mappings, manifest hash, and transparency-log
+  flag. (Wired in the ADR-0016 follow-on, PR #81.)
