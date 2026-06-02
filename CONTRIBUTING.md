@@ -23,11 +23,18 @@ uv run pre-commit install   # enable git hooks
 | Task | Command |
 |---|---|
 | Run the test suite | `uv run pytest` |
+| Run the integration tests | `docker compose up -d --wait` then `uv run pytest -m integration` |
 | Lint | `uv run ruff check .` |
 | Format | `uv run ruff format .` |
 | Type-check | `uv run mypy` |
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
 | Run the CLI | `uv run sectum --help` |
+
+The default `uv run pytest` stays fully offline: the integration tests in
+`tests/integration/` skip themselves unless their backend is reachable. Bring the
+local backends up with `docker compose up -d --wait` (pgvector, Chroma, Weaviate,
+Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against the live
+adapters. CI runs them too, in the dedicated **Integration** job.
 
 ## Conventions
 
@@ -61,7 +68,8 @@ section is the source of truth for that configuration:
 - Require **1 approving review**; dismiss stale approvals on new commits.
 - Require **CODEOWNERS** review.
 - Require status checks to pass before merging: the `CI` workflow
-  (lint, type-check, test), the `secret-scan` job, and `CodeQL`.
+  (lint, type-check, test; the docker-compose `Integration` job), the
+  `secret-scan` job, and `CodeQL`.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).
