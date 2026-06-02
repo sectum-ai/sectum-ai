@@ -20,6 +20,9 @@ classifiers = [
 ]
 dependencies = [
     "sectum-ai-spec",
+    # base.py imports pydantic directly (adapter config models); declare it
+    # rather than relying on the transitive dependency via sectum-ai-spec (§13).
+    "pydantic>=2.9",
 ]
 
 [project.optional-dependencies]
@@ -27,7 +30,9 @@ pgvector = ["psycopg[binary]>=3.3.4"]
 chroma = ["chromadb-client>=0.5"]
 weaviate = ["weaviate-client>=4.9"]
 redis = ["redis>=5"]
-phoenix = ["arize-phoenix-client>=2"]
+# the Phoenix adapter imports httpx directly (observability/phoenix.py); declare
+# it explicitly rather than relying on arize-phoenix-client to pull it in.
+phoenix = ["arize-phoenix-client>=2", "httpx>=0.27"]
 langfuse = ["langfuse>=3,<4"]
 langsmith = ["langsmith>=0.1"]
 mcp = ["mcp>=1"]

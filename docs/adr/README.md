@@ -20,3 +20,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0016](0016-anchor-the-whole-pack.md) | Anchor the whole evidence pack, not just the run | Accepted |
 | [0017](0017-pdf-engine.md) | weasyprint is an optional audit-pack engine; reportlab stays the default | Accepted |
 | [0018](0018-embedding-provider-sweep.md) | Real embedding providers are opt-in extras; a deterministic hashing model is the default | Accepted |
+| [0019](0019-job-runner-abstraction.md) | A `JobRunner` interface with local runners; a distributed backend stays swappable | Accepted |

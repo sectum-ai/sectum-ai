@@ -1,10 +1,11 @@
 """Tests for the job-runner abstraction (the engineering spec, sections 13, 21)."""
 
 import time
+from collections.abc import Callable, Sequence
 
 import pytest
 
-from sectum.jobs import SerialJobRunner, ThreadJobRunner, build_job_runner
+from sectum.jobs import JobRunner, SerialJobRunner, ThreadJobRunner, build_job_runner
 from sectum.spec import ConfigError
 
 
@@ -62,3 +63,22 @@ def test_build_job_runner_rejects_below_one() -> None:
 def test_an_empty_batch_returns_no_results() -> None:
     assert SerialJobRunner().map(lambda x: x, []) == []
     assert ThreadJobRunner(4).map(lambda x: x, []) == []
+
+
+def test_a_custom_job_runner_swaps_in_via_the_protocol() -> None:
+    # The §13/§21 contract: the engine binds to the JobRunner Protocol, so a
+    # third-party orchestrator (Temporal/Prefect/...) drops in without touching
+    # the engine. A minimal custom runner must type as a JobRunner (mypy checks
+    # the annotation below structurally) and agree with the shipped runners.
+    class RecordingJobRunner:
+        def __init__(self) -> None:
+            self.batches = 0
+
+        def map[T, R](self, func: Callable[[T], R], items: Sequence[T]) -> list[R]:
+            self.batches += 1
+            return [func(item) for item in items]
+
+    custom: JobRunner = RecordingJobRunner()
+    items = list(range(8))
+    assert custom.map(lambda x: x * 2, items) == SerialJobRunner().map(lambda x: x * 2, items)
+    assert isinstance(custom, RecordingJobRunner) and custom.batches == 1

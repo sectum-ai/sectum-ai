@@ -4287,6 +4287,7 @@ name = "sectum-ai-adapters"
 version = "0.1.0"
 source = { editable = "packages/adapters" }
 dependencies = [
+    { name = "pydantic" },
     { name = "sectum-ai-spec" },
 ]
 
@@ -4330,6 +4331,7 @@ pgvector = [
 ]
 phoenix = [
     { name = "arize-phoenix-client" },
+    { name = "httpx" },
 ]
 pinecone = [
     { name = "pinecone" },
@@ -4351,6 +4353,7 @@ requires-dist = [
     { name = "arize-phoenix-client", marker = "extra == 'phoenix'", specifier = ">=2" },
     { name = "chromadb-client", marker = "extra == 'chroma'", specifier = ">=0.5" },
     { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
+    { name = "httpx", marker = "extra == 'phoenix'", specifier = ">=0.27" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
     { name = "langchain-core", marker = "extra == 'rag-langchain'", specifier = ">=0.3" },
     { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=3,<4" },
@@ -4362,6 +4365,7 @@ requires-dist = [
     { name = "pinecone", marker = "extra == 'pinecone'", specifier = ">=5" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'pgvector'", specifier = ">=3.3.4" },
     { name = "pyautogen", marker = "extra == 'autogen'", specifier = ">=0.2,<0.3" },
+    { name = "pydantic", specifier = ">=2.9" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.4" },

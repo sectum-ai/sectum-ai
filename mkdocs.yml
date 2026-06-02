@@ -61,6 +61,7 @@ nav:
       - adr/0016-anchor-the-whole-pack.md
       - adr/0017-pdf-engine.md
       - adr/0018-embedding-provider-sweep.md
+      - adr/0019-job-runner-abstraction.md
   - Maintainers:
       - Build phases and acceptance: phases.md
       - Releasing: RELEASING.md
