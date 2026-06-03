@@ -24,6 +24,7 @@ pytestmark = [
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _EXAMPLES = (
     "retrieval-pivot",
+    "rag-pipeline-bleed",
     "erasure-attestation",
     "mcp-tenant-boundary",
     "agent-tool-hijack",

@@ -26,6 +26,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Configuration: configuration.md
+  - Marker substrate: substrate.md
   - Attack catalog:
       - Overview: attack-catalog/index.md
       - Class 1 - Direct tenant boundary fetch: attack-catalog/class-01-tenant-boundary.md
@@ -40,6 +41,7 @@ nav:
       - Class 10 - IKEA-style benign extraction: attack-catalog/class-10-ikea-extraction.md
       - Class 11 - GDPR Article 17 erasure: attack-catalog/class-11-erasure.md
   - Evidence chain: evidence-chain.md
+  - Core data models: data-models.md
   - Compliance mappings: compliance-mappings.md
   - SKUs and suites: skus.md
   - Adapters: adapters.md

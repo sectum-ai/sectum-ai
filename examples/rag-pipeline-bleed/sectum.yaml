@@ -1,0 +1,6 @@
+# Pins the RAG-pipeline-bleed demo to a small, high-signal corpus so the
+# Retrieval-Pivot Rate stays legible. The package default is ~500 documents per
+# tenant for realistic seeding (the engineering spec, section 6.2).
+scenario:
+  seed: 2026
+  corpus_size: 24
