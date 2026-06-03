@@ -19,16 +19,27 @@ import hashlib
 import io
 import json
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
+from sectum.evidence.dsse import verify_dsse_envelope
+from sectum.evidence.intoto import verify_in_toto_statement
 from sectum.evidence.verify import Check, VerificationResult, verify_pack
-from sectum.spec import EvidencePack
+from sectum.spec import EvidenceError, EvidencePack
 
 EVIDENCE_MEMBER = "evidence.json"
 """The bundled evidence-pack JSON; every bundle must contain it."""
 
 MANIFEST_MEMBER = "bundle-manifest.json"
 """The reserved member recording each other member's SHA-256."""
+
+# Sidecar members ``report``/``erasure`` write into a bundle. The bundle path
+# must re-bind these to the pack exactly as the standalone ``sectum verify`` binds
+# the on-disk siblings - otherwise a rebuilt bundle with a forged audit PDF or a
+# re-pointed attestation would pass on the member-digest checks alone.
+_PDF_MEMBERS = ("audit-pack.pdf", "erasure-attestation.pdf")
+_INTOTO_MEMBERS = ("attestation.intoto.json", "erasure-attestation.intoto.json")
+DSSE_MEMBER = "evidence.dsse.json"
 
 # ZIP's epoch floor (1980-01-01). Fixing the member timestamps makes a bundle
 # byte-reproducible for identical inputs instead of embedding the build time.
@@ -37,6 +48,28 @@ _ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _first_member(member_bytes: Mapping[str, bytes], names: tuple[str, ...]) -> bytes | None:
+    """Return the bytes of the first present member among ``names``, else ``None``."""
+    for name in names:
+        if name in member_bytes:
+            return member_bytes[name]
+    return None
+
+
+def _check_sidecar(name: str, raw: bytes, bind: Callable[[Any], None]) -> Check:
+    """Re-bind a JSON sidecar (in-toto / DSSE) to the pack; FAIL if it no longer binds.
+
+    Mirrors the standalone ``sectum verify`` sidecar re-checks: a swapped or
+    re-pointed statement/envelope that no longer attests this pack's run digest is
+    itemized as a failed check rather than silently trusted.
+    """
+    try:
+        bind(json.loads(raw))
+    except (ValueError, TypeError, AttributeError, EvidenceError) as error:
+        return Check(name, False, f"sidecar does not bind this pack: {error}")
+    return Check(name, True, "sidecar binds this pack's run digest")
 
 
 def build_bundle(members: Mapping[str, bytes]) -> bytes:
@@ -111,5 +144,33 @@ def verify_bundle(
     except ValueError as error:
         checks.append(Check("evidence-pack", False, f"unparsable evidence pack: {error}"))
         return VerificationResult(passed=False, checks=tuple(checks))
-    checks.extend(verify_pack(pack, rekor_keyring=rekor_keyring).checks)
+
+    # Bind the bundled audit PDF and attestation sidecars to the pack, exactly as
+    # the standalone ``sectum verify`` binds the on-disk siblings. Without this a
+    # rebuilt bundle whose ``audit-pack.pdf`` was swapped for a forged "zero
+    # leakage" PDF (its digest re-recorded in bundle-manifest.json) - or whose
+    # sidecar attests a different run - would pass on the member-digest checks
+    # alone, breaking the tamper-evidence guarantee (the spec, section 8.1; ADR-0016).
+    pdf_bytes = _first_member(member_bytes, _PDF_MEMBERS)
+    checks.extend(verify_pack(pack, rekor_keyring=rekor_keyring, pdf_bytes=pdf_bytes).checks)
+    if pack.pdf_ref is not None and pdf_bytes is None:
+        checks.append(
+            Check(
+                "audit-pdf",
+                False,
+                "the pack binds a pdf_ref but the bundle has no audit PDF member",
+            )
+        )
+    intoto_raw = _first_member(member_bytes, _INTOTO_MEMBERS)
+    if intoto_raw is not None:
+        checks.append(
+            _check_sidecar(
+                "in-toto-attestation", intoto_raw, lambda obj: verify_in_toto_statement(obj, pack)
+            )
+        )
+    dsse_raw = member_bytes.get(DSSE_MEMBER)
+    if dsse_raw is not None:
+        checks.append(
+            _check_sidecar("dsse-envelope", dsse_raw, lambda obj: verify_dsse_envelope(obj, pack))
+        )
     return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
