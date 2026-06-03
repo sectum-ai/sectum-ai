@@ -13,9 +13,8 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-
-import sectum.probes as probes
-from sectum.probes import load_probe_manifest
+import sectum_ai.probes as probes
+from sectum_ai.probes import load_probe_manifest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

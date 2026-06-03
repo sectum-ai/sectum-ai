@@ -10,9 +10,8 @@ runner, which threads the actor's user into every vector call.
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters import FakeVectorStore
-from sectum.probes import (
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.probes import (
     EmbeddingInversionProbe,
     IkeaExtractionProbe,
     Probe,
@@ -20,8 +19,8 @@ from sectum.probes import (
     RagPoisoningProbe,
     confirmed_findings,
 )
-from sectum.runner import Runner, retrieval_pivot_rate
-from sectum.spec import (
+from sectum_ai.runner import Runner, retrieval_pivot_rate
+from sectum_ai.spec import (
     Finding,
     Scenario,
     SharedEntity,
@@ -29,7 +28,7 @@ from sectum.spec import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
-from sectum.substrate import build_substrate
+from sectum_ai.substrate import build_substrate
 
 _TENANT = UUID(int=1)
 _USER_A = UUID(int=0xA)

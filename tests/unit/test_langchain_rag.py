@@ -7,10 +7,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.base import RAGPipelineAdapter
-from sectum.adapters.rag.langchain import LangChainRAGPipeline
-from sectum.spec import AdapterError
+from sectum_ai.adapters.base import RAGPipelineAdapter
+from sectum_ai.adapters.rag.langchain import LangChainRAGPipeline
+from sectum_ai.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 

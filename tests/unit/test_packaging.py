@@ -21,10 +21,10 @@ def _declared_names(package: str) -> set[str]:
 
 
 def test_probes_declares_the_adapters_dependency_it_imports() -> None:
-    # erasure/probe.py and kv_cache_timing/probe.py import sectum.adapters at module
+    # erasure/probe.py and kv_cache_timing/probe.py import sectum_ai.adapters at module
     # load (eagerly via probes/__init__), so a published sectum-ai-probes must
     # declare sectum-ai-adapters or `pip install sectum-ai-probes` + `import
-    # sectum.probes` raises ModuleNotFoundError.
+    # sectum_ai.probes` raises ModuleNotFoundError.
     assert "sectum-ai-adapters" in _declared_names("probes")
 
 

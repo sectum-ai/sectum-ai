@@ -15,27 +15,27 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$here/../.." && pwd)"
 out="$here/out"
 
-sectum() { uv run --quiet --project "$repo_root" sectum "$@"; }
+sectum-ai() { uv run --quiet --project "$repo_root" sectum-ai "$@"; }
 
 rm -rf "$out"
 mkdir -p "$out"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum seed --workdir "$out" --config "$here/sectum.yaml"
+sectum-ai seed --workdir "$out" --config "$here/sectum.yaml"
 
 echo
 echo "==> 2/4  Probe the RAG pipeline (a shared-index retriever behind the endpoint)"
-# 'sectum probe' exits 2 when it confirms cross-tenant leaks - the expected
+# 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - the expected
 # outcome on the leaky demo stack, so tolerate the non-zero exit.
-sectum probe --workdir "$out" --probe rag-pipeline-bleed || true
+sectum-ai probe --workdir "$out" --probe rag-pipeline-bleed || true
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
-sectum report --workdir "$out"
+sectum-ai report --workdir "$out"
 
 echo
 echo "==> 4/4  Independently verify the evidence pack"
-sectum verify "$out/evidence.json"
+sectum-ai verify "$out/evidence.json"
 
 echo
 echo "Artifacts written to: $out"

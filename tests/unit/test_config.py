@@ -3,8 +3,7 @@
 from pathlib import Path
 
 import pytest
-
-from sectum.adapters import (
+from sectum_ai.adapters import (
     Capability,
     FakeAgent,
     FakeCache,
@@ -15,7 +14,7 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
-from sectum.config import (
+from sectum_ai.config import (
     AdapterConfig,
     EmbedderConfig,
     JudgeConfig,
@@ -34,7 +33,7 @@ from sectum.config import (
     build_vector_store,
     load_config,
 )
-from sectum.spec import ConfigError
+from sectum_ai.spec import ConfigError
 
 
 def test_load_config_returns_defaults_for_an_empty_file(tmp_path: Path) -> None:
@@ -315,7 +314,7 @@ def test_build_vector_store_pgvector_requires_a_dsn() -> None:
 
 
 def test_build_cache_redis_constructs_a_redis_cache() -> None:
-    from sectum.adapters.cache.redis import RedisCache
+    from sectum_ai.adapters.cache.redis import RedisCache
 
     adapter = build_cache(AdapterConfig(kind="redis", host="example", port=6380, prefix="probe"))
     assert isinstance(adapter, RedisCache)
@@ -323,7 +322,7 @@ def test_build_cache_redis_constructs_a_redis_cache() -> None:
 
 
 def test_build_mcp_stdio_constructs_a_stdio_client() -> None:
-    from sectum.adapters.mcp.client import StdioMCPClient
+    from sectum_ai.adapters.mcp.client import StdioMCPClient
 
     adapter = build_mcp(
         AdapterConfig(kind="stdio", command="echo", args=["hello"], tenant_argument="tenant")
@@ -342,7 +341,7 @@ def test_build_mcp_stdio_rejects_non_list_args() -> None:
 
 
 def test_build_mcp_http_constructs_an_http_client() -> None:
-    from sectum.adapters.mcp.http import HttpMCPClient
+    from sectum_ai.adapters.mcp.http import HttpMCPClient
 
     adapter = build_mcp(
         AdapterConfig(
@@ -396,14 +395,14 @@ def test_build_adapters_includes_rag_observability_and_agent() -> None:
 
 
 def test_build_rag_http_constructs_an_http_pipeline() -> None:
-    from sectum.adapters.rag.http import HttpRAGPipeline
+    from sectum_ai.adapters.rag.http import HttpRAGPipeline
 
     adapter = build_rag(AdapterConfig(kind="http", url="http://example.com/rag"))
     assert isinstance(adapter, HttpRAGPipeline)
 
 
 def test_build_rag_http_accepts_headers_and_timeout() -> None:
-    from sectum.adapters.rag.http import HttpRAGPipeline
+    from sectum_ai.adapters.rag.http import HttpRAGPipeline
 
     adapter = build_rag(
         AdapterConfig(
@@ -427,7 +426,7 @@ def test_build_rag_http_rejects_a_non_mapping_headers_field() -> None:
 
 
 def test_build_observability_phoenix_constructs_phoenix() -> None:
-    from sectum.adapters.observability.phoenix import PhoenixObservability
+    from sectum_ai.adapters.observability.phoenix import PhoenixObservability
 
     adapter = build_observability(AdapterConfig(kind="phoenix", base_url="http://localhost:6007"))
     assert isinstance(adapter, PhoenixObservability)
@@ -439,7 +438,7 @@ def test_build_observability_phoenix_requires_base_url() -> None:
 
 
 def test_build_agent_http_constructs_an_http_agent() -> None:
-    from sectum.adapters.agent.http import HttpAgent
+    from sectum_ai.adapters.agent.http import HttpAgent
 
     adapter = build_agent(AdapterConfig(kind="http", url="http://example.com/agent"))
     assert isinstance(adapter, HttpAgent)
@@ -466,7 +465,7 @@ def test_build_agent_langgraph_imports_and_invokes_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.agent.langgraph import LangGraphAgent
+    from sectum_ai.adapters.agent.langgraph import LangGraphAgent
 
     class _StubGraph:
         def invoke(self, input: object, config: object | None = None) -> dict[str, object]:
@@ -507,7 +506,7 @@ def test_build_rag_langchain_imports_and_wraps_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.rag.langchain import LangChainRAGPipeline
+    from sectum_ai.adapters.rag.langchain import LangChainRAGPipeline
 
     class _StubChain:
         def invoke(self, input: object) -> str:
@@ -529,21 +528,21 @@ def test_build_rag_langchain_rejects_a_malformed_factory_path() -> None:
 
 
 def test_build_observability_otel_builds_from_a_base_url() -> None:
-    from sectum.adapters.observability.otel import OtelObservability
+    from sectum_ai.adapters.observability.otel import OtelObservability
 
     adapter = build_observability(AdapterConfig(kind="otel", base_url="https://otel.example.com"))
     assert isinstance(adapter, OtelObservability)
 
 
 def test_build_observability_helicone_builds_from_an_api_key() -> None:
-    from sectum.adapters.observability.helicone import HeliconeObservability
+    from sectum_ai.adapters.observability.helicone import HeliconeObservability
 
     adapter = build_observability(AdapterConfig(kind="helicone", api_key="hc-test-key"))
     assert isinstance(adapter, HeliconeObservability)
 
 
 def test_build_observability_datadog_builds_from_api_and_application_keys() -> None:
-    from sectum.adapters.observability.datadog import DatadogObservability
+    from sectum_ai.adapters.observability.datadog import DatadogObservability
 
     adapter = build_observability(
         AdapterConfig(kind="datadog", api_key="dd-test-key", application_key="dd-app-key")
@@ -610,7 +609,7 @@ def test_build_agent_autogen_imports_and_invokes_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.agent.autogen import AutoGenAgent
+    from sectum_ai.adapters.agent.autogen import AutoGenAgent
 
     class _StubAssistant:
         name = "stub"
@@ -706,7 +705,7 @@ def test_build_agent_autogen_forwards_a_max_turns_extra(
     import sys
     import types
 
-    from sectum.adapters.agent.autogen import AutoGenAgent
+    from sectum_ai.adapters.agent.autogen import AutoGenAgent
 
     class _StubAssistant:
         name = "stub"
@@ -741,7 +740,7 @@ def test_build_agent_crewai_imports_and_invokes_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.agent.crewai import CrewAIAgent
+    from sectum_ai.adapters.agent.crewai import CrewAIAgent
 
     class _StubCrew:
         def kickoff(self, inputs: dict[str, object]) -> dict[str, object]:
@@ -816,7 +815,7 @@ def test_build_agent_crewai_forwards_input_and_tenant_keys(
     import sys
     import types
 
-    from sectum.adapters.agent.crewai import CrewAIAgent
+    from sectum_ai.adapters.agent.crewai import CrewAIAgent
 
     class _StubCrew:
         def kickoff(self, inputs: dict[str, object]) -> dict[str, object]:
@@ -855,7 +854,7 @@ def test_build_agent_openai_assistants_imports_and_invokes_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.agent.openai_assistants import OpenAIAssistantsAgent
+    from sectum_ai.adapters.agent.openai_assistants import OpenAIAssistantsAgent
 
     class _StubAssistantsClient:
         def create_thread(self) -> str:
@@ -999,7 +998,7 @@ def test_build_agent_anthropic_tooluse_imports_and_invokes_the_named_factory(
     import sys
     import types
 
-    from sectum.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
+    from sectum_ai.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
 
     class _StubAnthropicClient:
         def run_turn(self, messages: list[dict[str, object]]) -> tuple[str, tuple[str, ...]]:

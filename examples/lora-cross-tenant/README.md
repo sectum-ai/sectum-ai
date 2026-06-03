@@ -35,17 +35,17 @@ serve path.
 `FakeModel` with the deliberately-leaky `adapter_bleed: true` knob (the
 condition Class 9 is built to catch):
 
-1. **`sectum seed`** provisions four synthetic tenants and their canary
+1. **`sectum-ai seed`** provisions four synthetic tenants and their canary
    markers.
-2. **`sectum probe --probe lora-cross-tenant`** trains each tenant's
+2. **`sectum-ai probe --probe lora-cross-tenant`** trains each tenant's
    adapter on a small corpus that includes the tenant's `HARD_CANARY`,
    then issues a foreign-tenant inference per tenant pair and scans the
    completion for any other tenant's canary. The probe exits `2` when
    it confirms at least one cross-tenant leak — the success signal on
    the leaky demo stack.
-3. **`sectum report`** assembles the tamper-evident evidence pack
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack
    (PDF + JSON + in-toto envelope).
-4. **`sectum verify`** independently re-checks the pack's integrity.
+4. **`sectum-ai verify`** independently re-checks the pack's integrity.
 
 ## Run it
 
@@ -81,7 +81,7 @@ adapters:
 
 ```sh
 pip install sectum-ai-adapters[huggingface]
-sectum probe --probe lora-cross-tenant --config sectum.yaml --workdir out
+sectum-ai probe --probe lora-cross-tenant --config sectum.yaml --workdir out
 ```
 
 A real base model on CPU runs slowly (TinyLlama-1.1B takes ~30s per

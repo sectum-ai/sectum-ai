@@ -28,16 +28,16 @@ Poisoning)**.
 
 `run.sh` runs the canonical CLI flow end to end:
 
-1. **`sectum seed`** provisions four synthetic tenants and their
+1. **`sectum-ai seed`** provisions four synthetic tenants and their
    canary markers.
-2. **`sectum probe --probe rag-poisoning`** plants one poison
+2. **`sectum-ai probe --probe rag-poisoning`** plants one poison
    document per hard canary (carrying that marker's owning
    principal's canary under the lure phrase) into the shared index,
    then queries the lure from every principal. A finding lands
    whenever a query's retrieved context carries a canary owned by a
    *different* principal — the cross-tenant poison pivot.
-3. **`sectum report`** assembles the tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 

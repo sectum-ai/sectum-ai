@@ -24,7 +24,7 @@ document IDs from the ground-truth manifest - need the seeded `Substrate`.
 ## Decision
 
 - **The leak-detection pipeline moves into `sectum-ai-probes`**
-  (`sectum.probes.detection`). The pipeline itself depends only on `sectum.spec`
+  (`sectum_ai.probes.detection`). The pipeline itself depends only on `sectum_ai.spec`
   data models, never on the substrate generators. The package dependency graph
   stays acyclic: `core` depends on `spec`, `adapters`, `probes`, and `evidence`;
   `probes` depends on `spec` **and `adapters`** (the erasure and
@@ -43,5 +43,5 @@ document IDs from the ground-truth manifest - need the seeded `Substrate`.
   design and the only one that is acyclic, keeps five packages, and keeps the
   CLI in core.
 - `DetectionPipeline`, the embedding and judge providers, and
-  `confirmed_findings` are imported from `sectum.probes`, not `sectum.substrate`.
+  `confirmed_findings` are imported from `sectum_ai.probes`, not `sectum_ai.substrate`.
 - The CLI in `core` can depend on `sectum-ai-probes` with no cycle.

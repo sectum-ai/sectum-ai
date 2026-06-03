@@ -20,10 +20,10 @@ classifiers = [
 ]
 dependencies = [
     "sectum-ai-spec",
-    # erasure/probe.py and kv_cache_timing/probe.py import sectum.adapters at module
+    # erasure/probe.py and kv_cache_timing/probe.py import sectum_ai.adapters at module
     # load (eagerly, via probes/__init__), so a published sectum-ai-probes must
     # declare it rather than rely on the adapters sibling being co-installed. The
-    # edge is acyclic: sectum-ai-adapters imports only sectum.spec (ADR-0004).
+    # edge is acyclic: sectum-ai-adapters imports only sectum_ai.spec (ADR-0004).
     "sectum-ai-adapters",
     "pyyaml>=6",
 ]
@@ -37,5 +37,5 @@ sectum-ai-spec = { workspace = true }
 sectum-ai-adapters = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/sectum"]
+only-include = ["src/sectum_ai"]
 sources = ["src"]

@@ -4,15 +4,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sectum.evidence import build_evidence_pack, control_mappings, render_audit_pack
-from sectum.evidence.pdf import (
+from sectum_ai.evidence import build_evidence_pack, control_mappings, render_audit_pack
+from sectum_ai.evidence.pdf import (
     _SCOPE_METHODOLOGY,
     _evidence_line,
     _finding_controls,
     _finding_lines,
     _remediation_line,
 )
-from sectum.spec import (
+from sectum_ai.spec import (
     EvidencePack,
     Finding,
     FindingStatus,

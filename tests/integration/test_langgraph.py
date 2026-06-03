@@ -22,8 +22,7 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.agent.langgraph import LangGraphAgent
+from sectum_ai.adapters.agent.langgraph import LangGraphAgent
 
 pytestmark = [
     pytest.mark.live,

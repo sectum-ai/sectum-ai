@@ -2,8 +2,7 @@
 
 import pytest
 import structlog
-
-from sectum.spec import configure_logging
+from sectum_ai.spec import configure_logging
 
 
 @pytest.fixture(autouse=True)

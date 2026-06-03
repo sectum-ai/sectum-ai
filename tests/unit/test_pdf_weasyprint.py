@@ -10,10 +10,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
-from sectum.evidence import PdfEngine, render_audit_pack
-from sectum.evidence.pdf_weasyprint import build_audit_html, render_weasyprint
-from sectum.spec import (
+from sectum_ai.evidence import PdfEngine, render_audit_pack
+from sectum_ai.evidence.pdf_weasyprint import build_audit_html, render_weasyprint
+from sectum_ai.spec import (
     ControlMapping,
     EvidenceError,
     EvidencePack,

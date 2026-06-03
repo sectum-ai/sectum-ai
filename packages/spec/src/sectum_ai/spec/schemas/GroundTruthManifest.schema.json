@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "Marker": {
+      "additionalProperties": false,
+      "description": "A planted canary whose appearance in the wrong principal proves leakage.\n\n``owner_user_id`` is set only when the marker is owned by a specific user\nwithin ``owner_tenant_id``'s tenant (ADR-0006); a tenant-level marker\nleaves it ``None``.",
+      "properties": {
+        "embedding_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Ref"
+        },
+        "marker_id": {
+          "title": "Marker Id",
+          "type": "string"
+        },
+        "marker_type": {
+          "$ref": "#/$defs/MarkerType"
+        },
+        "owner_tenant_id": {
+          "format": "uuid",
+          "title": "Owner Tenant Id",
+          "type": "string"
+        },
+        "owner_user_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner User Id"
+        },
+        "plaintext": {
+          "minLength": 1,
+          "title": "Plaintext",
+          "type": "string"
+        },
+        "planted_locations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PlantedLocation"
+          },
+          "title": "Planted Locations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "marker_id",
+        "marker_type",
+        "owner_tenant_id",
+        "plaintext"
+      ],
+      "title": "Marker",
+      "type": "object"
+    },
+    "MarkerType": {
+      "description": "The three canary marker types (the engineering spec, section 6.3).",
+      "enum": [
+        "HARD_CANARY",
+        "ENTITY_CANARY",
+        "SECRET_CANARY"
+      ],
+      "title": "MarkerType",
+      "type": "string"
+    },
+    "PlantedLocation": {
+      "additionalProperties": false,
+      "description": "Where a marker was planted within a document.",
+      "properties": {
+        "doc_id": {
+          "title": "Doc Id",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "doc_id",
+        "field"
+      ],
+      "title": "PlantedLocation",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.2.0/GroundTruthManifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Authoritative record of which marker belongs to which tenant.\n\nThe manifest is a pure function of the scenario and seed; it carries no\nwall-clock time so the reproducibility contract holds byte-for-byte. Its\ncanonical hash is computed via ``sectum_ai.spec.hashing.canonical_hash``.",
+  "properties": {
+    "manifest_id": {
+      "title": "Manifest Id",
+      "type": "string"
+    },
+    "markers": {
+      "items": {
+        "$ref": "#/$defs/Marker"
+      },
+      "title": "Markers",
+      "type": "array"
+    },
+    "scenario_hash": {
+      "title": "Scenario Hash",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "0.2.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest_id",
+    "scenario_hash",
+    "markers"
+  ],
+  "title": "GroundTruthManifest",
+  "type": "object"
+}

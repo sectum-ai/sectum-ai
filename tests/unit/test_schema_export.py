@@ -3,8 +3,8 @@
 import json
 from pathlib import Path
 
-from sectum.spec import SCHEMA_VERSION, json_schemas, write_json_schemas
-from sectum.spec.schema import SCHEMA_DIR, schema_id, serialize_schema
+from sectum_ai.spec import SCHEMA_VERSION, json_schemas, write_json_schemas
+from sectum_ai.spec.schema import SCHEMA_DIR, schema_id, serialize_schema
 
 
 def test_write_json_schemas_writes_one_file_per_model(tmp_path: Path) -> None:

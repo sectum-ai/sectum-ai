@@ -7,12 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — the Python import is renamed `sectum` → `sectum_ai`, and the CLI
+  binary `sectum` → `sectum-ai`.** Bare `sectum` is gone as a standalone name; the
+  product is **Sectum AI** (prose), `sectum-ai` (distribution / repo / CLI), and
+  `sectum_ai` (the valid-identifier import of that distribution). The PyPI
+  distribution names are unchanged (`sectum-ai`, `sectum-ai-spec`, `-probes`,
+  `-adapters`, `-evidence`); only the imported package and the console script
+  change — so `pip install sectum-ai` still works, but code now does `import
+  sectum_ai` and the command is `sectum-ai …`. Every package `src/sectum/`
+  directory is now `src/sectum_ai/`, all imports/docs/examples are updated, and the
+  committed JSON Schemas were regenerated (the change is the docstring reference in
+  two `description`s; the `$id` is domain-based and unchanged). The `sectum.ai`
+  domain, the `.sectum` workdir, the `sectum.yaml` config filename, and the
+  `sectum-demo` scenario id are retained (renaming the latter would churn the
+  reproducibility golden hashes and every sample pack). This supersedes the
+  original §3 "resolved" import/CLI names by operator decision.
+
 ### Fixed
 
-- **`sectum init` now generates a `sectum.yaml` that every `--config` command can
+- **`sectum-ai init` now generates a `sectum.yaml` that every `--config` command can
   load.** The template's `security:` section had only a commented-out body, so
   YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
-  rejected — `sectum seed --config <generated>` exited `3`, breaking the documented
+  rejected — `sectum-ai seed --config <generated>` exited `3`, breaking the documented
   `init` → `--config` onboarding for every workflow command. The template now
   comments out the section *header* too (so the default applies), and
   `SectumConfig` defensively drops any section commented down to `null` so the
@@ -21,13 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`sectum-ai-probes` now declares the `sectum-ai-adapters` dependency it imports
   — the published wheel was un-importable on its own.** `erasure/probe.py` and
-  `kv_cache_timing/probe.py` import `sectum.adapters` at module load (eagerly via
+  `kv_cache_timing/probe.py` import `sectum_ai.adapters` at module load (eagerly via
   `probes/__init__`), but `sectum-ai-probes` declared only `sectum-ai-spec` +
   `pyyaml`, so a clean `pip install sectum-ai-probes` followed by `import
-  sectum.probes` raised `ModuleNotFoundError: No module named 'sectum.adapters'`
+  sectum_ai.probes` raised `ModuleNotFoundError: No module named 'sectum_ai.adapters'`
   (the dev uv workspace installs every package, which masked the missing edge). The
   dependency (and uv source) are now declared; the edge is acyclic since
-  `sectum-ai-adapters` imports only `sectum.spec`, and ADR-0004 is corrected (its
+  `sectum-ai-adapters` imports only `sectum_ai.spec`, and ADR-0004 is corrected (its
   "probes depends on `sectum-ai-spec` only" claim was stale). A new
   `tests/unit/test_packaging.py` guards this and the related direct-dependency
   declarations.
@@ -46,12 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`scenario.embedding_models` is now wired end to end, so the per-model
   Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
   `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
-  `sectum.yaml` that set the documented key was rejected — and `sectum seed` built
+  `sectum.yaml` that set the documented key was rejected — and `sectum-ai seed` built
   the scenario from the seed alone, so `retrieval_pivot_rate_by_model` was always
   `{}` off a real `seed`→`probe` run (the flagship "stronger embeddings leak more"
   gradient only ever appeared in unit tests). `ScenarioConfig` now carries both
   fields, `seed` threads them through `default_scenario`, and a repeatable
-  `sectum seed --embedding-model <spec>` overrides them; an unknown spec is
+  `sectum-ai seed --embedding-model <spec>` overrides them; an unknown spec is
   rejected with a config error (exit `3`) at load/parse time rather than silently
   becoming an empty sweep. A full-CLI E2E seeds two embedding models and asserts
   the per-model rate is recorded with the expected gradient.
@@ -66,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `importlib.metadata.version("sectum-ai")` (with a `0.0.0+unknown` fallback for an
   uninstalled tree); the committed `docs/samples/` packs were regenerated so the
   published samples attest `0.1.0`.
-- **`sectum verify` now re-checks the in-toto attestation sidecar.** `report` /
+- **`sectum-ai verify` now re-checks the in-toto attestation sidecar.** `report` /
   `erasure` write `attestation.intoto.json` beside the pack, but `verify` never
   re-verified it, so a swapped sidecar handed to an in-toto-aware pipeline got no
   protection from the OSS verifier. `verify` now re-runs `verify_in_toto_statement`
@@ -100,12 +118,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path), so an unreachable or misbehaving backend fails cleanly.
 - **A present-but-corrupt `substrate.json` / `run.json` / `baseline.json` now
   exits `3` (config error) instead of crashing.** The CLI's `_load_substrate`,
-  `_load_run`, and `sectum baseline --compare` called `model_validate_json`
+  `_load_run`, and `sectum-ai baseline --compare` called `model_validate_json`
   unguarded, so a malformed artifact raised an unhandled `ValidationError` that
   Typer reported as an opaque exit `1` rather than the documented config-error
   exit `3`. Each load now catches the error and exits `3` with a message naming
   the bad file.
-- **`sectum baseline --compare` now gates on the full run diff, not metrics
+- **`sectum-ai baseline --compare` now gates on the full run diff, not metrics
   alone.** It compared only the headline metric counts, so a leak that newly
   *confirmed* (an `UNVERIFIED`→`CONFIRMED` upgrade or a fresh confirmed id) or a
   confirmed leak that *escalated in severity* (e.g. low→critical) between the
@@ -128,8 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
   backend limitation, not a confirmed cross-tenant leak. These findings are now
   `UNVERIFIED` (not `CONFIRMED`), and the erasure run's confirmed-findings count
-  excludes them, so onboarding such a backend no longer makes `sectum diff` /
-  `sectum baseline --compare` report a regression (exit 2) on the GDPR
+  excludes them, so onboarding such a backend no longer makes `sectum-ai diff` /
+  `sectum-ai baseline --compare` report a regression (exit 2) on the GDPR
   Article 17 wedge path. Completes the "caveats never regress" contract on the
   finding paths, not just the `erasure_caveats` metric. Regenerated sample packs
   in `docs/samples/` also now verify under the post-ADR-0016 whole-pack digest.
@@ -152,10 +170,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *attestable-with-caveat* (data presumed retained), exactly like the Helicone
   and Datadog adapters. Previously these codes were swallowed as a no-op, so the
   post-erasure re-scan reported the un-deletable spans as a `CONFIRMED` residual
-  (gating `sectum diff` / `baseline --compare`) — inconsistent with the other
+  (gating `sectum-ai diff` / `baseline --compare`) — inconsistent with the other
   observability backends for the same real condition. A `404` still means the
   spans are already absent and remains an idempotent erasure success.
-- **`sectum erasure` now itemizes an attestable-with-caveat surface even when a
+- **`sectum-ai erasure` now itemizes an attestable-with-caveat surface even when a
   genuine residual co-exists.** When a soft-deleting surface (a real erasure
   failure) and a no-erasure-API surface (a caveat) were both present, the
   dominant `ERASURE FAILED` message returned early and the caveat surface was
@@ -163,7 +181,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surface still held data. Both are now reported before the exit `2`.
 - **In-toto attestations no longer over-claim a timestamp anchor for a local
   development token.** The predicate's `anchors.timestamp` was `true` whenever a
-  token was present, but `sectum verify` treats the `local-dev` JSON token as
+  token was present, but `sectum-ai verify` treats the `local-dev` JSON token as
   *unanchored* (it binds the digest but is not an independent RFC 3161 / Rekor
   anchor). The flag now matches `verify_pack` — only a real (non-JSON, binary)
   TSA token counts as an external timestamp anchor.
@@ -200,7 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   canary types with their distinct detection paths, multi-field planting,
   model-scoped embedding references, secret redaction, the four-step detection
   pipeline with its zero-FP/zero-FN guarantees, and the reproducibility contract.
-  [`docs/data-models.md`](docs/data-models.md) documents the `sectum.spec` models
+  [`docs/data-models.md`](docs/data-models.md) documents the `sectum_ai.spec` models
   (§9), links the committed Draft 2020-12 JSON Schemas (generated by
   `scripts/gen_schemas.py`, parity-tested), and records `SCHEMA_VERSION` and the
   canonical-hashing rules. Both are added to the docs nav. A new
@@ -312,7 +330,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   zero-false-positive test for a secret-shaped string absent from the manifest. The
   demo `corpus_size` default rises to ~500 documents/tenant (the spec, section 6.2);
   tests and the checked-in example samples pin a small corpus, and the committed
-  sample packs and reproducibility golden hash were regenerated (no `sectum.spec`
+  sample packs and reproducibility golden hash were regenerated (no `sectum_ai.spec`
   model field changed, so the JSON Schemas and `SCHEMA_VERSION` are untouched).
 
 - **The canonical-hash finite-float determinism contract is now pinned (ADR-0021).**
@@ -333,13 +351,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `evidence/dsse.py` builds the envelope (base64 payload + the spec's PAE
   encoding), decodes it, and verifies it still binds the pack's run digest. `sectum
   report` now writes `evidence.dsse.json` beside the pack (and into `--bundle`), and
-  `sectum verify` re-checks that sidecar — a swapped envelope fails. Standard-library
+  `sectum-ai verify` re-checks that sidecar — a swapped envelope fails. Standard-library
   only and fully offline-verifiable. *Sigstore keyless (Fulcio/OIDC) signing of this
   envelope is the opt-in layer on top: its OIDC identity flow is not exercisable in
   offline CI, so — to avoid shipping unverifiable signing internals — it is deferred
   rather than stubbed; the DSSE envelope produced here is exactly what that signature
   and a Rekor `dsse` entry attach to.*
-- **`sectum verify` gates the pack's `schema_version`.** The attested digest is
+- **`sectum-ai verify` gates the pack's `schema_version`.** The attested digest is
   recomputed under a canonical-serialization scheme tied to the schema version, so
   a pack from an incompatible `major.minor` could hash under different rules or
   carry different fields. `verify_pack` now refuses such a pack up front with a
@@ -348,15 +366,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the retrieval-pivot one, whose large `evidence.json` is not committed and so
   previously went untested) is now pinned as a structurally valid in-toto
   Statement by an invariant test, so no shipped attestation is silently orphaned.
-- **Single-archive evidence bundle (`sectum report --bundle`, the spec §8.2).**
+- **Single-archive evidence bundle (`sectum-ai report --bundle`, the spec §8.2).**
   Section 8.2 step 5 calls for bundling a run's attested artifacts into one pack;
   until now `report` wrote three loose sidecars a verifier had to keep together by
   convention. `evidence/bundle.py` builds a deterministic ZIP carrying a
   `bundle-manifest.json` of each member's SHA-256, and `verify_bundle` recomputes
   every digest **and** re-runs `verify_pack` on the contained evidence — so editing
-  any member, or the pack itself, fails. `sectum report --bundle` writes
+  any member, or the pack itself, fails. `sectum-ai report --bundle` writes
   `evidence-bundle.zip` (with `--include-manifest` sealing the ground-truth manifest
-  AES-256-GCM, off by default); `sectum verify <bundle.zip>` verifies the archive
+  AES-256-GCM, off by default); `sectum-ai verify <bundle.zip>` verifies the archive
   end to end (exit `4` on failure). The bundler is crypto-agnostic and stays in the
   evidence layer.
 - **Class 9 routing assertion: `ModelAdapter.served_by` (the spec, Class 9).**
@@ -396,14 +414,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `extraction_efficiency` (Class 10) — each the fraction of that probe's benign
   query steps that surfaced a confirmed foreign canary, computed by the new
   `confirmed_finding_rate` helper (which `retrieval_pivot_rate` now aliases).
-  `sectum probe` records and prints them (and emits them in `--output json`), and
-  `sectum diff` / `baseline` flag a rise in any of them as a regression, exactly
+  `sectum-ai probe` records and prints them (and emits them in `--output json`), and
+  `sectum-ai diff` / `baseline` flag a rise in any of them as a regression, exactly
   like the Retrieval-Pivot Rate. The committed JSON Schema artifacts and erasure
   sample packs were regenerated for the widened `RunMetrics`.
 - **Structured logging with redaction, the last unimplemented §16 convention.**
   The spec requires `structlog`-based logging that never emits secrets or raw
   tenant content above DEBUG, with DEBUG off by default — and the library logged
-  nothing at all. `sectum.spec` now exports `get_logger` / `configure_logging` /
+  nothing at all. `sectum_ai.spec` now exports `get_logger` / `configure_logging` /
   `redact_sensitive`: a JSON renderer to **stderr** (stdout stays reserved for
   command output), DEBUG suppressed by default, and a processor that replaces
   secret-bearing and raw-tenant-content keys with `<redacted>` for every event
@@ -438,15 +456,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`adapter_versions` is stamped from the `sectum-ai-adapters` distribution.** A
   run's `adapter_versions` recorded the core CLI's `__version__` for every
   adapter; it now resolves the adapters distribution version via the new
-  `sectum.adapters.version()` (with a `0.0.0+unknown` fallback) at both the probe
+  `sectum_ai.adapters.version()` (with a `0.0.0+unknown` fallback) at both the probe
   and erasure sites, so an evidence pack attests the version of the code that
   actually drove each surface. Values are unchanged today (all packages ship in
   lockstep), so there is no canonical-hash or sample-pack change.
 - **The backup surface is now covered everywhere, and a meta-test stops a new
   adapter family from landing uncovered.** The `BackupAdapter` family (Class 11
   hiding place #7) shipped but was skipped at every coverage seam: `FakeBackup`
-  now runs the shared adapter contract suite, `sectum adapters` lists it (with the
-  search-index and eval-set fakes, also previously absent), and `sectum erasure`
+  now runs the shared adapter contract suite, `sectum-ai adapters` lists it (with the
+  search-index and eval-set fakes, also previously absent), and `sectum-ai erasure`
   seeds and scans a `FakeBackup` so the backup surface is attested in the erasure
   evidence pack (`adapter_versions`). A new contract meta-test asserts *every*
   `AdapterFamily` has a fake under the suite, so the gap that let backup slip
@@ -456,7 +474,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recall knob on the in-memory `FakeVectorStore`, and the CLI recorded it only
   when the configured store *was* that fake — so the flagship "stronger
   embeddings leak more" gradient (arXiv:2602.08668) vanished on a live POC. A new
-  provider-agnostic `EmbeddingModel` interface (`sectum.embeddings`) adds a
+  provider-agnostic `EmbeddingModel` interface (`sectum_ai.embeddings`) adds a
   deterministic offline `HashingEmbedding` (the CI/demo default) plus opt-in
   `SentenceTransformerEmbedding` (extra `sectum-ai[sentence-transformers]`, local
   and BYOC-safe — the MiniLM-vs-mpnet research pair) and `OpenAIEmbedding` (extra
@@ -494,13 +512,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model's higher Retrieval-Pivot Rate is flagged by `compare_metrics().regressed`
   — so "baseline compare detects an injected regression" is enforced in CI rather
   than asserted in prose.
-- **Named, sellable probe suites — `sectum probe --suite <name>`.** A *suite*
+- **Named, sellable probe suites — `sectum-ai probe --suite <name>`.** A *suite*
   fixes a probe set plus the compliance frameworks it provides evidence for, so an
   operator runs a named, control-mapped subset for a specific SKU instead of
   hand-picking probes. Ships `soc2-tenant-isolation` (the curated cross-tenant
   isolation checks → SOC 2 CC6.1/CC6.6/CC6.7, ISO 27001 A.8.3/A.8.12) and
   `owasp-llm08` (the full catalog). `--suite` and `--probe` are mutually exclusive;
-  an unknown suite exits `3`. Suite definitions live in `sectum.suites`, their
+  an unknown suite exits `3`. Suite definitions live in `sectum_ai.suites`, their
   probe sets validated against the live catalog. New `docs/skus.md` maps the four
   SKUs (Erasure Attestation, SOC 2 pack, Continuous Verification, Open Sectum) to
   their commands and the OSS-vs-Cloud boundary.
@@ -516,10 +534,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   example pointer — so the catalog is consumable without importing Python (the
   suite selector, dashboards, external tooling). Manifests are a mirror of the
   authoritative class attributes, generated by `scripts/gen_probe_manifests.py`
-  and loadable via `sectum.probes.load_probe_manifest(probe)`; a test enforces
+  and loadable via `sectum_ai.probes.load_probe_manifest(probe)`; a test enforces
   parity so a manifest can never drift from its class. Closes a standing §7.0
   gap (no manifests previously existed).
-- **Optional weasyprint PDF engine for the audit pack.** `sectum report
+- **Optional weasyprint PDF engine for the audit pack.** `sectum-ai report
   --pdf-engine weasyprint` (or `render_audit_pack(..., engine=PdfEngine.WEASYPRINT)`)
   renders the auditor pack from an HTML/CSS template — severity badges, typographic
   tables, page footers — as an alternative to the default reportlab renderer.
@@ -527,7 +545,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   install stays pure-Python and reportlab remains the default, and both engines
   render identical content. Resolves the spec §21 PDF-engine decision; see
   [ADR-0017](docs/adr/0017-pdf-engine.md).
-- **`sectum diff` — compare two runs or evidence packs.** Reports finding-level
+- **`sectum-ai diff` — compare two runs or evidence packs.** Reports finding-level
   changes — which leaks appeared, were resolved, persist, or changed in place
   (status or severity) — on top of the `baseline --compare` metric deltas, and
   exits `2` when the later run regressed: a worsened metric, a newly confirmed
@@ -537,14 +555,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **`sectum verify <bundle.zip>` now binds the bundled audit PDF and attestation
+- **`sectum-ai verify <bundle.zip>` now binds the bundled audit PDF and attestation
   sidecars to the pack — closing a verification-bypass in the bundle path.**
   `verify_bundle` recomputed each member's digest against `bundle-manifest.json`
   but called `verify_pack` without the audit PDF or the in-toto/DSSE sidecars, so a
   delivered `report --bundle` archive could be **rebuilt** with a forged "zero
   leakage" `audit-pack.pdf` (its digest re-recorded in the in-archive manifest) —
-  or with sidecars attesting a different run — and still pass `sectum verify`,
-  breaking the §8.1 tamper-evidence guarantee (the standalone `sectum verify
+  or with sidecars attesting a different run — and still pass `sectum-ai verify`,
+  breaking the §8.1 tamper-evidence guarantee (the standalone `sectum-ai verify
   evidence.json` path already enforced this via the on-disk siblings; only the
   bundle path was blind). `verify_bundle` now passes the bundled PDF to
   `verify_pack` (enforcing the bound `pdf_ref`), fails when a pack binds a
@@ -556,16 +574,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The audit-pack PDF is now bound into the tamper-evident digest.** The
   DPO/auditor-facing PDF was never covered by the attested digest, so it could be
-  silently swapped while `sectum verify` still reported PASS. `sectum report` /
-  `sectum erasure` now render the PDF first, hash its bytes, and bind that SHA-256
+  silently swapped while `sectum-ai verify` still reported PASS. `sectum-ai report` /
+  `sectum-ai erasure` now render the PDF first, hash its bytes, and bind that SHA-256
   as the pack's `pdf_ref` (which `attested_digest` already covers), so the signed
-  digest commits to the exact PDF. `sectum verify` re-hashes the audit PDF when it
+  digest commits to the exact PDF. `sectum-ai verify` re-hashes the audit PDF when it
   sits beside the pack (`audit-pack.pdf` / `erasure-attestation.pdf`) and fails on
   a mismatch, while still verifying from `evidence.json` alone when the PDF is
   absent. To make the PDF a pure function of pre-signature content (so it hashes
   deterministically before signing), the raw timestamp-token row was dropped from
   the rendered PDF — the token remains in `evidence.json`, and the PDF still
-  directs the reader to run `sectum verify`. Both PDF engines render the same
+  directs the reader to run `sectum-ai verify`. Both PDF engines render the same
   digest-stable content.
 - **Detection hardening (zero false-positive / zero false-negative).** Four
   fixes to the leak-detection pipeline, the technical moat:
@@ -586,7 +604,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Regression comparison reports per-surface erasure _caveats_** as
-  informational metric deltas (in `sectum diff` and `sectum baseline --compare`).
+  informational metric deltas (in `sectum-ai diff` and `sectum-ai baseline --compare`).
   A caveat is a backend coverage limitation (Class 11 hiding place #8), not an
   isolation failure, so it is surfaced for visibility but never counts as a
   regression — kept distinct from erasure _residue_, which does.
@@ -609,7 +627,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Evidence packs are tamper-evident across their whole attested surface.** The
   timestamp and Rekor anchors now bind the control mappings, the recorded PDF
   reference, and the manifest hash — not just the run record — so forging the
-  compliance claims or altering the recorded PDF reference makes `sectum verify`
+  compliance claims or altering the recorded PDF reference makes `sectum-ai verify`
   fail.
 - **Transparency-log anchoring cannot be silently downgraded.** A pack that was
   Rekor-anchored fails verification if its inclusion proof is stripped
@@ -642,7 +660,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Class 11 *attestable-with-caveat* distinction is now carried end to end,
   not just on the finding. A review pass found that when an observability
   backend raised `ErasureUnsupported` (Helicone / Datadog), the
-  `SurfaceErasure` verdict still read `RESIDUAL DATA`, the `sectum erasure`
+  `SurfaceErasure` verdict still read `RESIDUAL DATA`, the `sectum-ai erasure`
   CLI printed `ERASURE FAILED`, and it exited 2 — indistinguishable from a
   genuine erasure failure, undercutting the caveat the finding documented.
   `SurfaceErasure` now carries an `erasure_supported` flag; its verdict reads
@@ -694,7 +712,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pointer explains it is a backend limitation, not a failure of the
   customer's erasure flow. This distinction matters to a DPO and is the
   honest representation for a compliance attestation.
-- `ErasureUnsupported` is exported from `sectum.spec` and subclasses
+- `ErasureUnsupported` is exported from `sectum_ai.spec` and subclasses
   `AdapterError`, so callers that don't special-case the caveat still catch
   it under existing adapter-error handling. The CLI resolver accepts
   `kind: helicone` and `kind: datadog` under `observability`;
@@ -766,7 +784,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A runnable Class 7 walkthrough for the new probe in
   `examples/agent-framework-hijack/` (README + `run.sh` +
   `sectum.yaml`). The script seeds a four-tenant substrate, runs
-  `sectum probe --probe agent-framework-hijack` against the in-memory
+  `sectum-ai probe --probe agent-framework-hijack` against the in-memory
   `FakeAgent` with both leak knobs on, assembles a tamper-evident
   evidence pack, and verifies it — the same canonical CLI flow the
   other examples follow. Demonstrates 24 confirmed cross-tenant
@@ -799,7 +817,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   honours a caller-supplied `token=<tenant-hex>` argument (the
   Asana-class agentic token-passthrough pattern). A `provision(tenant,
   key, value)` test helper registers a tenant's resource; the CLI's
-  leaky-demo config flips both knobs on so `sectum probe` reproduces
+  leaky-demo config flips both knobs on so `sectum-ai probe` reproduces
   the cross-tenant findings the probe is built to catch. The default
   `FakeAgent()` stays non-leaky and now reports
   `Capability.TENANT_SCOPED_TOOLS`.
@@ -896,7 +914,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attack, scopes the demo to the fake substrate, and documents the
   `sectum.yaml` swap that points the same probe at the new live
   `HuggingFaceLoraModel` for real-PEFT-stack probing. Smoke-tested on
-  a clean substrate: the evidence pack verifies under `sectum verify`.
+  a clean substrate: the evidence pack verifies under `sectum-ai verify`.
 - A new `examples/kv-cache-timing/` walkthrough that reproduces Attack
   Class 5 — the KV-cache prefix-cache timing side channel — end to
   end against the in-memory `FakeModel` with `prefix_cache: true`.
@@ -908,7 +926,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cache), and scopes the demo to the fake-model substrate while
   pointing at the new live `huggingface` model kind as the on-ramp to
   real-inference-engine probing. Smoke-tested on a clean substrate:
-  the evidence pack verifies under `sectum verify`. Joins
+  the evidence pack verifies under `sectum-ai verify`. Joins
   `mcp-tenant-boundary/`, `agent-tool-hijack/`, and
   `memory-contamination/` as the agent-side isolation examples
   alongside the flagship Class 2 `retrieval-pivot/` and the wedge
@@ -948,7 +966,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CrewAI memory, Mem0, Letta, Zep) the `MemoryAdapter` interface is built
   to receive. Smoke-tested on a clean substrate: `run.sh` exits with 24
   confirmed Class 8 leak findings and the evidence pack verifies under
-  `sectum verify`.
+  `sectum-ai verify`.
 - A new `examples/agent-tool-hijack/` walkthrough that reproduces Attack
   Class 7 from the *agent-adapter* perspective: the same Class 7 probe
   the `examples/mcp-tenant-boundary/` example drives (with confused-deputy
@@ -960,7 +978,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operator can verify Class 7 with the same agent framework their customer
   actually runs in production. Smoke-tested on a clean substrate:
   `run.sh` exits with the canonical Class 7 leak findings and the evidence
-  pack verifies under `sectum verify`.
+  pack verifies under `sectum-ai verify`.
 - A live CrewAI agent adapter (`packages/adapters/src/sectum/adapters/agent/crewai.py`):
   a `CrewAIAgent` that drives a CrewAI `Crew` of agents + tasks through
   `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so a
@@ -1005,7 +1023,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 First public release. Sectum AI ships as a five-package `uv` workspace
 (`sectum-ai`, `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
 `sectum-ai-evidence`), Apache-2.0 licensed, with a tamper-evident evidence
-chain anyone can verify with `sectum verify` and no Sectum-side trust.
+chain anyone can verify with `sectum-ai verify` and no Sectum-side trust.
 What landed in 0.1.0 is the work that closed the phase-0 through phase-5
 build plan; the rest of this section is the per-feature log.
 
@@ -1041,7 +1059,7 @@ build plan; the rest of this section is the per-feature log.
   and a pair of live-gated integration tests run against the real APIs
   when `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` are set.
 - A second flavour of the Erasure Attestation sample in `docs/samples/`: the
-  RESIDUAL DATA pack produced by `sectum erasure --soft-delete` against the
+  RESIDUAL DATA pack produced by `sectum-ai erasure --soft-delete` against the
   `examples/erasure-attestation` substrate. Three new files
   (`erasure-attestation-residual-data-audit-pack.pdf`,
   `erasure-attestation-residual-data-evidence.json`,
@@ -1050,7 +1068,7 @@ build plan; the rest of this section is the per-feature log.
   successful-erasure deliverable and the failure-mode artefact the pack is
   built to catch — without running anything locally. The samples README now
   describes both verdict flavours, lists the regeneration commands for both,
-  and explains that either pack verifies under `sectum verify`; the verdict
+  and explains that either pack verifies under `sectum-ai verify`; the verdict
   is data, not signal integrity.
 - `examples/erasure-attestation/sectum.yaml.production`: a documented
   production-shape config for the engagement, with `evidence.timestamper:
@@ -1058,7 +1076,7 @@ build plan; the rest of this section is the per-feature log.
   real engagements should pin a customer-chosen TSA URL (FreeTSA, the OSS
   demo default, has been observed to be unreachable for hours at a time).
   Used by the sample regeneration in `docs/samples/README.md`.
-- `sectum probe --output json` emits a single machine-parseable JSON object on
+- `sectum-ai probe --output json` emits a single machine-parseable JSON object on
   stdout (the run id, the probe count, the confirmed-finding count, the
   Retrieval-Pivot Rate, the per-probe counts, and a `run_path` pointer) so CI
   pipelines and dashboards can act on the headline metrics without scraping
@@ -1107,7 +1125,7 @@ build plan; the rest of this section is the per-feature log.
 - Phase 2 - the adapter SDK and probe interface: six adapter family interfaces
   with a capability model and registry; the `Probe` protocol and registry;
   deterministic in-memory fake adapters for every family with a contract test
-  suite; the `sectum adapters` CLI command; and live pgvector and Chroma
+  suite; the `sectum-ai adapters` CLI command; and live pgvector and Chroma
   vector-store adapters verified against docker-compose backends.
 - Phase 3 - the attack catalog: the scenario runner; the Class 1
   direct-tenant-boundary probe; the Class 2 flagship organic-entity-bleed RAG
@@ -1120,11 +1138,11 @@ build plan; the rest of this section is the per-feature log.
   pluggable timestamper; the compliance-control mappings (SOC 2, ISO 27001,
   GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP); and the audit-pack PDF renderer
   (`render_audit_pack`).
-- Phase 3 - the CLI: `sectum seed` provisions the substrate, `sectum probe`
+- Phase 3 - the CLI: `sectum-ai seed` provisions the substrate, `sectum-ai probe`
   runs the probe suite (recording findings and the Retrieval-Pivot Rate),
-  `sectum report` assembles the evidence pack (JSON and PDF), `sectum verify`
-  independently verifies it, `sectum erasure` runs the GDPR Article 17
-  erasure-verification workflow into an attestation pack, and `sectum init`
+  `sectum-ai report` assembles the evidence pack (JSON and PDF), `sectum-ai verify`
+  independently verifies it, `sectum-ai erasure` runs the GDPR Article 17
+  erasure-verification workflow into an attestation pack, and `sectum-ai init`
   scaffolds a starter `sectum.yaml` config.
 - Phase 3 - end-to-end examples: `examples/retrieval-pivot` (the flagship
   Class 2 walkthrough, from seeding through a verified evidence pack) and
@@ -1133,7 +1151,7 @@ build plan; the rest of this section is the per-feature log.
   `ModelAdapter` adapter family with a deterministic `FakeModel`; the Class 9
   LoRA / adapter cross-tenant-influence probe; and the Class 7 cross-tenant
   agent tool-call hijacking probe (the MCP confused-deputy and token-passthrough
-  sub-probes) over an extended `FakeMCP`. Both probes join the `sectum probe`
+  sub-probes) over an extended `FakeMCP`. Both probes join the `sectum-ai probe`
   suite.
 - Phase 4 - the threat model: `docs/threat-model.md` records the
   trust boundaries, the assets (the ground-truth manifest, evidence packs), the
@@ -1141,9 +1159,9 @@ build plan; the rest of this section is the per-feature log.
 - Phase 4 - a mkdocs-material documentation site: a page per
   implemented attack class, plus the evidence chain, compliance mappings, the
   adapters, the ADRs, and the threat model, with a build-and-deploy workflow.
-- Phase 4 - the `sectum probe --probe` filter to run a single
+- Phase 4 - the `sectum-ai probe --probe` filter to run a single
   probe, and the `examples/mcp-tenant-boundary` Class 7 walkthrough.
-- Phase 5 - the regression-baseline engine: `sectum baseline`
+- Phase 5 - the regression-baseline engine: `sectum-ai baseline`
   saves a run's headline metrics, and `--compare` flags any later run whose
   metrics regressed (more confirmed findings, or a higher Retrieval-Pivot Rate).
 - Phase 5 - Class 8, the persistent memory contamination probe,
@@ -1190,18 +1208,18 @@ build plan; the rest of this section is the per-feature log.
   codes: an `EvidenceError` exits 4, and other typed errors exit 3, replacing
   the traceback that used to surface from a `seed`, `probe`, `erasure`, or
   `report` invocation.
-- A typed `sectum.yaml` configuration loader in `sectum.config`: pydantic
+- A typed `sectum.yaml` configuration loader in `sectum_ai.config`: pydantic
   models for the scenario, adapter, and evidence blocks, and a `load_config`
   function that raises `ConfigError` on a missing file, malformed YAML, or an
-  invalid schema. `sectum seed` accepts `--config sectum.yaml` and reads its
+  invalid schema. `sectum-ai seed` accepts `--config sectum.yaml` and reads its
   scenario seed and workdir from the file; explicit `--seed`/`--workdir` flags
   override the config.
-- A config-driven adapter resolver in `sectum.config`: `build_adapters`
+- A config-driven adapter resolver in `sectum_ai.config`: `build_adapters`
   dispatches each adapter family's `kind` to a concrete `Adapter`, defaulting
-  missing families to plain fakes. `sectum probe` accepts `--config` and
+  missing families to plain fakes. `sectum-ai probe` accepts `--config` and
   builds its adapter bundle from the file, so a tenant-isolated config (every
   leak knob off) records zero confirmed findings while the default leaky-demo
-  config keeps reproducing them. The `sectum init` template now exposes every
+  config keeps reproducing them. The `sectum-ai init` template now exposes every
   adapter family's leak knobs so the demo round-trips through the resolver.
 - The CLI resolver now wires the live adapters: `kind: pgvector`, `chroma`,
   or `weaviate` for `adapters.vector_store`; `kind: redis` for `adapters.cache`;
@@ -1209,7 +1227,7 @@ build plan; the rest of this section is the per-feature log.
   (`dsn_env: SECTUM_PGVECTOR_DSN`); vector adapters receive a deterministic
   hashing-trick embedder so a sectum-driven verification needs no
   embedding-model account.
-- `sectum erasure`, `sectum report`, and `sectum baseline` accept
+- `sectum-ai erasure`, `sectum-ai report`, and `sectum-ai baseline` accept
   `--config sectum.yaml` and use its workdir as a default, completing the
   per-command `--config` coverage for every workflow command.
 - A `docs/configuration.md` reference page in the mkdocs nav: the `sectum.yaml`
@@ -1217,7 +1235,7 @@ build plan; the rest of this section is the per-feature log.
   and defaults, the env-var secret pattern, and a live-pgvector example.
 - Extend the scenario runner with `rag.ask`, `observability.search`, and
   `agent.run` actions and pair them with new `rag`, `observability`, and
-  `agent` fields on `AdapterBundle`; the CLI's `sectum probe` passes the
+  `agent` fields on `AdapterBundle`; the CLI's `sectum-ai probe` passes the
   three new adapters into the runner. Probes can now drive a RAG pipeline,
   search observability traces, or run an agent task directly through the
   runner; the config resolver wires the three new families to their fakes.
@@ -1226,55 +1244,55 @@ build plan; the rest of this section is the per-feature log.
   `HttpRAGPipeline`/`HttpAgent`; `kind: phoenix` in `adapters.observability`
   selects `PhoenixObservability`. New `_float` and `_str_dict` helpers parse
   timeouts and header maps from the config.
-- `sectum probe` accepts `--max-concurrency N` (default 1) to run probes in
+- `sectum-ai probe` accepts `--max-concurrency N` (default 1) to run probes in
   parallel via a thread pool. N > 1 requires both thread-safe adapters and
   that probe-order interactions don't matter; the demo's in-memory fakes
   share state across mutating and reading probes, so concurrent execution
   there yields nondeterministic findings (the exit code is still stable).
-- Class 11 (`sectum erasure`) now checks the observability surface. The
+- Class 11 (`sectum-ai erasure`) now checks the observability surface. The
   `ObservabilityAdapter` interface gains `delete(tenant)`; `FakeObservability`
   gets a `soft_delete` knob mirroring `FakeVectorStore`; `PhoenixObservability`
   removes the tenant's project on delete. `ErasureProbe` accepts an optional
   `observability` adapter and scans the tracing surface for residual markers,
-  and `sectum erasure` seeds traces and passes a `FakeObservability` through
+  and `sectum-ai erasure` seeds traces and passes a `FakeObservability` through
   so the workflow round-trips through both the vector and tracing surfaces.
-- Class 11 (`sectum erasure`) now also checks the agent/long-term memory surface
+- Class 11 (`sectum-ai erasure`) now also checks the agent/long-term memory surface
   (a third of the spec's "ten hiding places"). The `MemoryAdapter` interface
   gains `delete(tenant)`; `FakeMemory` gets a `soft_delete` knob; `ErasureProbe`
   accepts an optional `memory` adapter and scans it (via `recall`) for residual
-  markers, and `sectum erasure` seeds memory and passes a `FakeMemory` through
+  markers, and `sectum-ai erasure` seeds memory and passes a `FakeMemory` through
   so the workflow round-trips the vector, tracing, and memory surfaces.
-- Class 11 (`sectum erasure`) now also checks the semantic/application cache
+- Class 11 (`sectum-ai erasure`) now also checks the semantic/application cache
   surface. The `CacheAdapter` interface gains `delete(tenant)` and `values(tenant)`
   (the values a tenant can read - the tenant's own when scoped, all of them when
   not, which is itself the leak); `FakeCache` gets a `soft_delete` knob and
   `RedisCache` deletes/scans the tenant's prefixed keys. `ErasureProbe` accepts
   an optional `cache` adapter and scans its values for residual markers, and
-  `sectum erasure` seeds the cache through, so the workflow now round-trips the
+  `sectum-ai erasure` seeds the cache through, so the workflow now round-trips the
   vector, tracing, memory, and cache surfaces. An unscoped cache that cannot
   isolate a tenant's entries is itself an erasure failure.
-- Class 11 (`sectum erasure`) now also checks the model / fine-tune-adapter
+- Class 11 (`sectum-ai erasure`) now also checks the model / fine-tune-adapter
   surface. The `ModelAdapter` interface gains `delete(tenant)`; `FakeModel` gets
   a `soft_delete` knob; `ErasureProbe` accepts an optional `model` adapter and
   scans it by querying the model with the canary - a memorized canary surfaces
-  only while the tenant's adapter exists - and `sectum erasure` trains and
+  only while the tenant's adapter exists - and `sectum-ai erasure` trains and
   threads a `FakeModel` through, so the workflow now round-trips the vector,
   tracing, memory, cache, and model surfaces (five of the "ten hiding places").
-- Class 11 (`sectum erasure`) now also checks the derived full-text search-index
+- Class 11 (`sectum-ai erasure`) now also checks the derived full-text search-index
   surface (the tenth "hiding place"). A new `SearchIndexAdapter` family
   (`search` + `delete`, capability `TEXT_SEARCH`) and its `FakeSearchIndex` (with
   a `soft_delete` knob) model a keyword index built from the corpus, distinct
   from the embedding vector store; `ErasureProbe` accepts an optional
-  `search_index` adapter and scans it for residual markers, and `sectum erasure`
+  `search_index` adapter and scans it for residual markers, and `sectum-ai erasure`
   indexes and threads a `FakeSearchIndex` through. The workflow now round-trips
   six of the "ten hiding places". There is no live search-index adapter yet, so
   the fake carries the behavior.
-- Class 11 (`sectum erasure`) now also checks the evaluation / golden-set surface
+- Class 11 (`sectum-ai erasure`) now also checks the evaluation / golden-set surface
   (the fourth "hiding place" - test fixtures and eval datasets that may copy
   tenant content). A new `EvalSetAdapter` family (`search` + `delete`, reusing
   the `TEXT_SEARCH` capability) and its `FakeEvalSet` (with a `soft_delete` knob)
   model an eval set; `ErasureProbe` accepts an optional `eval_set` adapter and
-  scans it for residual markers, and `sectum erasure` seeds and threads a
+  scans it for residual markers, and `sectum-ai erasure` seeds and threads a
   `FakeEvalSet` through. The workflow now round-trips seven of the "ten hiding
   places". There is no live eval-set adapter yet, so the fake carries the
   behavior.
@@ -1435,7 +1453,7 @@ build plan; the rest of this section is the per-feature log.
   config schema accepts (scenario, workdir, all eight adapter families with
   per-`kind` placeholders for the live backends, evidence chain, security/
   manifest-at-rest, detection providers and semantic threshold) with copy-and-
-  edit annotations. Validated to load cleanly under `sectum.config.load_config`.
+  edit annotations. Validated to load cleanly under `sectum_ai.config.load_config`.
   The README quickstart now points at it.
 - README now carries the spec section 20 storefront elements: an "Open Sectum
   vs Sectum Cloud" two-column comparison (both share the same evidence format,
@@ -1457,7 +1475,7 @@ build plan; the rest of this section is the per-feature log.
   and remediation pointers rendered) and the GDPR Article 17 erasure
   attestation pack (per-surface ERASED/RESIDUAL DATA verdicts) - so a
   prospective auditor or DPO can see what they get without installing
-  anything. Each pack ships its in-toto attestation envelope; `sectum verify
+  anything. Each pack ships its in-toto attestation envelope; `sectum-ai verify
   docs/samples/erasure-attestation-evidence.json` demonstrates the
   tamper-evident chain end to end.
 - `docs/glossary.md` mirrors the spec section 23 vocabulary - tenant, principal,
@@ -1510,7 +1528,7 @@ build plan; the rest of this section is the per-feature log.
 - Hypothesis property tests for marker generation and canonical hashing,
   generalizing the fixed-seed reproducibility and uniqueness invariants to
   arbitrary seeds (the engineering spec, section 15).
-- The Class 2 embedding-model sweep (`sectum.sweep.embedding_model_sweep`): runs
+- The Class 2 embedding-model sweep (`sectum_ai.sweep.embedding_model_sweep`): runs
   the flagship organic-entity-bleed probe once per configured embedding model
   and records a per-model Retrieval-Pivot Rate
   (`RunMetrics.retrieval_pivot_rate_by_model`), reproducing the "stronger
@@ -1526,23 +1544,23 @@ build plan; the rest of this section is the per-feature log.
   tests closing the reported coverage gaps (the JSON Schema export, the probe
   registry, the runner's per-action adapter guards, the config-resolver
   helpers), raising line coverage from ~95% to ~97%.
-- A real RFC 3161 trusted-timestamping path (`sectum.evidence.Rfc3161Timestamper`,
-  `verify_rfc3161_token`): `sectum report --tsa <url>` (or `evidence.timestamper:
+- A real RFC 3161 trusted-timestamping path (`sectum_ai.evidence.Rfc3161Timestamper`,
+  `verify_rfc3161_token`): `sectum-ai report --tsa <url>` (or `evidence.timestamper:
   rfc3161` in the config) submits the run digest to a Time-Stamp Authority and
-  stores the returned token, and `sectum verify` checks that token against the
+  stores the returned token, and `sectum-ai verify` checks that token against the
   recomputed digest. Trust is pinned independently of the pack: the verifier
-  ships the public FreeTSA leaf and root built in, and `sectum verify
+  ships the public FreeTSA leaf and root built in, and `sectum-ai verify
   --tsa-cert/--tsa-root` override them for a customer-pinned TSA. Backed by the
   `rfc3161-client` library behind a `sectum-ai-evidence[rfc3161]` extra (pinned
   `>=1.0.3` for CVE-2025-52556); a committed FreeTSA token fixture verifies
   offline in CI, and a live round-trip is opt-in via `SECTUM_RUN_LIVE_TSA`
   (the engineering spec, section 8.2).
 - Configurable real embedding and judge providers for the detection pipeline
-  (`sectum.probes.providers`): `OpenAIEmbeddingProvider` and an `OpenAIJudge` /
+  (`sectum_ai.probes.providers`): `OpenAIEmbeddingProvider` and an `OpenAIJudge` /
   `AnthropicJudge`, reached over their HTTP APIs (standard library only). A
   `detection` config block selects the embedder and judge (`fake` by default),
   their models, the API-key env var, and the `semantic_threshold`; the resolver
-  builds a `DetectionProviders` bundle that `sectum probe` threads through every
+  builds a `DetectionProviders` bundle that `sectum-ai probe` threads through every
   probe's detection. Detection stays provider-agnostic and deterministic-by-
   default; a real embedding model strengthens the Retrieval Pivot and a
   calibrated judge adjudicates candidates (the engineering spec, sections 6.4,
@@ -1555,40 +1573,40 @@ build plan; the rest of this section is the per-feature log.
   the built wheels, sdists, and the SBOM with Sigstore keyless signing (the
   workflow's OIDC identity, no stored key), uploading the `.sigstore.json`
   bundles. The SBOM script is reusable locally.
-- A job-runner abstraction (`sectum.jobs`): a small `JobRunner` interface
+- A job-runner abstraction (`sectum_ai.jobs`): a small `JobRunner` interface
   (`map(func, items) -> list`, results in input order) with two local
   implementations - `SerialJobRunner` and a bounded `ThreadJobRunner` -
-  selected by `build_job_runner(max_concurrency)`. `sectum probe` now executes
+  selected by `build_job_runner(max_concurrency)`. `sectum-ai probe` now executes
   its suite through this interface instead of an inline thread pool, so
   `--max-concurrency` is unchanged while the orchestration layer becomes the
   documented seam where a distributed backend (Temporal, Prefect) can drop in
   later without touching call sites (the engineering spec, sections 13 and 21,
   the open job-runner decision).
-- At-rest encryption of the seeded substrate (`sectum.crypto`): set
+- At-rest encryption of the seeded substrate (`sectum_ai.crypto`): set
   `security.manifest_key_env` to the name of an environment variable holding a
-  base64 32-byte key, and `sectum seed` seals the substrate - which holds the
+  base64 32-byte key, and `sectum-ai seed` seals the substrate - which holds the
   ground-truth manifest and the planted canary plaintexts - with AES-256-GCM
-  before it touches disk (`substrate.json.enc`); `sectum probe`/`report`/
+  before it touches disk (`substrate.json.enc`); `sectum-ai probe`/`report`/
   `erasure` open it with the same key. A wrong key or any tampering fails
   authentication. The key is referenced from the environment, never inlined
   (the engineering spec, section 17). Backed by `cryptography` behind a
   `sectum-ai[encryption]` extra; the unencrypted path needs nothing extra.
-- An in-toto attestation wrapping (`sectum.evidence.to_in_toto_statement`,
-  `verify_in_toto_statement`): `sectum report` and `sectum erasure` also emit
+- An in-toto attestation wrapping (`sectum_ai.evidence.to_in_toto_statement`,
+  `verify_in_toto_statement`): `sectum-ai report` and `sectum-ai erasure` also emit
   `attestation.intoto.json`, the evidence re-expressed as an in-toto Statement
   (v1) - subject = the run bound by its canonical digest, predicate = the
   verification result (scenario/manifest hashes, metrics, control mappings, and
   which integrity anchors are present). It is a derived, interoperable view of
   the pack and adds no new trust; standard-library only (the engineering spec,
   section 13).
-- A Sigstore Rekor transparency-log anchor (`sectum.evidence.RekorTransparencyLog`,
-  `verify_rekor_proof`): `sectum report --rekor` (or `evidence.rekor: true`)
+- A Sigstore Rekor transparency-log anchor (`sectum_ai.evidence.RekorTransparencyLog`,
+  `verify_rekor_proof`): `sectum-ai report --rekor` (or `evidence.rekor: true`)
   signs the run digest and records a `hashedrekord` entry in a public,
-  append-only log, storing the inclusion proof in the pack; `sectum verify`
+  append-only log, storing the inclusion proof in the pack; `sectum-ai verify`
   recomputes the RFC 6962 Merkle root and checks the signed checkpoint that
   commits to it. As with the TSA, the checkpoint key is pinned independently of
   the pack: the public-good instance's log keys (ECDSA and Ed25519) are shipped
-  built in and selected by log id, and `sectum verify --rekor-key <pem>` pins a
+  built in and selected by log id, and `sectum-ai verify --rekor-key <pem>` pins a
   private instance's key. Verification is fully offline (no network, no current
   tree head); a committed real inclusion-proof fixture verifies in CI, and a
   live round-trip is opt-in via `SECTUM_RUN_LIVE_REKOR`. Backed by `cryptography`

@@ -9,9 +9,8 @@ adapter wired → a typed ``AdapterError``).
 from uuid import UUID
 
 import pytest
-
-import sectum.probes as probes
-from sectum.adapters import (
+import sectum_ai.probes as probes
+from sectum_ai.adapters import (
     FakeAgent,
     FakeCache,
     FakeMCP,
@@ -21,9 +20,9 @@ from sectum.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
-from sectum.probes import RagEntityBleedProbe
-from sectum.runner import Runner
-from sectum.spec import (
+from sectum_ai.probes import RagEntityBleedProbe
+from sectum_ai.runner import Runner
+from sectum_ai.spec import (
     AccessOutcome,
     AdapterError,
     ConfigError,
@@ -32,7 +31,7 @@ from sectum.spec import (
     Substrate,
     Surface,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _substrate() -> Substrate:

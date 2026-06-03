@@ -33,13 +33,13 @@ of the [engineering spec](https://github.com/sectum-ai/sectum-ai/blob/main/CLAUD
 
 `run.sh` runs the Class 8 probe end to end:
 
-1. **`sectum seed`** provisions four synthetic tenants and their canary markers.
-2. **`sectum probe --probe memory-contamination`** writes each tenant's hard
+1. **`sectum-ai seed`** provisions four synthetic tenants and their canary markers.
+2. **`sectum-ai probe --probe memory-contamination`** writes each tenant's hard
    canary into its memory as the owning principal (`memory.write`), then from
    every other principal issues a recall query for it (`memory.recall`) against
    a memory store whose tenant boundary has been removed.
-3. **`sectum report`** assembles a tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles a tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 
@@ -61,8 +61,8 @@ IDs (OWASP / ATLAS / NIST), and a remediation pointer.
 ran 1 probe: 24 confirmed cross-tenant findings
 ```
 
-`sectum probe` exits with code 2 because it confirmed cross-tenant leaks,
-and `sectum verify` confirms the evidence pack is intact. The headline
+`sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks,
+and `sectum-ai verify` confirms the evidence pack is intact. The headline
 metric is the count of confirmed Class 8 leaks; on a memory store that
 binds every read and write to the authenticated principal, the same probe
 yields zero findings.

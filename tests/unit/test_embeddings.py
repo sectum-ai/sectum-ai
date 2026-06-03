@@ -3,16 +3,15 @@
 import math
 
 import pytest
-
-from sectum.embeddings import (
+from sectum_ai.embeddings import (
     EmbeddingModel,
     HashingEmbedding,
     cosine,
     resolve_embedding_model,
 )
-from sectum.spec import ConfigError
-from sectum.substrate import build_substrate, default_scenario
-from sectum.sweep import embedding_provider_sweep
+from sectum_ai.spec import ConfigError
+from sectum_ai.substrate import build_substrate, default_scenario
+from sectum_ai.sweep import embedding_provider_sweep
 
 
 def test_hashing_embedding_satisfies_the_protocol() -> None:

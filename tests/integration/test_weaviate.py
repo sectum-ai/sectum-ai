@@ -11,11 +11,10 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
+from sectum_ai.adapters.base import Capability
+from sectum_ai.adapters.vector.weaviate import WeaviateVectorStore
+from sectum_ai.spec import CorpusDocument
 from weaviate.exceptions import WeaviateBaseError
-
-from sectum.adapters.base import Capability
-from sectum.adapters.vector.weaviate import WeaviateVectorStore
-from sectum.spec import CorpusDocument
 
 pytestmark = pytest.mark.integration
 

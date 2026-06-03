@@ -7,9 +7,9 @@ similarity + judge - and a foreign marker appearing verbatim in an observation
 must always become a confirmed leak, from whichever field it was planted in.
 """
 
-from sectum.probes import DetectionPipeline, confirmed_findings
-from sectum.spec import MarkerType, Substrate, Surface
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.probes import DetectionPipeline, confirmed_findings
+from sectum_ai.spec import MarkerType, Substrate, Surface
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _substrate() -> Substrate:

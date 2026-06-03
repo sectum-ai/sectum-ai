@@ -3,12 +3,11 @@
 from pathlib import Path
 from typing import Any, cast
 
+import sectum_ai.probes as probes
+from sectum_ai.cli.app import app
+from sectum_ai.spec import RunResult
+from sectum_ai.suites import SUITES
 from typer.testing import CliRunner
-
-import sectum.probes as probes
-from sectum.cli.app import app
-from sectum.spec import RunResult
-from sectum.suites import SUITES
 
 _runner = CliRunner()
 

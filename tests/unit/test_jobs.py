@@ -4,9 +4,8 @@ import time
 from collections.abc import Callable, Sequence
 
 import pytest
-
-from sectum.jobs import JobRunner, SerialJobRunner, ThreadJobRunner, build_job_runner
-from sectum.spec import ConfigError
+from sectum_ai.jobs import JobRunner, SerialJobRunner, ThreadJobRunner, build_job_runner
+from sectum_ai.spec import ConfigError
 
 
 def test_serial_runner_applies_in_order() -> None:

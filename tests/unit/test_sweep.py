@@ -1,11 +1,11 @@
 """Tests for the Class 2 embedding-model sweep (the engineering spec, section 7)."""
 
-from sectum.adapters import FakeVectorStore
-from sectum.baseline import compare_metrics
-from sectum.cli.app import _per_model_rpr
-from sectum.spec import RunMetrics, Scenario
-from sectum.substrate import build_substrate, default_scenario
-from sectum.sweep import embedding_model_sweep, model_recall
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.baseline import compare_metrics
+from sectum_ai.cli.app import _per_model_rpr
+from sectum_ai.spec import RunMetrics, Scenario
+from sectum_ai.substrate import build_substrate, default_scenario
+from sectum_ai.sweep import embedding_model_sweep, model_recall
 
 _MODELS = ("fake-mini", "fake-base", "fake-strong")
 

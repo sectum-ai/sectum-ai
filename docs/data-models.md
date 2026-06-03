@@ -1,7 +1,7 @@
 # Core data models
 
-Sectum AI's data contracts are Pydantic v2 models in the `sectum.spec` package
-(distributed as `sectum-ai-spec`, imported as `sectum.spec`). They are the stable
+Sectum AI's data contracts are Pydantic v2 models in the `sectum_ai.spec` package
+(distributed as `sectum-ai-spec`, imported as `sectum_ai.spec`). They are the stable
 interface between the substrate, the probes, and the evidence chain, and their
 **JSON Schema is published** so a third party can validate an evidence pack
 without running Sectum.

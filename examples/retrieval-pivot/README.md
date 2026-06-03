@@ -23,15 +23,15 @@ cross-tenant queries leaked this way, and that stronger embedding models leaked
 
 `run.sh` runs the full Sectum AI workflow:
 
-1. **`sectum seed`** provisions four synthetic tenants (Acme, Globex, Initech,
+1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex, Initech,
    Hooli), generates their corpora, and plants canary markers. Every tenant
    owns one *pivot document* per marker — a document that names a shared
    organic entity and carries the canary in the same text.
-2. **`sectum probe`** runs the probe suite against the demo stack: a single
+2. **`sectum-ai probe`** runs the probe suite against the demo stack: a single
    shared vector index with no tenant scoping. Class 2 issues one benign query
    per shared entity from each tenant's session.
-3. **`sectum report`** assembles a tamper-evident evidence pack (JSON + PDF).
-4. **`sectum verify`** independently re-checks the pack's integrity.
+3. **`sectum-ai report`** assembles a tamper-evident evidence pack (JSON + PDF).
+4. **`sectum-ai verify`** independently re-checks the pack's integrity.
 
 ## Run it
 
@@ -52,8 +52,8 @@ ran 12 probes: 321 confirmed cross-tenant findings
 retrieval-pivot rate: 81%
 ```
 
-`sectum probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum verify` confirms the evidence pack is intact.
+`sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
+`sectum-ai verify` confirms the evidence pack is intact.
 
 The Retrieval-Pivot Rate is the fraction of the flagship Class 2 benign queries
 that surfaced a foreign tenant's marker — not every benign query pivots, so even

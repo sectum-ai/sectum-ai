@@ -10,9 +10,8 @@ from uuid import UUID
 
 import pytest
 import redis
-
-from sectum.adapters.base import Capability
-from sectum.adapters.cache.redis import RedisCache
+from sectum_ai.adapters.base import Capability
+from sectum_ai.adapters.cache.redis import RedisCache
 
 pytestmark = pytest.mark.integration
 

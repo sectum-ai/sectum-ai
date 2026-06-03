@@ -2,7 +2,7 @@
 
 Sectum AI ships as an Apache-2.0 **open-source core** plus a paid **Sectum
 Cloud**. The seam between them is the shared, independently verifiable evidence
-format: anything the OSS CLI runs produces a pack that `sectum verify` checks,
+format: anything the OSS CLI runs produces a pack that `sectum-ai verify` checks,
 and Cloud adds hosting, scheduling, the dashboard, and branded packs on top of
 that same format.
 
@@ -13,9 +13,9 @@ Prices are not listed here (they change independently of the code) — see
 
 | SKU | What it proves | How you run it | Edition |
 |---|---|---|---|
-| **Erasure Attestation** (the wedge) | A churned tenant's data has actually left every configured AI surface after a GDPR Article 17 request | `sectum erasure --target-tenant …` (Class 11) → DPO-facing PDF + signed `evidence.json` | OSS CLI; Cloud hosts + schedules |
-| **SOC 2 Tenant Isolation Evidence Pack** | Logical separation, boundary, and segregation between tenants hold across the AI surfaces | `sectum probe --suite soc2-tenant-isolation` → control-mapped pack | OSS CLI; Cloud + auditor channel |
-| **Continuous Multi-Tenant Verification** | Isolation still holds release over release (no regression) | `sectum probe` (full) + `sectum baseline` / `sectum diff`, scheduled | Cloud (scheduled runs + dashboard); OSS runs it one-shot |
+| **Erasure Attestation** (the wedge) | A churned tenant's data has actually left every configured AI surface after a GDPR Article 17 request | `sectum-ai erasure --target-tenant …` (Class 11) → DPO-facing PDF + signed `evidence.json` | OSS CLI; Cloud hosts + schedules |
+| **SOC 2 Tenant Isolation Evidence Pack** | Logical separation, boundary, and segregation between tenants hold across the AI surfaces | `sectum-ai probe --suite soc2-tenant-isolation` → control-mapped pack | OSS CLI; Cloud + auditor channel |
+| **Continuous Multi-Tenant Verification** | Isolation still holds release over release (no regression) | `sectum-ai probe` (full) + `sectum-ai baseline` / `sectum-ai diff`, scheduled | Cloud (scheduled runs + dashboard); OSS runs it one-shot |
 | **Open Sectum** | — (the substrate, attack catalog, adapters, and `verify`) | the `sectum` CLI | OSS, free (Apache-2.0) |
 
 The first three are revenue SKUs; **Open Sectum** is the free core that makes the
@@ -34,16 +34,16 @@ run a named, control-mapped subset instead of hand-picking probes:
 
 ```sh
 # A SOC 2 tenant-isolation evidence pack:
-sectum seed   --workdir .sectum
-sectum probe  --workdir .sectum --suite soc2-tenant-isolation
-sectum report --workdir .sectum
-sectum verify .sectum/evidence.json
+sectum-ai seed   --workdir .sectum
+sectum-ai probe  --workdir .sectum --suite soc2-tenant-isolation
+sectum-ai report --workdir .sectum
+sectum-ai verify .sectum/evidence.json
 ```
 
-`sectum probe` with no `--suite` runs the full catalog (the
+`sectum-ai probe` with no `--suite` runs the full catalog (the
 continuous-verification default). The GDPR erasure SKU is the separate
-`sectum erasure` workflow, not a probe suite. Suite definitions live in
-[`sectum.suites`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/core/src/sectum/suites.py),
+`sectum-ai erasure` workflow, not a probe suite. Suite definitions live in
+[`sectum_ai.suites`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/core/src/sectum/suites.py),
 and their probe sets are validated against the live catalog in CI.
 
 ## Deployment modes

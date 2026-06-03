@@ -2,9 +2,8 @@
 
 from pathlib import Path
 
+from sectum_ai.cli.app import app
 from typer.testing import CliRunner
-
-from sectum.cli.app import app
 
 _runner = CliRunner()
 

@@ -1,7 +1,7 @@
 """Tests for the regression-baseline engine."""
 
-from sectum.baseline import compare_metrics
-from sectum.spec import RunMetrics
+from sectum_ai.baseline import compare_metrics
+from sectum_ai.spec import RunMetrics
 
 
 def test_no_regression_when_metrics_are_unchanged() -> None:
@@ -173,7 +173,7 @@ def test_erasure_residue_regresses_while_a_caveat_does_not() -> None:
 def test_severity_rank_covers_every_severity() -> None:
     # Guard against a future Severity member being added without a rank entry,
     # which would KeyError in FindingChange.severity_escalated at runtime.
-    from sectum.baseline import _SEVERITY_RANK
-    from sectum.spec import Severity
+    from sectum_ai.baseline import _SEVERITY_RANK
+    from sectum_ai.spec import Severity
 
     assert set(_SEVERITY_RANK) == set(Severity)

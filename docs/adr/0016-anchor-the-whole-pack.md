@@ -21,7 +21,7 @@ Because none of these were in the anchored digest, a hardening review found they
 could be mutated without detection: forging `control_mappings` to read "fully
 isolated, zero leakage", repointing `pdf_ref` at an attacker-controlled file, or
 **stripping `rekor_proof`** to silently skip the transparency-log check — each
-left `sectum verify` reporting PASS. That contradicts the product's core promise
+left `sectum-ai verify` reporting PASS. That contradicts the product's core promise
 (the engineering spec §8.1): mutating the pack must make verification fail.
 
 Separately, a `local-dev` JSON timestamp token is unsigned. The verifier treated
@@ -34,7 +34,7 @@ time and still pass.
 **The anchors bind the whole attested pack.** A new `attested_digest(pack)` is the
 SHA-256 of the canonical form of `{run_result, manifest_hash, control_mappings,
 pdf_ref, anchored_in_log}`. `build_evidence_pack` timestamps and Rekor-records
-*that* digest; `sectum verify` recomputes it from the pack's own fields and checks
+*that* digest; `sectum-ai verify` recomputes it from the pack's own fields and checks
 it against the timestamp token and any Rekor proof. Editing any bound field
 changes the digest and fails verification.
 
@@ -63,14 +63,14 @@ timestamps to UTC) — see the update note in
 
 - Tamper-evidence now covers the full auditor-facing surface, not just the run record.
 - Transparency-log anchoring cannot be silently downgraded.
-- `sectum verify <pack>` without the original manifest confirms integrity and internal
+- `sectum-ai verify <pack>` without the original manifest confirms integrity and internal
   consistency but not marker-ownership; the CLI now says so explicitly (re-run with
   the manifest to bind ownership).
 - `tests/invariants/test_evidence_roundtrip.py` gained a tamper-each-field suite
   (control mappings, pdf ref, manifest hash, Rekor strip, flag flip, forged local token).
-- `pdf_ref` is bound into the digest and the CLI now populates it: `sectum report`
-  and `sectum erasure` render the audit PDF first, record `pdf_ref` as the SHA-256 of
-  its bytes, and `sectum verify` re-hashes the sibling PDF against it (failing on a
+- `pdf_ref` is bound into the digest and the CLI now populates it: `sectum-ai report`
+  and `sectum-ai erasure` render the audit PDF first, record `pdf_ref` as the SHA-256 of
+  its bytes, and `sectum-ai verify` re-hashes the sibling PDF against it (failing on a
   mismatch). So a swapped audit PDF and a repointed reference both fail verification
   in the CLI flow, alongside the control mappings, manifest hash, and transparency-log
   flag. (Wired in the ADR-0016 follow-on, PR #81.)

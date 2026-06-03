@@ -2,10 +2,10 @@
 
 from uuid import UUID
 
-from sectum.adapters import FakeModel
-from sectum.probes import KvCacheTimingProbe, confirmed_findings
-from sectum.spec import Scenario, Severity, SharedEntity, Surface, SyntheticTenantSpec
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters import FakeModel
+from sectum_ai.probes import KvCacheTimingProbe, confirmed_findings
+from sectum_ai.spec import Scenario, Severity, SharedEntity, Surface, SyntheticTenantSpec
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def test_shared_prefix_cache_is_a_timing_side_channel() -> None:
@@ -69,7 +69,7 @@ def test_two_low_valued_tenants_yield_distinct_finding_ids() -> None:
 
 # --- Statistical-rigor tests (spec §7 Class 5: t-test, p-value, CI) ----------
 
-from sectum.probes.kv_cache_timing.probe import (  # noqa: E402
+from sectum_ai.probes.kv_cache_timing.probe import (  # noqa: E402
     _student_t_sf,
     _t_critical,
     _welch,
@@ -159,7 +159,7 @@ def test_timing_statistics_are_deterministic() -> None:
 
 # --- Gate-arm and degenerate-input coverage (the avoid-over-claiming logic) ---
 
-from sectum.probes.kv_cache_timing.probe import TimingSignal  # noqa: E402
+from sectum_ai.probes.kv_cache_timing.probe import TimingSignal  # noqa: E402
 
 
 def _signal(*, p_value: float, effect_size: float, mean_gap_ms: float) -> TimingSignal:
@@ -209,7 +209,7 @@ def test_welch_handles_zero_variance_samples() -> None:
     # different-but-constant means -> infinite t but df=0 (conservatively p=1.0).
     import math
 
-    from sectum.probes.kv_cache_timing.probe import _student_t_sf
+    from sectum_ai.probes.kv_cache_timing.probe import _student_t_sf
 
     t_eq, df_eq, se_eq = _welch([5.0, 5.0, 5.0, 5.0], [5.0, 5.0, 5.0, 5.0])
     assert (t_eq, df_eq, se_eq) == (0.0, 0.0, 0.0)

@@ -3,12 +3,11 @@
 import json
 from pathlib import Path
 
+from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
+from sectum_ai.config import EvidenceConfig
+from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
+from sectum_ai.spec import RunMetrics, RunResult
 from typer.testing import CliRunner
-
-from sectum.cli.app import _resolve_timestamper, _resolve_transparency_log, app
-from sectum.config import EvidenceConfig
-from sectum.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum.spec import RunMetrics, RunResult
 
 _runner = CliRunner()
 
@@ -58,7 +57,7 @@ def test_probe_stamps_the_adapters_distribution_version(tmp_path: Path) -> None:
     # — not the core CLI's hard-coded __version__.
     from importlib.metadata import version as dist_version
 
-    from sectum.adapters import version as adapters_version
+    from sectum_ai.adapters import version as adapters_version
 
     assert adapters_version() == dist_version("sectum-ai-adapters")
     _seed_and_probe(tmp_path)
@@ -284,7 +283,7 @@ def test_cli_version_is_the_installed_package_version_and_is_stamped(tmp_path: P
     # the audit PDF, so a drift falsifies the tamper-evident artifact.
     from importlib.metadata import version
 
-    from sectum.cli.app import __version__
+    from sectum_ai.cli.app import __version__
 
     assert __version__ == version("sectum-ai")
     assert __version__ != "0.0.0"
@@ -541,10 +540,10 @@ def test_headline_rpr_counts_a_pipeline_bleed_only_leak() -> None:
     # 2-tuple StepResults the runner produces and replicates app.py's bleed filter.
     from uuid import UUID
 
-    from sectum.cli.app import BLEED_PROBE_IDS
-    from sectum.probes import RagEntityBleedProbe, RagPipelineBleedProbe
-    from sectum.runner import retrieval_pivot_rate
-    from sectum.spec import Finding, FindingStatus, ProbeStep, Severity, Surface
+    from sectum_ai.cli.app import BLEED_PROBE_IDS
+    from sectum_ai.probes import RagEntityBleedProbe, RagPipelineBleedProbe
+    from sectum_ai.runner import retrieval_pivot_rate
+    from sectum_ai.spec import Finding, FindingStatus, ProbeStep, Severity, Surface
 
     tenant_a, tenant_b = UUID(int=0xA), UUID(int=0xB)
 

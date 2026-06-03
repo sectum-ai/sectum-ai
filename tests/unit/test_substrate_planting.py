@@ -2,9 +2,9 @@
 
 import hashlib
 
-from sectum.adapters.fakes import FakeVectorStore
-from sectum.spec import MarkerType, Substrate
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters.fakes import FakeVectorStore
+from sectum_ai.spec import MarkerType, Substrate
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _substrate(

@@ -36,9 +36,9 @@ trials per (owner, observer) tenant pair**, half with a primed prefix
 the two latency distributions and reports the t-statistic, degrees of
 freedom, p-value, a 95% confidence interval on the gap, and Cohen's d.
 
-1. **`sectum seed`** provisions four synthetic tenants (Acme, Globex,
+1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
-2. **`sectum probe --probe kv-cache-timing`** runs the timing trials
+2. **`sectum-ai probe --probe kv-cache-timing`** runs the timing trials
    against the demo config's fake model with `prefix_cache=true`
    (the leaky condition Class 5 is built to catch). A finding is
    confirmed only when the timing gap is **statistically significant**
@@ -46,12 +46,12 @@ freedom, p-value, a 95% confidence interval on the gap, and Cohen's d.
    and **directional** (the primed prefix is faster) — the spec §7
    "avoid over-claiming" bar. The probe exits `2` when it confirms at
    least one side channel — the success signal on the leaky demo stack.
-3. **`sectum report`** assembles the tamper-evident evidence pack
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack
    (PDF + JSON + in-toto envelope). The audit-pack PDF carries the
    per-pair t-statistic, p-value, confidence interval, effect size,
    and primed/control means so a reviewer can sanity-check the
    statistical strength themselves.
-4. **`sectum verify`** independently re-checks the pack's integrity.
+4. **`sectum-ai verify`** independently re-checks the pack's integrity.
 
 ## Run it
 

@@ -94,4 +94,4 @@ and Phoenix adapters run against docker-compose backends in CI (the **Integratio
 job); the hosted and SDK-backed adapters are exercised by tests that mock their
 transport, with any live tests gated behind credentials so CI never needs them.
 
-Run `sectum adapters` to list the installed adapters and their capabilities.
+Run `sectum-ai adapters` to list the installed adapters and their capabilities.

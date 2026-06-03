@@ -46,7 +46,7 @@ sentence-transformers = ["sentence-transformers>=3"]
 openai = ["openai>=1.40"]
 
 [project.scripts]
-sectum = "sectum.cli.app:app"
+sectum-ai = "sectum_ai.cli.app:app"
 
 [project.urls]
 Homepage = "https://sectum.ai"
@@ -61,5 +61,5 @@ sectum-ai-probes = { workspace = true }
 sectum-ai-evidence = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/sectum"]
+only-include = ["src/sectum_ai"]
 sources = ["src"]

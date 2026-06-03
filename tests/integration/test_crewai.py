@@ -23,8 +23,7 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.agent.crewai import CrewAIAgent
+from sectum_ai.adapters.agent.crewai import CrewAIAgent
 
 pytestmark = [
     pytest.mark.live,

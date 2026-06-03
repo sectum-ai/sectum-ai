@@ -16,9 +16,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import sectum_ai.probes as probes
 import yaml
-
-import sectum.probes as probes
 
 # Probes that run as a standalone statistical/erasure workflow rather than the
 # plan/detect protocol, so they carry no class-level `surfaces`/`requires_adapters`.

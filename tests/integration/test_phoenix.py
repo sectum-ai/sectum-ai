@@ -16,9 +16,8 @@ import httpx
 import pytest
 from phoenix.client import Client
 from phoenix.client.__generated__ import v1
-
-from sectum.adapters.base import TraceHit
-from sectum.adapters.observability.phoenix import PhoenixObservability
+from sectum_ai.adapters.base import TraceHit
+from sectum_ai.adapters.observability.phoenix import PhoenixObservability
 
 pytestmark = pytest.mark.integration
 

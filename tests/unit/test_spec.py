@@ -1,12 +1,11 @@
-"""Unit tests for the sectum.spec models, hashing, and schema export."""
+"""Unit tests for the sectum_ai.spec models, hashing, and schema export."""
 
 import json
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
-
-from sectum.spec import (
+from sectum_ai.spec import (
     SCHEMA_VERSION,
     Finding,
     FindingStatus,
@@ -20,7 +19,7 @@ from sectum.spec import (
     json_schemas,
     to_canonical_json,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def test_canonical_hash_is_deterministic() -> None:

@@ -15,9 +15,8 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.base import TraceHit
-from sectum.adapters.observability.langfuse import LangfuseObservability
+from sectum_ai.adapters.base import TraceHit
+from sectum_ai.adapters.observability.langfuse import LangfuseObservability
 
 pytestmark = [
     pytest.mark.live,

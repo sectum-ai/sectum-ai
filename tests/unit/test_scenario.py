@@ -3,9 +3,8 @@
 from uuid import UUID
 
 import pytest
-
-from sectum.spec import ConfigError
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.spec import ConfigError
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _EXPECTED_TENANTS = (
     "Acme Robotics",

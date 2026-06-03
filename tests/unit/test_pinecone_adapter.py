@@ -12,9 +12,9 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
-from sectum.adapters.base import Capability, VectorStoreAdapter
-from sectum.adapters.vector.pinecone import PineconeVectorStore
-from sectum.spec import CorpusDocument
+from sectum_ai.adapters.base import Capability, VectorStoreAdapter
+from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
+from sectum_ai.spec import CorpusDocument
 
 _DIM = 64
 _TENANT_A = UUID(int=0xA)

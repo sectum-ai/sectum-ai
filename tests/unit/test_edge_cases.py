@@ -4,9 +4,8 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
-
-from sectum.probes import FakeJudge
-from sectum.spec import (
+from sectum_ai.probes import FakeJudge
+from sectum_ai.spec import (
     ConfigError,
     Marker,
     MarkerType,
@@ -14,7 +13,7 @@ from sectum.spec import (
     SharedEntity,
     SyntheticTenantSpec,
 )
-from sectum.substrate import build_substrate
+from sectum_ai.substrate import build_substrate
 
 
 def test_corpus_smaller_than_the_marker_count_raises() -> None:

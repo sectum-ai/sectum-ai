@@ -2,7 +2,7 @@
 """Generate the committed JSON Schema artifacts for the Sectum AI data models
 (the engineering spec, section 9: "publish JSON Schema in ``sectum-ai-spec``").
 
-The Pydantic models in ``sectum.spec.models`` remain authoritative; this writes
+The Pydantic models in ``sectum_ai.spec.models`` remain authoritative; this writes
 their exported JSON Schema to ``sectum/spec/schemas/*.schema.json`` so the
 distribution ships machine-readable, version-pinned schemas that external
 tooling can consume without importing Python. Each artifact is a standalone
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sectum.spec import SCHEMA_VERSION
-from sectum.spec.schema import SCHEMA_DIR, write_json_schemas
+from sectum_ai.spec import SCHEMA_VERSION
+from sectum_ai.spec.schema import SCHEMA_DIR, write_json_schemas
 
 
 def main() -> int:

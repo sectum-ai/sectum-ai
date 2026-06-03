@@ -32,15 +32,15 @@ token-passthrough pattern.
 `run.sh` runs the canonical Class 7 probe end to end against the
 in-memory leaky MCP server:
 
-1. **`sectum seed`** provisions four synthetic tenants (Acme, Globex,
+1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
-2. **`sectum probe --probe agent-tool-hijack`** issues, per hard
+2. **`sectum-ai probe --probe agent-tool-hijack`** issues, per hard
    canary, a direct lookup and a token-bearing lookup from every
    *foreign* principal — both the confused-deputy and the
    token-passthrough patterns.
-3. **`sectum report`** assembles a tamper-evident evidence pack
+3. **`sectum-ai report`** assembles a tamper-evident evidence pack
    (JSON + PDF).
-4. **`sectum verify`** independently re-checks the pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 The probe today exercises the MCP surface (Class 7 v1 per the
 [engineering spec, §7](https://github.com/sectum-ai/sectum-ai/blob/main/CLAUDE.md));
@@ -85,7 +85,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
-sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
 ```
 
 The LangGraph adapter scopes by `thread_id`: each probe step passes
@@ -107,7 +107,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[autogen]
 export OPENAI_API_KEY=sk-...
-sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
 ```
 
 The AutoGen adapter scopes by prefixing every user-proxy message with
@@ -130,7 +130,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[crewai]
 export OPENAI_API_KEY=sk-...
-sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
 ```
 
 The CrewAI adapter scopes by passing `tenant_id` as a named input to
@@ -151,7 +151,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[openai-assistants]
 export OPENAI_API_KEY=sk-...
-sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
 ```
 
 The OpenAI Assistants adapter scopes by caching one `Thread` per
@@ -173,7 +173,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[anthropic-tooluse]
 export ANTHROPIC_API_KEY=sk-ant-...
-sectum probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
 ```
 
 The Anthropic tool-use adapter scopes by caching one conversation

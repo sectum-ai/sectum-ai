@@ -11,8 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
-from sectum.adapters.base import Capability, ObservabilityAdapter
-from sectum.adapters.observability.langfuse import LangfuseObservability
+from sectum_ai.adapters.base import Capability, ObservabilityAdapter
+from sectum_ai.adapters.observability.langfuse import LangfuseObservability
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)

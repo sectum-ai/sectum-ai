@@ -29,7 +29,7 @@ control-mapped evidence pack — *whether the system isolates tenants at all*.
 | **Boundary** | Tenant or user, per the prompt | Principal boundary — tenant *and* user within a tenant — verified default-deny ([ADR-0006](adr/0006-principal-isolation-model.md)) |
 | **Surfaces** | The model response | Vector DB, RAG, semantic & KV caches, agent memory, MCP tool calls, fine-tunes/adapters, tracing — across the catalog |
 | **Catalog** | One retrieval check | 11 probe classes incl. side-channel (KV-cache timing), embedding inversion, MCP confused-deputy/token-passthrough, persistent-memory contamination, LoRA bleed, and the GDPR Art. 17 erasure wedge |
-| **Output** | A score in an eval report | A signed, timestamped (RFC 3161 + Sigstore Rekor), in-toto-wrapped evidence pack with control mappings (SOC 2, ISO 27001, GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM08), independently checkable via `sectum verify` |
+| **Output** | A score in an eval report | A signed, timestamped (RFC 3161 + Sigstore Rekor), in-toto-wrapped evidence pack with control mappings (SOC 2, ISO 27001, GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM08), independently checkable via `sectum-ai verify` |
 | **Reproducibility** | Prompt- and judge-dependent | Byte-identical from a seed ([ADR-0003](adr/0003-deterministic-substrate.md)); regression baselines flag drift |
 
 ## Why the substrate matters

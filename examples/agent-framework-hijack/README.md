@@ -33,15 +33,15 @@ re-authenticating tenant context.
 `run.sh` runs the canonical Class 7 probe end to end against the
 in-memory `FakeAgent` configured with both leak knobs on:
 
-1. **`sectum seed`** provisions four synthetic tenants (Acme, Globex,
+1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
-2. **`sectum probe --probe agent-framework-hijack`** issues, per hard
+2. **`sectum-ai probe --probe agent-framework-hijack`** issues, per hard
    canary, a direct `agent.run` and a token-bearing `agent.run` from
    every *foreign* principal — the confused-deputy and the
    token-passthrough patterns at the agent layer.
-3. **`sectum report`** assembles a tamper-evident evidence pack
+3. **`sectum-ai report`** assembles a tamper-evident evidence pack
    (JSON + PDF).
-4. **`sectum verify`** independently re-checks the pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 You'll see confirmed leaks per canary across the configured principals.
 The PDF page-3 findings table itemises each, with `surface =
@@ -79,7 +79,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
-sectum probe --probe agent-framework-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum.yaml --workdir out
 ```
 
 ## What the report tells you

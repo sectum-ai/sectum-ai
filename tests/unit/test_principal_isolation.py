@@ -8,13 +8,13 @@ the tenant-level case are unchanged.
 
 from uuid import UUID
 
-from sectum.probes import (
+from sectum_ai.probes import (
     DetectionPipeline,
     RagEntityBleedProbe,
     TenantBoundaryProbe,
     is_cross_principal,
 )
-from sectum.spec import (
+from sectum_ai.spec import (
     FindingStatus,
     Marker,
     MarkerType,
@@ -25,7 +25,7 @@ from sectum.spec import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _TENANT = UUID(int=1)
 _OTHER_TENANT = UUID(int=2)

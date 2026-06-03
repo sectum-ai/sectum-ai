@@ -11,11 +11,10 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.base import Capability, ObservabilityAdapter
-from sectum.adapters.observability.datadog import DatadogObservability
-from sectum.adapters.observability.helicone import HeliconeObservability
-from sectum.spec import ErasureUnsupported
+from sectum_ai.adapters.base import Capability, ObservabilityAdapter
+from sectum_ai.adapters.observability.datadog import DatadogObservability
+from sectum_ai.adapters.observability.helicone import HeliconeObservability
+from sectum_ai.spec import ErasureUnsupported
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
@@ -184,6 +183,6 @@ def test_datadog_delete_raises_erasure_unsupported() -> None:
 def test_erasure_unsupported_is_an_adapter_error() -> None:
     # It must subclass AdapterError so existing broad adapter-error handling
     # still catches it where a caller does not special-case the caveat.
-    from sectum.spec import AdapterError
+    from sectum_ai.spec import AdapterError
 
     assert issubclass(ErasureUnsupported, AdapterError)

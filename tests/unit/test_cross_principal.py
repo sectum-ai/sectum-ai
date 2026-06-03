@@ -10,8 +10,8 @@ plus the corners where one or both sides drop their user id.
 
 from uuid import UUID
 
-from sectum.probes.detection import is_cross_principal
-from sectum.spec import Marker, MarkerType, Principal
+from sectum_ai.probes.detection import is_cross_principal
+from sectum_ai.spec import Marker, MarkerType, Principal
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)

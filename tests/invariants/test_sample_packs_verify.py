@@ -18,9 +18,8 @@ import json
 from pathlib import Path
 
 import pytest
-
-from sectum.evidence import PREDICATE_TYPE, STATEMENT_TYPE, verify_pack
-from sectum.spec import EvidencePack
+from sectum_ai.evidence import PREDICATE_TYPE, STATEMENT_TYPE, verify_pack
+from sectum_ai.spec import EvidencePack
 
 # tests/invariants/ -> repo root is two parents up.
 _SAMPLES_DIR = Path(__file__).resolve().parents[2] / "docs" / "samples"

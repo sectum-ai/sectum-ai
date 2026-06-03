@@ -9,8 +9,7 @@ types).
 import math
 
 import pytest
-
-from sectum.spec import canonical_hash, sha256_hex, to_canonical_json
+from sectum_ai.spec import canonical_hash, sha256_hex, to_canonical_json
 
 
 def test_key_order_does_not_change_the_hash() -> None:

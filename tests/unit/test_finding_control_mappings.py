@@ -9,8 +9,8 @@ compatibility - the defaults leave a manual call unchanged).
 
 from uuid import UUID
 
-from sectum.adapters import FakeVectorStore
-from sectum.probes import (
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.probes import (
     AgentToolHijackProbe,
     ErasureProbe,
     LoraCrossTenantProbe,
@@ -18,10 +18,10 @@ from sectum.probes import (
     TenantBoundaryProbe,
     confirmed_findings,
 )
-from sectum.probes.detection import DetectionPipeline
-from sectum.runner import Runner
-from sectum.spec import MarkerType, Substrate, Surface
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.probes.detection import DetectionPipeline
+from sectum_ai.runner import Runner
+from sectum_ai.spec import MarkerType, Substrate, Surface
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _seeded_store(

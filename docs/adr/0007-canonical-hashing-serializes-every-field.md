@@ -6,11 +6,11 @@ Accepted (2026-05-20).
 
 ## Context
 
-`sectum.spec.hashing.to_canonical_json` serializes a model with
+`sectum_ai.spec.hashing.to_canonical_json` serializes a model with
 `model_dump(mode="json")` — every field, including optionals left `None`
 (emitted as `null`) — then sorts keys and SHA-256s the bytes. This
 `canonical_hash` underpins `scenario_hash`, `manifest_hash`, the run digest, the
-RFC 3161 TSA token, the Sigstore Rekor entry, and `sectum verify`.
+RFC 3161 TSA token, the Sigstore Rekor entry, and `sectum-ai verify`.
 
 Because no field is omitted, adding an optional field shifts the digest of every
 existing instance. ADR-0006 added `Marker.owner_user_id` (default `None`) and

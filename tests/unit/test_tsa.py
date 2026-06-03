@@ -11,15 +11,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-
-from sectum.evidence import (
+from sectum_ai.evidence import (
     Rfc3161Timestamper,
     build_evidence_pack,
     verify_pack,
     verify_rfc3161_token,
 )
-from sectum.evidence.tsa import _builtin_cert
-from sectum.spec import (
+from sectum_ai.evidence.tsa import _builtin_cert
+from sectum_ai.spec import (
     EvidenceError,
     GroundTruthManifest,
     RunMetrics,
@@ -78,7 +77,7 @@ def test_timestamp_posts_a_query_and_returns_the_base64_token(
         captured["data"] = request.data  # type: ignore[attr-defined]
         return _FakeResponse(raw_token)
 
-    monkeypatch.setattr("sectum.evidence.tsa.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("sectum_ai.evidence.tsa.urllib.request.urlopen", fake_urlopen)
     token = Rfc3161Timestamper("https://tsa.example/tsr").timestamp("a" * 64)
     assert base64.b64decode(token) == raw_token
     assert captured["url"] == "https://tsa.example/tsr"
@@ -91,7 +90,7 @@ def test_timestamp_wraps_a_network_failure_as_an_evidence_error(
     def boom(request: object, timeout: float) -> _FakeResponse:
         raise OSError("connection refused")
 
-    monkeypatch.setattr("sectum.evidence.tsa.urllib.request.urlopen", boom)
+    monkeypatch.setattr("sectum_ai.evidence.tsa.urllib.request.urlopen", boom)
     with pytest.raises(EvidenceError, match="TSA request"):
         Rfc3161Timestamper("https://tsa.example/tsr").timestamp("a" * 64)
 
@@ -126,7 +125,7 @@ def test_a_decodable_but_internally_malformed_token_is_a_typed_error() -> None:
 def test_check_token_returns_a_failing_check_for_a_malformed_token() -> None:
     # The verify.py routing must turn a malformed RFC 3161 token into a failing
     # check, never an uncaught exception.
-    from sectum.evidence.verify import _check_token
+    from sectum_ai.evidence.verify import _check_token
 
     check = _check_token(_DECODABLE_BUT_MALFORMED, _FIXTURE_DIGEST)
     assert not check.ok
@@ -170,7 +169,7 @@ def test_verify_pack_routes_an_rfc3161_token_through_the_tsa_path(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
-    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
     result = verify_pack(rfc_pack, manifest)
     token_check = next(check for check in result.checks if check.name == "timestamp-token")
     assert token_check.ok
@@ -184,7 +183,7 @@ def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
-    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: "f" * 64)
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: "f" * 64)
     result = verify_pack(rfc_pack, manifest)
     assert not result.passed
 

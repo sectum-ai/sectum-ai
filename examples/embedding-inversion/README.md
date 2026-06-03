@@ -29,15 +29,15 @@ This is **OWASP LLM08:2025** on the embedding surface.
 `run.sh` runs the canonical CLI flow end to end against the in-
 memory `FakeVectorStore` with `shared_index: true`:
 
-1. **`sectum seed`** provisions four synthetic tenants with
+1. **`sectum-ai seed`** provisions four synthetic tenants with
    `ENTITY_CANARY` markers planted across the corpora.
-2. **`sectum probe --probe embedding-inversion`** issues, from
+2. **`sectum-ai probe --probe embedding-inversion`** issues, from
    each tenant, nearest-neighbour queries crafted to surface a
    foreign tenant's entity canary. A foreign canary in the returned
    neighbours is a confirmed inversion path; the probe exits `2`
    on at least one such hit.
-3. **`sectum report`** assembles the tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 

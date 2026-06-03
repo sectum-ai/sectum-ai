@@ -1,8 +1,7 @@
 """Tests for the probe registry (the engineering spec, section 7)."""
 
 import pytest
-
-from sectum.probes import ProbeRegistry, RagEntityBleedProbe, TenantBoundaryProbe
+from sectum_ai.probes import ProbeRegistry, RagEntityBleedProbe, TenantBoundaryProbe
 
 
 def test_probe_registry_registers_lists_and_rejects_duplicates() -> None:

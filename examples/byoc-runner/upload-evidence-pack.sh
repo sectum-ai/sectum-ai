@@ -3,16 +3,16 @@
 #
 # The Snapshot tier ships the OSS `sectum` CLI as the probe runner; this
 # script is the missing piece: it takes a completed run's evidence pack
-# (the three files produced by `sectum report`) and POSTs them to the
+# (the three files produced by `sectum-ai report`) and POSTs them to the
 # Sectum Cloud delivery API. Sectum Cloud then writes the pack to its
 # S3 bucket and emails the customer + the operator a download link.
 #
 # Wire this into cron to make a Snapshot subscription self-running. The
 # 10-line CI / cron contract looks like:
 #
-#   sectum seed   --workdir .sectum --config /etc/sectum/sectum.yaml
-#   sectum probe  --workdir .sectum --config /etc/sectum/sectum.yaml --output json
-#   sectum report --workdir .sectum --config /etc/sectum/sectum.yaml
+#   sectum-ai seed   --workdir .sectum --config /etc/sectum/sectum.yaml
+#   sectum-ai probe  --workdir .sectum --config /etc/sectum/sectum.yaml --output json
+#   sectum-ai report --workdir .sectum --config /etc/sectum/sectum.yaml
 #   ./upload-evidence-pack.sh \
 #     --workdir .sectum \
 #     --customer-id "$SECTUM_CUSTOMER_ID" \
@@ -70,7 +70,7 @@ intoto_json="$workdir/attestation.intoto.json"
 
 for f in "$evidence_json" "$audit_pack_pdf" "$intoto_json"; do
   if [[ ! -f "$f" ]]; then
-    echo "missing $f (did 'sectum report' run successfully?)" >&2
+    echo "missing $f (did 'sectum-ai report' run successfully?)" >&2
     exit 65
   fi
 done
