@@ -232,6 +232,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The marker substrate is deepened to the full section-6.3 design: embedding
+  references, multi-field planting, and a real secret-format detector (ADR-0022).**
+  The ground-truth manifest now populates `Marker.embedding_ref` for every ENTITY
+  canary — a model-scoped content address (`{model}/{sha256(plaintext)[:16]}`) the
+  detection pipeline indexes its vectors by and reads back through, so the attested
+  test condition (which model embedded the entity) is bound into the manifest hash.
+  Each marker is planted in its pivot document's **body, title, and metadata**
+  (all three recorded in `planted_locations`), and the in-memory vector store
+  searches all three, so a leak is caught whichever field surfaces. `SECRET_CANARY`
+  takes **realistic, non-issuable shapes** — an OpenAI-style `sk-` key, an AWS
+  `AKIA` access-key id, and a `9xx` SSN the SSA never issues, rotated so the default
+  scenario exercises all three — detected by a dedicated `_secret_format` pass
+  (the spec's "exact + format detector", a path distinct from `HARD_CANARY`'s exact
+  scan) that recovers a credential even when it is wrapped in surrounding bytes
+  (e.g. a key inside a JSON blob). Secret plaintexts are generated at runtime from
+  the seed and never committed — only the manifest *hash* is published. New
+  invariants pin all of it, including a **zero-false-negative** test (every marker
+  type, from every planted field, is detected when it surfaces cross-tenant) and a
+  zero-false-positive test for a secret-shaped string absent from the manifest. The
+  demo `corpus_size` default rises to ~500 documents/tenant (the spec, section 6.2);
+  tests and the checked-in example samples pin a small corpus, and the committed
+  sample packs and reproducibility golden hash were regenerated (no `sectum.spec`
+  model field changed, so the JSON Schemas and `SCHEMA_VERSION` are untouched).
+
 - **The canonical-hash finite-float determinism contract is now pinned (ADR-0021).**
   The evidence chain's reproducibility rests on the canonical hash being stable for
   the float metrics it covers (RPR, effect sizes, confidences). A dedicated

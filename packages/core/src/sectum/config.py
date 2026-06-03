@@ -68,7 +68,10 @@ class ScenarioConfig(BaseModel):
 
     seed: int = 2026
     corpus_profile: str = "demo"
-    corpus_size: int = 24
+    # ~500 documents per tenant is the demo default (the engineering spec, section
+    # 6.2); lower it in a config for a faster run. Tests build small corpora by
+    # passing ``corpus_size`` to ``default_scenario`` directly.
+    corpus_size: int = 500
     embedding_models: tuple[str, ...] = ("fake-deterministic",)
 
     @field_validator("embedding_models")

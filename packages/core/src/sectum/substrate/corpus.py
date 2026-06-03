@@ -218,7 +218,14 @@ def generate_corpus(
         if pivot is not None:
             marker, entity = pivot
             content = _pivot_content(doc_type, entity, marker, tenant_spec.industry)
-            locations[marker.marker_id].append(PlantedLocation(doc_id=doc_id, field="body"))
+            # Plant the marker in the document body, title, and metadata (the
+            # engineering spec, section 6.3: "document bodies, document metadata,
+            # and ... titles"). A leak is then caught whichever field surfaces,
+            # and the vector store can retrieve the document by any of them.
+            title = f"{title} (ref {marker.plaintext})"
+            metadata["marker_ref"] = marker.plaintext
+            for field in ("body", "title", "metadata"):
+                locations[marker.marker_id].append(PlantedLocation(doc_id=doc_id, field=field))
             marker_ids: tuple[str, ...] = (marker.marker_id,)
             # A pivot document inherits its marker's owner user, so a user-scoped
             # store can decide who may retrieve it (ADR-0006). Filler documents

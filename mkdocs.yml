@@ -64,6 +64,7 @@ nav:
       - adr/0019-job-runner-abstraction.md
       - adr/0020-structured-logging.md
       - adr/0021-canonical-float-determinism.md
+      - adr/0022-marker-substrate-depth.md
   - Maintainers:
       - Build phases and acceptance: phases.md
       - Releasing: RELEASING.md

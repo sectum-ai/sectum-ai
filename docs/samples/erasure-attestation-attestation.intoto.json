@@ -4,7 +4,7 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "7c5c14e37bb810921bef4e631ea68a2110def42c974b880b5ecff070f86c32e9"
+        "sha256": "f2d27da9680b01949068766cc25a303aa33eb55a129dfb497153ba75a8918d47"
       }
     }
   ],
@@ -12,9 +12,9 @@
   "predicate": {
     "schema_version": "0.2.0",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
-    "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-03T02:07:43.411517+00:00",
-    "finished_at": "2026-06-03T02:07:43.412115+00:00",
+    "manifest_hash": "514feea45996025aa07628216320c7e88b716bad5564f99294d833fc1c5c7868",
+    "started_at": "2026-06-03T06:35:09.565769+00:00",
+    "finished_at": "2026-06-03T06:35:09.566412+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,

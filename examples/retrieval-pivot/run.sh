@@ -17,7 +17,7 @@ rm -rf "$out"
 mkdir -p "$out"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum seed --workdir "$out"
+sectum seed --workdir "$out" --config "$here/sectum.yaml"
 
 echo
 echo "==> 2/4  Probe the demo stack (a single shared vector index - no isolation)"

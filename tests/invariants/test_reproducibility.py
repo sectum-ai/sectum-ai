@@ -49,5 +49,5 @@ def test_default_scenario_hashes_match_the_published_golden() -> None:
         "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d"
     )
     assert canonical_hash(substrate.manifest) == (
-        "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de"
+        "514feea45996025aa07628216320c7e88b716bad5564f99294d833fc1c5c7868"
     )

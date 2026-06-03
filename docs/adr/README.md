@@ -23,3 +23,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0019](0019-job-runner-abstraction.md) | A `JobRunner` interface with local runners; a distributed backend stays swappable | Accepted |
 | [0020](0020-structured-logging.md) | Structured logging with redaction, to stderr, DEBUG off by default | Accepted |
 | [0021](0021-canonical-float-determinism.md) | Canonical hashing relies on deterministic float repr, not rounding | Accepted |
+| [0022](0022-marker-substrate-depth.md) | Substrate depth: model-scoped embedding refs, multi-field planting, realistic secret shapes + format detector | Accepted |
