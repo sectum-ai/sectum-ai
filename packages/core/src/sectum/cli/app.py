@@ -86,7 +86,7 @@ from sectum.probes import (
     confirmed_findings,
     dedupe_findings,
 )
-from sectum.runner import Runner, StepResult, retrieval_pivot_rate
+from sectum.runner import Runner, StepResult, confirmed_finding_rate, retrieval_pivot_rate
 from sectum.spec import (
     ConfigError,
     EvidenceError,
@@ -620,6 +620,19 @@ def probe(
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
     bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
+    # Class 3/6/10 headline rates over each probe's benign query steps. Poisoning
+    # excludes its own vector.upsert (plant) steps, which never produce findings.
+    poison_query_steps = [
+        result
+        for result in step_results
+        if result[0].probe_id == RagPoisoningProbe.id and result[0].action == "vector.query"
+    ]
+    inversion_steps = [
+        result for result in step_results if result[0].probe_id == EmbeddingInversionProbe.id
+    ]
+    extraction_steps = [
+        result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id
+    ]
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),
@@ -650,6 +663,15 @@ def probe(
             retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
             per_probe_findings=_per_probe_counts(confirmed),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
+            poisoning_bleed_delta=(
+                confirmed_finding_rate(poison_query_steps) if poison_query_steps else None
+            ),
+            inversion_reconstruction_rate=(
+                confirmed_finding_rate(inversion_steps) if inversion_steps else None
+            ),
+            extraction_efficiency=(
+                confirmed_finding_rate(extraction_steps) if extraction_steps else None
+            ),
         ),
     )
     path = effective_workdir / "run.json"
@@ -664,6 +686,9 @@ def probe(
             "confirmed_findings": len(confirmed),
             "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
             "retrieval_pivot_rate_by_model": run.metrics.retrieval_pivot_rate_by_model,
+            "poisoning_bleed_delta": run.metrics.poisoning_bleed_delta,
+            "inversion_reconstruction_rate": run.metrics.inversion_reconstruction_rate,
+            "extraction_efficiency": run.metrics.extraction_efficiency,
             "per_probe_findings": run.metrics.per_probe_findings,
             "run_path": str(path),
         }
@@ -677,6 +702,13 @@ def probe(
             typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
         for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
             typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
+        for label, class_rate in (
+            ("poisoning bleed delta", run.metrics.poisoning_bleed_delta),
+            ("inversion reconstruction rate", run.metrics.inversion_reconstruction_rate),
+            ("extraction efficiency", run.metrics.extraction_efficiency),
+        ):
+            if class_rate is not None:
+                typer.echo(f"{label}: {class_rate:.0%}")
         typer.echo(f"run recorded -> {path}")
     if confirmed:
         raise typer.Exit(code=2)

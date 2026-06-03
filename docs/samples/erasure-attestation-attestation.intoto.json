@@ -4,7 +4,7 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "f525981fbf128da08f44453d2da0960bc890ee7f69f7c3a924f4772d21bb83e0"
+        "sha256": "fc83ba1d4481ec1715372f6fab9598d7dc98174fd1e08c64478cb622d667513b"
       }
     }
   ],
@@ -13,8 +13,8 @@
     "schema_version": "0.2.0",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
     "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-01T22:02:57.622171+00:00",
-    "finished_at": "2026-06-01T22:02:57.622650+00:00",
+    "started_at": "2026-06-03T00:18:31.668889+00:00",
+    "finished_at": "2026-06-03T00:18:31.669468+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,
@@ -27,10 +27,14 @@
         "semantic_cache": 0,
         "model_adapter": 0,
         "search_index": 0,
-        "eval_set": 0
+        "eval_set": 0,
+        "backup": 0
       },
       "erasure_caveats": {},
-      "side_channel_effect_sizes": {}
+      "side_channel_effect_sizes": {},
+      "poisoning_bleed_delta": null,
+      "inversion_reconstruction_rate": null,
+      "extraction_efficiency": null
     },
     "finding_count": 0,
     "control_mappings": [

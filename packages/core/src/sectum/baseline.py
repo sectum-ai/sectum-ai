@@ -103,6 +103,23 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             baseline=baseline.retrieval_pivot_rate or 0.0,
             current=current.retrieval_pivot_rate or 0.0,
         ),
+        # Class 3/6/10 headline rates: higher means more cross-tenant leakage, so
+        # an increase regresses exactly like the retrieval-pivot rate above.
+        MetricDelta(
+            name="poisoning_bleed_delta",
+            baseline=baseline.poisoning_bleed_delta or 0.0,
+            current=current.poisoning_bleed_delta or 0.0,
+        ),
+        MetricDelta(
+            name="inversion_reconstruction_rate",
+            baseline=baseline.inversion_reconstruction_rate or 0.0,
+            current=current.inversion_reconstruction_rate or 0.0,
+        ),
+        MetricDelta(
+            name="extraction_efficiency",
+            baseline=baseline.extraction_efficiency or 0.0,
+            current=current.extraction_efficiency or 0.0,
+        ),
     ]
     deltas.extend(
         _dict_deltas(

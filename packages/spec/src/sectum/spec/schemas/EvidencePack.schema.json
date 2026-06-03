@@ -180,12 +180,48 @@
           "title": "Erasure Residue",
           "type": "object"
         },
+        "extraction_efficiency": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extraction Efficiency"
+        },
+        "inversion_reconstruction_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inversion Reconstruction Rate"
+        },
         "per_probe_findings": {
           "additionalProperties": {
             "type": "integer"
           },
           "title": "Per Probe Findings",
           "type": "object"
+        },
+        "poisoning_bleed_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Poisoning Bleed Delta"
         },
         "retrieval_pivot_rate": {
           "anyOf": [
