@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`sectum init` now generates a `sectum.yaml` that every `--config` command can
+  load.** The template's `security:` section had only a commented-out body, so
+  YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
+  rejected — `sectum seed --config <generated>` exited `3`, breaking the documented
+  `init` → `--config` onboarding for every workflow command. The template now
+  comments out the section *header* too (so the default applies), and
+  `SectumConfig` defensively drops any section commented down to `null` so the
+  field default is used. A regression test round-trips the generated template
+  through `load_config`.
+
 - **`sectum-ai-probes` now declares the `sectum-ai-adapters` dependency it imports
   — the published wheel was un-importable on its own.** `erasure/probe.py` and
   `kv_cache_timing/probe.py` import `sectum.adapters` at module load (eagerly via
@@ -173,6 +183,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   any run.
 
 ### Documentation
+
+- **`configuration.md` now documents the fake RAG/agent leak knobs and corrects
+  the adapter-field-validation wording.** The `rag.fake` and `agent.fake` rows said
+  "needs no fields", but both carry load-bearing leak knobs (`shared_index` for
+  Class 2 at the pipeline end; `confused_deputy` / `tool_call_passthrough` for
+  Class 7) — a `--config` user who omitted them silently got zero such findings.
+  The page also no longer claims the `build_*` resolvers "validate" extra fields:
+  `AdapterConfig` is `extra="allow"`, so a misspelled knob is accepted and silently
+  ignored (it type-checks only the keys it consumes).
 
 - **Two reference pages document the shipped substrate and data models, and a new
   example walks the RAG-pipeline variant of the flagship probe.**

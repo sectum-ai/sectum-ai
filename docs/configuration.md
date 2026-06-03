@@ -103,7 +103,7 @@ No live memory adapter is wired into the CLI resolver yet.
 
 | `kind` | Fields | Notes |
 |---|---|---|
-| `fake` | — | `FakeRAGPipeline`; needs no fields. |
+| `fake` | `shared_index: bool = false` | `FakeRAGPipeline`. `shared_index: true` makes one retriever serve every tenant — the Class 2 retrieval-pivot leak at the RAG-pipeline end (the `rag-pipeline-bleed` probe). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
 | `langchain` | (constructed in Python) | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. The `sectum.yaml` block only flips the kind; the caller constructs the chain (typically via `LangChainRAGPipeline.connect(retriever, llm)`) and supplies it to the substrate runner. Requires the optional `rag-langchain` extra: `pip install sectum-ai-adapters[rag-langchain]`. |
 
@@ -123,7 +123,7 @@ No live memory adapter is wired into the CLI resolver yet.
 
 | `kind` | Fields | Notes |
 |---|---|---|
-| `fake` | — | `FakeAgent`; needs no fields. |
+| `fake` | `confused_deputy: bool = false`, `tool_call_passthrough: bool = false` | `FakeAgent`. Both knobs reproduce the Class 7 flaws — a tool that lost tenant scope (confused deputy) and a server that trusts a caller-supplied token (token passthrough). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
 | `langgraph` | (constructed in Python) | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The `sectum.yaml` block only flips the kind; the caller constructs the graph (typically via `LangGraphAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
 | `autogen` | (constructed in Python) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The `sectum.yaml` block only flips the kind; the caller constructs the pair (typically via `AutoGenAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
@@ -230,4 +230,8 @@ The schema is implemented as pydantic models in `sectum.config` —
 `SectumConfig`, `ScenarioConfig`, `AdapterConfig`, `EvidenceConfig` — and the
 adapter resolver is `sectum.config.build_adapters`. `AdapterConfig` accepts
 extra fields (the backend-specific `host`, `port`, `dsn_env`, leak knobs);
-the per-family `build_*` functions validate them.
+the per-family `build_*` functions read and *type-check* the keys they consume.
+Because `AdapterConfig` is `extra="allow"`, an unrecognised or misspelled key —
+for example a mistyped leak knob like `confusedeputy` — is accepted and silently
+ignored (the knob stays at its non-leaky default), not rejected; double-check
+adapter field names against the tables above.

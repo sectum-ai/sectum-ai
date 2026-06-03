@@ -230,8 +230,8 @@ evidence:
 # manifest). Set manifest_key_env to the name of an environment variable holding
 # a base64-encoded 32-byte key; `sectum seed` then seals the substrate on disk.
 # Generate a key: python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"
-security:
-  # manifest_key_env: SECTUM_MANIFEST_KEY
+# security:
+#   manifest_key_env: SECTUM_MANIFEST_KEY
 
 # Detection-pipeline providers. The defaults are deterministic offline fakes.
 # Configure a real embedding model and judge to run production detection; API
