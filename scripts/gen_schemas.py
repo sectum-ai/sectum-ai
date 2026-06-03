@@ -3,7 +3,7 @@
 (the engineering spec, section 9: "publish JSON Schema in ``sectum-ai-spec``").
 
 The Pydantic models in ``sectum_ai.spec.models`` remain authoritative; this writes
-their exported JSON Schema to ``sectum/spec/schemas/*.schema.json`` so the
+their exported JSON Schema to ``sectum_ai/spec/schemas/*.schema.json`` so the
 distribution ships machine-readable, version-pinned schemas that external
 tooling can consume without importing Python. Each artifact is a standalone
 document carrying a ``$schema`` dialect and a version-pinned ``$id``.

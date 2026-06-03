@@ -6,7 +6,9 @@ from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.probes import TenantBoundaryProbe, confirmed_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
+    FindingStatus,
     Scenario,
+    Severity,
     SharedEntity,
     Substrate,
     SyntheticTenantSpec,
@@ -69,6 +71,21 @@ def test_isolated_index_has_no_tenant_boundary_leak() -> None:
     store = _seeded_store(substrate, shared_index=False)
     findings = Runner(substrate, vector=store).run(TenantBoundaryProbe())
     assert confirmed_findings(findings) == []
+
+
+def test_isolated_index_flags_the_200_empty_deny_ambiguity() -> None:
+    # An isolated store returns 200-empty for a cross-tenant fetch, not an explicit
+    # deny. The probe must not treat that as a clean pass: it emits an UNVERIFIED
+    # informational finding flagging the 200-empty vs 403 ambiguity (spec Class 1).
+    substrate = build_substrate(default_scenario(seed=2026))
+    store = _seeded_store(substrate, shared_index=False)
+    findings = Runner(substrate, vector=store).run(TenantBoundaryProbe())
+    assert confirmed_findings(findings) == []  # nothing actually leaked
+    ambiguous = [f for f in findings if f.status is FindingStatus.UNVERIFIED]
+    assert ambiguous  # ... but the silent 200-empty is flagged, not passed over
+    assert all(f.severity is Severity.INFO for f in ambiguous)
+    assert all(f.owner_tenant_id != f.observed_in_tenant_id for f in ambiguous)
+    assert all("200-empty" in f.evidence_span for f in ambiguous)
 
 
 def test_probe_plans_only_cross_tenant_fetch_steps() -> None:

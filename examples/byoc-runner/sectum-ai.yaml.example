@@ -1,6 +1,6 @@
 # Sectum AI — BYOC runner config example
 #
-# Drop this at /etc/sectum/sectum-ai.yaml and edit the adapter blocks to
+# Drop this at /etc/sectum-ai/sectum-ai.yaml and edit the adapter blocks to
 # point at your actual stack. Credentials resolve from env vars at
 # runtime; the YAML itself never carries plaintext secrets.
 

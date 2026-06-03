@@ -165,8 +165,13 @@ def test_probe_records_class_3_6_10_metrics_on_a_full_sweep(tmp_path: Path) -> N
         assert metrics[key] is not None, key
         assert 0.0 <= metrics[key] <= 1.0, key
     # the poison lure plants a HARD_CANARY that surfaces cross-tenant on the
-    # shared-index demo stack, so its exact-match bleed rate is non-zero.
+    # shared-index demo stack, so its exact-match bleed rate is non-zero - and so
+    # are the inversion (Class 6) and extraction (Class 10) rates on the same
+    # leaky stack. A regression that silenced any of these classes would drop its
+    # rate to zero here, not merely to a populated-but-meaningless value.
     assert metrics["poisoning_bleed_delta"] > 0.0
+    assert metrics["inversion_reconstruction_rate"] > 0.0
+    assert metrics["extraction_efficiency"] > 0.0
 
 
 def test_probe_rejects_an_unknown_probe_id(tmp_path: Path) -> None:

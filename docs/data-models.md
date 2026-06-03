@@ -28,21 +28,23 @@ without running Sectum.
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
-schema it does not understand. The current `SCHEMA_VERSION` is **0.2.0**.
+schema it does not understand. The current `SCHEMA_VERSION` is **0.3.0**.
 
 ## Published JSON Schema
 
 The Draft 2020-12 JSON Schemas are generated from the Pydantic models by
 [`scripts/gen_schemas.py`](https://github.com/sectum-ai/sectum-ai/blob/main/scripts/gen_schemas.py)
 and committed under
-[`packages/spec/src/sectum/spec/schemas/`](https://github.com/sectum-ai/sectum-ai/tree/main/packages/spec/src/sectum/spec/schemas)
+[`packages/spec/src/sectum_ai/spec/schemas/`](https://github.com/sectum-ai/sectum-ai/tree/main/packages/spec/src/sectum_ai/spec/schemas)
 (shipped inside the `sectum-ai-spec` wheel). Each schema's version-pinned `$id`
 embeds the `SCHEMA_VERSION`. A parity test fails CI if a committed schema drifts
 from its model, so the published schema always matches the code.
 
-The committed schemas are: `Scenario`, `SyntheticTenantSpec`, `Marker`,
-`CorpusDocument`, `GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`,
-`Finding`, `RunMetrics`, `RunResult`, `EvidencePack`, and `ControlMapping`.
+The committed schemas are: `Scenario`, `Marker`, `CorpusDocument`,
+`GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`, `Finding`,
+`RunMetrics`, `RunResult`, `EvidencePack`, and `ControlMapping`. (`Scenario`
+embeds `SyntheticTenantSpec` inline, so that nested model has no standalone
+schema file.)
 
 ## Canonical hashing
 

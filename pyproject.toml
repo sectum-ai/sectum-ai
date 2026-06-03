@@ -224,9 +224,9 @@ source = ["sectum_ai"]
 # Live adapters are exercised by docker-backed integration tests, not the unit
 # suite; exclude them so the gate measures unit-tested code.
 omit = [
-    "*/sectum/adapters/vector/*",
-    "*/sectum/adapters/cache/*",
-    "*/sectum/adapters/observability/*",
+    "*/sectum_ai/adapters/vector/*",
+    "*/sectum_ai/adapters/cache/*",
+    "*/sectum_ai/adapters/observability/*",
 ]
 
 [tool.coverage.report]

@@ -3,7 +3,7 @@
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.probes import RagPoisoningProbe, confirmed_findings
 from sectum_ai.runner import Runner
-from sectum_ai.spec import Substrate
+from sectum_ai.spec import MarkerType, Substrate
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -35,3 +35,20 @@ def test_probe_plans_upserts_then_queries() -> None:
     steps = RagPoisoningProbe().plan(substrate)
     assert steps
     assert {step.action for step in steps} == {"vector.upsert", "vector.query"}
+
+
+def test_leak_traces_to_the_planted_poison_hard_canary() -> None:
+    # Provenance, not just outcome: the pivot must surface a HARD_CANARY that the
+    # poison document carries, tied back to a manifest marker - the distinctive
+    # Class-3 mechanism, not an organic entity bleed. Every confirmed finding is
+    # manifest-traceable, and at least one is the poison's hard canary.
+    substrate = build_substrate(default_scenario(seed=2026))
+    store = _seeded_store(substrate, shared_index=True)
+    findings = confirmed_findings(Runner(substrate, vector=store).run(RagPoisoningProbe()))
+    markers = {marker.marker_id: marker for marker in substrate.manifest.markers}
+    assert findings
+    assert all(f.marker_id in markers for f in findings)
+    assert any(
+        f.marker_id is not None and markers[f.marker_id].marker_type is MarkerType.HARD_CANARY
+        for f in findings
+    )

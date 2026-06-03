@@ -52,9 +52,11 @@ def verify_pack(
     Recomputes the pack digest over the whole attested content, validates that
     the timestamp token attests it, and checks that the run and the pack agree on
     the manifest hash. A pack that claims a transparency-log anchor
-    (``anchored_in_log``) must carry a valid Rekor inclusion proof - stripping it
-    is a downgrade and fails. When ``manifest`` is given, its canonical hash must
-    also match the pack.
+    (``anchored_in_log``) must carry a valid Rekor inclusion proof, and a pack that
+    claims a real RFC 3161 timestamp anchor (``anchored_with_timestamp``) must
+    carry a real RFC 3161 token, not a local-dev one - stripping either anchor is a
+    downgrade and fails. When ``manifest`` is given, its canonical hash must also
+    match the pack.
 
     For an RFC 3161 timestamp token, ``tsa_certificate``/``tsa_root`` override
     the built-in FreeTSA leaf/root to pin a customer's own TSA. When the pack
@@ -68,7 +70,13 @@ def verify_pack(
     digest = attested_digest(pack)
     checks = [
         _check_schema_version(pack),
-        _check_token(pack.tsa_token, digest, tsa_certificate, tsa_root),
+        _check_token(
+            pack.tsa_token,
+            digest,
+            tsa_certificate,
+            tsa_root,
+            require_rfc3161=pack.anchored_with_timestamp,
+        ),
         _check_consistency(pack),
     ]
     if pack.anchored_in_log and pack.rekor_proof is None:
@@ -128,6 +136,8 @@ def _check_token(
     digest: str,
     tsa_certificate: bytes | None = None,
     tsa_root: bytes | None = None,
+    *,
+    require_rfc3161: bool = False,
 ) -> Check:
     name = "timestamp-token"
     if not token:
@@ -155,6 +165,20 @@ def _check_token(
             detail=(
                 "unrecognized JSON timestamp token; a real RFC 3161 TSA returns a "
                 "signed binary token, not JSON, so this token is rejected"
+            ),
+        )
+    if require_rfc3161:
+        # The pack declares it was anchored by a real RFC 3161 TSA
+        # (``anchored_with_timestamp``, bound into the digest), yet it carries only
+        # a local-dev JSON token. The independent timestamp anchor was stripped -
+        # the same downgrade shape the Rekor ``anchored_in_log`` guard refuses.
+        return Check(
+            name,
+            ok=False,
+            detail=(
+                "the pack claims a real RFC 3161 timestamp anchor "
+                "(anchored_with_timestamp) but carries only a local-dev token; the "
+                "independent timestamp anchor was stripped (a downgrade)"
             ),
         )
     return Check(

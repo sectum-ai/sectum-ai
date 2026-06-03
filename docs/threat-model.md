@@ -83,9 +83,11 @@ sensitive core: an adversary holding it knows every canary in advance.
 
 ### Evidence packs
 
-An evidence pack is tamper-evident. `run_digest` hashes the entire canonical run,
-findings included; the digest is timestamped; `sectum-ai verify` recomputes the
-digest and rejects any pack whose run record was altered.
+An evidence pack is tamper-evident. The pack's `attested_digest` covers the whole
+attested content — the canonical run (findings included) together with the
+manifest binding and the audit-PDF reference; that digest is what gets
+timestamped, and `sectum-ai verify` recomputes it and rejects any pack whose
+attested content was altered.
 
 The development-default timestamper (`LocalTimestamper`) records a digest and a
 wall-clock time; it is **not** an external anchor and is not cryptographically

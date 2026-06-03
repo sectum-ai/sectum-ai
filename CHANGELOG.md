@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
+  by a real TSA could have its binary `tsa_token` swapped for a `local-dev` JSON
+  token carrying the same digest and still verify (reported as "unanchored"),
+  silently dropping the one independent proof of *when* the evidence existed —
+  load-bearing for the GDPR Art. 17 erasure timeline. A new `anchored_with_timestamp`
+  flag, bound into the attested digest (mirroring `anchored_in_log`), makes
+  `sectum-ai verify` demand a real RFC 3161 token whenever a pack claims one, so the
+  swap fails. This bumps `SCHEMA_VERSION` `0.2.0` → `0.3.0`; the committed JSON
+  schemas, the reproducibility golden hashes, and the `docs/samples/` packs are
+  regenerated, and pre-`0.3.0` packs are refused by the schema gate with a clear
+  version-mismatch message (ADR-0016).
+
+- **`verify_bundle` now reconciles a bundle's ZIP members against its digest
+  manifest, closing a tamper-evidence hole.** The integrity loop only iterated
+  manifest-*listed* members, so a file physically present in the archive but absent
+  from `bundle-manifest.json` was covered by no digest check — and because the
+  audit-PDF / sidecar selection reads the raw ZIP, an unlisted forged member (e.g.
+  a fake `erasure-attestation.pdf` claiming "zero residue") could ride inside a
+  bundle that `sectum-ai verify` reported as PASSING, and could even be the member
+  delivered. Verification now fails on any archive member not covered by the
+  manifest, so a bundle attests exactly its manifest's member set (the engineering
+  spec §8.1). Regression test added for the smuggled-unlisted-member attack.
+
+### Added
+
+- **Class 1 now flags the "200-empty vs 403" deny ambiguity.** A direct
+  cross-tenant fetch that comes back empty is not a proven deny — a backend can
+  return `200` with an empty body without ever enforcing authorization. The
+  tenant-boundary probe now emits an *unverified, informational* finding for each
+  such cross-principal fetch (excluded from the confirmed-leak headline, carrying
+  a remediation pointer to return an explicit `403`), so a silent empty response
+  can no longer pass for enforced negative authorization. This consumes the
+  Class 1 `access_outcome` signal the runner already recorded but nothing read.
+
 ### Changed
 
 - **Rename tail: tooling config, CLI name, and resource-prefix defaults.** The
@@ -48,6 +84,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The audit-pack PDF now renders each finding's secondary OWASP classes.** The
+  spec §18 maps a primary OWASP class plus secondary ones (e.g. `LLM02:2025` /
+  `LLM06:2025`); they were recorded in `evidence.json` but the PDF's per-finding
+  control line dropped them. Both PDF engines (`reportlab` and `weasyprint`) share
+  the fix. The committed `docs/samples/` retrieval-pivot and residual-data erasure
+  packs are regenerated so the public artifacts show the secondary classes (the
+  all-erased happy-path pack has no findings and is unchanged).
+
+- **Documentation accuracy sweep.** The glossary's `SECRET_CANARY` entry now
+  describes the shipped form (an `sk-`/`AKIA`/`9xx`-SSN shape matched by an exact
+  **and** credential-format pass, then redacted) instead of the removed
+  `SECTUM-SECRET-<base32>` token; `compliance-mappings.md` no longer claims a
+  per-pack "mapping revision" (the identifiers come from `sectum-ai-evidence` and
+  the `ControlMapping` model is versioned by the shared `SCHEMA_VERSION`);
+  `data-models.md` drops `SyntheticTenantSpec` from the committed-schema list (it
+  is embedded inline in `Scenario` and has no standalone schema); and
+  `threat-model.md` attributes timestamping/verification to the pack's
+  `attested_digest` rather than `run_digest`.
+- **Stale `src/sectum/` code-path references left by the rename are corrected.**
+  The slash-delimited package path escaped the earlier rename passes, leaving
+  broken links in the ADRs, several READMEs, `docs/`, and a `gen_schemas.py`
+  docstring (now `src/sectum_ai/`), and — functionally — the `[tool.coverage]`
+  omit globs (`*/sectum/adapters/*` → `*/sectum_ai/adapters/*`), which had stopped
+  matching the moved adapter modules. The BYOC example deployment paths move to
+  `/etc/sectum-ai/` for brand consistency.
 - **`sectum-ai init` now generates a `sectum-ai.yaml` that every `--config` command can
   load.** The template's `security:` section had only a commented-out body, so
   YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
