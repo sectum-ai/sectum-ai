@@ -67,4 +67,5 @@ class EmbeddingInversionProbe(DetectingProbe):
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
+            owasp_secondary=self.owasp_secondary,
         )

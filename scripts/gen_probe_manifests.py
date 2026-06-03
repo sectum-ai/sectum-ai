@@ -77,6 +77,7 @@ def _manifest(cls: type) -> dict[str, Any]:
         "name": cls.name,
         "kind": "workflow" if is_workflow else "plan-detect",
         "owasp_llm": cls.owasp_llm,
+        "owasp_secondary": list(getattr(cls, "owasp_secondary", [])),
         "atlas_techniques": list(cls.atlas_techniques),
         "nist_rmf": list(cls.nist_rmf),
         "surfaces": _surfaces(cls),

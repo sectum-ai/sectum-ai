@@ -221,6 +221,7 @@ class KvCacheTimingProbe:
     id = "kv-cache-timing"
     name = "KV-cache timing side channel"
     owasp_llm = "LLM08:2025"
+    owasp_secondary: tuple[str, ...] = ("LLM02:2025",)
     # A statistical timing side channel has no clean MITRE ATLAS technique, so
     # atlas is intentionally empty (the engineering spec, section 9).
     atlas_techniques: tuple[str, ...] = ()
@@ -303,5 +304,6 @@ class KvCacheTimingProbe:
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
+            owasp_secondary=self.owasp_secondary,
             remediation_pointer="disable cross-tenant KV prefix-cache sharing",
         )

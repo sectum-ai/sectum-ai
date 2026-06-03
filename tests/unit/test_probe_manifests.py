@@ -45,8 +45,9 @@ def test_probe_manifest_mirrors_class_attributes(cls: type) -> None:
     assert manifest["id"] == probe.id
     assert manifest["name"] == probe.name
     assert manifest["owasp_llm"] == probe.owasp_llm
-    assert manifest["atlas_techniques"] == list(probe.atlas_techniques)
+    assert manifest["owasp_secondary"] == list(probe.owasp_secondary)
     assert manifest["nist_rmf"] == list(probe.nist_rmf)
+    assert manifest["atlas_techniques"] == list(probe.atlas_techniques)
     assert manifest["kind"] in {"plan-detect", "workflow"}
     assert manifest["surfaces"], "every manifest must declare at least one surface"
     # The plan/detect probes carry class-level surfaces/requires_adapters; those

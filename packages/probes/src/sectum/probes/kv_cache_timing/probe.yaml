@@ -5,6 +5,8 @@ id: kv-cache-timing
 name: KV-cache timing side channel
 kind: workflow
 owasp_llm: LLM08:2025
+owasp_secondary:
+- LLM02:2025
 atlas_techniques: []
 nist_rmf:
 - MEASURE 2.7

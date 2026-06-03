@@ -232,6 +232,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-probe secondary OWASP mappings (`Finding.owasp_secondary`, the spec §18).**
+  Every finding carried only its primary OWASP class (`LLM08:2025`), but §18 also
+  maps the catalog to `LLM02`/`LLM06` as secondary. `Finding` now carries
+  `owasp_secondary`, stamped from each probe: the leakage probes map to
+  `LLM02:2025` (Sensitive Information Disclosure) via a `DetectingProbe` default,
+  and the agent/tool probes override to `LLM06:2025` (Excessive Agency). The 13
+  `probe.yaml` manifests gained the field (with a parity assertion), and the
+  committed JSON Schema artifacts and erasure sample packs were regenerated for the
+  widened `Finding`.
 - **Headline metrics for Class 3, 6, and 10 (`RunMetrics`, the spec §9 promise).**
   Three attack classes ran and produced findings but had no aggregate metric, so a
   run could not report or regression-gate them. `RunMetrics` now carries

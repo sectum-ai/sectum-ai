@@ -5,6 +5,8 @@ id: agent-framework-hijack
 name: Cross-tenant agent-framework tool-call hijacking
 kind: plan-detect
 owasp_llm: LLM08:2025
+owasp_secondary:
+- LLM06:2025
 atlas_techniques:
 - AML.T0024
 - AML.T0053

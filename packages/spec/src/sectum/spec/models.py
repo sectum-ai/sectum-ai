@@ -253,6 +253,10 @@ class Finding(SectumModel):
     marker_id: str | None = None
     evidence_span: str = ""
     owasp_llm: str = ""
+    # Secondary OWASP LLM Top 10 classes this finding also evidences (the spec
+    # §18: "LLM08:2025 primary; LLM02/LLM06 secondary"). Empty when the probe
+    # declares no secondary mapping.
+    owasp_secondary: tuple[str, ...] = ()
     atlas: tuple[str, ...] = ()
     nist: tuple[str, ...] = ()
     remediation_pointer: str = ""

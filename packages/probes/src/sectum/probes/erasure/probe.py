@@ -134,6 +134,7 @@ class ErasureProbe:
     id = "gdpr-erasure-verification"
     name = "GDPR Article 17 erasure verification"
     owasp_llm = "LLM08:2025"
+    owasp_secondary: tuple[str, ...] = ("LLM02:2025",)
     # Erasure verification is a control check, not an attack technique, so atlas
     # is intentionally empty (the engineering spec, section 9).
     atlas_techniques: tuple[str, ...] = ()
@@ -377,6 +378,7 @@ class ErasureProbe:
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
+            owasp_secondary=self.owasp_secondary,
             remediation_pointer=remediation,
         )
 
@@ -413,6 +415,7 @@ class ErasureProbe:
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
+            owasp_secondary=self.owasp_secondary,
             remediation_pointer=(
                 "ATTESTABLE WITH CAVEAT: this backend exposes no programmatic "
                 "per-tenant erasure API, so Article 17 erasure cannot be verified "

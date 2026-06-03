@@ -20,6 +20,7 @@ class AgentToolHijackProbe(DetectingProbe):
     id = "agent-tool-hijack"
     name = "Cross-tenant agent tool-call hijacking"
     owasp_llm = "LLM08:2025"
+    owasp_secondary = ("LLM06:2025",)
     # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough
     # technique; T0024 Exfiltration via AI Inference API is the leak it causes.
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")
@@ -87,4 +88,5 @@ class AgentToolHijackProbe(DetectingProbe):
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
+            owasp_secondary=self.owasp_secondary,
         )

@@ -70,6 +70,14 @@
           "title": "Owasp Llm",
           "type": "string"
         },
+        "owasp_secondary": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Owasp Secondary",
+          "type": "array"
+        },
         "owner_tenant_id": {
           "format": "uuid",
           "title": "Owner Tenant Id",
