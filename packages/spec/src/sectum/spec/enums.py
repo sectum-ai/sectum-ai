@@ -28,6 +28,21 @@ class FindingStatus(StrEnum):
     UNVERIFIED = "unverified"
 
 
+class AccessOutcome(StrEnum):
+    """How an authorization-boundary fetch resolved (the engineering spec, Class 1).
+
+    A direct cross-tenant fetch should be *denied*. The spec calls out the
+    ambiguity a competitor's scanner misses: a backend that returns ``200`` with
+    an empty body looks like a deny but never enforced one. ``RETURNED`` is the
+    object actually surfacing (a leak if the object is foreign); ``EMPTY`` is the
+    ambiguous empty result; ``DENIED`` is an explicit authorization refusal.
+    """
+
+    RETURNED = "returned"
+    EMPTY = "empty"
+    DENIED = "denied"
+
+
 class PrincipalKind(StrEnum):
     """The kind of isolation boundary a principal represents.
 

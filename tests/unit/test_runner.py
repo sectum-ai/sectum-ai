@@ -23,7 +23,15 @@ from sectum.adapters import (
 )
 from sectum.probes import RagEntityBleedProbe
 from sectum.runner import Runner
-from sectum.spec import AdapterError, ConfigError, CorpusDocument, ProbeStep, Substrate, Surface
+from sectum.spec import (
+    AccessOutcome,
+    AdapterError,
+    ConfigError,
+    CorpusDocument,
+    ProbeStep,
+    Substrate,
+    Surface,
+)
 from sectum.substrate import build_substrate, default_scenario
 
 
@@ -167,6 +175,8 @@ def test_runner_dispatches_vector_fetch_to_the_vector_adapter() -> None:
     observation = runner._execute(_step(tenant, "vector.fetch", {"doc_id": "d-7"}))
     assert observation.surface == Surface.VECTOR_DB
     assert observation.raw_response == "seven content"
+    # Class 1 deny-semantics: the object surfaced, so the outcome is RETURNED.
+    assert observation.access_outcome == AccessOutcome.RETURNED
 
 
 def test_runner_vector_fetch_returns_empty_string_when_doc_missing() -> None:
@@ -181,6 +191,9 @@ def test_runner_vector_fetch_returns_empty_string_when_doc_missing() -> None:
     observation = runner._execute(_step(tenant, "vector.fetch", {"doc_id": "no-such-id"}))
     assert observation.surface == Surface.VECTOR_DB
     assert observation.raw_response == ""
+    # The ambiguous "200-empty" case the spec (Class 1) calls out: an absent
+    # object is EMPTY, not a proven deny.
+    assert observation.access_outcome == AccessOutcome.EMPTY
 
 
 def test_runner_vector_fetch_without_a_vector_adapter_raises() -> None:

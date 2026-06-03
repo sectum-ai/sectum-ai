@@ -232,6 +232,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Class 1 deny-semantics: `Observation.access_outcome` (the spec, Class 1).**
+  Class 1 flags whether a direct cross-tenant fetch is denied, and the spec calls
+  out the ambiguity a shallow scanner misses — a backend that returns `200` with
+  an empty body looks like a deny but never enforced one. A new `AccessOutcome`
+  enum (`RETURNED` / `EMPTY` / `DENIED`) is recorded on each fetch observation:
+  the runner marks a `vector.fetch` `RETURNED` when the object surfaced (a leak if
+  foreign) and `EMPTY` when absent (the ambiguous 200-empty), so evidence can
+  distinguish the two. (Class 9's companion routing signal, `ModelResult.served_by_tenant`,
+  follows in its own change — it reshapes the `ModelAdapter.infer` return across
+  the fake and HuggingFace adapters.)
 - **Per-probe secondary OWASP mappings (`Finding.owasp_secondary`, the spec §18).**
   Every finding carried only its primary OWASP class (`LLM08:2025`), but §18 also
   maps the catalog to `LLM02`/`LLM06` as secondary. `Finding` now carries

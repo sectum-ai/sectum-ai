@@ -1,5 +1,15 @@
 {
   "$defs": {
+    "AccessOutcome": {
+      "description": "How an authorization-boundary fetch resolved (the engineering spec, Class 1).\n\nA direct cross-tenant fetch should be *denied*. The spec calls out the\nambiguity a competitor's scanner misses: a backend that returns ``200`` with\nan empty body looks like a deny but never enforced one. ``RETURNED`` is the\nobject actually surfacing (a leak if the object is foreign); ``EMPTY`` is the\nambiguous empty result; ``DENIED`` is an explicit authorization refusal.",
+      "enum": [
+        "returned",
+        "empty",
+        "denied"
+      ],
+      "title": "AccessOutcome",
+      "type": "string"
+    },
     "Surface": {
       "description": "A place tenant data can live or leak (the engineering spec, section 23).",
       "enum": [
@@ -27,6 +37,17 @@
   "additionalProperties": false,
   "description": "A response or observation captured for a probe step.",
   "properties": {
+    "access_outcome": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AccessOutcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "latency_ms": {
       "anyOf": [
         {
