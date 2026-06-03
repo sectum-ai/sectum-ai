@@ -87,7 +87,16 @@ def _finding_controls(finding: Finding) -> str:
     """
     parts: list[str] = []
     if finding.owasp_llm:
-        parts.append(f"OWASP {finding.owasp_llm}")
+        owasp = f"OWASP {finding.owasp_llm}"
+        # The spec §18 maps a primary OWASP class plus optional secondary ones
+        # ("LLM08:2025 primary; LLM02/LLM06 secondary"). evidence.json already
+        # carries them; render them in the audit pack too, rather than dropping
+        # the secondary classes silently.
+        if finding.owasp_secondary:
+            owasp += f" (secondary: {', '.join(finding.owasp_secondary)})"
+        parts.append(owasp)
+    elif finding.owasp_secondary:
+        parts.append(f"OWASP secondary: {', '.join(finding.owasp_secondary)}")
     if finding.atlas:
         parts.append(f"ATLAS {', '.join(finding.atlas)}")
     if finding.nist:
