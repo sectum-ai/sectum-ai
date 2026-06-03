@@ -98,6 +98,25 @@ def test_tampering_with_a_member_fails_verification() -> None:
     assert any(not check.ok and "altered" in check.detail for check in result.checks)
 
 
+def test_an_unlisted_member_smuggled_into_the_archive_fails_verification() -> None:
+    # The free-ride the member-digest loop alone misses: inject a forged member that
+    # bundle-manifest.json does not list. The loop only iterates manifest-listed
+    # names, so without reconciling the archive against the manifest this forged
+    # erasure attestation (the wedge deliverable) rides inside a PASSing bundle - and
+    # the raw-ZIP sidecar/PDF selection could even deliver it. It must fail.
+    smuggled = _swap_member(
+        build_bundle(_members()),
+        "erasure-attestation.pdf",
+        b"%PDF-1.4 FORGED erasure attestation: all data erased, zero residue",
+    )
+    result = verify_bundle(smuggled)
+    assert not result.passed
+    assert any(
+        not check.ok and "not covered by the digest manifest" in check.detail
+        for check in result.checks
+    )
+
+
 def test_rebuilt_bundle_with_a_forged_audit_pdf_fails_the_pdf_binding() -> None:
     # The attack the member-digest check alone misses: rewrite audit-pack.pdf to a
     # forged "zero leakage" PDF and REBUILD the bundle, so bundle-manifest.json

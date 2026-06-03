@@ -103,10 +103,11 @@ def verify_bundle(
 ) -> VerificationResult:
     """Verify a bundle end to end and return a PASS/FAIL verdict with per-check detail.
 
-    Every member's SHA-256 must match the recorded manifest digest, and the
-    contained evidence pack must pass :func:`verify_pack`. A missing or mismatched
-    member, or a failed pack verification, fails the result - so editing any
-    bundled artifact (or the pack itself) is caught.
+    Every member's SHA-256 must match the recorded manifest digest, the archive's
+    member set must equal the manifest's (no unlisted member may ride along), and
+    the contained evidence pack must pass :func:`verify_pack`. A missing, extra, or
+    mismatched member, or a failed pack verification, fails the result - so editing
+    a bundled artifact, smuggling an unlisted one in, or altering the pack is caught.
     """
     try:
         with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
@@ -134,6 +135,23 @@ def verify_bundle(
             checks.append(Check(f"member:{name}", True, "digest matches"))
         else:
             checks.append(Check(f"member:{name}", False, "digest mismatch (member altered)"))
+
+    # Reconcile the archive against the manifest. The loop above only covers
+    # manifest-LISTED names, so a member physically present in the ZIP but absent
+    # from bundle-manifest.json is otherwise uncovered by every digest check - and
+    # the sidecar/PDF selection below reads the raw archive, so an unlisted forged
+    # artifact (e.g. a fake erasure-attestation.pdf) would ride inside an otherwise
+    # passing bundle and could even be delivered. Fail on any unlisted member so a
+    # bundle attests EXACTLY its manifest's member set (the spec, section 8.1).
+    for name in sorted(member_bytes):
+        if name not in member_digests:
+            checks.append(
+                Check(
+                    f"member:{name}",
+                    False,
+                    "present in the archive but not covered by the digest manifest",
+                )
+            )
 
     evidence_raw = member_bytes.get(evidence_member)
     if evidence_raw is None:
