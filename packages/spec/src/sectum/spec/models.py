@@ -276,6 +276,15 @@ class RunMetrics(SectumModel):
     erasure_residue: dict[str, int] = Field(default_factory=dict)
     erasure_caveats: dict[str, int] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
+    # Headline rates for Class 3 (poisoning), Class 6 (inversion), and Class 10
+    # (extraction), each in [0, 1]: the fraction of that probe's benign query
+    # steps that surfaced a confirmed foreign canary. ``None`` when the probe did
+    # not run. Poisoning's rate is the post-plant cross-tenant bleed over an
+    # implicit zero baseline - the lure phrase does not exist before the poison is
+    # planted - so the rate *is* the delta the spec (section 7, Class 3) calls for.
+    poisoning_bleed_delta: float | None = None
+    inversion_reconstruction_rate: float | None = None
+    extraction_efficiency: float | None = None
 
 
 class RunResult(SectumModel):

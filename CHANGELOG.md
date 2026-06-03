@@ -232,6 +232,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Headline metrics for Class 3, 6, and 10 (`RunMetrics`, the spec §9 promise).**
+  Three attack classes ran and produced findings but had no aggregate metric, so a
+  run could not report or regression-gate them. `RunMetrics` now carries
+  `poisoning_bleed_delta` (Class 3), `inversion_reconstruction_rate` (Class 6), and
+  `extraction_efficiency` (Class 10) — each the fraction of that probe's benign
+  query steps that surfaced a confirmed foreign canary, computed by the new
+  `confirmed_finding_rate` helper (which `retrieval_pivot_rate` now aliases).
+  `sectum probe` records and prints them (and emits them in `--output json`), and
+  `sectum diff` / `baseline` flag a rise in any of them as a regression, exactly
+  like the Retrieval-Pivot Rate. The committed JSON Schema artifacts and erasure
+  sample packs were regenerated for the widened `RunMetrics`.
 - **Structured logging with redaction, the last unimplemented §16 convention.**
   The spec requires `structlog`-based logging that never emits secrets or raw
   tenant content above DEBUG, with DEBUG off by default — and the library logged

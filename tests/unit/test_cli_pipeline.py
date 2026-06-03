@@ -144,6 +144,29 @@ def test_probe_can_run_a_single_probe(tmp_path: Path) -> None:
     assert set(run["probe_versions"]) == {"agent-tool-hijack"}
     # the Retrieval-Pivot Rate is a Class 2 metric; it is unset when Class 2 did not run
     assert run["metrics"]["retrieval_pivot_rate"] is None
+    # likewise the Class 3/6/10 rates are unset when their probes did not run
+    assert run["metrics"]["poisoning_bleed_delta"] is None
+    assert run["metrics"]["inversion_reconstruction_rate"] is None
+    assert run["metrics"]["extraction_efficiency"] is None
+
+
+def test_probe_records_class_3_6_10_metrics_on_a_full_sweep(tmp_path: Path) -> None:
+    """The Class 3 (poisoning), 6 (inversion), and 10 (extraction) headline rates
+    populate when their probes run against the leaky demo stack."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 2
+    metrics = json.loads((tmp_path / "run.json").read_text())["metrics"]
+    for key in (
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    ):
+        assert metrics[key] is not None, key
+        assert 0.0 <= metrics[key] <= 1.0, key
+    # the poison lure plants a HARD_CANARY that surfaces cross-tenant on the
+    # shared-index demo stack, so its exact-match bleed rate is non-zero.
+    assert metrics["poisoning_bleed_delta"] > 0.0
 
 
 def test_probe_rejects_an_unknown_probe_id(tmp_path: Path) -> None:

@@ -32,6 +32,24 @@ def test_fewer_findings_is_not_a_regression() -> None:
     assert not compare_metrics(baseline, current).regressed
 
 
+def test_higher_class_3_6_10_rates_are_regressions() -> None:
+    """A rise in poisoning bleed, inversion reconstruction, or extraction
+    efficiency is more cross-tenant leakage, so each regresses like the RPR."""
+    for name in ("poisoning_bleed_delta", "inversion_reconstruction_rate", "extraction_efficiency"):
+        baseline = RunMetrics(**{name: 0.1})
+        current = RunMetrics(**{name: 0.6})
+        comparison = compare_metrics(baseline, current)
+        assert comparison.regressed, name
+        delta = next(d for d in comparison.deltas if d.name == name)
+        assert delta.regressed
+
+
+def test_unmeasured_class_3_6_10_rates_count_as_zero() -> None:
+    """``None`` (the probe did not run) never reads as a regression."""
+    metrics = RunMetrics(poisoning_bleed_delta=None)
+    assert not compare_metrics(metrics, metrics).regressed
+
+
 def test_an_unmeasured_retrieval_pivot_rate_counts_as_zero() -> None:
     baseline = RunMetrics(confirmed_findings=1, retrieval_pivot_rate=None)
     current = RunMetrics(confirmed_findings=1, retrieval_pivot_rate=None)

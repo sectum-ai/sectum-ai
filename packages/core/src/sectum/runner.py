@@ -296,13 +296,26 @@ class Runner:
         )
 
 
-def retrieval_pivot_rate(step_results: list[StepResult]) -> float:
-    """Fraction of benign steps that surfaced a confirmed cross-tenant leak.
+def confirmed_finding_rate(step_results: list[StepResult]) -> float:
+    """Fraction of steps that surfaced at least one confirmed cross-tenant leak.
 
-    The Class 2 headline metric, the Retrieval-Pivot Rate (the engineering spec,
-    section 7).
+    The shared denominator for every probe whose headline metric is "how often did
+    a benign step surface a foreign canary": Class 2's Retrieval-Pivot Rate, plus
+    Class 3 poisoning bleed, Class 6 inversion reconstruction, and Class 10
+    extraction efficiency (the engineering spec, section 7). Callers pass the
+    subset of steps for the probe (and action) they are measuring.
     """
     if not step_results:
         return 0.0
     pivoted = sum(1 for _, findings in step_results if confirmed_findings(findings))
     return pivoted / len(step_results)
+
+
+def retrieval_pivot_rate(step_results: list[StepResult]) -> float:
+    """Fraction of benign steps that surfaced a confirmed cross-tenant leak.
+
+    The Class 2 headline metric, the Retrieval-Pivot Rate (the engineering spec,
+    section 7); an alias of :func:`confirmed_finding_rate` kept for call-site
+    clarity at the flagship probe.
+    """
+    return confirmed_finding_rate(step_results)
