@@ -25,7 +25,10 @@ from sectum.spec import (
     GroundTruthManifest,
     RunResult,
     canonical_hash,
+    get_logger,
 )
+
+_log = get_logger(__name__)
 
 
 class Timestamper(Protocol):
@@ -142,7 +145,7 @@ def build_evidence_pack(
     digest = canonical_hash(
         _attested_content(run_result, manifest_hash, control_mappings, pdf_ref, anchored_in_log)
     )
-    return EvidencePack(
+    pack = EvidencePack(
         run_result=run_result,
         manifest_hash=manifest_hash,
         tsa_token=stamper.timestamp(digest),
@@ -151,3 +154,11 @@ def build_evidence_pack(
         pdf_ref=pdf_ref,
         anchored_in_log=anchored_in_log,
     )
+    # Digests and the run id are safe to log; the TSA/Rekor tokens are not (§16).
+    _log.info(
+        "evidence.pack.built",
+        run_id=run_result.run_id,
+        digest=digest,
+        anchored_in_log=anchored_in_log,
+    )
+    return pack
