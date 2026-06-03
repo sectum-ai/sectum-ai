@@ -20,7 +20,7 @@ instead, which pulls this in automatically.
 ## JSON Schema
 
 Every model is also published as a standalone JSON Schema document under
-`sectum/spec/schemas/<Model>.schema.json` (shipped in the wheel). Each carries a
+`sectum_ai/spec/schemas/<Model>.schema.json` (shipped in the wheel). Each carries a
 `$schema` dialect (draft 2020-12) and a version-pinned `$id`
 (`https://schemas.sectum.ai/<schema_version>/<Model>.schema.json`), so external
 tooling can validate Sectum artifacts without importing Python:

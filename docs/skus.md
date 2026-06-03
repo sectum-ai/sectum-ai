@@ -43,7 +43,7 @@ sectum-ai verify .sectum-ai/evidence.json
 `sectum-ai probe` with no `--suite` runs the full catalog (the
 continuous-verification default). The GDPR erasure SKU is the separate
 `sectum-ai erasure` workflow, not a probe suite. Suite definitions live in
-[`sectum_ai.suites`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/core/src/sectum/suites.py),
+[`sectum_ai.suites`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/core/src/sectum_ai/suites.py),
 and their probe sets are validated against the live catalog in CI.
 
 ## Deployment modes

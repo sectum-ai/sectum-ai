@@ -43,7 +43,7 @@ whatever you use for everything else).
 
 ### 2. Author your `sectum-ai.yaml` (one-time)
 
-Copy `sectum-ai.yaml.example` to `/etc/sectum/sectum-ai.yaml` and edit:
+Copy `sectum-ai.yaml.example` to `/etc/sectum-ai/sectum-ai.yaml` and edit:
 
 - Point each adapter at your actual stack (vector DB DSN reference,
   RAG endpoint, observability backend, etc.). Use env-var references
@@ -55,9 +55,9 @@ Scaffold a config, then validate it parses by seeding into a scratch workdir you
 discard afterwards (`sectum-ai seed` has no dry-run mode):
 
 ```sh
-sectum-ai init --output /etc/sectum/sectum-ai.yaml.draft
-sectum-ai seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum-ai.yaml
-rm -rf /tmp/sectum-validate
+sectum-ai init --output /etc/sectum-ai/sectum-ai.yaml.draft
+sectum-ai seed --workdir /tmp/sectum-ai-validate --config /etc/sectum-ai/sectum-ai.yaml
+rm -rf /tmp/sectum-ai-validate
 ```
 
 ### 3. Install the wrapper + cron (one-time)

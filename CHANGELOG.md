@@ -48,6 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Documentation accuracy sweep.** The glossary's `SECRET_CANARY` entry now
+  describes the shipped form (an `sk-`/`AKIA`/`9xx`-SSN shape matched by an exact
+  **and** credential-format pass, then redacted) instead of the removed
+  `SECTUM-SECRET-<base32>` token; `compliance-mappings.md` no longer claims a
+  per-pack "mapping revision" (the identifiers come from `sectum-ai-evidence` and
+  the `ControlMapping` model is versioned by the shared `SCHEMA_VERSION`);
+  `data-models.md` drops `SyntheticTenantSpec` from the committed-schema list (it
+  is embedded inline in `Scenario` and has no standalone schema); and
+  `threat-model.md` attributes timestamping/verification to the pack's
+  `attested_digest` rather than `run_digest`.
+- **Stale `src/sectum/` code-path references left by the rename are corrected.**
+  The slash-delimited package path escaped the earlier rename passes, leaving
+  broken links in the ADRs, several READMEs, `docs/`, and a `gen_schemas.py`
+  docstring (now `src/sectum_ai/`), and — functionally — the `[tool.coverage]`
+  omit globs (`*/sectum/adapters/*` → `*/sectum_ai/adapters/*`), which had stopped
+  matching the moved adapter modules. The BYOC example deployment paths move to
+  `/etc/sectum-ai/` for brand consistency.
 - **`sectum-ai init` now generates a `sectum-ai.yaml` that every `--config` command can
   load.** The template's `security:` section had only a commented-out body, so
   YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
