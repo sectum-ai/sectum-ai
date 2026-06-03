@@ -59,7 +59,7 @@ adapters:
 ```
 
 ```sh
-sectum-ai probe --probe semantic-cache-contamination --config sectum.yaml --workdir out
+sectum-ai probe --probe semantic-cache-contamination --config sectum-ai.yaml --workdir out
 ```
 
 A real engagement runs with `tenant_scoped: true` (or absent) to

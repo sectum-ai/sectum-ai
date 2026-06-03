@@ -1,4 +1,4 @@
-"""Tests for the ``sectum.yaml`` configuration loader."""
+"""Tests for the ``sectum-ai.yaml`` configuration loader."""
 
 from pathlib import Path
 
@@ -37,17 +37,17 @@ from sectum_ai.spec import ConfigError
 
 
 def test_load_config_returns_defaults_for_an_empty_file(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("")
     config = load_config(path)
     assert config == SectumConfig()
     assert config.scenario.seed == 2026
-    assert config.workdir == Path(".sectum")
+    assert config.workdir == Path(".sectum-ai")
     assert config.evidence.timestamper == "local"
 
 
 def test_load_config_parses_the_init_template_shape(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text(
         "scenario:\n"
         "  seed: 42\n"
@@ -78,7 +78,7 @@ def test_load_config_parses_the_init_template_shape(tmp_path: Path) -> None:
 
 
 def test_load_config_parses_embedding_models_and_corpus_size(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text(
         "scenario:\n  seed: 7\n  corpus_size: 48\n  embedding_models: [hash-32, hash-256]\n"
     )
@@ -88,7 +88,7 @@ def test_load_config_parses_embedding_models_and_corpus_size(tmp_path: Path) -> 
 
 
 def test_load_config_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("scenario:\n  embedding_models: [minilm]\n")
     with pytest.raises(ConfigError, match="unknown embedding model"):
         load_config(path)
@@ -100,28 +100,28 @@ def test_load_config_raises_when_the_file_is_missing(tmp_path: Path) -> None:
 
 
 def test_load_config_raises_on_invalid_yaml(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("scenario: : :\n  bad")
     with pytest.raises(ConfigError, match="invalid YAML"):
         load_config(path)
 
 
 def test_load_config_raises_on_a_non_mapping_top_level(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("- just\n- a\n- list\n")
     with pytest.raises(ConfigError, match="YAML mapping"):
         load_config(path)
 
 
 def test_load_config_rejects_an_unknown_top_level_field(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("typo_field: 1\n")
     with pytest.raises(ConfigError, match="invalid config"):
         load_config(path)
 
 
 def test_load_config_rejects_an_unknown_evidence_timestamper(tmp_path: Path) -> None:
-    path = tmp_path / "sectum.yaml"
+    path = tmp_path / "sectum-ai.yaml"
     path.write_text("evidence:\n  timestamper: invalid-kind\n")
     with pytest.raises(ConfigError, match="invalid config"):
         load_config(path)
@@ -251,15 +251,15 @@ _RESOLVER_FAMILIES = {
 
 
 def test_example_config_uses_only_adapter_keys_the_resolver_reads() -> None:
-    # sectum.yaml.example must use the exact family keys build_adapters consumes:
+    # sectum-ai.yaml.example must use the exact family keys build_adapters consumes:
     # a copied-and-edited example with a stray key (e.g. `vector:` instead of
     # `vector_store:`) silently runs against the in-memory fake with no error,
     # which defeats real-stack probing. Guards that footgun against regressing.
-    example = Path(__file__).resolve().parents[2] / "sectum.yaml.example"
+    example = Path(__file__).resolve().parents[2] / "sectum-ai.yaml.example"
     config = load_config(example)
     unknown = set(config.adapters) - _RESOLVER_FAMILIES
     assert not unknown, (
-        f"sectum.yaml.example has adapter keys the resolver ignores: {sorted(unknown)}"
+        f"sectum-ai.yaml.example has adapter keys the resolver ignores: {sorted(unknown)}"
     )
 
 

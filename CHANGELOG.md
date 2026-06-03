@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The remaining `sectum` data slugs are renamed too (completes the rename).** The
+  default workdir `.sectum` → `.sectum-ai`, the default config filename
+  `sectum.yaml` → `sectum-ai.yaml` (and the example configs / `sectum.yaml.example`
+  / `sectum.yaml.production`), and the demo `scenario_id` `sectum-demo-{seed}` →
+  `sectum-ai-demo-{seed}` (so the run id is `run-sectum-ai-demo-{seed}`). The
+  reproducibility golden hashes and every committed sample pack were regenerated
+  accordingly. The `sectum.ai` domain is unchanged; the deployed
+  `/sectum/platform/...` AWS SSM parameter paths are left to a separate infra
+  redeploy.
+
 - **BREAKING — the Python import is renamed `sectum` → `sectum_ai`, and the CLI
   binary `sectum` → `sectum-ai`.** Bare `sectum` is gone as a standalone name; the
   product is **Sectum AI** (prose), `sectum-ai` (distribution / repo / CLI), and
@@ -20,14 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directory is now `src/sectum_ai/`, all imports/docs/examples are updated, and the
   committed JSON Schemas were regenerated (the change is the docstring reference in
   two `description`s; the `$id` is domain-based and unchanged). The `sectum.ai`
-  domain, the `.sectum` workdir, the `sectum.yaml` config filename, and the
+  domain, the `.sectum-ai` workdir, the `sectum-ai.yaml` config filename, and the
   `sectum-demo` scenario id are retained (renaming the latter would churn the
   reproducibility golden hashes and every sample pack). This supersedes the
   original §3 "resolved" import/CLI names by operator decision.
 
 ### Fixed
 
-- **`sectum-ai init` now generates a `sectum.yaml` that every `--config` command can
+- **`sectum-ai init` now generates a `sectum-ai.yaml` that every `--config` command can
   load.** The template's `security:` section had only a commented-out body, so
   YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
   rejected — `sectum-ai seed --config <generated>` exited `3`, breaking the documented
@@ -64,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`scenario.embedding_models` is now wired end to end, so the per-model
   Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
   `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
-  `sectum.yaml` that set the documented key was rejected — and `sectum-ai seed` built
+  `sectum-ai.yaml` that set the documented key was rejected — and `sectum-ai seed` built
   the scenario from the seed alone, so `retrieval_pivot_rate_by_model` was always
   `{}` off a real `seed`→`probe` run (the flagship "stronger embeddings leak more"
   gradient only ever appeared in unit tests). `ScenarioConfig` now carries both
@@ -105,7 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The CLI config resolver now threads `user_scoped` into the model, memory, and
   MCP fakes.** Only the vector-store and cache fake branches passed the
   `user_scoped` knob through; the `model`, `memory`, and `mcp` fakes dropped it,
-  so a `sectum.yaml` requesting per-user (ADR-0006) isolation on those families
+  so a `sectum-ai.yaml` requesting per-user (ADR-0006) isolation on those families
   silently built a tenant-only fake and verified the wrong boundary. All three
   fake branches now thread `user_scoped`, with resolver parity tests.
 - **The stdlib HTTP adapters now wrap transport and JSON errors in
@@ -268,7 +278,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   finding count (~33 KB, 321 findings); and ADR-0016's consequences now reflect
   that `pdf_ref` is bound *and populated* end-to-end (it previously stated the CLI
   did not populate it).
-- **`sectum.yaml.example` used the wrong vector adapter key.** The example
+- **`sectum-ai.yaml.example` used the wrong vector adapter key.** The example
   config keyed the vector store under `vector:`, but the CLI resolver reads
   `vector_store:` (matching `docs/configuration.md`), so a user who copied the
   example and pointed it at a live vector store had that block silently ignored
@@ -288,7 +298,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SECURITY.md` lists v0.1.0 as the first supported release instead of "no
     stable release exists"; `glossary.md` describes `SECRET_CANARY` as the branded
     `SECTUM-SECRET-<base32>` token matched exactly (not an "API-key/SSN-shaped"
-    string); the core-package quickstart verifies `.sectum/evidence.json` and the
+    string); the core-package quickstart verifies `.sectum-ai/evidence.json` and the
     BYOC example validates with a scratch-workdir seed instead of a nonexistent
     `--dry-run` flag.
   - ADR-0008 carries a dated note that the `rag-pipeline-bleed` probe now issues a
@@ -676,7 +686,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would crash the run if a future retention-governed adapter raised it).
 - `FakeObservability` gains a `no_erasure` knob (parallel to `soft_delete`)
   that raises `ErasureUnsupported` from `delete`, so the caveat path is
-  reachable from `sectum.yaml` (`observability: {kind: fake, no_erasure: true}`)
+  reachable from `sectum-ai.yaml` (`observability: {kind: fake, no_erasure: true}`)
   and covered by a CLI-level test.
 
 ### Added
@@ -716,7 +726,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AdapterError`, so callers that don't special-case the caveat still catch
   it under existing adapter-error handling. The CLI resolver accepts
   `kind: helicone` and `kind: datadog` under `observability`;
-  `docs/configuration.md` and `sectum.yaml.example` document both, including
+  `docs/configuration.md` and `sectum-ai.yaml.example` document both, including
   the read-only erasure caveat.
 - A live generic OpenTelemetry observability adapter, `OtelObservability`
   (`packages/adapters/src/sectum/adapters/observability/otel.py`). Adds
@@ -734,7 +744,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   then surfaces at the next scan, the honest Class 11 signal. Standard-
   library HTTP only, so the adapter and its 8 mock-backed unit tests need
   no optional extra. The CLI resolver accepts `kind: otel` under
-  `observability`; `docs/configuration.md` and `sectum.yaml.example` are
+  `observability`; `docs/configuration.md` and `sectum-ai.yaml.example` are
   updated. (Helicone + Datadog APM, the other two §11-named backends,
   follow on the same injectable-client pattern once their live REST
   schemas + per-tenant delete semantics are verified against the vendor
@@ -780,10 +790,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group: `pip install sectum-ai-adapters[rag-langchain]`. The CLI
   resolver accepts `kind: langchain` under `rag` via a
   `factory: module.path:callable` returning a `Runnable`;
-  `docs/configuration.md` and `sectum.yaml.example` are updated.
+  `docs/configuration.md` and `sectum-ai.yaml.example` are updated.
 - A runnable Class 7 walkthrough for the new probe in
   `examples/agent-framework-hijack/` (README + `run.sh` +
-  `sectum.yaml`). The script seeds a four-tenant substrate, runs
+  `sectum-ai.yaml`). The script seeds a four-tenant substrate, runs
   `sectum-ai probe --probe agent-framework-hijack` against the in-memory
   `FakeAgent` with both leak knobs on, assembles a tamper-evident
   evidence pack, and verifies it — the same canonical CLI flow the
@@ -855,7 +865,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolver accepts `kind: anthropic-tooluse` under `agent` via a
   `factory: module.path:callable` returning a client implementing
   the `_AnthropicClient` protocol; `docs/configuration.md` and
-  `sectum.yaml.example` are updated to match. Brings the live
+  `sectum-ai.yaml.example` are updated to match. Brings the live
   agent-adapter family to **six** (http, langgraph, autogen,
   crewai, openai-assistants, anthropic-tooluse) — the full v1 set
   spec §11 names.
@@ -880,7 +890,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The CLI resolver accepts `kind: openai-assistants` under `agent`
   via a `factory: module.path:callable` returning a 2-tuple
   `(client, assistant_id)`; `docs/configuration.md` and
-  `sectum.yaml.example` are updated to match. Brings the live
+  `sectum-ai.yaml.example` are updated to match. Brings the live
   agent-adapter family to **five** (http, langgraph, autogen,
   crewai, openai-assistants) — the v1 set spec §11 names.
 - Five new example walkthroughs filling in the rest of the attack
@@ -912,7 +922,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   weight-bleed condition the substrate is built to catch). README
   explains both the routing-failure and weight-bleed shapes of the
   attack, scopes the demo to the fake substrate, and documents the
-  `sectum.yaml` swap that points the same probe at the new live
+  `sectum-ai.yaml` swap that points the same probe at the new live
   `HuggingFaceLoraModel` for real-PEFT-stack probing. Smoke-tested on
   a clean substrate: the evidence pack verifies under `sectum-ai verify`.
 - A new `examples/kv-cache-timing/` walkthrough that reproduces Attack
@@ -974,7 +984,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   but framed around the agent caller and accompanied by
   `factories.py` — copy-pasteable connect-time factory callables for each
   of the four shipped agent kinds (`fake`, `langgraph`, `autogen`,
-  `crewai`). README documents the `sectum.yaml` swap for each kind so an
+  `crewai`). README documents the `sectum-ai.yaml` swap for each kind so an
   operator can verify Class 7 with the same agent framework their customer
   actually runs in production. Smoke-tested on a clean substrate:
   `run.sh` exits with the canonical Class 7 leak findings and the evidence
@@ -997,7 +1007,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/integration/test_crewai.py` (opt-in via the env-gated
   integration suite). The CLI resolver accepts `kind: crewai` under
   `agent` (via a `factory: module.path:callable` returning a `Crew`);
-  `docs/configuration.md` and `sectum.yaml.example` are updated to match.
+  `docs/configuration.md` and `sectum-ai.yaml.example` are updated to match.
 - A live AutoGen agent adapter (`packages/adapters/src/sectum/adapters/agent/autogen.py`):
   an `AutoGenAgent` that drives an AutoGen `AssistantAgent` + `UserProxyAgent`
   pair through `UserProxyAgent.initiate_chat`, prefixing every user message
@@ -1016,7 +1026,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   env-gated integration suite). The CLI resolver accepts `kind: autogen`
   under `agent` (via a `factory: module.path:callable` returning
   `(assistant, user_proxy)`); `docs/configuration.md` and
-  `sectum.yaml.example` are updated to match.
+  `sectum-ai.yaml.example` are updated to match.
 
 ## [0.1.0] - 2026-05-26
 
@@ -1043,7 +1053,7 @@ build plan; the rest of this section is the per-feature log.
   and is exercised by `tests/integration/test_langgraph.py`
   (opt-in via the env-gated integration suite). The CLI resolver accepts
   `kind: langgraph` under `agent`; `docs/configuration.md` and
-  `sectum.yaml.example` are updated to match.
+  `sectum-ai.yaml.example` are updated to match.
 - Live OpenAI and Anthropic providers for the Class 2 detection pipeline
   (`packages/probes/src/sectum/probes/providers.py`): `OpenAIEmbedder`
   (default `text-embedding-3-small`), `OpenAIJudge` (default `gpt-4o-mini`
@@ -1070,7 +1080,7 @@ build plan; the rest of this section is the per-feature log.
   describes both verdict flavours, lists the regeneration commands for both,
   and explains that either pack verifies under `sectum-ai verify`; the verdict
   is data, not signal integrity.
-- `examples/erasure-attestation/sectum.yaml.production`: a documented
+- `examples/erasure-attestation/sectum-ai.yaml.production`: a documented
   production-shape config for the engagement, with `evidence.timestamper:
   local` and `evidence.rekor: true` defaults and a comment explaining why
   real engagements should pin a customer-chosen TSA URL (FreeTSA, the OSS
@@ -1143,7 +1153,7 @@ build plan; the rest of this section is the per-feature log.
   `sectum-ai report` assembles the evidence pack (JSON and PDF), `sectum-ai verify`
   independently verifies it, `sectum-ai erasure` runs the GDPR Article 17
   erasure-verification workflow into an attestation pack, and `sectum-ai init`
-  scaffolds a starter `sectum.yaml` config.
+  scaffolds a starter `sectum-ai.yaml` config.
 - Phase 3 - end-to-end examples: `examples/retrieval-pivot` (the flagship
   Class 2 walkthrough, from seeding through a verified evidence pack) and
   `examples/erasure-attestation` (the Class 11 erasure-verification wedge).
@@ -1208,10 +1218,10 @@ build plan; the rest of this section is the per-feature log.
   codes: an `EvidenceError` exits 4, and other typed errors exit 3, replacing
   the traceback that used to surface from a `seed`, `probe`, `erasure`, or
   `report` invocation.
-- A typed `sectum.yaml` configuration loader in `sectum_ai.config`: pydantic
+- A typed `sectum-ai.yaml` configuration loader in `sectum_ai.config`: pydantic
   models for the scenario, adapter, and evidence blocks, and a `load_config`
   function that raises `ConfigError` on a missing file, malformed YAML, or an
-  invalid schema. `sectum-ai seed` accepts `--config sectum.yaml` and reads its
+  invalid schema. `sectum-ai seed` accepts `--config sectum-ai.yaml` and reads its
   scenario seed and workdir from the file; explicit `--seed`/`--workdir` flags
   override the config.
 - A config-driven adapter resolver in `sectum_ai.config`: `build_adapters`
@@ -1228,9 +1238,9 @@ build plan; the rest of this section is the per-feature log.
   hashing-trick embedder so a sectum-driven verification needs no
   embedding-model account.
 - `sectum-ai erasure`, `sectum-ai report`, and `sectum-ai baseline` accept
-  `--config sectum.yaml` and use its workdir as a default, completing the
+  `--config sectum-ai.yaml` and use its workdir as a default, completing the
   per-command `--config` coverage for every workflow command.
-- A `docs/configuration.md` reference page in the mkdocs nav: the `sectum.yaml`
+- A `docs/configuration.md` reference page in the mkdocs nav: the `sectum-ai.yaml`
   top-level shape, every adapter family's supported `kind`s with their fields
   and defaults, the env-var secret pattern, and a live-pgvector example.
 - Extend the scenario runner with `rag.ask`, `observability.search`, and
@@ -1449,7 +1459,7 @@ build plan; the rest of this section is the per-feature log.
   index table) to list all seven configured erasure surfaces (vector DB,
   tracing, agent memory, semantic cache, model/fine-tune, search index, eval
   set) instead of the original five.
-- A self-documenting `sectum.yaml.example` at the repo root: every block the
+- A self-documenting `sectum-ai.yaml.example` at the repo root: every block the
   config schema accepts (scenario, workdir, all eight adapter families with
   per-`kind` placeholders for the live backends, evidence chain, security/
   manifest-at-rest, detection providers and semantic threshold) with copy-and-

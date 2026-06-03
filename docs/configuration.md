@@ -1,21 +1,21 @@
 # Configuration
 
-`sectum-ai init` scaffolds a `sectum.yaml` configuration file; every CLI command
+`sectum-ai init` scaffolds a `sectum-ai.yaml` configuration file; every CLI command
 that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`) accepts
-`--config sectum.yaml` to read its defaults from that
+`--config sectum-ai.yaml` to read its defaults from that
 file. Explicit CLI flags — for example `--seed` or `--workdir` — always
 override the values the config supplies.
 
 ## Top-level shape
 
-A `sectum.yaml` is a single YAML mapping with four top-level sections, all
+A `sectum-ai.yaml` is a single YAML mapping with four top-level sections, all
 optional. Any omitted section uses its built-in defaults.
 
 ```yaml
 scenario:
   seed: 2026
   corpus_profile: demo
-workdir: .sectum
+workdir: .sectum-ai
 adapters:
   vector_store: ...
   cache: ...
@@ -46,7 +46,7 @@ Settings that drive substrate generation.
 ## `workdir`
 
 A filesystem path. The CLI writes the substrate, run record, evidence pack,
-and audit pack here. Defaults to `.sectum`.
+and audit pack here. Defaults to `.sectum-ai`.
 
 ## `adapters`
 
@@ -105,7 +105,7 @@ No live memory adapter is wired into the CLI resolver yet.
 |---|---|---|
 | `fake` | `shared_index: bool = false` | `FakeRAGPipeline`. `shared_index: true` makes one retriever serve every tenant — the Class 2 retrieval-pivot leak at the RAG-pipeline end (the `rag-pipeline-bleed` probe). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
-| `langchain` | (constructed in Python) | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. The `sectum.yaml` block only flips the kind; the caller constructs the chain (typically via `LangChainRAGPipeline.connect(retriever, llm)`) and supplies it to the substrate runner. Requires the optional `rag-langchain` extra: `pip install sectum-ai-adapters[rag-langchain]`. |
+| `langchain` | (constructed in Python) | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. The `sectum-ai.yaml` block only flips the kind; the caller constructs the chain (typically via `LangChainRAGPipeline.connect(retriever, llm)`) and supplies it to the substrate runner. Requires the optional `rag-langchain` extra: `pip install sectum-ai-adapters[rag-langchain]`. |
 
 ### `observability`
 
@@ -125,11 +125,11 @@ No live memory adapter is wired into the CLI resolver yet.
 |---|---|---|
 | `fake` | `confused_deputy: bool = false`, `tool_call_passthrough: bool = false` | `FakeAgent`. Both knobs reproduce the Class 7 flaws — a tool that lost tenant scope (confused deputy) and a server that trusts a caller-supplied token (token passthrough). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
-| `langgraph` | (constructed in Python) | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The `sectum.yaml` block only flips the kind; the caller constructs the graph (typically via `LangGraphAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
-| `autogen` | (constructed in Python) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The `sectum.yaml` block only flips the kind; the caller constructs the pair (typically via `AutoGenAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
-| `crewai` | (constructed in Python) | `CrewAIAgent` — a CrewAI `Crew` of agents + tasks kicked off per tenant via `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so templated task descriptions interpolate the tenant id and tenant-aware tools read the scope from their call arguments. The `sectum.yaml` block only flips the kind; the caller constructs the crew (typically via `CrewAIAgent.connect(agents, tasks)`) and supplies it to the substrate runner. Requires the optional `crewai` extra: `pip install sectum-ai-adapters[crewai]`. |
-| `openai-assistants` | (constructed in Python) | `OpenAIAssistantsAgent` — an OpenAI Assistant with one `Thread` cached per tenant, posted via `OpenAI().beta.threads.messages.create` + `runs.create`; each user message is prefixed with `[tenant:<hex>]` so a tenant-aware tool reads the scope from its call arguments. The `sectum.yaml` block only flips the kind; the caller constructs the client + assistant_id (typically via `OpenAIAssistantsAgent.connect(model, tools)`) and supplies them to the substrate runner. Requires the optional `openai-assistants` extra: `pip install sectum-ai-adapters[openai-assistants]`. |
-| `anthropic-tooluse` | (constructed in Python) | `AnthropicToolUseAgent` — the Anthropic Messages API in native tool-use mode with one conversation history cached per tenant; each per-tenant user message is prefixed with `[tenant:<hex>]` and the tool-use loop runs to `stop_reason: end_turn` per turn, executing the python callable each registered tool spec carries on its `__sectum_callable__` sidecar. The `sectum.yaml` block only flips the kind; the caller constructs the client (typically via `AnthropicToolUseAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `anthropic-tooluse` extra: `pip install sectum-ai-adapters[anthropic-tooluse]`. |
+| `langgraph` | (constructed in Python) | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The `sectum-ai.yaml` block only flips the kind; the caller constructs the graph (typically via `LangGraphAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
+| `autogen` | (constructed in Python) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The `sectum-ai.yaml` block only flips the kind; the caller constructs the pair (typically via `AutoGenAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
+| `crewai` | (constructed in Python) | `CrewAIAgent` — a CrewAI `Crew` of agents + tasks kicked off per tenant via `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so templated task descriptions interpolate the tenant id and tenant-aware tools read the scope from their call arguments. The `sectum-ai.yaml` block only flips the kind; the caller constructs the crew (typically via `CrewAIAgent.connect(agents, tasks)`) and supplies it to the substrate runner. Requires the optional `crewai` extra: `pip install sectum-ai-adapters[crewai]`. |
+| `openai-assistants` | (constructed in Python) | `OpenAIAssistantsAgent` — an OpenAI Assistant with one `Thread` cached per tenant, posted via `OpenAI().beta.threads.messages.create` + `runs.create`; each user message is prefixed with `[tenant:<hex>]` so a tenant-aware tool reads the scope from its call arguments. The `sectum-ai.yaml` block only flips the kind; the caller constructs the client + assistant_id (typically via `OpenAIAssistantsAgent.connect(model, tools)`) and supplies them to the substrate runner. Requires the optional `openai-assistants` extra: `pip install sectum-ai-adapters[openai-assistants]`. |
+| `anthropic-tooluse` | (constructed in Python) | `AnthropicToolUseAgent` — the Anthropic Messages API in native tool-use mode with one conversation history cached per tenant; each per-tenant user message is prefixed with `[tenant:<hex>]` and the tool-use loop runs to `stop_reason: end_turn` per turn, executing the python callable each registered tool spec carries on its `__sectum_callable__` sidecar. The `sectum-ai.yaml` block only flips the kind; the caller constructs the client (typically via `AnthropicToolUseAgent.connect(model, tools)`) and supplies it to the substrate runner. Requires the optional `anthropic-tooluse` extra: `pip install sectum-ai-adapters[anthropic-tooluse]`. |
 
 ## `evidence`
 
@@ -157,7 +157,7 @@ The substrate holds the canary plaintexts, so sealing it at rest is recommended
 for BYOC runs. Generate a key with
 `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`
 and export it under the configured name. The key is referenced from the
-environment, never written into `sectum.yaml`.
+environment, never written into `sectum-ai.yaml`.
 
 ## `detection`
 
@@ -179,7 +179,7 @@ is read from the environment, never inlined.
 
 ## Secrets and environment variables
 
-Credentials never appear inline in `sectum.yaml` (the engineering spec,
+Credentials never appear inline in `sectum-ai.yaml` (the engineering spec,
 section 17: *adapters never embed credentials*). Adapter blocks reference an
 environment variable by name; the resolver reads its value at run time:
 
@@ -192,7 +192,7 @@ adapters:
 
 ```sh
 export SECTUM_PGVECTOR_DSN=postgresql://user:pass@host/db
-sectum-ai probe --config sectum.yaml
+sectum-ai probe --config sectum-ai.yaml
 ```
 
 A missing or empty environment variable produces a `ConfigError`
@@ -205,7 +205,7 @@ exits with code 3. An empty inline value (`dsn: ""`) or an empty env-var name
 ```yaml
 scenario:
   seed: 2026
-workdir: .sectum
+workdir: .sectum-ai
 adapters:
   vector_store:
     kind: pgvector
@@ -220,8 +220,8 @@ adapters:
 ```sh
 export SECTUM_PGVECTOR_DSN=postgresql://...
 docker compose up -d pgvector redis
-sectum-ai seed --config sectum.yaml
-sectum-ai probe --config sectum.yaml
+sectum-ai seed --config sectum-ai.yaml
+sectum-ai probe --config sectum-ai.yaml
 ```
 
 ## Schema reference

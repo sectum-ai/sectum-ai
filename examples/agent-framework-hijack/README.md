@@ -56,7 +56,7 @@ agent_framework`.
 ## Swap the agent caller
 
 The probe consumes whatever `agent.kind` resolves to in
-`sectum.yaml`. This example sets it to the leaky in-memory `FakeAgent`
+`sectum-ai.yaml`. This example sets it to the leaky in-memory `FakeAgent`
 so the demo runs without API keys. To drive the same probe through a
 real agent framework, switch `agent.kind` to one of the live backends
 (`langgraph`, `autogen`, `crewai`, `openai-assistants`,
@@ -79,7 +79,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-framework-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 ## What the report tells you

@@ -34,10 +34,10 @@ run a named, control-mapped subset instead of hand-picking probes:
 
 ```sh
 # A SOC 2 tenant-isolation evidence pack:
-sectum-ai seed   --workdir .sectum
-sectum-ai probe  --workdir .sectum --suite soc2-tenant-isolation
-sectum-ai report --workdir .sectum
-sectum-ai verify .sectum/evidence.json
+sectum-ai seed   --workdir .sectum-ai
+sectum-ai probe  --workdir .sectum-ai --suite soc2-tenant-isolation
+sectum-ai report --workdir .sectum-ai
+sectum-ai verify .sectum-ai/evidence.json
 ```
 
 `sectum-ai probe` with no `--suite` runs the full catalog (the

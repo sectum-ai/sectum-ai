@@ -46,4 +46,4 @@ echo
 echo "Artifacts written to: $out"
 echo
 echo "Swap the in-memory model for a real one by pointing the model adapter"
-echo "at the new live HuggingFaceLoraModel via sectum.yaml - see README.md."
+echo "at the new live HuggingFaceLoraModel via sectum-ai.yaml - see README.md."

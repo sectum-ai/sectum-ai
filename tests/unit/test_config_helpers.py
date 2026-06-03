@@ -1,4 +1,4 @@
-"""Tests for the sectum.yaml adapter-resolver helpers and unknown-kind errors."""
+"""Tests for the sectum-ai.yaml adapter-resolver helpers and unknown-kind errors."""
 
 from collections.abc import Callable
 

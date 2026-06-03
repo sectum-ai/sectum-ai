@@ -18,15 +18,15 @@ pack, and verifies it.
 ## Drive the CLI directly
 
 ```sh
-uv run sectum-ai seed   --workdir .sectum
-uv run sectum-ai probe  --workdir .sectum
-uv run sectum-ai report --workdir .sectum
-uv run sectum-ai verify .sectum/evidence.json
+uv run sectum-ai seed   --workdir .sectum-ai
+uv run sectum-ai probe  --workdir .sectum-ai
+uv run sectum-ai report --workdir .sectum-ai
+uv run sectum-ai verify .sectum-ai/evidence.json
 ```
 
 | Command | Purpose |
 |---|---|
-| `sectum-ai init` | Scaffold a `sectum.yaml` configuration file. |
+| `sectum-ai init` | Scaffold a `sectum-ai.yaml` configuration file. |
 | `sectum-ai seed` | Provision synthetic tenants, corpora, and canary markers. |
 | `sectum-ai probe` | Run the probe suite and record findings. |
 | `sectum-ai report` | Assemble a tamper-evident evidence pack (JSON and PDF). |
@@ -49,7 +49,7 @@ emit a single JSON object on stdout instead — convenient for CI dashboards
 that want to act on the headline metrics without scraping prose:
 
 ```sh
-uv run sectum-ai probe --workdir .sectum --output json | jq '.retrieval_pivot_rate'
+uv run sectum-ai probe --workdir .sectum-ai --output json | jq '.retrieval_pivot_rate'
 ```
 
 The summary carries the `run_id`, the probe count, the confirmed-finding

@@ -121,8 +121,8 @@ except PackageNotFoundError:  # running from an uninstalled / editable tree
 # code that actually drove each surface, not the core CLI's.
 _ADAPTERS_VERSION = _adapters_version()
 
-_DEFAULT_WORKDIR = Path(".sectum")
-_DEFAULT_CONFIG = Path("sectum.yaml")
+_DEFAULT_WORKDIR = Path(".sectum-ai")
+_DEFAULT_CONFIG = Path("sectum-ai.yaml")
 
 
 class OutputFormat(StrEnum):
@@ -157,7 +157,7 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
 
 # The CLI's default for `sectum probe`: every fake's leak knob is on, so the
 # probe suite reproduces the cross-tenant findings the probes are built to
-# catch. Override by passing `--config sectum.yaml`.
+# catch. Override by passing `--config sectum-ai.yaml`.
 _DEMO_CONFIG = SectumConfig(
     adapters={
         "vector_store": AdapterConfig(kind="fake", shared_index=True),
@@ -458,7 +458,7 @@ def seed(
     workdir: Annotated[Path | None, typer.Option(help="Directory for run artifacts.")] = None,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
     ] = None,
     embedding_model: Annotated[
         list[str] | None,
@@ -512,7 +512,7 @@ def probe(
     ] = None,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Read adapters and workdir from this sectum.yaml file."),
+        typer.Option("--config", help="Read adapters and workdir from this sectum-ai.yaml file."),
     ] = None,
     max_concurrency: Annotated[
         int,
@@ -758,7 +758,7 @@ def report(
     ] = None,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
     ] = None,
     tsa: Annotated[
         str | None,
@@ -1017,7 +1017,7 @@ def erasure(
     ] = None,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
     ] = None,
 ) -> None:
     """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
@@ -1212,7 +1212,7 @@ def init(
         bool, typer.Option("--force", help="Overwrite an existing config file.")
     ] = False,
 ) -> None:
-    """Scaffold a sectum.yaml configuration file."""
+    """Scaffold a sectum-ai.yaml configuration file."""
     if output.exists() and not force:
         typer.echo(f"{output} already exists; pass --force to overwrite", err=True)
         raise typer.Exit(code=3)
@@ -1241,7 +1241,7 @@ def baseline(
     ] = False,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Read defaults from this sectum.yaml file."),
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
     ] = None,
 ) -> None:
     """Save a regression baseline from the current run, or compare against it."""

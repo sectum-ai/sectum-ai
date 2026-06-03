@@ -32,8 +32,8 @@ cd examples/retrieval-pivot
 
 The script:
 
-1. Wipes `.sectum/` to start from a clean substrate.
-2. Generates a fixed-seed `sectum.yaml` so the substrate is
+1. Wipes `.sectum-ai/` to start from a clean substrate.
+2. Generates a fixed-seed `sectum-ai.yaml` so the substrate is
    byte-identical across recordings.
 3. Drives the four-command workflow inside `asciinema rec`:
    `seed` → `probe --output json` → `report` → `verify`.

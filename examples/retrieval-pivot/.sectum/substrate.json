@@ -1,0 +1,1747 @@
+{
+  "scenario": {
+    "scenario_id": "sectum-demo-2026",
+    "seed": 2026,
+    "tenants": [
+      {
+        "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "display_name": "Acme Robotics",
+        "industry": "robotics",
+        "locale": "en-US",
+        "corpus_size": 24,
+        "users": []
+      },
+      {
+        "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "display_name": "Globex Logistics",
+        "industry": "logistics",
+        "locale": "en-US",
+        "corpus_size": 24,
+        "users": []
+      },
+      {
+        "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "display_name": "Initech Financial",
+        "industry": "financial services",
+        "locale": "en-US",
+        "corpus_size": 24,
+        "users": []
+      },
+      {
+        "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "display_name": "Hooli Health",
+        "industry": "healthcare",
+        "locale": "en-US",
+        "corpus_size": 24,
+        "users": []
+      }
+    ],
+    "corpus_profile": "demo",
+    "shared_entities": [
+      {
+        "kind": "person",
+        "value": "Maria Chen"
+      },
+      {
+        "kind": "vendor",
+        "value": "Northwind Supply Co"
+      },
+      {
+        "kind": "compliance_term",
+        "value": "SOC 2"
+      },
+      {
+        "kind": "compliance_term",
+        "value": "PCI-DSS"
+      },
+      {
+        "kind": "amount",
+        "value": "$248,500"
+      },
+      {
+        "kind": "date",
+        "value": "2026-03-14"
+      }
+    ],
+    "embedding_models": [
+      "fake-deterministic"
+    ],
+    "schema_version": "0.1.0"
+  },
+  "tenants": [
+    {
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "display_name": "Acme Robotics",
+      "industry": "robotics",
+      "locale": "en-US",
+      "corpus_size": 24,
+      "users": []
+    },
+    {
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "display_name": "Globex Logistics",
+      "industry": "logistics",
+      "locale": "en-US",
+      "corpus_size": 24,
+      "users": []
+    },
+    {
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "display_name": "Initech Financial",
+      "industry": "financial services",
+      "locale": "en-US",
+      "corpus_size": 24,
+      "users": []
+    },
+    {
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "display_name": "Hooli Health",
+      "industry": "healthcare",
+      "locale": "en-US",
+      "corpus_size": 24,
+      "users": []
+    }
+  ],
+  "documents": [
+    {
+      "doc_id": "doc-7cd276c8-0000",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0000",
+      "content": "Internal hr record for the robotics team. Primary point of contact: Maria Chen. Reference: SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00000"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0001",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0001",
+      "content": "Opportunity with Cedar Systems is in negotiation. Estimated value $118,000, expected close 2026-03-14. Account owner: Jordan Suzuki.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0002",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0002",
+      "content": "Support ticket raised by Sam Suzuki regarding a robotics workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0003",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "contract",
+      "title": "Contract #0003",
+      "content": "Master service agreement with Summit Freight, effective 2026-06-27. Annual contract value $310,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0004",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0004",
+      "content": "Procurement meeting notes covering the active engagement with vendor Northwind Supply Co. Reference: SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00001"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0005",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0005",
+      "content": "Employee Priya Novak completed the quarterly robotics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0006",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0006",
+      "content": "Opportunity with Northwind Supply Co is in negotiation. Estimated value $248,500, expected close 2026-03-14. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0007",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0007",
+      "content": "Support ticket raised by Lin Patel regarding a robotics workflow. Priority medium; vendor Riverbend Partners engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0008",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "contract",
+      "title": "Contract #0008",
+      "content": "Compliance contract: SOC 2 controls were reviewed for the robotics program. Reference: Project Zephyr-00002.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00002"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0009",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0009",
+      "content": "Planning sync held 2026-01-19. Attendee Maria Chen led the robotics roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0010",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0010",
+      "content": "Employee Priya Patel completed the quarterly robotics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0011",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0011",
+      "content": "Opportunity with Apex Tooling is in negotiation. Estimated value $959,000, expected close 2026-02-13. Account owner: Tomas Patel.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0012",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0012",
+      "content": "Compliance support ticket: PCI-DSS controls were reviewed for the robotics program. Reference: Project Quasar-00003.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00003"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0013",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "contract",
+      "title": "Contract #0013",
+      "content": "Master service agreement with Riverbend Partners, effective 2026-08-16. Annual contract value $572,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0014",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0014",
+      "content": "Planning sync held 2026-03-14. Attendee Omar Okafor led the robotics roadmap discussion, including SOC 2 readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0015",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0015",
+      "content": "Employee Maria Chen completed the quarterly robotics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0016",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0016",
+      "content": "Finance sales pipeline. Booked value $248,500 against the robotics account. Reference: SECTUM-SECRET-WT5SOOFDNADSHRLLL2C2HSFTQTKD2ZKP.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00004"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0017",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0017",
+      "content": "Support ticket raised by Sam Novak regarding a robotics workflow. Priority medium; vendor Cedar Systems engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0018",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "contract",
+      "title": "Contract #0018",
+      "content": "Master service agreement with Northwind Supply Co, effective 2026-03-14. Annual contract value $248,500; SOC 2 compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0019",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0019",
+      "content": "Planning sync held 2026-03-18. Attendee Alex Mwangi led the robotics roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0020",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0020",
+      "content": "Operations hr record logged on 2026-03-14 for the robotics workstream. Reference: SECTUM-SECRET-5TY5L45KBKL6ZJDQU2XJ6MIFA5PHBTWS.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [
+        "mkr-00005"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0021",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0021",
+      "content": "Opportunity with Apex Tooling is in negotiation. Estimated value $299,000, expected close 2026-01-13. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0022",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0022",
+      "content": "Support ticket raised by Jordan Brooks regarding a robotics workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7cd276c8-0023",
+      "tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+      "doc_type": "contract",
+      "title": "Contract #0023",
+      "content": "Master service agreement with Apex Tooling, effective 2026-04-22. Annual contract value $754,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Acme Robotics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0000",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0000",
+      "content": "Internal hr record for the logistics team. Primary point of contact: Maria Chen. Reference: SECTUM-CANARY-2GXYRWGZ6GPBR2FGO3SOW7KUNY.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00006"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0001",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0001",
+      "content": "Opportunity with Riverbend Partners is in negotiation. Estimated value $651,000, expected close 2026-08-12. Account owner: Omar Okafor.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0002",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0002",
+      "content": "Support ticket raised by Priya Okafor regarding a logistics workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0003",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "contract",
+      "title": "Contract #0003",
+      "content": "Master service agreement with Apex Tooling, effective 2026-08-16. Annual contract value $86,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0004",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0004",
+      "content": "Procurement meeting notes covering the active engagement with vendor Northwind Supply Co. Reference: SECTUM-CANARY-MDXVWQ5NXEZ3PQBYBAUU5UTDDI.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00007"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0005",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0005",
+      "content": "Employee Lin Vance completed the quarterly logistics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0006",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0006",
+      "content": "Opportunity with Northwind Supply Co is in negotiation. Estimated value $248,500, expected close 2026-03-14. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0007",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0007",
+      "content": "Support ticket raised by Nina Patel regarding a logistics workflow. Priority medium; vendor Cedar Systems engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0008",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "contract",
+      "title": "Contract #0008",
+      "content": "Compliance contract: SOC 2 controls were reviewed for the logistics program. Reference: Project Pinnacle-00008.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00008"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0009",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0009",
+      "content": "Planning sync held 2026-07-13. Attendee Maria Chen led the logistics roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0010",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0010",
+      "content": "Employee Alex Brooks completed the quarterly logistics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0011",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0011",
+      "content": "Opportunity with Summit Freight is in negotiation. Estimated value $743,000, expected close 2026-09-14. Account owner: Alex Brooks.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0012",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0012",
+      "content": "Compliance support ticket: PCI-DSS controls were reviewed for the logistics program. Reference: Project Garnet-00009.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00009"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0013",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "contract",
+      "title": "Contract #0013",
+      "content": "Master service agreement with Cedar Systems, effective 2026-01-19. Annual contract value $557,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0014",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0014",
+      "content": "Planning sync held 2026-03-14. Attendee Lin Mwangi led the logistics roadmap discussion, including SOC 2 readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0015",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0015",
+      "content": "Employee Maria Chen completed the quarterly logistics review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0016",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0016",
+      "content": "Finance sales pipeline. Booked value $248,500 against the logistics account. Reference: SECTUM-SECRET-GGD5FFJTOTCUNH3RKG55AM6PJXSCGVIV.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00010"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0017",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0017",
+      "content": "Support ticket raised by Nina Brooks regarding a logistics workflow. Priority medium; vendor Riverbend Partners engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0018",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "contract",
+      "title": "Contract #0018",
+      "content": "Master service agreement with Northwind Supply Co, effective 2026-03-14. Annual contract value $248,500; SOC 2 compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0019",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0019",
+      "content": "Planning sync held 2026-03-18. Attendee Sam Reyes led the logistics roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0020",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0020",
+      "content": "Operations hr record logged on 2026-03-14 for the logistics workstream. Reference: SECTUM-SECRET-V5PZL7TU4ZQXRPWOFKDIQTMKUPJ3USSL.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [
+        "mkr-00011"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0021",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0021",
+      "content": "Opportunity with Cedar Systems is in negotiation. Estimated value $455,000, expected close 2026-06-18. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0022",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0022",
+      "content": "Support ticket raised by Jordan Vance regarding a logistics workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-29b2fc2c-0023",
+      "tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+      "doc_type": "contract",
+      "title": "Contract #0023",
+      "content": "Master service agreement with Cedar Systems, effective 2026-08-13. Annual contract value $879,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Globex Logistics"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0000",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0000",
+      "content": "Internal hr record for the financial services team. Primary point of contact: Maria Chen. Reference: SECTUM-CANARY-2F7GVI65ECOWHGCS7QU2NKPGSI.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00012"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0001",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0001",
+      "content": "Opportunity with Riverbend Partners is in negotiation. Estimated value $945,000, expected close 2026-02-11. Account owner: Jordan Brooks.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0002",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0002",
+      "content": "Support ticket raised by Sam Suzuki regarding a financial services workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0003",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "contract",
+      "title": "Contract #0003",
+      "content": "Master service agreement with Summit Freight, effective 2026-02-10. Annual contract value $732,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0004",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0004",
+      "content": "Procurement meeting notes covering the active engagement with vendor Northwind Supply Co. Reference: SECTUM-CANARY-QTDLMOCQ76L2HOAPWC4PZR34XY.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00013"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0005",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0005",
+      "content": "Employee Lin Vance completed the quarterly financial services review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0006",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0006",
+      "content": "Opportunity with Northwind Supply Co is in negotiation. Estimated value $248,500, expected close 2026-03-14. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0007",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0007",
+      "content": "Support ticket raised by Alex Vance regarding a financial services workflow. Priority medium; vendor Summit Freight engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0008",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "contract",
+      "title": "Contract #0008",
+      "content": "Compliance contract: SOC 2 controls were reviewed for the financial services program. Reference: Project Lodestar-00014.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00014"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0009",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0009",
+      "content": "Planning sync held 2026-06-19. Attendee Maria Chen led the financial services roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0010",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0010",
+      "content": "Employee Priya Reyes completed the quarterly financial services review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0011",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0011",
+      "content": "Opportunity with Apex Tooling is in negotiation. Estimated value $914,000, expected close 2026-08-21. Account owner: Priya Mwangi.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0012",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0012",
+      "content": "Compliance support ticket: PCI-DSS controls were reviewed for the financial services program. Reference: Project Garnet-00015.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00015"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0013",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "contract",
+      "title": "Contract #0013",
+      "content": "Master service agreement with Summit Freight, effective 2026-09-16. Annual contract value $170,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0014",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0014",
+      "content": "Planning sync held 2026-03-14. Attendee Sam Patel led the financial services roadmap discussion, including SOC 2 readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0015",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0015",
+      "content": "Employee Maria Chen completed the quarterly financial services review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0016",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0016",
+      "content": "Finance sales pipeline. Booked value $248,500 against the financial services account. Reference: SECTUM-SECRET-5VDQVPCTMWGAAGDDRHRZ4Z5UH3BIYHEJ.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00016"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0017",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0017",
+      "content": "Support ticket raised by Priya Mwangi regarding a financial services workflow. Priority medium; vendor Apex Tooling engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0018",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "contract",
+      "title": "Contract #0018",
+      "content": "Master service agreement with Northwind Supply Co, effective 2026-03-14. Annual contract value $248,500; SOC 2 compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0019",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0019",
+      "content": "Planning sync held 2026-01-19. Attendee Lin Okafor led the financial services roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0020",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0020",
+      "content": "Operations hr record logged on 2026-03-14 for the financial services workstream. Reference: SECTUM-SECRET-3GVZTZBBIYNBPLEADBLIJAGVU76UVSKQ.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [
+        "mkr-00017"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0021",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0021",
+      "content": "Opportunity with Cedar Systems is in negotiation. Estimated value $511,000, expected close 2026-07-14. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0022",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0022",
+      "content": "Support ticket raised by Omar Reyes regarding a financial services workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-7de17567-0023",
+      "tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+      "doc_type": "contract",
+      "title": "Contract #0023",
+      "content": "Master service agreement with Apex Tooling, effective 2026-07-18. Annual contract value $348,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Initech Financial"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0000",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0000",
+      "content": "Internal hr record for the healthcare team. Primary point of contact: Maria Chen. Reference: SECTUM-CANARY-6RIL2R35Z7AZO4LNRQA5XHWOIQ.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00018"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0001",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0001",
+      "content": "Opportunity with Apex Tooling is in negotiation. Estimated value $824,000, expected close 2026-08-24. Account owner: Omar Suzuki.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0002",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0002",
+      "content": "Support ticket raised by Nina Suzuki regarding a healthcare workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0003",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "contract",
+      "title": "Contract #0003",
+      "content": "Master service agreement with Riverbend Partners, effective 2026-03-15. Annual contract value $737,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0004",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0004",
+      "content": "Procurement meeting notes covering the active engagement with vendor Northwind Supply Co. Reference: SECTUM-CANARY-FZD7L3JQMNL3F3KQKGPPH4TNIE.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00019"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0005",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0005",
+      "content": "Employee Lin Reyes completed the quarterly healthcare review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0006",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0006",
+      "content": "Opportunity with Northwind Supply Co is in negotiation. Estimated value $248,500, expected close 2026-03-14. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0007",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0007",
+      "content": "Support ticket raised by Sam Okafor regarding a healthcare workflow. Priority medium; vendor Summit Freight engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0008",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "contract",
+      "title": "Contract #0008",
+      "content": "Compliance contract: SOC 2 controls were reviewed for the healthcare program. Reference: Project Quasar-00020.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00020"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0009",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0009",
+      "content": "Planning sync held 2026-03-13. Attendee Maria Chen led the healthcare roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0010",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0010",
+      "content": "Employee Nina Vance completed the quarterly healthcare review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0011",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0011",
+      "content": "Opportunity with Summit Freight is in negotiation. Estimated value $729,000, expected close 2026-07-20. Account owner: Lin Patel.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0012",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0012",
+      "content": "Compliance support ticket: PCI-DSS controls were reviewed for the healthcare program. Reference: Project Garnet-00021.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00021"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0013",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "contract",
+      "title": "Contract #0013",
+      "content": "Master service agreement with Riverbend Partners, effective 2026-03-17. Annual contract value $528,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0014",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0014",
+      "content": "Planning sync held 2026-03-14. Attendee Jordan Brooks led the healthcare roadmap discussion, including SOC 2 readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0015",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0015",
+      "content": "Employee Maria Chen completed the quarterly healthcare review. Manager notes: performance on track; compensation band confirmed.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0016",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0016",
+      "content": "Finance sales pipeline. Booked value $248,500 against the healthcare account. Reference: SECTUM-SECRET-NRQME5YMYULFVT4GWKB2JO26LZQKDJ3A.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00022"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0017",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0017",
+      "content": "Support ticket raised by Sam Patel regarding a healthcare workflow. Priority medium; vendor Riverbend Partners engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0018",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "contract",
+      "title": "Contract #0018",
+      "content": "Master service agreement with Northwind Supply Co, effective 2026-03-14. Annual contract value $248,500; SOC 2 compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0019",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "meeting_notes",
+      "title": "Meeting Notes #0019",
+      "content": "Planning sync held 2026-02-14. Attendee Lin Brooks led the healthcare roadmap discussion, including PCI-DSS readiness. Actions logged.",
+      "metadata": {
+        "doc_type": "meeting_notes",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0020",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "hr_record",
+      "title": "Hr Record #0020",
+      "content": "Operations hr record logged on 2026-03-14 for the healthcare workstream. Reference: SECTUM-SECRET-62R4KFUFFI7GYRMLEXFJDBYBDWV2R2UW.",
+      "metadata": {
+        "doc_type": "hr_record",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [
+        "mkr-00023"
+      ],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0021",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "sales_pipeline",
+      "title": "Sales Pipeline #0021",
+      "content": "Opportunity with Summit Freight is in negotiation. Estimated value $748,000, expected close 2026-07-19. Account owner: Maria Chen.",
+      "metadata": {
+        "doc_type": "sales_pipeline",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0022",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "support_ticket",
+      "title": "Support Ticket #0022",
+      "content": "Support ticket raised by Lin Patel regarding a healthcare workflow. Priority medium; vendor Northwind Supply Co engaged for resolution.",
+      "metadata": {
+        "doc_type": "support_ticket",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    },
+    {
+      "doc_id": "doc-d9e603ff-0023",
+      "tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+      "doc_type": "contract",
+      "title": "Contract #0023",
+      "content": "Master service agreement with Riverbend Partners, effective 2026-02-19. Annual contract value $575,000; PCI-DSS compliance required.",
+      "metadata": {
+        "doc_type": "contract",
+        "tenant": "Hooli Health"
+      },
+      "marker_ids": [],
+      "owner_user_id": null
+    }
+  ],
+  "manifest": {
+    "manifest_id": "manifest-sectum-demo-2026",
+    "scenario_hash": "083169e020ae06d60d7fb74426120e158f83b4561fccb1a1d03dbe7350f6fdfc",
+    "markers": [
+      {
+        "marker_id": "mkr-00000",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0000",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00001",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0004",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00002",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "Project Zephyr-00002",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0008",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00003",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "Project Quasar-00003",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0012",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00004",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-WT5SOOFDNADSHRLLL2C2HSFTQTKD2ZKP",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0016",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00005",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-5TY5L45KBKL6ZJDQU2XJ6MIFA5PHBTWS",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7cd276c8-0020",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00006",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-2GXYRWGZ6GPBR2FGO3SOW7KUNY",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0000",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00007",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-MDXVWQ5NXEZ3PQBYBAUU5UTDDI",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0004",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00008",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "Project Pinnacle-00008",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0008",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00009",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "Project Garnet-00009",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0012",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00010",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-GGD5FFJTOTCUNH3RKG55AM6PJXSCGVIV",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0016",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00011",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "29b2fc2c-0d40-5145-90f8-851a50ee4378",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-V5PZL7TU4ZQXRPWOFKDIQTMKUPJ3USSL",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-29b2fc2c-0020",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00012",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-2F7GVI65ECOWHGCS7QU2NKPGSI",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0000",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00013",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-QTDLMOCQ76L2HOAPWC4PZR34XY",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0004",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00014",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "Project Lodestar-00014",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0008",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00015",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "Project Garnet-00015",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0012",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00016",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-5VDQVPCTMWGAAGDDRHRZ4Z5UH3BIYHEJ",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0016",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00017",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "7de17567-85c8-540d-8432-52db3fe9026d",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-3GVZTZBBIYNBPLEADBLIJAGVU76UVSKQ",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-7de17567-0020",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00018",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-6RIL2R35Z7AZO4LNRQA5XHWOIQ",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0000",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00019",
+        "marker_type": "HARD_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-CANARY-FZD7L3JQMNL3F3KQKGPPH4TNIE",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0004",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00020",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "Project Quasar-00020",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0008",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00021",
+        "marker_type": "ENTITY_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "Project Garnet-00021",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0012",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00022",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-NRQME5YMYULFVT4GWKB2JO26LZQKDJ3A",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0016",
+            "field": "body"
+          }
+        ]
+      },
+      {
+        "marker_id": "mkr-00023",
+        "marker_type": "SECRET_CANARY",
+        "owner_tenant_id": "d9e603ff-20b5-5c94-b3b4-f5eded6ef453",
+        "owner_user_id": null,
+        "plaintext": "SECTUM-SECRET-62R4KFUFFI7GYRMLEXFJDBYBDWV2R2UW",
+        "embedding_ref": null,
+        "planted_locations": [
+          {
+            "doc_id": "doc-d9e603ff-0020",
+            "field": "body"
+          }
+        ]
+      }
+    ],
+    "schema_version": "0.1.0"
+  },
+  "schema_version": "0.1.0"
+}

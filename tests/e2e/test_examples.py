@@ -108,8 +108,8 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     # exit 3 (a different failure mode covered elsewhere).
     original = pack_path.read_text(encoding="utf-8")
     tampered = original.replace(
-        '"run_id": "run-sectum-demo-2026"',
-        '"run_id": "run-sectum-demo-XXXX"',
+        '"run_id": "run-sectum-ai-demo-2026"',
+        '"run_id": "run-sectum-ai-demo-XXXX"',
         1,
     )
     assert tampered != original, "tamper pattern did not match the pack contents"

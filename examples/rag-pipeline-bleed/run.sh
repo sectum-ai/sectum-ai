@@ -21,7 +21,7 @@ rm -rf "$out"
 mkdir -p "$out"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum-ai seed --workdir "$out" --config "$here/sectum.yaml"
+sectum-ai seed --workdir "$out" --config "$here/sectum-ai.yaml"
 
 echo
 echo "==> 2/4  Probe the RAG pipeline (a shared-index retriever behind the endpoint)"

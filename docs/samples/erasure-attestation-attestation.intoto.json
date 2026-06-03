@@ -4,17 +4,17 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "f2d27da9680b01949068766cc25a303aa33eb55a129dfb497153ba75a8918d47"
+        "sha256": "cb17226eee6b1373f4ad2592d3f3e06bed7ca49ee4042d81b2e8a21d08d4139a"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
     "schema_version": "0.2.0",
-    "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
-    "manifest_hash": "514feea45996025aa07628216320c7e88b716bad5564f99294d833fc1c5c7868",
-    "started_at": "2026-06-03T06:35:09.565769+00:00",
-    "finished_at": "2026-06-03T06:35:09.566412+00:00",
+    "scenario_hash": "ae01e2877bfe733c560987e1ae402f3854f00e95a11bc78ed2d4888b6a397ddb",
+    "manifest_hash": "2020041f3ea27e0c91241a8aa11d7a4d2d38bdf843d390d2372850bd6808f247",
+    "started_at": "2026-06-03T20:40:49.573753+00:00",
+    "finished_at": "2026-06-03T20:40:49.574328+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,

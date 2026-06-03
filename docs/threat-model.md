@@ -56,7 +56,7 @@ A verification run crosses these boundaries:
    trusted to generate the substrate and execute probes deterministically.
 2. **Sectum AI → the system under test.** Sectum AI connects through adapters.
    Adapters resolve credentials from the environment or a secret manager — never
-   from inline configuration. `sectum.yaml` holds references, not secrets.
+   from inline configuration. `sectum-ai.yaml` holds references, not secrets.
 3. **Sectum AI → the evidence consumer.** An auditor or DPO receives an evidence
    pack and verifies it with `sectum-ai verify`, independently of Sectum AI.
 

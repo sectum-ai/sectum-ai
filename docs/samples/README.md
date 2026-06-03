@@ -61,7 +61,7 @@ cp examples/erasure-attestation/out/erasure-attestation.intoto.json docs/samples
 # then run erasure with --soft-delete to reproduce the failure mode.
 mkdir -p examples/erasure-attestation/out-residual
 uv run sectum-ai seed --workdir examples/erasure-attestation/out-residual \
-  --config examples/erasure-attestation/sectum.yaml
+  --config examples/erasure-attestation/sectum-ai.yaml
 uv run sectum-ai erasure \
   --workdir examples/erasure-attestation/out-residual \
   --target-tenant "Acme Robotics" \
