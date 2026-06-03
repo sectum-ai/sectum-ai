@@ -79,6 +79,7 @@ def test_render_audit_pack_handles_a_run_with_no_findings(tmp_path: Path) -> Non
 def _classified_finding(
     *,
     owasp_llm: str = "LLM08:2025",
+    owasp_secondary: tuple[str, ...] = (),
     atlas: tuple[str, ...] = ("AML.T0024", "AML.T0024.001"),
     nist: tuple[str, ...] = ("MEASURE 2.7",),
     remediation: str = "",
@@ -95,6 +96,7 @@ def _classified_finding(
         surface=Surface.VECTOR_DB,
         marker_id="marker-1",
         owasp_llm=owasp_llm,
+        owasp_secondary=owasp_secondary,
         atlas=atlas,
         nist=nist,
         remediation_pointer=remediation,
@@ -107,6 +109,23 @@ def test_finding_controls_lists_all_three_frameworks() -> None:
         _finding_controls(_classified_finding())
         == "OWASP LLM08:2025; ATLAS AML.T0024, AML.T0024.001; NIST MEASURE 2.7"
     )
+
+
+def test_finding_controls_renders_secondary_owasp_classes() -> None:
+    # The spec §18 maps secondary OWASP classes (e.g. LLM06 for agent probes).
+    # They live in evidence.json and must also reach the audit pack, in the OWASP
+    # segment alongside the primary class.
+    rendered = _finding_controls(_classified_finding(owasp_secondary=("LLM06:2025",)))
+    assert rendered == (
+        "OWASP LLM08:2025 (secondary: LLM06:2025); ATLAS AML.T0024, AML.T0024.001; NIST MEASURE 2.7"
+    )
+
+
+def test_finding_controls_renders_secondary_owasp_without_a_primary() -> None:
+    rendered = _finding_controls(
+        _classified_finding(owasp_llm="", owasp_secondary=("LLM02:2025", "LLM06:2025"), atlas=())
+    )
+    assert rendered == "OWASP secondary: LLM02:2025, LLM06:2025; NIST MEASURE 2.7"
 
 
 def test_finding_controls_omits_empty_frameworks() -> None:

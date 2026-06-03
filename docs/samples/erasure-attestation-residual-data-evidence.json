@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "ae01e2877bfe733c560987e1ae402f3854f00e95a11bc78ed2d4888b6a397ddb",
     "manifest_hash": "2020041f3ea27e0c91241a8aa11d7a4d2d38bdf843d390d2372850bd6808f247",
-    "started_at": "2026-06-03T20:40:50.471515+00:00",
-    "finished_at": "2026-06-03T20:40:50.472319+00:00",
+    "started_at": "2026-06-03T21:55:17.808703+00:00",
+    "finished_at": "2026-06-03T21:55:17.810683+00:00",
     "adapter_versions": {
       "fake-vector": "0.1.0",
       "fake-observability": "0.1.0",
@@ -412,7 +412,7 @@
     "schema_version": "0.2.0"
   },
   "manifest_hash": "2020041f3ea27e0c91241a8aa11d7a4d2d38bdf843d390d2372850bd6808f247",
-  "tsa_token": "{\"digest\":\"ff92014d984e03fb06137871dd29acf9188caa9d743ec55625753b7fdc902c63\",\"timestamped_at\":\"2026-06-03T20:40:50.482719+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"6c592412ce8b157bc804dc68196e140065c5e4ee8da7edfac25215d565c554f7\",\"timestamped_at\":\"2026-06-03T21:55:17.827005+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -474,7 +474,7 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "e922f3dd982c4d7a63d3dabe5b9e2185f3d983e92671b07b80768aba65b00129",
+  "pdf_ref": "ab85b58a30856303eed18f61fc9ede524ef831b30876efba040d018e10013ca7",
   "anchored_in_log": false,
   "schema_version": "0.2.0"
 }

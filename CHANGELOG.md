@@ -59,6 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The audit-pack PDF now renders each finding's secondary OWASP classes.** The
+  spec §18 maps a primary OWASP class plus secondary ones (e.g. `LLM02:2025` /
+  `LLM06:2025`); they were recorded in `evidence.json` but the PDF's per-finding
+  control line dropped them. Both PDF engines (`reportlab` and `weasyprint`) share
+  the fix. The committed `docs/samples/` retrieval-pivot and residual-data erasure
+  packs are regenerated so the public artifacts show the secondary classes (the
+  all-erased happy-path pack has no findings and is unchanged).
+
 - **Documentation accuracy sweep.** The glossary's `SECRET_CANARY` entry now
   describes the shipped form (an `sk-`/`AKIA`/`9xx`-SSN shape matched by an exact
   **and** credential-format pass, then redacted) instead of the removed
