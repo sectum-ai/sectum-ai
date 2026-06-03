@@ -232,10 +232,22 @@ class Runner:
         response = self._model.infer(
             step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
         )
+        # Class 9 routing assertion: record who actually served only when it is a
+        # foreign tenant (a mis-route). The probe reads this to raise a routing
+        # finding; a correctly-routed or unknowable inference adds no structured data.
+        served_by = self._model.served_by(
+            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+        )
+        structured = (
+            {"served_by_tenant": str(served_by)}
+            if served_by is not None and served_by != step.actor_tenant_id
+            else None
+        )
         return Observation(
             step_id=step.step_id,
             surface=Surface.MODEL_ADAPTER,
             raw_response=response,
+            structured=structured,
         )
 
     def _mcp_invoke(self, step: ProbeStep) -> Observation:
