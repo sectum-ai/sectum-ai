@@ -494,6 +494,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **`sectum verify <bundle.zip>` now binds the bundled audit PDF and attestation
+  sidecars to the pack — closing a verification-bypass in the bundle path.**
+  `verify_bundle` recomputed each member's digest against `bundle-manifest.json`
+  but called `verify_pack` without the audit PDF or the in-toto/DSSE sidecars, so a
+  delivered `report --bundle` archive could be **rebuilt** with a forged "zero
+  leakage" `audit-pack.pdf` (its digest re-recorded in the in-archive manifest) —
+  or with sidecars attesting a different run — and still pass `sectum verify`,
+  breaking the §8.1 tamper-evidence guarantee (the standalone `sectum verify
+  evidence.json` path already enforced this via the on-disk siblings; only the
+  bundle path was blind). `verify_bundle` now passes the bundled PDF to
+  `verify_pack` (enforcing the bound `pdf_ref`), fails when a pack binds a
+  `pdf_ref` but the bundle carries no PDF member, and re-runs
+  `verify_in_toto_statement` / `verify_dsse_envelope` against the bundled sidecars.
+  Regression tests rebuild a bundle with a forged PDF and with a different-run
+  sidecar and assert verification fails (the previous test mutated a member without
+  rebuilding the manifest, so it only exercised the member-digest check).
+
 - **The audit-pack PDF is now bound into the tamper-evident digest.** The
   DPO/auditor-facing PDF was never covered by the attested digest, so it could be
   silently swapped while `sectum verify` still reported PASS. `sectum report` /
