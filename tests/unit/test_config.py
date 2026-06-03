@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from sectum_ai.adapters import (
     Capability,
     FakeAgent,

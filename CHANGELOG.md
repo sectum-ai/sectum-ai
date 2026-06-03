@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Rename tail: tooling config, CLI name, and resource-prefix defaults.** The
+  default resource-namespace `prefix` for the Redis / Phoenix / LangSmith / Chroma
+  adapters changes from `sectum` to `sectum-ai` (it only affects deployments that
+  rely on the default key/collection/project prefix; set `prefix:` explicitly to
+  pin a value). The `--version` banner now prints `sectum-ai <version>`, the Typer
+  app name is `sectum-ai`, and the packaging config that the earlier passes missed
+  is corrected — `[tool.coverage] source` and ruff's `known-first-party` now point
+  at `sectum_ai` (the coverage gate measured the renamed package correctly only
+  after this). A stray, accidentally-committed `examples/retrieval-pivot/.sectum/`
+  workdir (matched `.gitignore` but was tracked) is removed.
+
 - **The remaining `sectum` data slugs are renamed too (completes the rename).** The
   default workdir `.sectum` → `.sectum-ai`, the default config filename
   `sectum.yaml` → `sectum-ai.yaml` (and the example configs / `sectum.yaml.example`

@@ -2,6 +2,7 @@
 
 import pytest
 import structlog
+
 from sectum_ai.spec import configure_logging
 
 

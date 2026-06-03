@@ -1,7 +1,7 @@
 """Read and validate ``sectum-ai.yaml`` and resolve its adapter blocks.
 
 The CLI flag ``--config sectum-ai.yaml`` loads a ``SectumConfig``: a typed view
-of the configuration that ``sectum init`` scaffolds. Explicit CLI flags
+of the configuration that ``sectum-ai init`` scaffolds. Explicit CLI flags
 override the values the config supplies, and the config supplies values the
 built-in defaults would otherwise use (the engineering spec, section 10).
 
@@ -37,6 +37,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
 from sectum_ai.adapters import (
     AgentAdapter,
     CacheAdapter,
@@ -122,7 +123,7 @@ class SecurityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Name of the env var holding a base64-encoded 32-byte AES-256 key. When set,
-    # `sectum seed` seals the substrate (and its ground-truth manifest) at rest.
+    # `sectum-ai seed` seals the substrate (and its ground-truth manifest) at rest.
     manifest_key_env: str | None = None
 
 
@@ -179,7 +180,7 @@ class SectumConfig(BaseModel):
         ``security:`` header whose only remaining line is ``# manifest_key_env:`` -
         parses that section to ``None``. A non-optional section field would then
         reject ``None``; dropping such keys lets the field's default apply, which
-        matches the obvious intent and keeps a ``sectum init`` template loadable.
+        matches the obvious intent and keeps a ``sectum-ai init`` template loadable.
         """
         if isinstance(data, dict):
             return {key: value for key, value in data.items() if value is not None}
@@ -396,7 +397,7 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
         port = _int(extras, "port", 6379)
         tenant_scoped = _bool(extras, "tenant_scoped", True)
         user_scoped = _bool(extras, "user_scoped", False)
-        prefix = _str(extras, "prefix", "sectum")
+        prefix = _str(extras, "prefix", "sectum-ai")
         return RedisCache(
             host, port, tenant_scoped=tenant_scoped, user_scoped=user_scoped, prefix=prefix
         )
@@ -535,7 +536,7 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
         from sectum_ai.adapters.observability.phoenix import PhoenixObservability
 
         base_url = _required_str(extras, "base_url")
-        prefix = _str(extras, "prefix", "sectum")
+        prefix = _str(extras, "prefix", "sectum-ai")
         return PhoenixObservability(base_url, prefix=prefix)
     if config.kind == "langfuse":
         from sectum_ai.adapters.observability.langfuse import LangfuseObservability
@@ -549,7 +550,7 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
 
         api_key = _resolve_secret(extras, "api_key", "api_key_env")
         api_url = _optional_str(extras, "api_url")
-        prefix = _str(extras, "prefix", "sectum")
+        prefix = _str(extras, "prefix", "sectum-ai")
         return LangSmithObservability.connect(api_key, api_url, prefix=prefix)
     if config.kind == "otel":
         from sectum_ai.adapters.observability.otel import OtelObservability

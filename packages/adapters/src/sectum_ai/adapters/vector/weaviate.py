@@ -14,11 +14,12 @@ from typing import Any
 from uuid import UUID
 
 import weaviate
-from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
-from sectum_ai.spec import AdapterError, CorpusDocument
 from weaviate.classes.config import Configure, DataType, Property, Tokenization
 from weaviate.classes.query import Filter, MetadataQuery
 from weaviate.util import generate_uuid5
+
+from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""

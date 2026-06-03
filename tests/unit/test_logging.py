@@ -4,6 +4,7 @@ import json
 
 import pytest
 import structlog
+
 from sectum_ai.spec import configure_logging, get_logger, redact_sensitive
 
 

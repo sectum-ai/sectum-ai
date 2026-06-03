@@ -3,11 +3,12 @@
 import json
 from pathlib import Path
 
+from typer.testing import CliRunner
+
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
 from sectum_ai.spec import RunMetrics, RunResult
-from typer.testing import CliRunner
 
 _runner = CliRunner()
 
@@ -196,7 +197,7 @@ def test_baseline_compare_flags_an_injected_regression(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     # A baseline taken from a then-clean stack: the same run, but with no leaks
     # and no retrieval pivot. (The baseline is now a full RunResult, not just
-    # metrics, so `--compare` can run the same finding-level diff as `sectum diff`.)
+    # metrics, so `--compare` can run the same finding-level diff as `sectum-ai diff`.)
     run = RunResult.model_validate_json((tmp_path / "run.json").read_text())
     clean = run.model_copy(
         update={

@@ -50,7 +50,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["sectum"]
+known-first-party = ["sectum_ai"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -220,7 +220,7 @@ branch = true
 # shard; pytest-cov combines them at the end. Also keeps the serial path
 # correct (one shard becomes one combined .coverage file).
 parallel = true
-source = ["sectum"]
+source = ["sectum_ai"]
 # Live adapters are exercised by docker-backed integration tests, not the unit
 # suite; exclude them so the gate measures unit-tested code.
 omit = [

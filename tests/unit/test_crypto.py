@@ -4,6 +4,7 @@ import base64
 import os
 
 import pytest
+
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum_ai.spec import ConfigError
 

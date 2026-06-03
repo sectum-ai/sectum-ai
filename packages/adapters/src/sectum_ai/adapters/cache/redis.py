@@ -11,6 +11,7 @@ Requires the ``redis`` optional dependency: ``pip install sectum-ai-adapters[red
 from uuid import UUID
 
 import redis
+
 from sectum_ai.adapters.base import CacheAdapter, Capability
 
 
@@ -33,7 +34,7 @@ class RedisCache(CacheAdapter):
         name: str = "redis",
         tenant_scoped: bool = True,
         user_scoped: bool = False,
-        prefix: str = "sectum",
+        prefix: str = "sectum-ai",
     ) -> None:
         capabilities = {Capability.TENANT_SCOPED_KEYS} if tenant_scoped else set()
         if user_scoped:

@@ -1,7 +1,7 @@
-"""Invariant: every evidence pack shipped in docs/samples/ passes ``sectum verify``.
+"""Invariant: every evidence pack shipped in docs/samples/ passes ``sectum-ai verify``.
 
 docs/samples/README.md promises "Every pack here verifies under the open-source
-``sectum verify``". These are the flagship public artifacts a prospective
+``sectum-ai verify``". These are the flagship public artifacts a prospective
 auditor, DPO, or CISO inspects, so an untampered-but-failing sample is a
 worst-case credibility failure for a product sold on independently verifiable,
 tamper-evident evidence.
@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from sectum_ai.evidence import PREDICATE_TYPE, STATEMENT_TYPE, verify_pack
 from sectum_ai.spec import EvidencePack
 
@@ -37,11 +38,11 @@ def test_sample_packs_directory_is_present() -> None:
 @pytest.mark.parametrize("pack_path", _SAMPLE_PACKS, ids=lambda p: p.name)
 def test_shipped_sample_pack_verifies(pack_path: Path) -> None:
     # Verify the pack standalone (no manifest): integrity + internal consistency,
-    # exactly what `sectum verify <pack>` does for a downloaded sample.
+    # exactly what `sectum-ai verify <pack>` does for a downloaded sample.
     pack = EvidencePack.model_validate_json(pack_path.read_text())
     result = verify_pack(pack)
     failed = [f"{c.name}: {c.detail}" for c in result.checks if not c.ok]
-    assert result.passed, f"{pack_path.name} failed sectum verify: {failed}"
+    assert result.passed, f"{pack_path.name} failed sectum-ai verify: {failed}"
 
 
 def test_sample_sidecars_are_present() -> None:
@@ -54,7 +55,7 @@ def test_shipped_intoto_sidecar_is_a_wellformed_statement(sidecar_path: Path) ->
     # shipped attestation is silently orphaned or malformed - including the
     # retrieval-pivot sidecar, whose (large) evidence.json is not committed and so
     # would otherwise go untested. The erasure sidecars are additionally bound to
-    # their committed packs by `sectum verify` (test_cli_pipeline / cli_erasure).
+    # their committed packs by `sectum-ai verify` (test_cli_pipeline / cli_erasure).
     statement = json.loads(sidecar_path.read_text())
     assert statement["_type"] == STATEMENT_TYPE
     assert statement["predicateType"] == PREDICATE_TYPE

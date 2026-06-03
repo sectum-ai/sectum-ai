@@ -179,6 +179,7 @@ import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 
 import pytest  # noqa: E402
+
 from sectum_ai.adapters.observability.otel import _HttpOtelTraceStore  # noqa: E402
 from sectum_ai.spec import AdapterError, ErasureUnsupported  # noqa: E402
 

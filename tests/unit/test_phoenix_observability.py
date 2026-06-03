@@ -10,6 +10,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+
 from sectum_ai.adapters.observability.phoenix import PhoenixObservability
 
 _TENANT = UUID(int=0xA)

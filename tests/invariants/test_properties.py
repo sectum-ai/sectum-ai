@@ -10,6 +10,7 @@ from uuid import UUID
 
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
+
 from sectum_ai.spec import (
     Scenario,
     SharedEntity,

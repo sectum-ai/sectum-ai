@@ -396,7 +396,7 @@ class ErasureProbe:
         coverage limitation on the *same* tenant (``owner == observed``), not a
         confirmed cross-tenant leak. Holding it in the unverified bucket (the
         false-positive control) keeps it out of the confirmed-findings count and
-        the ``sectum diff`` / ``baseline`` regression gates (``newly_confirmed``),
+        the ``sectum-ai diff`` / ``baseline`` regression gates (``newly_confirmed``),
         so onboarding a no-per-tenant-erasure-API backend never reads as a
         regression - the "caveats never regress" contract applied to the finding
         paths, not just the ``erasure_caveats`` metric dict.

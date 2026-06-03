@@ -13,9 +13,9 @@ BASH_ENV=/etc/sectum/runner.env
 # 03:00 on the 1st of every month. Logs go to syslog via `logger`.
 0 3 1 * * cd /var/lib/sectum && \
   rm -rf .sectum-ai && \
-  sectum seed   --workdir .sectum-ai --config /etc/sectum/sectum.yaml 2>&1 | logger -t sectum-snapshot && \
-  sectum probe  --workdir .sectum-ai --config /etc/sectum/sectum.yaml --output json 2>&1 | logger -t sectum-snapshot && \
-  sectum report --workdir .sectum-ai --config /etc/sectum/sectum.yaml 2>&1 | logger -t sectum-snapshot && \
+  sectum-ai seed   --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml 2>&1 | logger -t sectum-snapshot && \
+  sectum-ai probe  --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml --output json 2>&1 | logger -t sectum-snapshot && \
+  sectum-ai report --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml 2>&1 | logger -t sectum-snapshot && \
   sectum-upload --workdir .sectum-ai \
     --customer-id "$SECTUM_CUSTOMER_ID" \
     --customer-email "$SECTUM_CUSTOMER_EMAIL" \

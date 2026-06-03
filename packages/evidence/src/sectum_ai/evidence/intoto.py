@@ -34,7 +34,7 @@ def _is_external_timestamp_anchor(token: str | None) -> bool:
     """True only for a real external RFC 3161 timestamp anchor.
 
     A genuine TSA returns a signed *binary* token (not JSON); the local
-    development timestamper returns a JSON token that ``sectum verify`` binds to
+    development timestamper returns a JSON token that ``sectum-ai verify`` binds to
     the digest but reports as *unanchored* (no independent time or authority).
     The predicate's anchor flags must match ``verify_pack``, so a JSON token -
     the local-dev token, or anything impersonating a TSA - does not count as an

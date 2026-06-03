@@ -3,6 +3,7 @@
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.spec import ConfigError
 from sectum_ai.substrate import build_substrate, default_scenario
 

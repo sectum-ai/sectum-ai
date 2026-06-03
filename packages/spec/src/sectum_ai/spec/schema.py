@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+
 from sectum_ai.spec import models
 from sectum_ai.spec.models import SCHEMA_VERSION
 

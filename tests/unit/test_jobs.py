@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 
 import pytest
+
 from sectum_ai.jobs import JobRunner, SerialJobRunner, ThreadJobRunner, build_job_runner
 from sectum_ai.spec import ConfigError
 

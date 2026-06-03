@@ -4,6 +4,7 @@ its capabilities honestly (the engineering spec, section 15)."""
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters import (
     Adapter,
     AdapterFamily,

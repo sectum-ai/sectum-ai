@@ -20,5 +20,5 @@ def test_namespace_packages_resolve() -> None:
 
 
 def test_cli_app_is_constructed() -> None:
-    """The Typer application is importable and named ``sectum``."""
-    assert sectum_ai.cli.app.app.info.name == "sectum"
+    """The Typer application is importable and named ``sectum-ai``."""
+    assert sectum_ai.cli.app.app.info.name == "sectum-ai"

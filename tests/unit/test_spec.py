@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
+
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     Finding,

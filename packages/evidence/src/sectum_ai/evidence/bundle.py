@@ -34,7 +34,7 @@ MANIFEST_MEMBER = "bundle-manifest.json"
 """The reserved member recording each other member's SHA-256."""
 
 # Sidecar members ``report``/``erasure`` write into a bundle. The bundle path
-# must re-bind these to the pack exactly as the standalone ``sectum verify`` binds
+# must re-bind these to the pack exactly as the standalone ``sectum-ai verify`` binds
 # the on-disk siblings - otherwise a rebuilt bundle with a forged audit PDF or a
 # re-pointed attestation would pass on the member-digest checks alone.
 _PDF_MEMBERS = ("audit-pack.pdf", "erasure-attestation.pdf")
@@ -61,7 +61,7 @@ def _first_member(member_bytes: Mapping[str, bytes], names: tuple[str, ...]) -> 
 def _check_sidecar(name: str, raw: bytes, bind: Callable[[Any], None]) -> Check:
     """Re-bind a JSON sidecar (in-toto / DSSE) to the pack; FAIL if it no longer binds.
 
-    Mirrors the standalone ``sectum verify`` sidecar re-checks: a swapped or
+    Mirrors the standalone ``sectum-ai verify`` sidecar re-checks: a swapped or
     re-pointed statement/envelope that no longer attests this pack's run digest is
     itemized as a failed check rather than silently trusted.
     """
@@ -146,7 +146,7 @@ def verify_bundle(
         return VerificationResult(passed=False, checks=tuple(checks))
 
     # Bind the bundled audit PDF and attestation sidecars to the pack, exactly as
-    # the standalone ``sectum verify`` binds the on-disk siblings. Without this a
+    # the standalone ``sectum-ai verify`` binds the on-disk siblings. Without this a
     # rebuilt bundle whose ``audit-pack.pdf`` was swapped for a forged "zero
     # leakage" PDF (its digest re-recorded in bundle-manifest.json) - or whose
     # sidecar attests a different run - would pass on the member-digest checks

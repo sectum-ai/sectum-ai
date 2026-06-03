@@ -23,7 +23,7 @@ def default_scenario(
     """Build the default four-tenant demo scenario with shared organic entities.
 
     ``embedding_models`` carries through to the Class 2 per-model sweep: two or more
-    entries make ``sectum probe`` record a per-model Retrieval-Pivot Rate.
+    entries make ``sectum-ai probe`` record a per-model Retrieval-Pivot Rate.
     """
     return Scenario(
         scenario_id=f"sectum-ai-demo-{seed}",

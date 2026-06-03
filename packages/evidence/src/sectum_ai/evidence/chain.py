@@ -1,7 +1,7 @@
 """The evidence chain: canonicalize a run, hash it, and timestamp the digest.
 
 The engineering spec, section 8. An ``EvidencePack`` is tamper-evident:
-``sectum verify`` recomputes the pack digest and checks it against the timestamp
+``sectum-ai verify`` recomputes the pack digest and checks it against the timestamp
 token, so any edit to the attested content is detected.
 
 The anchored digest binds the *whole* attested pack - the run record, the
@@ -51,7 +51,7 @@ class LocalTimestamper:
     """A deterministic, offline timestamper for development and tests.
 
     It records the digest and a wall-clock time as a JSON token; it is not an
-    external anchor. ``sectum verify`` treats a ``local-dev`` token as binding
+    external anchor. ``sectum-ai verify`` treats a ``local-dev`` token as binding
     the digest (so tampering is still caught) but marks it as *unanchored* - it
     does not attest an independent time or authority. Production configures an
     RFC 3161 TSA and Sigstore Rekor (the engineering spec, section 8.2).
@@ -105,7 +105,7 @@ def _attested_content(
 def attested_digest(pack: EvidencePack) -> str:
     """Return the SHA-256 the anchors bind: the canonical hash of the whole pack.
 
-    Recomputed by ``sectum verify`` from the pack's own fields and checked
+    Recomputed by ``sectum-ai verify`` from the pack's own fields and checked
     against the timestamp token and any Rekor proof. Any edit to the run record,
     manifest hash, control mappings, PDF reference, or transparency-log flag
     changes this digest and fails verification.

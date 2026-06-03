@@ -3,6 +3,7 @@
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.runner import Runner, retrieval_pivot_rate
 from sectum_ai.spec import AdapterError, ProbeStep

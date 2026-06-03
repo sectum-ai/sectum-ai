@@ -20,6 +20,7 @@ from uuid import UUID
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
+
 from sectum_ai.adapters.base import Capability, MCPAdapter, McpResult
 from sectum_ai.spec import AdapterError
 

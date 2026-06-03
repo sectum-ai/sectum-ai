@@ -3,7 +3,7 @@
 Opt-in: set ``SECTUM_RUN_E2E=1`` (CI sets it on a dedicated step). Each example's
 ``run.sh`` seeds a substrate, probes the demo stack, assembles a tamper-evident
 evidence pack, and verifies it via the ``sectum`` CLI - so a non-zero exit means
-the published demo broke. These shell out to ``uv run sectum`` and are slower
+the published demo broke. These shell out to ``uv run sectum-ai`` and are slower
 than the in-process CLI tests, hence the opt-in gate.
 """
 
@@ -56,9 +56,9 @@ def test_example_walkthrough_runs_and_verifies(example: str) -> None:
 
 
 def _sectum(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Run ``uv run sectum <args>`` from ``cwd`` and return the completed process."""
+    """Run ``uv run sectum-ai <args>`` from ``cwd`` and return the completed process."""
     return subprocess.run(
-        ["uv", "run", "--quiet", "--project", str(_REPO_ROOT), "sectum", *args],
+        ["uv", "run", "--quiet", "--project", str(_REPO_ROOT), "sectum-ai", *args],
         capture_output=True,
         text=True,
         timeout=600,
@@ -68,7 +68,7 @@ def _sectum(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> None:
-    """Mutating the evidence pack must make ``sectum verify`` exit 4.
+    """Mutating the evidence pack must make ``sectum-ai verify`` exit 4.
 
     The tamper-evident property is the OSS evidence layer's core promise (the
     engineering spec, §8). The example walkthroughs above only confirm the
@@ -84,7 +84,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     seed = _sectum("seed", "--workdir", str(workdir), cwd=tmp_path)
     assert seed.returncode == 0, (seed.stdout + seed.stderr)[-2000:]
 
-    # `sectum probe` exits 2 when it confirms leaks. Tolerate that here -
+    # `sectum-ai probe` exits 2 when it confirms leaks. Tolerate that here -
     # the demo substrate is deliberately leaky and the probe is supposed
     # to detect it, so the non-zero exit IS the success signal at this step.
     probe = _sectum("probe", "--workdir", str(workdir), cwd=tmp_path)
@@ -94,7 +94,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     assert report.returncode == 0, (report.stdout + report.stderr)[-2000:]
 
     pack_path = workdir / "evidence.json"
-    assert pack_path.exists(), f"sectum report did not write {pack_path}"
+    assert pack_path.exists(), f"sectum-ai report did not write {pack_path}"
 
     # Baseline: a freshly built pack verifies (exit 0).
     verify = _sectum("verify", str(pack_path), cwd=tmp_path)
@@ -127,7 +127,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
 
 
 def test_sectum_probe_filter_runs_only_the_named_probe(tmp_path: Path) -> None:
-    """``sectum probe --probe <id>`` must run only that probe.
+    """``sectum-ai probe --probe <id>`` must run only that probe.
 
     The run.json's per-probe finding counts have a single non-zero entry under
     the named probe, with the others either absent or zero. Catches a class
@@ -149,7 +149,7 @@ def test_sectum_probe_filter_runs_only_the_named_probe(tmp_path: Path) -> None:
     assert probe.returncode in (0, 2), (probe.stdout + probe.stderr)[-2000:]
 
     run_json = workdir / "run.json"
-    assert run_json.exists(), f"sectum probe did not write {run_json}"
+    assert run_json.exists(), f"sectum-ai probe did not write {run_json}"
     import json
 
     data = json.loads(run_json.read_text(encoding="utf-8"))

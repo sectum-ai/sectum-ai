@@ -34,7 +34,7 @@ dependencies = [
 # At-rest encryption of the seeded substrate (and its ground-truth manifest).
 # Optional: the default unencrypted path needs no third-party dependency.
 encryption = ["cryptography>=43"]
-# weasyprint audit-pack PDF engine (sectum report --pdf-engine weasyprint).
+# weasyprint audit-pack PDF engine (sectum-ai report --pdf-engine weasyprint).
 # Optional: the default reportlab renderer is pure Python with no system
 # libraries; weasyprint adds the pango/cairo system libraries.
 weasyprint = ["sectum-ai-evidence[weasyprint]"]

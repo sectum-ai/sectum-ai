@@ -4,7 +4,7 @@ After the run digest is timestamped (the RFC 3161 path in :mod:`sectum_ai.eviden
 it can also be recorded in the `Sigstore Rekor <https://docs.sigstore.dev/logging/overview/>`_
 transparency log. ``RekorTransparencyLog`` signs the digest and submits a
 ``hashedrekord`` entry; the log returns an inclusion proof that anyone can
-verify offline. ``sectum verify`` then proves the run digest is present in a
+verify offline. ``sectum-ai verify`` then proves the run digest is present in a
 public, append-only log under a checkpoint signed by Rekor itself.
 
 Trust model (the same shape as the TSA): the inclusion proof is only as

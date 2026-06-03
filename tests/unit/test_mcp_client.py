@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.base import Capability
 from sectum_ai.adapters.mcp.client import StdioMCPClient
 from sectum_ai.spec import AdapterError

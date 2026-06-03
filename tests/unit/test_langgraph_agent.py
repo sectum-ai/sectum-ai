@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.agent.langgraph import LangGraphAgent
 from sectum_ai.adapters.base import AgentAdapter, Capability
 from sectum_ai.spec import AdapterError
