@@ -11,7 +11,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
-from sectum.spec.enums import FindingStatus, MarkerType, PrincipalKind, Severity, Surface
+from sectum.spec.enums import (
+    AccessOutcome,
+    FindingStatus,
+    MarkerType,
+    PrincipalKind,
+    Severity,
+    Surface,
+)
 
 SCHEMA_VERSION = "0.2.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
@@ -225,6 +232,10 @@ class Observation(SectumModel):
     raw_response: str
     structured: dict[str, str] | None = None
     latency_ms: float | None = None
+    # How an authorization-boundary fetch resolved (Class 1). ``None`` for steps
+    # that are not a direct object fetch; set by the runner on a vector.fetch so a
+    # 200-empty result is distinguishable from a real deny (the spec, Class 1).
+    access_outcome: AccessOutcome | None = None
 
 
 # --- Findings ---------------------------------------------------------------

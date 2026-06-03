@@ -16,6 +16,7 @@ from sectum.adapters import (
 )
 from sectum.probes import Probe, confirmed_findings
 from sectum.spec import (
+    AccessOutcome,
     AdapterError,
     ConfigError,
     CorpusDocument,
@@ -171,10 +172,13 @@ class Runner:
         hit = self._vector.fetch(
             step.actor_tenant_id, step.payload["doc_id"], user=step.actor_user_id
         )
+        # Class 1 deny-semantics: a returned object surfaced (a leak when foreign);
+        # an absent one is the ambiguous 200-empty case, not a proven deny.
         return Observation(
             step_id=step.step_id,
             surface=Surface.VECTOR_DB,
             raw_response=hit.content if hit is not None else "",
+            access_outcome=AccessOutcome.RETURNED if hit is not None else AccessOutcome.EMPTY,
         )
 
     def _vector_upsert(self, step: ProbeStep) -> Observation:
