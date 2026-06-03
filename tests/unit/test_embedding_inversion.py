@@ -3,7 +3,7 @@
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.probes import EmbeddingInversionProbe, confirmed_findings
 from sectum_ai.runner import Runner
-from sectum_ai.spec import Substrate
+from sectum_ai.spec import MarkerType, Substrate
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -35,3 +35,15 @@ def test_probe_plans_fragment_queries_for_foreign_entity_canaries() -> None:
     steps = EmbeddingInversionProbe().plan(substrate)
     assert steps
     assert all(step.action == "vector.query" for step in steps)
+    # Each query is a *partial fragment* of an entity canary - a strict prefix that
+    # drops the canary's unique trailing segment, modelling reconstruction from
+    # partial knowledge. A regression to querying the full plaintext (no inversion)
+    # would make the query equal to a whole canary and fail this.
+    entity_plaintexts = [
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.ENTITY_CANARY
+    ]
+    for step in steps:
+        query = step.payload["query"]
+        assert any(full.startswith(f"{query}-") for full in entity_plaintexts), query

@@ -74,5 +74,5 @@ cp examples/erasure-attestation/out-residual/erasure-attestation.intoto.json doc
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
 (~296 KB with 348 findings); run the example locally to inspect the JSON
 structure, or read the
-[`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum/spec/models.py)
+[`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum_ai/spec/models.py)
 schema.

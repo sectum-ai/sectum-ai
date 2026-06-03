@@ -41,7 +41,7 @@ weasyprint = ["sectum-ai-evidence[weasyprint]"]
 # Real embedding providers for the Class 2 per-model RPR sweep (embedding_models:
 # ["st:all-mpnet-base-v2", ...]). Optional: the default hashing/recall sweep is
 # pure-Python. sentence-transformers runs locally (BYOC-safe); openai is a
-# hosted call. See packages/core/src/sectum/embeddings.py.
+# hosted call. See packages/core/src/sectum_ai/embeddings.py.
 sentence-transformers = ["sentence-transformers>=3"]
 openai = ["openai>=1.40"]
 

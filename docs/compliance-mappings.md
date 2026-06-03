@@ -14,5 +14,6 @@ test coverage, not legal certification** — the reports say so explicitly.
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
 
-The mapping table is versioned in `sectum-ai-spec`, so an evidence pack records
-exactly which mapping revision produced its appendix.
+The control identifiers are applied by `sectum-ai-evidence` (`controls.py`); the
+`ControlMapping` model that records them in a pack lives in `sectum-ai-spec` and
+is versioned by the shared `SCHEMA_VERSION` that every evidence pack stamps.

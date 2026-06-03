@@ -10,9 +10,9 @@
 # Wire this into cron to make a Snapshot subscription self-running. The
 # 10-line CI / cron contract looks like:
 #
-#   sectum-ai seed   --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml
-#   sectum-ai probe  --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml --output json
-#   sectum-ai report --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml
+#   sectum-ai seed   --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml
+#   sectum-ai probe  --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml --output json
+#   sectum-ai report --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml
 #   ./upload-evidence-pack.sh \
 #     --workdir .sectum-ai \
 #     --customer-id "$SECTUM_CUSTOMER_ID" \

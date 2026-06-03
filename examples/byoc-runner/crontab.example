@@ -8,15 +8,15 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
 # Reads SECTUM_UPLOAD_BEARER, SECTUM_CUSTOMER_ID, SECTUM_CUSTOMER_EMAIL.
-BASH_ENV=/etc/sectum/runner.env
+BASH_ENV=/etc/sectum-ai/runner.env
 
 # 03:00 on the 1st of every month. Logs go to syslog via `logger`.
 0 3 1 * * cd /var/lib/sectum && \
   rm -rf .sectum-ai && \
-  sectum-ai seed   --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml 2>&1 | logger -t sectum-snapshot && \
-  sectum-ai probe  --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml --output json 2>&1 | logger -t sectum-snapshot && \
-  sectum-ai report --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml 2>&1 | logger -t sectum-snapshot && \
+  sectum-ai seed   --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml 2>&1 | logger -t sectum-ai-snapshot && \
+  sectum-ai probe  --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml --output json 2>&1 | logger -t sectum-ai-snapshot && \
+  sectum-ai report --workdir .sectum-ai --config /etc/sectum-ai/sectum-ai.yaml 2>&1 | logger -t sectum-ai-snapshot && \
   sectum-upload --workdir .sectum-ai \
     --customer-id "$SECTUM_CUSTOMER_ID" \
     --customer-email "$SECTUM_CUSTOMER_EMAIL" \
-    --api-url "https://platform.sectum.ai/evidence/upload" 2>&1 | logger -t sectum-snapshot
+    --api-url "https://platform.sectum.ai/evidence/upload" 2>&1 | logger -t sectum-ai-snapshot

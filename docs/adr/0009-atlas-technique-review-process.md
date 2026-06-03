@@ -53,7 +53,7 @@ The validation is a three-step sweep:
 3. **Source-of-truth comment.** The per-class rationale for non-obvious
    assignments lives as a one-line comment above each `atlas_techniques`
    tuple in the probe source (see e.g.
-   `packages/probes/src/sectum/probes/rag_poisoning/probe.py`); the
+   `packages/probes/src/sectum_ai/probes/rag_poisoning/probe.py`); the
    per-class attack-catalog doc (`docs/attack-catalog/class-NN-*.md`)
    surfaces the same IDs in its header. Both stay in sync at every
    re-validation.
