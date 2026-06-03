@@ -19,6 +19,13 @@ from sectum.evidence.chain import (
     run_digest,
 )
 from sectum.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
+from sectum.evidence.dsse import (
+    PAYLOAD_TYPE,
+    build_dsse_envelope,
+    envelope_statement,
+    pae,
+    verify_dsse_envelope,
+)
 from sectum.evidence.intoto import (
     PREDICATE_TYPE,
     STATEMENT_TYPE,
@@ -34,6 +41,7 @@ __all__ = [
     "COVERAGE_DISCLAIMER",
     "EVIDENCE_MEMBER",
     "MANIFEST_MEMBER",
+    "PAYLOAD_TYPE",
     "PREDICATE_TYPE",
     "STATEMENT_TYPE",
     "Check",
@@ -46,14 +54,18 @@ __all__ = [
     "VerificationResult",
     "attested_digest",
     "build_bundle",
+    "build_dsse_envelope",
     "build_evidence_pack",
     "control_mappings",
+    "envelope_statement",
+    "pae",
     "rekor_keyring",
     "render_audit_pack",
     "render_audit_pack_and_hash",
     "run_digest",
     "to_in_toto_statement",
     "verify_bundle",
+    "verify_dsse_envelope",
     "verify_in_toto_statement",
     "verify_pack",
     "verify_rekor_proof",

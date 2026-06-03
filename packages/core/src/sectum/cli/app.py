@@ -59,12 +59,14 @@ from sectum.evidence import (
     Timestamper,
     TransparencyLog,
     build_bundle,
+    build_dsse_envelope,
     build_evidence_pack,
     control_mappings,
     rekor_keyring,
     render_audit_pack_and_hash,
     to_in_toto_statement,
     verify_bundle,
+    verify_dsse_envelope,
     verify_in_toto_statement,
     verify_pack,
 )
@@ -827,6 +829,11 @@ def report(
     json_path.write_text(pack.model_dump_json(indent=2))
     intoto_path = workdir / "attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
+    # The DSSE envelope is the standard signable carrier of the in-toto statement
+    # (the body of a Sigstore Rekor `dsse` entry); written unconditionally beside
+    # the pack so it can be signed/distributed (the spec, sections 8 and 13).
+    dsse_path = workdir / "evidence.dsse.json"
+    dsse_path.write_text(json.dumps(build_dsse_envelope(pack), indent=2))
     typer.echo(f"evidence pack -> {json_path}")
     typer.echo(f"audit pack -> {pdf_path}")
     if bundle:
@@ -834,6 +841,7 @@ def report(
             "evidence.json": json_path.read_bytes(),
             "audit-pack.pdf": pdf_path.read_bytes(),
             "attestation.intoto.json": intoto_path.read_bytes(),
+            "evidence.dsse.json": dsse_path.read_bytes(),
         }
         if include_manifest:
             # The manifest holds canary plaintexts, so it is sealed AES-256-GCM
@@ -851,6 +859,7 @@ def report(
         bundle_path.write_bytes(build_bundle(members))
         typer.echo(f"evidence bundle -> {bundle_path}")
     typer.echo(f"in-toto attestation -> {intoto_path}")
+    typer.echo(f"dsse envelope -> {dsse_path}")
 
 
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
@@ -881,6 +890,17 @@ def _sibling_intoto(pack_path: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def _sibling_dsse(pack_path: Path) -> Path | None:
+    """Return the DSSE envelope written beside ``pack_path``, if present.
+
+    ``report`` writes ``evidence.dsse.json`` next to the evidence json; when
+    present, ``sectum verify`` re-checks that its in-toto statement binds this
+    pack's run digest, so a swapped envelope is caught.
+    """
+    candidate = pack_path.parent / "evidence.dsse.json"
+    return candidate if candidate.exists() else None
 
 
 @app.command()
@@ -955,6 +975,16 @@ def verify(
             typer.echo("[ok] in-toto-attestation: sidecar binds this pack's run digest")
         except (ValueError, EvidenceError) as error:
             typer.echo(f"[FAIL] in-toto-attestation: {error}")
+            passed = False
+    # Re-verify the DSSE envelope sidecar if report wrote one: its in-toto
+    # statement must still bind this pack's run digest (a swapped envelope fails).
+    dsse_path = _sibling_dsse(pack)
+    if dsse_path is not None:
+        try:
+            verify_dsse_envelope(json.loads(dsse_path.read_text()), evidence)
+            typer.echo("[ok] dsse-envelope: sidecar binds this pack's run digest")
+        except (ValueError, EvidenceError) as error:
+            typer.echo(f"[FAIL] dsse-envelope: {error}")
             passed = False
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
