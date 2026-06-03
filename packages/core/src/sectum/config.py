@@ -29,7 +29,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from sectum.adapters import (
     AgentAdapter,
@@ -163,6 +170,21 @@ class SectumConfig(BaseModel):
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_null_sections(cls, data: Any) -> Any:
+        """Treat a section commented down to ``key: null`` as absent (use its default).
+
+        A ``sectum.yaml`` that comments out a whole section's body - e.g. a
+        ``security:`` header whose only remaining line is ``# manifest_key_env:`` -
+        parses that section to ``None``. A non-optional section field would then
+        reject ``None``; dropping such keys lets the field's default apply, which
+        matches the obvious intent and keeps a ``sectum init`` template loadable.
+        """
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if value is not None}
+        return data
 
 
 def load_config(path: Path) -> SectumConfig:
