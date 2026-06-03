@@ -5,7 +5,14 @@ from uuid import UUID
 from sectum.adapters import FakeModel
 from sectum.probes import LoraCrossTenantProbe, confirmed_findings
 from sectum.runner import Runner
-from sectum.spec import Scenario, SharedEntity, Substrate, SyntheticTenantSpec, SyntheticUserSpec
+from sectum.spec import (
+    FindingStatus,
+    Scenario,
+    SharedEntity,
+    Substrate,
+    SyntheticTenantSpec,
+    SyntheticUserSpec,
+)
 from sectum.substrate import build_substrate, default_scenario
 
 _TENANT = UUID(int=1)
@@ -47,6 +54,38 @@ def test_isolated_adapters_have_no_cross_tenant_influence() -> None:
     model = FakeModel(adapter_bleed=False)
     findings = Runner(substrate, model=model).run(LoraCrossTenantProbe())
     assert confirmed_findings(findings) == []
+
+
+def test_weight_bleed_also_raises_a_routing_finding() -> None:
+    # Under adapter bleed a foreign tenant's adapter serves the request, so the
+    # probe raises an explicit Class 9 routing finding (served_by != requester)
+    # alongside the canary weight-bleed finding.
+    substrate = build_substrate(default_scenario(seed=2026))
+    findings = Runner(substrate, model=FakeModel(adapter_bleed=True)).run(LoraCrossTenantProbe())
+    routing = [f for f in findings if f.finding_id.startswith("routing-")]
+    assert routing
+    for finding in routing:
+        assert finding.status is FindingStatus.CONFIRMED
+        assert finding.owner_tenant_id != finding.observed_in_tenant_id
+        assert "mis-routed" in finding.evidence_span
+
+
+def test_isolated_adapters_raise_no_routing_finding() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    findings = Runner(substrate, model=FakeModel(adapter_bleed=False)).run(LoraCrossTenantProbe())
+    assert not [f for f in findings if f.finding_id.startswith("routing-")]
+
+
+def test_served_by_attributes_a_foreign_serving_tenant_under_bleed() -> None:
+    owner, requester = UUID(int=0x1), UUID(int=0x2)
+    bleed = FakeModel(adapter_bleed=True)
+    bleed.train_adapter(owner, ["memorized alpha fact"])
+    # the foreign owner's adapter matches and serves the request -> mis-routed
+    assert bleed.served_by(requester, "recall the alpha fact") == owner
+    isolated = FakeModel(adapter_bleed=False)
+    isolated.train_adapter(owner, ["memorized alpha fact"])
+    # without bleed only the caller's own adapter is ever in scope
+    assert isolated.served_by(requester, "recall the alpha fact") == requester
 
 
 def test_probe_plans_train_then_infer_steps() -> None:

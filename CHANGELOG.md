@@ -232,6 +232,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Class 9 routing assertion: `ModelAdapter.served_by` (the spec, Class 9).**
+  Class 9 must verify adapter *routing correctness*, not only weight bleed. A new
+  non-abstract `ModelAdapter.served_by(tenant, prompt)` reports which tenant's
+  adapter actually served an inference — a real adapter that cannot introspect its
+  routing returns `None` (never a finding), while `FakeModel` attributes it
+  precisely (a foreign owner under `adapter_bleed`). The runner records a foreign
+  `served_by_tenant` on the observation, and the lora probe raises a confirmed
+  `routing-*` finding for the mis-route, distinct from the canary weight-bleed
+  finding. No schema or sample-pack change — it rides the existing
+  `Observation.structured`. (Completes rank 12 with the Class 1 `access_outcome`
+  half shipped just prior.)
 - **Class 1 deny-semantics: `Observation.access_outcome` (the spec, Class 1).**
   Class 1 flags whether a direct cross-tenant fetch is denied, and the spec calls
   out the ambiguity a shallow scanner misses — a backend that returns `200` with

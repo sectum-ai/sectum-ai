@@ -578,6 +578,21 @@ class FakeModel(ModelAdapter):
             return "the adapter recalled nothing for this prompt"
         return " ".join(recalled)
 
+    def served_by(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> UUID | None:
+        # Without weight bleed only the caller's own adapter is in scope, so the
+        # request is always served by the caller. With bleed a foreign tenant's
+        # adapter can match and serve the prompt - that foreign owner is the
+        # mis-routing Class 9 asserts against (it coincides with the canary leak).
+        if not self._adapter_bleed:
+            return tenant
+        prompt_tokens = _tokens(prompt)
+        for owner_tenant, entries in self._adapters.items():
+            if owner_tenant != tenant and any(
+                prompt_tokens & _tokens(text) for _owner_user, text in entries
+            ):
+                return owner_tenant
+        return tenant
+
     def measure_latency(self, tenant: UUID, prompt: str) -> float:
         """Return a deterministic inference latency in milliseconds.
 

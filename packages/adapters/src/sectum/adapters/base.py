@@ -303,6 +303,18 @@ class ModelAdapter(Adapter):
         content - a leak. ``user=None`` is the tenant-level call and is unchanged.
         """
 
+    def served_by(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> UUID | None:
+        """Return the tenant whose adapter actually served this inference, if known.
+
+        Class 9 verifies routing correctness: a value other than ``tenant`` means
+        one tenant's request was served by another tenant's adapter (mis-routing,
+        the spec section 7 "routing assertion failures"). A real adapter that
+        cannot introspect its routing returns ``None`` (unknown), which is never a
+        finding; the in-memory fake attributes it precisely so the assertion is
+        testable. Not abstract, so existing adapters need no change.
+        """
+        return None
+
     @abstractmethod
     def measure_latency(self, tenant: UUID, prompt: str) -> float:
         """Return the inference latency in milliseconds for ``prompt``.
