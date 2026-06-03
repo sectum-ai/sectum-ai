@@ -4,6 +4,12 @@ This is the ``sectum.evidence`` namespace package. The entire evidence layer is
 open source; see docs/adr/0002-evidence-layer-oss-boundary.md.
 """
 
+from sectum.evidence.bundle import (
+    EVIDENCE_MEMBER,
+    MANIFEST_MEMBER,
+    build_bundle,
+    verify_bundle,
+)
 from sectum.evidence.chain import (
     LocalTimestamper,
     Timestamper,
@@ -26,6 +32,8 @@ from sectum.evidence.verify import Check, VerificationResult, verify_pack
 
 __all__ = [
     "COVERAGE_DISCLAIMER",
+    "EVIDENCE_MEMBER",
+    "MANIFEST_MEMBER",
     "PREDICATE_TYPE",
     "STATEMENT_TYPE",
     "Check",
@@ -37,6 +45,7 @@ __all__ = [
     "TransparencyLog",
     "VerificationResult",
     "attested_digest",
+    "build_bundle",
     "build_evidence_pack",
     "control_mappings",
     "rekor_keyring",
@@ -44,6 +53,7 @@ __all__ = [
     "render_audit_pack_and_hash",
     "run_digest",
     "to_in_toto_statement",
+    "verify_bundle",
     "verify_in_toto_statement",
     "verify_pack",
     "verify_rekor_proof",
