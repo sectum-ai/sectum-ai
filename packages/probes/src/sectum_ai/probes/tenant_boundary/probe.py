@@ -7,7 +7,17 @@ boundary.
 """
 
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
-from sectum_ai.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
+from sectum_ai.spec import (
+    AccessOutcome,
+    Finding,
+    FindingStatus,
+    MarkerType,
+    Observation,
+    ProbeStep,
+    Severity,
+    Substrate,
+    Surface,
+)
 
 
 class TenantBoundaryProbe(DetectingProbe):
@@ -53,9 +63,18 @@ class TenantBoundaryProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan the observation for a foreign-principal canary via the pipeline."""
+        """Scan the observation for a foreign-principal canary, and flag deny ambiguity.
+
+        A returned object carrying a foreign canary is a confirmed leak. But the
+        spec's Class 1 also calls out the *200-empty vs 403* ambiguity: a fetch
+        that comes back empty is not a proven deny - the backend may have silently
+        swallowed the request. When nothing leaked and the boundary returned
+        ``EMPTY`` rather than an explicit ``DENIED``, emit an UNVERIFIED
+        informational finding so a silent 200-empty cannot pass for enforced
+        negative authorization.
+        """
         pipeline = self._providers.pipeline(substrate)
-        return pipeline.detect(
+        findings = pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
@@ -65,4 +84,66 @@ class TenantBoundaryProbe(DetectingProbe):
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
+        )
+        if not findings and observation.access_outcome is AccessOutcome.EMPTY:
+            ambiguity = self._empty_ambiguity_finding(step, observation, substrate)
+            if ambiguity is not None:
+                findings.append(ambiguity)
+        return findings
+
+    def _empty_ambiguity_finding(
+        self, step: ProbeStep, observation: Observation, substrate: Substrate
+    ) -> Finding | None:
+        """Build the UNVERIFIED 200-empty ambiguity finding for a cross-principal fetch."""
+        observer = next(
+            (
+                principal
+                for principal in substrate.principals()
+                if principal.tenant_id == step.actor_tenant_id
+                and principal.user_id == step.actor_user_id
+            ),
+            None,
+        )
+        if observer is None:
+            return None
+        doc_id = step.payload.get("doc_id")
+        marker = next(
+            (
+                candidate
+                for candidate in substrate.manifest.markers
+                for location in candidate.planted_locations
+                if location.doc_id == doc_id and is_cross_principal(candidate, observer)
+            ),
+            None,
+        )
+        if marker is None:
+            return None
+        user_suffix = f"-{observer.user_id.hex}" if observer.user_id is not None else ""
+        return Finding(
+            finding_id=(
+                f"finding-{self.id}-empty-{marker.marker_id}-"
+                f"{observer.tenant_id.hex}{user_suffix}-{observation.surface.value}"
+            ),
+            probe_id=self.id,
+            severity=Severity.INFO,
+            confidence=0.0,
+            status=FindingStatus.UNVERIFIED,
+            owner_tenant_id=marker.owner_tenant_id,
+            observed_in_tenant_id=observer.tenant_id,
+            owner_user_id=marker.owner_user_id,
+            observed_in_user_id=observer.user_id,
+            surface=observation.surface,
+            marker_id=marker.marker_id,
+            evidence_span=(
+                "cross-principal fetch returned 200-empty, not an explicit deny - "
+                "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
+            ),
+            owasp_llm=self.owasp_llm,
+            owasp_secondary=self.owasp_secondary,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
+            remediation_pointer=(
+                "return an explicit authorization error (e.g. 403) for cross-tenant "
+                "object fetches rather than a 200 with an empty body"
+            ),
         )

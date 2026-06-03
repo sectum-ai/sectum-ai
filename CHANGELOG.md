@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Class 1 now flags the "200-empty vs 403" deny ambiguity.** A direct
+  cross-tenant fetch that comes back empty is not a proven deny — a backend can
+  return `200` with an empty body without ever enforcing authorization. The
+  tenant-boundary probe now emits an *unverified, informational* finding for each
+  such cross-principal fetch (excluded from the confirmed-leak headline, carrying
+  a remediation pointer to return an explicit `403`), so a silent empty response
+  can no longer pass for enforced negative authorization. This consumes the
+  Class 1 `access_outcome` signal the runner already recorded but nothing read.
+
 ### Changed
 
 - **Rename tail: tooling config, CLI name, and resource-prefix defaults.** The

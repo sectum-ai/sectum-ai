@@ -15,9 +15,16 @@ from the similarity query used by Class 2.
 
 ## Detection
 
-A foreign hard canary in the fetched content is a confirmed cross-tenant leak.
-On a tenant-isolated store the fetch returns nothing; on a shared index it
-returns the foreign document.
+A foreign hard canary in the fetched content is a confirmed cross-tenant leak;
+on a shared index the fetch returns the foreign document and the canary surfaces.
+
+A tenant-isolated store instead returns **200-empty**, which is *not* a proven
+deny — the backend may have silently swallowed the request rather than enforcing
+authorization. The probe does not treat that as a clean pass: it records an
+**unverified, informational** finding flagging the 200-empty vs 403 ambiguity, so
+an enforced deny (an explicit `403`) is distinguished from a silent empty body in
+the evidence. These findings are excluded from the confirmed-leak headline and
+carry a remediation pointer to return an explicit authorization error.
 
 ## Status
 
