@@ -28,7 +28,7 @@ without running Sectum.
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
-schema it does not understand. The current `SCHEMA_VERSION` is **0.2.0**.
+schema it does not understand. The current `SCHEMA_VERSION` is **0.3.0**.
 
 ## Published JSON Schema
 

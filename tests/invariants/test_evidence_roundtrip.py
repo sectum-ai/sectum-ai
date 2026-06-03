@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 from sectum_ai.evidence import attested_digest, build_evidence_pack, verify_pack
+from sectum_ai.evidence.chain import LocalTimestamper
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     ControlMapping,
@@ -34,6 +35,18 @@ class _StubTransparencyLog:
 
     def record(self, digest: str) -> str:
         return f"stub-rekor-proof::{digest}"
+
+
+class _StubTsaTimestamper:
+    """A stand-in for a real RFC 3161 TSA: self-reports as an anchor and returns a
+    non-JSON token. Not a real signer, so the RFC 3161 signature check would fail -
+    but the pack it builds carries ``anchored_with_timestamp=True``, which is what
+    the timestamp-anchor downgrade tests need."""
+
+    anchored = True
+
+    def timestamp(self, digest: str) -> str:
+        return f"stub-rfc3161-token::{digest}"
 
 
 def _stub_controls() -> tuple[ControlMapping, ...]:
@@ -300,6 +313,37 @@ def test_flipping_the_anchored_flag_to_dodge_the_downgrade_check_fails() -> None
     assert not result.passed
     token = next(c for c in result.checks if c.name == "timestamp-token")
     assert not token.ok and "altered" in token.detail
+
+
+def test_a_real_tsa_build_records_the_timestamp_anchor_flag() -> None:
+    # A pack built with a real (anchored) RFC 3161 timestamper records
+    # anchored_with_timestamp=True; the local-dev default leaves it False. The flag
+    # is bound into the attested digest (see the downgrade test below).
+    manifest = _manifest()
+    anchored = build_evidence_pack(
+        _run_result(manifest), manifest, timestamper=_StubTsaTimestamper()
+    )
+    local = build_evidence_pack(_run_result(manifest), manifest)
+    assert anchored.anchored_with_timestamp is True
+    assert local.anchored_with_timestamp is False
+
+
+def test_downgrading_a_timestamp_anchored_pack_to_a_local_token_fails() -> None:
+    # Downgrade attack on the timestamp anchor, mirroring the Rekor downgrade guard:
+    # a pack that declares a real RFC 3161 timestamp anchor must keep failing if its
+    # binary token is swapped for a local-dev JSON token - even one minted over the
+    # correct (flag-bound) digest. anchored_with_timestamp is in the digest, and the
+    # verifier demands a real RFC 3161 token whenever it is set.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)  # local: flag False
+    forged = pack.model_copy(update={"anchored_with_timestamp": True})
+    forged = forged.model_copy(
+        update={"tsa_token": LocalTimestamper().timestamp(attested_digest(forged))}
+    )
+    result = verify_pack(forged, manifest)
+    assert not result.passed
+    token = next(c for c in result.checks if c.name == "timestamp-token")
+    assert not token.ok and "downgrade" in token.detail
 
 
 def test_forging_a_local_token_naming_another_tsa_is_rejected() -> None:

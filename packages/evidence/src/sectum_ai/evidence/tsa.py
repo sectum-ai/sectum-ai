@@ -50,6 +50,11 @@ class Rfc3161Timestamper:
     pack's JSON. Defaults to FreeTSA; pass ``tsa_url`` for a customer-pinned TSA.
     """
 
+    anchored = True
+    """A real, independent RFC 3161 anchor - recorded on the pack as
+    ``anchored_with_timestamp`` so a verifier refuses a later downgrade to a
+    local-dev token."""
+
     def __init__(self, tsa_url: str = _FREETSA_URL, *, timeout: float = 30.0) -> None:
         if urlparse(tsa_url).scheme not in ("http", "https"):
             raise EvidenceError(f"tsa_url must be an http(s) URL: {tsa_url!r}")

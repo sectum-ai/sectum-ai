@@ -20,7 +20,7 @@ from sectum_ai.spec.enums import (
     Surface,
 )
 
-SCHEMA_VERSION = "0.2.0"
+SCHEMA_VERSION = "0.3.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
@@ -339,4 +339,10 @@ class EvidencePack(SectumModel):
     # Rekor inclusion proof whenever it is set: stripping ``rekor_proof`` to
     # skip the check (a downgrade) no longer passes verification.
     anchored_in_log: bool = False
+    # True when the pack was timestamp-anchored by a real RFC 3161 TSA at build
+    # time (not the local-dev timestamper). Bound into the anchored digest, so a
+    # verifier demands a real RFC 3161 token whenever it is set: swapping the binary
+    # token for a local-dev JSON one to drop the independent timestamp (a downgrade)
+    # no longer passes verification.
+    anchored_with_timestamp: bool = False
     schema_version: str = SCHEMA_VERSION
