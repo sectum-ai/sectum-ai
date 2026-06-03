@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`verify_bundle` now reconciles a bundle's ZIP members against its digest
+  manifest, closing a tamper-evidence hole.** The integrity loop only iterated
+  manifest-*listed* members, so a file physically present in the archive but absent
+  from `bundle-manifest.json` was covered by no digest check — and because the
+  audit-PDF / sidecar selection reads the raw ZIP, an unlisted forged member (e.g.
+  a fake `erasure-attestation.pdf` claiming "zero residue") could ride inside a
+  bundle that `sectum-ai verify` reported as PASSING, and could even be the member
+  delivered. Verification now fails on any archive member not covered by the
+  manifest, so a bundle attests exactly its manifest's member set (the engineering
+  spec §8.1). Regression test added for the smuggled-unlisted-member attack.
+
 ### Added
 
 - **Class 1 now flags the "200-empty vs 403" deny ambiguity.** A direct
