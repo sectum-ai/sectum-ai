@@ -232,6 +232,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`sectum verify` gates the pack's `schema_version`.** The attested digest is
+  recomputed under a canonical-serialization scheme tied to the schema version, so
+  a pack from an incompatible `major.minor` could hash under different rules or
+  carry different fields. `verify_pack` now refuses such a pack up front with a
+  `schema-version` check (exit `4`) instead of silently mis-verifying it; a
+  patch-level difference stays compatible. Every committed in-toto sidecar (incl.
+  the retrieval-pivot one, whose large `evidence.json` is not committed and so
+  previously went untested) is now pinned as a structurally valid in-toto
+  Statement by an invariant test, so no shipped attestation is silently orphaned.
 - **Single-archive evidence bundle (`sectum report --bundle`, the spec §8.2).**
   Section 8.2 step 5 calls for bundling a run's attested artifacts into one pack;
   until now `report` wrote three loose sidecars a verifier had to keep together by
