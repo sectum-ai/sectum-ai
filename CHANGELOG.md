@@ -232,6 +232,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DSSE in-toto envelope for the evidence pack (the spec §8/§13).** The in-toto
+  Statement can now be wrapped in a DSSE (Dead Simple Signing Envelope) — the
+  standard signable carrier and the body of a Sigstore Rekor `dsse` log entry.
+  `evidence/dsse.py` builds the envelope (base64 payload + the spec's PAE
+  encoding), decodes it, and verifies it still binds the pack's run digest. `sectum
+  report` now writes `evidence.dsse.json` beside the pack (and into `--bundle`), and
+  `sectum verify` re-checks that sidecar — a swapped envelope fails. Standard-library
+  only and fully offline-verifiable. *Sigstore keyless (Fulcio/OIDC) signing of this
+  envelope is the opt-in layer on top: its OIDC identity flow is not exercisable in
+  offline CI, so — to avoid shipping unverifiable signing internals — it is deferred
+  rather than stubbed; the DSSE envelope produced here is exactly what that signature
+  and a Rekor `dsse` entry attach to.*
 - **`sectum verify` gates the pack's `schema_version`.** The attested digest is
   recomputed under a canonical-serialization scheme tied to the schema version, so
   a pack from an incompatible `major.minor` could hash under different rules or
