@@ -19,14 +19,14 @@ Two constraints shape the design:
 - **The package graph is acyclic** (ADR-0004): core → probes → adapters → spec,
   and evidence → spec. For one logging facility to be usable from the runner
   (core), detection (probes), the evidence chain (evidence), *and* the adapters,
-  it must live in the one package they all depend on — `sectum.spec`.
-- **stdout is a data channel.** `sectum probe --output json` and the verifier
+  it must live in the one package they all depend on — `sectum_ai.spec`.
+- **stdout is a data channel.** `sectum-ai probe --output json` and the verifier
   write machine-readable results to stdout; logs must not corrupt them.
 
 ## Decision
 
-Add `sectum.spec._logging`, re-exported as `get_logger`, `configure_logging`, and
-`redact_sensitive` from `sectum.spec`.
+Add `sectum_ai.spec._logging`, re-exported as `get_logger`, `configure_logging`, and
+`redact_sensitive` from `sectum_ai.spec`.
 
 - **Library code calls `get_logger(__name__)`; the application configures once.**
   The CLI's root callback calls `configure_logging(debug=...)` (a global

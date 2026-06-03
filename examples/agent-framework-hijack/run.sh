@@ -21,7 +21,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$here/../.." && pwd)"
 out="$here/out"
 
-sectum() { uv run --quiet --project "$repo_root" sectum "$@"; }
+sectum-ai() { uv run --quiet --project "$repo_root" sectum-ai "$@"; }
 
 rm -rf "$out"
 mkdir -p "$out"
@@ -29,24 +29,24 @@ mkdir -p "$out"
 cp "$here/sectum.yaml" "$out/sectum.yaml"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum seed --workdir "$out" --config "$out/sectum.yaml"
+sectum-ai seed --workdir "$out" --config "$out/sectum.yaml"
 
 echo
 echo "==> 2/4  Probe Class 7 from the agent-framework end"
 echo "         (the leaky in-memory FakeAgent stands in for any agent caller;"
 echo "         swap it for a live backend via the factories.py wiring in"
 echo "         examples/agent-tool-hijack/)"
-# 'sectum probe' exits 2 when it confirms cross-tenant leaks - expected on the
+# 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on the
 # leaky demo agent, so tolerate the non-zero exit.
-sectum probe --workdir "$out" --config "$out/sectum.yaml" --probe agent-framework-hijack || true
+sectum-ai probe --workdir "$out" --config "$out/sectum.yaml" --probe agent-framework-hijack || true
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
-sectum report --workdir "$out" --config "$out/sectum.yaml"
+sectum-ai report --workdir "$out" --config "$out/sectum.yaml"
 
 echo
 echo "==> 4/4  Independently verify the evidence pack"
-sectum verify "$out/evidence.json"
+sectum-ai verify "$out/evidence.json"
 
 echo
 echo "Artifacts written to: $out"

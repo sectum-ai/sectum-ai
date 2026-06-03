@@ -57,13 +57,13 @@ trips secret scanning.
 **Demo corpus default is ~500 documents/tenant** (the spec, section 6.2). Tests and
 the checked-in example samples pin a small corpus (24) — the flagship
 retrieval-pivot showcase reads better small and keeps a high Retrieval-Pivot Rate —
-while a default `sectum seed` produces the realistic demo scale.
+while a default `sectum-ai seed` produces the realistic demo scale.
 
 ## Consequences
 
 - The manifest hash changes (embedding refs, multi-field planting, new secret
   shapes), so the reproducibility golden hash and the committed sample packs are
-  regenerated in the same change. No `sectum.spec` model field changes, so the
+  regenerated in the same change. No `sectum_ai.spec` model field changes, so the
   committed JSON Schemas and `SCHEMA_VERSION` are untouched.
 - New invariants are pinned: `embedding_ref` population and model-scoping, planting
   in all three fields, the SECRET format detector's three shapes, zero-FP for a

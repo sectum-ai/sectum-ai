@@ -4,8 +4,8 @@ The reproducibility contract (the engineering spec, section 6.5, ADR-0003): the 
 must yield a byte-identical corpus and an identical ground-truth manifest.
 """
 
-from sectum.spec import canonical_hash
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.spec import canonical_hash
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def test_same_seed_yields_identical_substrate() -> None:

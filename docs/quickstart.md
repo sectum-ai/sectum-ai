@@ -18,38 +18,38 @@ pack, and verifies it.
 ## Drive the CLI directly
 
 ```sh
-uv run sectum seed   --workdir .sectum
-uv run sectum probe  --workdir .sectum
-uv run sectum report --workdir .sectum
-uv run sectum verify .sectum/evidence.json
+uv run sectum-ai seed   --workdir .sectum
+uv run sectum-ai probe  --workdir .sectum
+uv run sectum-ai report --workdir .sectum
+uv run sectum-ai verify .sectum/evidence.json
 ```
 
 | Command | Purpose |
 |---|---|
-| `sectum init` | Scaffold a `sectum.yaml` configuration file. |
-| `sectum seed` | Provision synthetic tenants, corpora, and canary markers. |
-| `sectum probe` | Run the probe suite and record findings. |
-| `sectum report` | Assemble a tamper-evident evidence pack (JSON and PDF). |
-| `sectum verify` | Independently verify an evidence pack. |
-| `sectum erasure` | Run the GDPR Article 17 erasure-verification workflow. |
-| `sectum baseline` | Save a regression baseline, or compare a run against it. |
-| `sectum diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
-| `sectum adapters` | List installed adapters and their capabilities. |
+| `sectum-ai init` | Scaffold a `sectum.yaml` configuration file. |
+| `sectum-ai seed` | Provision synthetic tenants, corpora, and canary markers. |
+| `sectum-ai probe` | Run the probe suite and record findings. |
+| `sectum-ai report` | Assemble a tamper-evident evidence pack (JSON and PDF). |
+| `sectum-ai verify` | Independently verify an evidence pack. |
+| `sectum-ai erasure` | Run the GDPR Article 17 erasure-verification workflow. |
+| `sectum-ai baseline` | Save a regression baseline, or compare a run against it. |
+| `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
+| `sectum-ai adapters` | List installed adapters and their capabilities. |
 
 Exit codes: `0` no confirmed leaks; `2` a gating result — confirmed leaks
-(`sectum probe`), a regression (`sectum diff` / `baseline --compare`), or
-residual / attestable-with-caveat data on an erased surface (`sectum erasure`,
+(`sectum-ai probe`), a regression (`sectum-ai diff` / `baseline --compare`), or
+residual / attestable-with-caveat data on an erased surface (`sectum-ai erasure`,
 where data is presumed retained); `3` config or adapter error; `4` evidence
 verification failure.
 
 ## Read the probe summary from CI
 
-`sectum probe` defaults to a human-readable summary. Pass `--output json` to
+`sectum-ai probe` defaults to a human-readable summary. Pass `--output json` to
 emit a single JSON object on stdout instead — convenient for CI dashboards
 that want to act on the headline metrics without scraping prose:
 
 ```sh
-uv run sectum probe --workdir .sectum --output json | jq '.retrieval_pivot_rate'
+uv run sectum-ai probe --workdir .sectum --output json | jq '.retrieval_pivot_rate'
 ```
 
 The summary carries the `run_id`, the probe count, the confirmed-finding

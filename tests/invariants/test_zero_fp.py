@@ -4,9 +4,9 @@ The zero-false-positive control (the engineering spec, section 6.4): a confirmed
 only ever produced for a genuine cross-tenant observation of a manifest marker.
 """
 
-from sectum.probes import DetectionPipeline, confirmed_findings
-from sectum.spec import Substrate, Surface
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.probes import DetectionPipeline, confirmed_findings
+from sectum_ai.spec import Substrate, Surface
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _BENIGN = (
     "The weekly operations review covered staffing levels, gardening rosters, "

@@ -4,8 +4,7 @@ import json
 
 import pytest
 import structlog
-
-from sectum.spec import configure_logging, get_logger, redact_sensitive
+from sectum_ai.spec import configure_logging, get_logger, redact_sensitive
 
 
 def test_redact_drops_secrets_and_tenant_content_above_debug() -> None:

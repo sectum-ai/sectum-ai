@@ -5,11 +5,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from typer.testing import CliRunner
-
-from sectum.baseline import diff_findings, diff_runs
-from sectum.cli.app import app
-from sectum.spec import (
+from sectum_ai.baseline import diff_findings, diff_runs
+from sectum_ai.cli.app import app
+from sectum_ai.spec import (
     EvidencePack,
     Finding,
     FindingStatus,
@@ -18,6 +16,7 @@ from sectum.spec import (
     Severity,
     Surface,
 )
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

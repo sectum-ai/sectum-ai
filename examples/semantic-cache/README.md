@@ -31,15 +31,15 @@ hit it whenever:
 memory `FakeCache` with `tenant_scoped: false` (the leaky
 condition Class 4 is built to catch):
 
-1. **`sectum seed`** provisions four synthetic tenants and their
+1. **`sectum-ai seed`** provisions four synthetic tenants and their
    canary markers.
-2. **`sectum probe --probe semantic-cache-contamination`** primes
+2. **`sectum-ai probe --probe semantic-cache-contamination`** primes
    the cache as each tenant with their hard canary, then from every
    foreign tenant issues the same key lookup. A returned value that
    matches a foreign tenant's primed canary is a confirmed leak;
    the probe exits `2` on at least one such hit.
-3. **`sectum report`** assembles the tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 
@@ -59,7 +59,7 @@ adapters:
 ```
 
 ```sh
-sectum probe --probe semantic-cache-contamination --config sectum.yaml --workdir out
+sectum-ai probe --probe semantic-cache-contamination --config sectum.yaml --workdir out
 ```
 
 A real engagement runs with `tenant_scoped: true` (or absent) to

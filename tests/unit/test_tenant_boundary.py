@@ -2,17 +2,17 @@
 
 from uuid import UUID
 
-from sectum.adapters import FakeVectorStore
-from sectum.probes import TenantBoundaryProbe, confirmed_findings
-from sectum.runner import Runner
-from sectum.spec import (
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.probes import TenantBoundaryProbe, confirmed_findings
+from sectum_ai.runner import Runner
+from sectum_ai.spec import (
     Scenario,
     SharedEntity,
     Substrate,
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _TENANT = UUID(int=1)
 _USER_A = UUID(int=0xA)

@@ -11,8 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.config import (
+from sectum_ai.config import (
     DetectionConfig,
     EmbedderConfig,
     JudgeConfig,
@@ -20,15 +19,15 @@ from sectum.config import (
     build_embedder,
     build_judge,
 )
-from sectum.probes import (
+from sectum_ai.probes import (
     AnthropicJudge,
     DetectionPipeline,
     JudgeVerdict,
     OpenAIEmbeddingProvider,
     OpenAIJudge,
 )
-from sectum.probes.providers import _JUDGE_SYSTEM, _judge_user_prompt, _verdict_from_json
-from sectum.spec import (
+from sectum_ai.probes.providers import _JUDGE_SYSTEM, _judge_user_prompt, _verdict_from_json
+from sectum_ai.spec import (
     ConfigError,
     DetectionError,
     FindingStatus,
@@ -68,7 +67,7 @@ def _mock_urlopen(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> d
         captured["body"] = json.loads(request.data)
         return _FakeResponse(payload)
 
-    monkeypatch.setattr("sectum.probes.providers.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", fake_urlopen)
     return captured
 
 
@@ -138,7 +137,7 @@ def test_a_provider_http_error_becomes_a_detection_error(monkeypatch: pytest.Mon
     def fail(request: Any, timeout: float) -> _FakeResponse:
         raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("sectum.probes.providers.urllib.request.urlopen", fail)
+    monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", fail)
     with pytest.raises(DetectionError, match="HTTP 429"):
         OpenAIEmbeddingProvider("sk-test").embed("hello")
 
@@ -149,7 +148,7 @@ def test_a_provider_network_error_becomes_a_detection_error(
     def boom(request: Any, timeout: float) -> _FakeResponse:
         raise OSError("connection refused")
 
-    monkeypatch.setattr("sectum.probes.providers.urllib.request.urlopen", boom)
+    monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", boom)
     with pytest.raises(DetectionError, match="failed"):
         OpenAIJudge("sk-test").judge("text", _MARKER)
 
@@ -456,7 +455,7 @@ class _StubJudge:
 
 def _entity_substrate() -> tuple[Marker, UUID, UUID, Any]:
     """Build a minimal substrate with one foreign ENTITY_CANARY for pipeline tests."""
-    from sectum.substrate import build_substrate, default_scenario
+    from sectum_ai.substrate import build_substrate, default_scenario
 
     substrate = build_substrate(default_scenario(seed=77))
     owner = substrate.tenants[0].tenant_id

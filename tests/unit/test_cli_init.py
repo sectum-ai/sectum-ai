@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
+from sectum_ai.cli.app import app
+from sectum_ai.config import load_config
 from typer.testing import CliRunner
-
-from sectum.cli.app import app
-from sectum.config import load_config
 
 _runner = CliRunner()
 

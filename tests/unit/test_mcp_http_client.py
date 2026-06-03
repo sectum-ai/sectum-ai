@@ -16,10 +16,9 @@ import anyio
 import pytest
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_client_server_memory_streams
-
-from sectum.adapters.base import Capability
-from sectum.adapters.mcp.http import HttpMCPClient
-from sectum.spec import AdapterError
+from sectum_ai.adapters.base import Capability
+from sectum_ai.adapters.mcp.http import HttpMCPClient
+from sectum_ai.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 _URL = "http://stub.invalid/mcp"
@@ -70,7 +69,7 @@ def patched(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
                     tg.cancel_scope.cancel()
 
     monkeypatch.setattr(
-        "sectum.adapters.mcp.http.streamablehttp_client", fake_streamablehttp_client
+        "sectum_ai.adapters.mcp.http.streamablehttp_client", fake_streamablehttp_client
     )
     yield
 

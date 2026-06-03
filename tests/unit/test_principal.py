@@ -9,7 +9,7 @@ models and substrate; user-level detection/probing is a later phase.
 from collections import Counter
 from uuid import UUID
 
-from sectum.spec import (
+from sectum_ai.spec import (
     Principal,
     PrincipalKind,
     Scenario,
@@ -17,7 +17,7 @@ from sectum.spec import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _USER_A = UUID(int=0xA)
 _USER_B = UUID(int=0xB)

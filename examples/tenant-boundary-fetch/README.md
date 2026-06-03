@@ -29,17 +29,17 @@ fuzzy heuristic.
 in-memory `FakeVectorStore` with `shared_index: true` (the leaky
 condition Class 1 is built to catch):
 
-1. **`sectum seed`** provisions four synthetic tenants (Acme,
+1. **`sectum-ai seed`** provisions four synthetic tenants (Acme,
    Globex, Initech, Hooli) and their canary markers; each marker is
    anchored to a doc id in the substrate manifest.
-2. **`sectum probe --probe tenant-boundary-fetch`** enumerates each
+2. **`sectum-ai probe --probe tenant-boundary-fetch`** enumerates each
    tenant's hard-canary doc IDs from the manifest, then from every
    foreign tenant issues a fetch for them. The probe exits `2` when
    it confirms at least one cross-tenant fetch — the success
    signal on the leaky demo stack.
-3. **`sectum report`** assembles the tamper-evident evidence pack
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack
    (PDF + JSON + in-toto envelope).
-4. **`sectum verify`** independently re-checks the pack's integrity.
+4. **`sectum-ai verify`** independently re-checks the pack's integrity.
 
 ## Run it
 
@@ -80,7 +80,7 @@ adapters:
 ```
 
 ```sh
-sectum probe --probe tenant-boundary-fetch --config sectum.yaml --workdir out
+sectum-ai probe --probe tenant-boundary-fetch --config sectum.yaml --workdir out
 ```
 
 A real engagement runs the probe with `shared_index: false` to

@@ -1,10 +1,10 @@
 """Tests for Class 2 - the flagship organic entity-bleed RAG probe."""
 
-from sectum.adapters import FakeVectorStore
-from sectum.probes import RagEntityBleedProbe, confirmed_findings
-from sectum.runner import Runner, retrieval_pivot_rate
-from sectum.spec import Substrate
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.probes import RagEntityBleedProbe, confirmed_findings
+from sectum_ai.runner import Runner, retrieval_pivot_rate
+from sectum_ai.spec import Substrate
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _seeded_store(substrate: Substrate, *, shared_index: bool) -> FakeVectorStore:

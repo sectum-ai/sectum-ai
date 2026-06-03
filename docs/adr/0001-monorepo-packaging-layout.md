@@ -28,7 +28,7 @@ scaffolded:
   `sectum-ai-evidence`.
 - **The CLI is part of `core`.** It lives at `sectum/cli/` inside the
   `packages/core` source tree, and `core`'s `pyproject.toml` declares the console
-  script `sectum = "sectum.cli.app:app"`. There is no `packages/cli/`.
+  script `sectum = "sectum_ai.cli.app:app"`. There is no `packages/cli/`.
 - **PEP 420 native namespace packages.** No package ships
   `src/sectum/__init__.py`. Each distribution owns a distinct subtree under the
   shared `sectum` namespace.
@@ -45,7 +45,7 @@ scaffolded:
   directory; no top-level `sectum/__init__.py`). This ADR records that deviation
   per the engineering spec, section 1.2.
 - `import sectum` resolves to an empty namespace; all code lives under a
-  subpackage (`sectum.cli`, `sectum.spec`, and so on).
+  subpackage (`sectum_ai.cli`, `sectum_ai.spec`, and so on).
 - `core` and the CLI version and release together, which matches their intended
   cadence.
 - `sectum/cli/` is kept as a self-contained subpackage, so it could be lifted out

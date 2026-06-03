@@ -14,20 +14,19 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from sectum.evidence import (
+from sectum_ai.evidence import (
     RekorTransparencyLog,
     build_evidence_pack,
     rekor_keyring,
     verify_pack,
     verify_rekor_proof,
 )
-from sectum.evidence.rekor import (
+from sectum_ai.evidence.rekor import (
     _builtin_keyring,
     _hash_children,
     _root_from_inclusion_proof,
 )
-from sectum.spec import (
+from sectum_ai.spec import (
     EvidenceError,
     GroundTruthManifest,
     RunMetrics,
@@ -229,7 +228,7 @@ def test_record_posts_a_valid_hashedrekord_and_normalizes_the_proof(
         captured["entry"] = json.loads(request.data)
         return _FakeResponse(json.dumps({"some-uuid": _v1_api_entry()}).encode())
 
-    monkeypatch.setattr("sectum.evidence.rekor.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("sectum_ai.evidence.rekor.urllib.request.urlopen", fake_urlopen)
     proof_json = RekorTransparencyLog(rekor_url="https://rekor.example").record(_FIXTURE_DIGEST)
 
     # The submitted entry is a hashedrekord whose hash binds our digest, signed
@@ -251,7 +250,7 @@ def test_record_wraps_a_network_failure_as_an_evidence_error(
     def boom(request: Any, timeout: float) -> _FakeResponse:
         raise OSError("connection refused")
 
-    monkeypatch.setattr("sectum.evidence.rekor.urllib.request.urlopen", boom)
+    monkeypatch.setattr("sectum_ai.evidence.rekor.urllib.request.urlopen", boom)
     with pytest.raises(EvidenceError, match="Rekor request"):
         RekorTransparencyLog(rekor_url="https://rekor.example").record(_FIXTURE_DIGEST)
 
@@ -263,7 +262,7 @@ def test_verify_pack_checks_a_rekor_proof(monkeypatch: pytest.MonkeyPatch) -> No
     # token over that same digest so only the Rekor path is under test here.
     local_token = json.dumps({"tsa": "local-dev", "digest": _FIXTURE_DIGEST})
     rekor_pack = pack.model_copy(update={"rekor_proof": _PROOF, "tsa_token": local_token})
-    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
     result = verify_pack(rekor_pack, manifest, rekor_keyring=_STAGING_KEYRING)
     rekor_check = next(check for check in result.checks if check.name == "rekor-inclusion")
     assert rekor_check.ok
@@ -276,7 +275,7 @@ def test_verify_pack_fails_a_rekor_proof_when_the_digest_was_altered(
     manifest = _manifest()
     pack = build_evidence_pack(_run_result(manifest), manifest)
     rekor_pack = pack.model_copy(update={"rekor_proof": _PROOF})
-    monkeypatch.setattr("sectum.evidence.verify.attested_digest", lambda _run: "f" * 64)
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: "f" * 64)
     assert not verify_pack(rekor_pack, manifest, rekor_keyring=_STAGING_KEYRING).passed
 
 

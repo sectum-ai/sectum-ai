@@ -58,7 +58,7 @@ A verification run crosses these boundaries:
    Adapters resolve credentials from the environment or a secret manager — never
    from inline configuration. `sectum.yaml` holds references, not secrets.
 3. **Sectum AI → the evidence consumer.** An auditor or DPO receives an evidence
-   pack and verifies it with `sectum verify`, independently of Sectum AI.
+   pack and verifies it with `sectum-ai verify`, independently of Sectum AI.
 
 ## Assets
 
@@ -77,14 +77,14 @@ sensitive core: an adversary holding it knows every canary in advance.
   travels to auditors.
 - At rest, the seeded substrate (which holds the manifest, and the planted
   canary plaintexts that also appear in the corpus) can be encrypted: set
-  `security.manifest_key_env` and `sectum seed` seals it with AES-256-GCM under
+  `security.manifest_key_env` and `sectum-ai seed` seals it with AES-256-GCM under
   a key referenced from the environment. Recommended for BYOC, where the
   substrate persists on a customer machine.
 
 ### Evidence packs
 
 An evidence pack is tamper-evident. `run_digest` hashes the entire canonical run,
-findings included; the digest is timestamped; `sectum verify` recomputes the
+findings included; the digest is timestamped; `sectum-ai verify` recomputes the
 digest and rejects any pack whose run record was altered.
 
 The development-default timestamper (`LocalTimestamper`) records a digest and a

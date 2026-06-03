@@ -3,10 +3,10 @@
 #
 # This script drives the same workflow the README quickstart promises:
 #
-#   sectum seed   --workdir .sectum --config sectum.yaml
-#   sectum probe  --workdir .sectum --config sectum.yaml --output json
-#   sectum report --workdir .sectum --config sectum.yaml
-#   sectum verify .sectum/evidence.json
+#   sectum-ai seed   --workdir .sectum --config sectum.yaml
+#   sectum-ai probe  --workdir .sectum --config sectum.yaml --output json
+#   sectum-ai report --workdir .sectum --config sectum.yaml
+#   sectum-ai verify .sectum/evidence.json
 #
 # Wrapped with `asciinema rec`, the run produces a deterministic
 # `demo.cast` file that's embeddable on the website and linkable from
@@ -65,19 +65,19 @@ rm -rf .sectum
 cast=demo.cast
 asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --command "bash -c '
   # === 1. Seed a 4-tenant marker substrate (Acme, Globex, Initech, Hooli)
-  sectum seed --workdir .sectum
+  sectum-ai seed --workdir .sectum
   echo
   # === 2. Run the cross-tenant probe suite. The default in-memory
   #        substrate is deliberately leaky so the headline RPR shows
-  #        real findings; sectum probe exits 2 when it confirms
+  #        real findings; sectum-ai probe exits 2 when it confirms
   #        cross-tenant leaks, so tolerate the non-zero exit.
-  sectum probe --workdir .sectum --output json || true
+  sectum-ai probe --workdir .sectum --output json || true
   echo
   # === 3. Build the tamper-evident evidence pack (JSON + PDF + in-toto envelope).
-  sectum report --workdir .sectum
+  sectum-ai report --workdir .sectum
   echo
   # === 4. Independently verify the pack with no Sectum installation trust.
-  sectum verify .sectum/evidence.json
+  sectum-ai verify .sectum/evidence.json
   echo
   # === 5. Inspect what landed on disk.
   ls -lh .sectum/*.json .sectum/*.pdf

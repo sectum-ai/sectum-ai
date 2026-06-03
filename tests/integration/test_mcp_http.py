@@ -15,8 +15,7 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.mcp.http import HttpMCPClient
+from sectum_ai.adapters.mcp.http import HttpMCPClient
 
 pytestmark = [
     pytest.mark.live,

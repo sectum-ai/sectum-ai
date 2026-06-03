@@ -27,7 +27,7 @@ needs to apply a function across a batch and get the results back in order.
 
 ## Decision
 
-Define a minimal **`JobRunner` protocol** (`sectum.jobs`) and bind the engine to
+Define a minimal **`JobRunner` protocol** (`sectum_ai.jobs`) and bind the engine to
 it, not to any concrete orchestrator:
 
 ```python
@@ -39,7 +39,7 @@ class JobRunner(Protocol):
   the default and the only one used in tests and the demo) and `ThreadJobRunner`
   (a bounded thread pool for I/O-bound live-adapter runs). `build_job_runner(n)`
   returns serial at `n == 1`, threaded above.
-- The CLI selects concurrency with `sectum probe --max-concurrency`; the engine
+- The CLI selects concurrency with `sectum-ai probe --max-concurrency`; the engine
   calls `job_runner.map(...)` and is otherwise oblivious to the backend.
 - "Async" in section 13 is realized as a **thread pool**, not `asyncio`: the work
   is bounded I/O against adapters and the probe-detection logic is synchronous

@@ -8,8 +8,8 @@ import json
 from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
-from sectum.evidence import attested_digest, build_evidence_pack, verify_pack
-from sectum.spec import (
+from sectum_ai.evidence import attested_digest, build_evidence_pack, verify_pack
+from sectum_ai.spec import (
     SCHEMA_VERSION,
     ControlMapping,
     Finding,

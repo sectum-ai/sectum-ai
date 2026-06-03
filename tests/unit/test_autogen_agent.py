@@ -15,10 +15,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.agent.autogen import AutoGenAgent
-from sectum.adapters.base import AgentAdapter, Capability
-from sectum.spec import AdapterError
+from sectum_ai.adapters.agent.autogen import AutoGenAgent
+from sectum_ai.adapters.base import AgentAdapter, Capability
+from sectum_ai.spec import AdapterError
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)

@@ -2,7 +2,7 @@
 
 These artifacts were produced by the runnable end-to-end examples in
 [`examples/`](https://github.com/sectum-ai/sectum-ai/tree/main/examples) — they
-are real outputs of `sectum report` and `sectum erasure`, checked in so a
+are real outputs of `sectum-ai report` and `sectum-ai erasure`, checked in so a
 prospective auditor, DPO, or CISO can see what they get without installing
 anything.
 
@@ -29,10 +29,10 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 ## Verifying these packs
 
-Every pack here verifies under the open-source `sectum verify`:
+Every pack here verifies under the open-source `sectum-ai verify`:
 
 ```sh
-uv run sectum verify docs/samples/erasure-attestation-evidence.json
+uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json
 ```
 
 A `VERIFIED` outcome means the whole-pack attested digest matches the
@@ -60,9 +60,9 @@ cp examples/erasure-attestation/out/erasure-attestation.intoto.json docs/samples
 # Re-seed into a separate workdir so the happy-path artifacts survive,
 # then run erasure with --soft-delete to reproduce the failure mode.
 mkdir -p examples/erasure-attestation/out-residual
-uv run sectum seed --workdir examples/erasure-attestation/out-residual \
+uv run sectum-ai seed --workdir examples/erasure-attestation/out-residual \
   --config examples/erasure-attestation/sectum.yaml
-uv run sectum erasure \
+uv run sectum-ai erasure \
   --workdir examples/erasure-attestation/out-residual \
   --target-tenant "Acme Robotics" \
   --soft-delete

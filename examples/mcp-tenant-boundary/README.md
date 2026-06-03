@@ -24,14 +24,14 @@ tool-call surface.
 
 `run.sh` runs the Class 7 probe end to end:
 
-1. **`sectum seed`** provisions four synthetic tenants and their canary markers.
-2. **`sectum probe --probe agent-tool-hijack`** provisions each tenant's hard
+1. **`sectum-ai seed`** provisions four synthetic tenants and their canary markers.
+2. **`sectum-ai probe --probe agent-tool-hijack`** provisions each tenant's hard
    canary as an MCP resource, then from every other tenant issues two lookups
    for it — a direct lookup (confused-deputy) and a lookup carrying the owner's
    token (token-passthrough) — against an MCP server with both flaws switched
    on.
-3. **`sectum report`** assembles a tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles a tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 
@@ -50,8 +50,8 @@ leak on each:
 ran 1 probe: 24 confirmed cross-tenant findings
 ```
 
-`sectum probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum verify` confirms the evidence pack is intact.
+`sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
+`sectum-ai verify` confirms the evidence pack is intact.
 
 A tenant-scoped MCP server — one that binds every tool call to the
 authenticated caller and ignores caller-supplied tokens — yields zero findings.

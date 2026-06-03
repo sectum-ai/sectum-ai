@@ -14,10 +14,9 @@ from uuid import UUID
 
 import chromadb
 import pytest
-
-from sectum.adapters.base import Capability
-from sectum.adapters.vector.chroma import ChromaVectorStore
-from sectum.spec import CorpusDocument
+from sectum_ai.adapters.base import Capability
+from sectum_ai.adapters.vector.chroma import ChromaVectorStore
+from sectum_ai.spec import CorpusDocument
 
 pytestmark = pytest.mark.integration
 

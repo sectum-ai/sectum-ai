@@ -1,6 +1,6 @@
 # Configuration
 
-`sectum init` scaffolds a `sectum.yaml` configuration file; every CLI command
+`sectum-ai init` scaffolds a `sectum.yaml` configuration file; every CLI command
 that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`) accepts
 `--config sectum.yaml` to read its defaults from that
 file. Explicit CLI flags — for example `--seed` or `--workdir` — always
@@ -40,7 +40,7 @@ Settings that drive substrate generation.
 |---|---|---|---|
 | `seed` | int | `2026` | Drives every deterministic generator. |
 | `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
-| `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum seed`; lower it for a faster run. |
+| `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
 | `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
@@ -55,7 +55,7 @@ takes a `kind` plus any backend-specific fields. A family that is omitted
 defaults to a plain (non-leaky) fake.
 
 The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
-`memory`, `rag`, `observability`, and `agent` — and `sectum probe` drives all
+`memory`, `rag`, `observability`, and `agent` — and `sectum-ai probe` drives all
 of them through the runner. Other family names parse successfully but are not
 consumed by the CLI.
 
@@ -136,11 +136,11 @@ No live memory adapter is wired into the CLI resolver yet.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `timestamper` | `local` \| `rfc3161` | `local` | `local` records a wall-clock time with no external anchor. `rfc3161` submits the run digest to a Time-Stamp Authority (requires the `sectum-ai-evidence[rfc3161]` extra). |
-| `tsa_url` | str | — | (`rfc3161` only) URL of the Time-Stamp Authority; defaults to FreeTSA when unset. `sectum report --tsa <url>` overrides it. |
-| `rekor` | bool | `false` | Also record the run digest in a Sigstore Rekor transparency log (requires the `sectum-ai-evidence[rekor]` extra). `sectum report --rekor` enables it for one run. |
+| `tsa_url` | str | — | (`rfc3161` only) URL of the Time-Stamp Authority; defaults to FreeTSA when unset. `sectum-ai report --tsa <url>` overrides it. |
+| `rekor` | bool | `false` | Also record the run digest in a Sigstore Rekor transparency log (requires the `sectum-ai-evidence[rekor]` extra). `sectum-ai report --rekor` enables it for one run. |
 | `rekor_url` | str | — | URL of the Sigstore Rekor instance; defaults to the public-good instance when unset. |
 
-`sectum verify` checks an RFC 3161 token against a root pinned independently of
+`sectum-ai verify` checks an RFC 3161 token against a root pinned independently of
 the pack: it ships the public FreeTSA leaf and root built in, and
 `--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA.
 Likewise it checks a Rekor inclusion proof against log keys pinned built in, and
@@ -151,7 +151,7 @@ Likewise it checks a Rekor inclusion proof against log keys pinned built in, and
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `manifest_key_env` | str | — | Name of the environment variable holding a base64-encoded 32-byte AES-256 key. When set, `sectum seed` seals the substrate (and its ground-truth manifest) at rest as `substrate.json.enc` (requires the `sectum-ai[encryption]` extra). |
+| `manifest_key_env` | str | — | Name of the environment variable holding a base64-encoded 32-byte AES-256 key. When set, `sectum-ai seed` seals the substrate (and its ground-truth manifest) at rest as `substrate.json.enc` (requires the `sectum-ai[encryption]` extra). |
 
 The substrate holds the canary plaintexts, so sealing it at rest is recommended
 for BYOC runs. Generate a key with
@@ -192,7 +192,7 @@ adapters:
 
 ```sh
 export SECTUM_PGVECTOR_DSN=postgresql://user:pass@host/db
-sectum probe --config sectum.yaml
+sectum-ai probe --config sectum.yaml
 ```
 
 A missing or empty environment variable produces a `ConfigError`
@@ -220,15 +220,15 @@ adapters:
 ```sh
 export SECTUM_PGVECTOR_DSN=postgresql://...
 docker compose up -d pgvector redis
-sectum seed --config sectum.yaml
-sectum probe --config sectum.yaml
+sectum-ai seed --config sectum.yaml
+sectum-ai probe --config sectum.yaml
 ```
 
 ## Schema reference
 
-The schema is implemented as pydantic models in `sectum.config` —
+The schema is implemented as pydantic models in `sectum_ai.config` —
 `SectumConfig`, `ScenarioConfig`, `AdapterConfig`, `EvidenceConfig` — and the
-adapter resolver is `sectum.config.build_adapters`. `AdapterConfig` accepts
+adapter resolver is `sectum_ai.config.build_adapters`. `AdapterConfig` accepts
 extra fields (the backend-specific `host`, `port`, `dsn_env`, leak knobs);
 the per-family `build_*` functions read and *type-check* the keys they consume.
 Because `AdapterConfig` is `extra="allow"`, an unrecognised or misspelled key —

@@ -5,8 +5,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-
-from sectum.evidence import (
+from sectum_ai.evidence import (
     PAYLOAD_TYPE,
     build_dsse_envelope,
     build_evidence_pack,
@@ -14,7 +13,7 @@ from sectum.evidence import (
     pae,
     verify_dsse_envelope,
 )
-from sectum.spec import (
+from sectum_ai.spec import (
     EvidenceError,
     EvidencePack,
     GroundTruthManifest,

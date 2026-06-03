@@ -55,5 +55,5 @@ Repository = "https://github.com/sectum-ai/sectum-ai"
 sectum-ai-spec = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/sectum"]
+only-include = ["src/sectum_ai"]
 sources = ["src"]

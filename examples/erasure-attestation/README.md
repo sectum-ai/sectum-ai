@@ -18,12 +18,12 @@ A Data Protection Officer needs evidence, not assurances.
 
 `run.sh` runs the erasure-verification workflow:
 
-1. **`sectum seed`** provisions the marker substrate.
-2. **`sectum erasure --target-tenant "Acme Robotics"`** confirms the tenant's
+1. **`sectum-ai seed`** provisions the marker substrate.
+2. **`sectum-ai erasure --target-tenant "Acme Robotics"`** confirms the tenant's
    canary markers are present in the vector store, triggers erasure, re-scans
    the vector store for residual markers, and writes an **attestation pack**:
    `erasure-attestation.pdf` (for the DPO) and `erasure-evidence.json`.
-3. **`sectum verify`** independently re-checks the attestation's integrity.
+3. **`sectum-ai verify`** independently re-checks the attestation's integrity.
 
 The probe verifies erasure across **seven surfaces** — the vector store,
 observability / tracing, agent / long-term memory, semantic / application cache,
@@ -57,7 +57,7 @@ ERASURE VERIFIED: no residual marker on vector_db, tracing, agent_memory,
 semantic_cache, model_adapter, search_index, eval_set.
 ```
 
-`sectum verify` then confirms the attestation pack is intact.
+`sectum-ai verify` then confirms the attestation pack is intact.
 
 ## See a failing erasure
 
@@ -65,7 +65,7 @@ After `./run.sh` has populated `out/`, model a store that only soft-deletes —
 the common, silent Article 17 failure — from this directory:
 
 ```sh
-uv run sectum erasure --workdir out --soft-delete
+uv run sectum-ai erasure --workdir out --soft-delete
 ```
 
 The residual markers are itemized per surface, the run reports `ERASURE FAILED`,
@@ -74,5 +74,5 @@ and it exits with code 2.
 ## Tamper-evidence
 
 The attestation is tamper-evident. Editing `erasure-evidence.json` after the
-fact makes `sectum verify` fail with a clear reason and exit code 4 — so an
+fact makes `sectum-ai verify` fail with a clear reason and exit code 4 — so an
 attestation that verifies is an attestation that has not been altered.

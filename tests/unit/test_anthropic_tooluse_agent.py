@@ -17,10 +17,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
-from sectum.adapters.base import AgentAdapter, Capability
-from sectum.spec import AdapterError
+from sectum_ai.adapters.agent.anthropic_tooluse import AnthropicToolUseAgent
+from sectum_ai.adapters.base import AgentAdapter, Capability
+from sectum_ai.spec import AdapterError
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)

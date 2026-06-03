@@ -2,10 +2,10 @@
 
 from uuid import UUID
 
-from sectum.adapters import FakeModel
-from sectum.probes import LoraCrossTenantProbe, confirmed_findings
-from sectum.runner import Runner
-from sectum.spec import (
+from sectum_ai.adapters import FakeModel
+from sectum_ai.probes import LoraCrossTenantProbe, confirmed_findings
+from sectum_ai.runner import Runner
+from sectum_ai.spec import (
     FindingStatus,
     Scenario,
     SharedEntity,
@@ -13,7 +13,7 @@ from sectum.spec import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _TENANT = UUID(int=1)
 _USER_A = UUID(int=0xA)

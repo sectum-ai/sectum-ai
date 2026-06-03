@@ -9,10 +9,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters.base import Capability
-from sectum.adapters.mcp.client import StdioMCPClient
-from sectum.spec import AdapterError
+from sectum_ai.adapters.base import Capability
+from sectum_ai.adapters.mcp.client import StdioMCPClient
+from sectum_ai.spec import AdapterError
 
 _TENANT = UUID(int=0xA)
 _STUB = str(Path(__file__).parent / "mcp_server_stub.py")

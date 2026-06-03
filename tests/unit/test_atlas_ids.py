@@ -11,7 +11,7 @@ new id ships. It does not - and cannot - judge renames or fit.
 import re
 from typing import Any, cast
 
-import sectum.probes as probes
+import sectum_ai.probes as probes
 
 # The ids verified against the MISP galaxy ATLAS mirror on 2026-06-01
 # (docs/adr/0009-atlas-technique-review-process.md, "Validation log"). Adding an

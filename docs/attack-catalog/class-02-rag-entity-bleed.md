@@ -28,7 +28,7 @@ on a shared index with no isolation, 0% on a per-tenant-namespace store.
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
 Retrieval-Pivot Rate rises with embedding strength. When a scenario lists more
-than one `embedding_models` entry, `sectum probe` runs the probe once per model
+than one `embedding_models` entry, `sectum-ai probe` runs the probe once per model
 and reports a per-model rate (`retrieval_pivot_rate_by_model`).
 
 Each entry is resolved to an embedding model:

@@ -10,15 +10,14 @@ from uuid import UUID
 
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-
-from sectum.spec import (
+from sectum_ai.spec import (
     Scenario,
     SharedEntity,
     SyntheticTenantSpec,
     canonical_hash,
     to_canonical_json,
 )
-from sectum.substrate import build_substrate
+from sectum_ai.substrate import build_substrate
 
 _seeds = st.integers(min_value=0, max_value=2**31 - 1)
 

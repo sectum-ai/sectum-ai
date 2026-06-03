@@ -52,11 +52,11 @@ Copy `sectum.yaml.example` to `/etc/sectum/sectum.yaml` and edit:
   starting point; reproducible).
 
 Scaffold a config, then validate it parses by seeding into a scratch workdir you
-discard afterwards (`sectum seed` has no dry-run mode):
+discard afterwards (`sectum-ai seed` has no dry-run mode):
 
 ```sh
-sectum init --output /etc/sectum/sectum.yaml.draft
-sectum seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum.yaml
+sectum-ai init --output /etc/sectum/sectum.yaml.draft
+sectum-ai seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum.yaml
 rm -rf /tmp/sectum-validate
 ```
 
@@ -74,10 +74,10 @@ The cron fires at 03:00 on the 1st of every month. The runner:
 1. Drops the existing `.sectum/` work directory (we want a fresh
    substrate every cycle — running against the same canaries month
    over month would let an attacker game the markers).
-2. `sectum seed` — provisions synthetic tenants + plants canaries.
-3. `sectum probe --output json` — runs the suite; pipes the run
+2. `sectum-ai seed` — provisions synthetic tenants + plants canaries.
+3. `sectum-ai probe --output json` — runs the suite; pipes the run
    summary into the log so it's grepable for alerting.
-4. `sectum report` — builds the evidence pack
+4. `sectum-ai report` — builds the evidence pack
    (`evidence.json` + `audit-pack.pdf` + `attestation.intoto.json`,
    plus the RFC 3161 timestamp + optional Sigstore Rekor inclusion
    proof).
@@ -94,7 +94,7 @@ A typical run finishes in 5-15 minutes depending on adapter count.
 - An identical email to your Sectum operator (CC) so they know the
   run landed.
 - Your auditor / DPO can independently verify the pack with the OSS
-  `sectum verify` command — no Sectum installation needed beyond
+  `sectum-ai verify` command — no Sectum installation needed beyond
   `pip install sectum-ai`.
 
 ## Failure modes
@@ -103,8 +103,8 @@ A typical run finishes in 5-15 minutes depending on adapter count.
 |---|---|---|
 | `HTTP 401` from upload | Bearer secret expired or revoked | Re-fetch from the dashboard; rotate the env var |
 | `HTTP 503` from upload | Sectum Cloud is bootstrapping or the secret has not been populated | Retry in 5 minutes; the runner is idempotent |
-| `sectum probe` exits 2 | Confirmed cross-tenant findings on the stack | Expected behaviour — the pack still uploads and your auditor sees the findings |
-| `sectum verify` exits 4 (your auditor's check) | Pack was tampered with in transit | Re-run the cycle; if it happens twice, contact us |
+| `sectum-ai probe` exits 2 | Confirmed cross-tenant findings on the stack | Expected behaviour — the pack still uploads and your auditor sees the findings |
+| `sectum-ai verify` exits 4 (your auditor's check) | Pack was tampered with in transit | Re-run the cycle; if it happens twice, contact us |
 
 ## Source
 

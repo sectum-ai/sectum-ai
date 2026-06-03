@@ -1,6 +1,6 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
-from sectum.adapters import (
+from sectum_ai.adapters import (
     FakeBackup,
     FakeCache,
     FakeEvalSet,
@@ -10,10 +10,10 @@ from sectum.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum.adapters.base import ObservabilityAdapter
-from sectum.probes import ErasureProbe
-from sectum.spec import MarkerType, Substrate, Surface
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters.base import ObservabilityAdapter
+from sectum_ai.probes import ErasureProbe
+from sectum_ai.spec import MarkerType, Substrate, Surface
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _seeded_store(substrate: Substrate, *, soft_delete: bool) -> FakeVectorStore:
@@ -158,8 +158,8 @@ def test_erasure_reports_a_caveat_when_observability_has_no_erasure_api() -> Non
     # distinct from an erasure *failure* (spec §7 Class 11 hiding place #8).
     from uuid import UUID
 
-    from sectum.adapters.base import ObservabilityAdapter, TraceHit
-    from sectum.spec import ErasureUnsupported
+    from sectum_ai.adapters.base import ObservabilityAdapter, TraceHit
+    from sectum_ai.spec import ErasureUnsupported
 
     class _NoErasureObservability(ObservabilityAdapter):
         def __init__(self, seeded: FakeObservability) -> None:
@@ -426,8 +426,8 @@ def _no_erasure_observability(substrate: Substrate) -> ObservabilityAdapter:
     """A FakeObservability whose delete() raises ErasureUnsupported (caveat path)."""
     from uuid import UUID
 
-    from sectum.adapters.base import TraceHit
-    from sectum.spec import ErasureUnsupported
+    from sectum_ai.adapters.base import TraceHit
+    from sectum_ai.spec import ErasureUnsupported
 
     class _NoErasureObservability(ObservabilityAdapter):
         def __init__(self, seeded: FakeObservability) -> None:
@@ -451,7 +451,7 @@ def test_attestable_with_caveat_finding_is_unverified_not_confirmed() -> None:
     # a confirmed cross-tenant leak. It must be UNVERIFIED so the false-positive
     # control (confirmed-count, sectum diff/baseline gates) never treats a
     # no-per-tenant-erasure-API backend as a confirmed finding (spec §7 #8).
-    from sectum.spec import FindingStatus
+    from sectum_ai.spec import FindingStatus
 
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id
@@ -475,8 +475,8 @@ def test_onboarding_a_caveat_backend_is_not_a_diff_regression() -> None:
     # attestation that differs from a clean baseline only by an added
     # no-per-tenant-erasure-API surface must NOT read as a regression in
     # `sectum diff` (no newly-confirmed finding, no confirmed-count bump).
-    from sectum.baseline import diff_findings
-    from sectum.probes import confirmed_findings
+    from sectum_ai.baseline import diff_findings
+    from sectum_ai.probes import confirmed_findings
 
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id

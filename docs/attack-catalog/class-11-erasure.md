@@ -30,7 +30,7 @@ hiding place #8). It is never a clean pass — the data genuinely remains.
 
 ## Output
 
-`sectum erasure` produces an attestation pack — a PDF for the Data Protection
+`sectum-ai erasure` produces an attestation pack — a PDF for the Data Protection
 Officer and a JSON evidence pack — control-mapped to GDPR Articles 17 and 32.
 
 ## Status

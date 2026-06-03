@@ -3,8 +3,7 @@
 from collections.abc import Callable
 
 import pytest
-
-from sectum.config import (
+from sectum_ai.config import (
     AdapterConfig,
     _optional_str,
     _required_str,
@@ -18,7 +17,7 @@ from sectum.config import (
     build_rag,
     build_vector_store,
 )
-from sectum.spec import ConfigError
+from sectum_ai.spec import ConfigError
 
 _BUILDERS: tuple[Callable[[AdapterConfig], object], ...] = (
     build_vector_store,

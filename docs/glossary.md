@@ -70,7 +70,7 @@ manifest, an RFC 3161 timestamp token, a Sigstore Rekor inclusion proof
 (when enabled), control mappings (SOC 2 / ISO 27001 / GDPR / EU AI Act /
 HIPAA / NIST AI RMF / OWASP), a machine-readable `evidence.json`, and a
 human-readable [audit-pack PDF](https://github.com/sectum-ai/sectum-ai/tree/main/docs/samples). The pack is
-independently verifiable by `sectum verify`.
+independently verifiable by `sectum-ai verify`.
 
 ## BYOC (bring-your-own-cloud)
 A deployment mode where the `sectum` CLI runs inside the customer's

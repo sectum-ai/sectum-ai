@@ -11,8 +11,8 @@ from collections.abc import Callable
 from typing import Any, NoReturn
 from uuid import UUID
 
-from sectum.adapters.base import Capability, ObservabilityAdapter
-from sectum.adapters.observability.otel import OtelObservability
+from sectum_ai.adapters.base import Capability, ObservabilityAdapter
+from sectum_ai.adapters.observability.otel import OtelObservability
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
@@ -179,9 +179,8 @@ import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 
 import pytest  # noqa: E402
-
-from sectum.adapters.observability.otel import _HttpOtelTraceStore  # noqa: E402
-from sectum.spec import AdapterError, ErasureUnsupported  # noqa: E402
+from sectum_ai.adapters.observability.otel import _HttpOtelTraceStore  # noqa: E402
+from sectum_ai.spec import AdapterError, ErasureUnsupported  # noqa: E402
 
 
 def _http_store() -> _HttpOtelTraceStore:

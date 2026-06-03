@@ -11,8 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
-from sectum.adapters.base import Capability, ObservabilityAdapter
-from sectum.adapters.observability.langsmith import LangSmithObservability
+from sectum_ai.adapters.base import Capability, ObservabilityAdapter
+from sectum_ai.adapters.observability.langsmith import LangSmithObservability
 
 _PREFIX = "sectum"
 _TENANT_A = UUID(int=0xA)

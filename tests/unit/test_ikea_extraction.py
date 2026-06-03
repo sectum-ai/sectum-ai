@@ -1,10 +1,10 @@
 """Tests for Class 10 - the IKEA-style implicit benign extraction probe."""
 
-from sectum.adapters import FakeVectorStore
-from sectum.probes import IkeaExtractionProbe, confirmed_findings
-from sectum.runner import Runner
-from sectum.spec import Substrate
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.probes import IkeaExtractionProbe, confirmed_findings
+from sectum_ai.runner import Runner
+from sectum_ai.spec import Substrate
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _seeded_store(substrate: Substrate, *, shared_index: bool) -> FakeVectorStore:

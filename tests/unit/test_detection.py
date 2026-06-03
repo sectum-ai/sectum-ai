@@ -2,8 +2,8 @@
 
 from uuid import UUID
 
-from sectum.probes import DetectionPipeline, FakeJudge, confirmed_findings, dedupe_findings
-from sectum.spec import (
+from sectum_ai.probes import DetectionPipeline, FakeJudge, confirmed_findings, dedupe_findings
+from sectum_ai.spec import (
     FindingStatus,
     GroundTruthManifest,
     Marker,
@@ -14,7 +14,7 @@ from sectum.spec import (
     Surface,
     SyntheticTenantSpec,
 )
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _substrate() -> Substrate:
@@ -338,7 +338,7 @@ def test_same_marker_same_surface_same_probe_collapses() -> None:
 
 
 def test_cosine_is_a_true_cosine_bounded_by_one() -> None:
-    from sectum.probes.detection import _cosine
+    from sectum_ai.probes.detection import _cosine
 
     # Identical direction is 1.0 regardless of magnitude. A bare dot product would
     # return 25.0 here and overflow Finding.confidence's 0..1 bound.

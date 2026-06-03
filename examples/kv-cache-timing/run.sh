@@ -22,30 +22,30 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$here/../.." && pwd)"
 out="$here/out"
 
-sectum() { uv run --quiet --project "$repo_root" sectum "$@"; }
+sectum-ai() { uv run --quiet --project "$repo_root" sectum-ai "$@"; }
 
 rm -rf "$out"
 mkdir -p "$out"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum seed --workdir "$out"
+sectum-ai seed --workdir "$out"
 
 echo
 echo "==> 2/4  Probe the KV cache (paired primed-vs-control timing trials)"
-# 'sectum probe' exits 2 when it confirms cross-tenant leaks - expected on
+# 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on
 # the leaky-cache fake model in the demo config, so tolerate the non-zero
 # exit. The statistical run gates each tenant pair on a Welch t-test; a
 # confirmed Class 5 finding is one whose gap is significant (p < 0.01),
 # large (Cohen's d >= 0.8), and directional (primed faster).
-sectum probe --workdir "$out" --probe kv-cache-timing || true
+sectum-ai probe --workdir "$out" --probe kv-cache-timing || true
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
-sectum report --workdir "$out"
+sectum-ai report --workdir "$out"
 
 echo
 echo "==> 4/4  Independently verify the evidence pack"
-sectum verify "$out/evidence.json"
+sectum-ai verify "$out/evidence.json"
 
 echo
 echo "Artifacts written to: $out"

@@ -46,7 +46,7 @@ This table will be updated as the project matures toward a `1.0` release.
 
 In scope: the packages in this repository — `sectum-ai`, `sectum-ai-spec`,
 `sectum-ai-probes`, `sectum-ai-adapters`, `sectum-ai-evidence` — and the
-evidence-chain verification path (`sectum verify`).
+evidence-chain verification path (`sectum-ai verify`).
 
 Out of scope: third-party dependencies (report those upstream), and any system
 that Sectum AI is *pointed at* during a verification run — those belong to their

@@ -6,10 +6,8 @@ from uuid import UUID
 
 import pytest
 import typer
-from typer.testing import CliRunner
-
-from sectum.cli.app import _handle_typed_errors, _load_run, _load_substrate, app
-from sectum.spec import (
+from sectum_ai.cli.app import _handle_typed_errors, _load_run, _load_substrate, app
+from sectum_ai.spec import (
     AdapterError,
     ConfigError,
     EvidenceError,
@@ -20,6 +18,7 @@ from sectum.spec import (
     Severity,
     Surface,
 )
+from typer.testing import CliRunner
 
 _runner = CliRunner()
 

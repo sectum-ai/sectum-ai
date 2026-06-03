@@ -45,12 +45,12 @@ Ship **both** engines behind a selector, with **reportlab as the default**.
   `importorskip`s).
 - Both engines render the **same content** — the methodology narrative, control
   formatting, and coverage disclaimer are shared — so a pack asserts identical
-  facts whichever engine produced it. The `sectum report --pdf-engine` flag
+  facts whichever engine produced it. The `sectum-ai report --pdf-engine` flag
   selects the engine at the CLI.
 
 ## Consequences
 
-- The default `sectum report` and CI stay pure-Python and light; nothing about
+- The default `sectum-ai report` and CI stay pure-Python and light; nothing about
   the base install changes.
 - Users who want the richer auditor layout opt in with one extra and the
   `--pdf-engine weasyprint` flag (or `engine=` in the API).

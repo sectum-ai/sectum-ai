@@ -35,15 +35,15 @@ adversarial detection do not catch it.
 substrate's shared vector store (the leaky condition Class 10 is
 built to catch):
 
-1. **`sectum seed`** provisions four synthetic tenants and their
+1. **`sectum-ai seed`** provisions four synthetic tenants and their
    canary markers.
-2. **`sectum probe --probe ikea-extraction`** runs the benign
+2. **`sectum-ai probe --probe ikea-extraction`** runs the benign
    multi-turn sequence from every tenant for each shared entity. A
    finding lands on any turn whose retrieved context carries a
    canary owned by a *different* principal; the probe exits `2`
    when at least one turn does.
-3. **`sectum report`** assembles the tamper-evident evidence pack.
-4. **`sectum verify`** independently re-checks the pack.
+3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
+4. **`sectum-ai verify`** independently re-checks the pack.
 
 ## Run it
 

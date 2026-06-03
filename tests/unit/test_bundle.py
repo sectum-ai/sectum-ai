@@ -6,8 +6,7 @@ import zipfile
 from datetime import UTC, datetime
 
 import pytest
-
-from sectum.evidence import (
+from sectum_ai.evidence import (
     EVIDENCE_MEMBER,
     Check,
     VerificationResult,
@@ -17,7 +16,7 @@ from sectum.evidence import (
     to_in_toto_statement,
     verify_bundle,
 )
-from sectum.spec import (
+from sectum_ai.spec import (
     EvidencePack,
     GroundTruthManifest,
     RunMetrics,

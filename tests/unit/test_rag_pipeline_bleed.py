@@ -1,11 +1,11 @@
 """Tests for the Class 2 RAG-pipeline-end entity-bleed probe."""
 
-from sectum.adapters import FakeRAGPipeline
-from sectum.adapters.base import Capability
-from sectum.probes import RagPipelineBleedProbe, confirmed_findings
-from sectum.runner import Runner
-from sectum.spec import Substrate
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters import FakeRAGPipeline
+from sectum_ai.adapters.base import Capability
+from sectum_ai.probes import RagPipelineBleedProbe, confirmed_findings
+from sectum_ai.runner import Runner
+from sectum_ai.spec import Substrate
+from sectum_ai.substrate import build_substrate, default_scenario
 
 
 def _seeded_rag(substrate: Substrate, *, shared_index: bool) -> FakeRAGPipeline:

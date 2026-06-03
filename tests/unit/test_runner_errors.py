@@ -3,11 +3,10 @@
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters import FakeVectorStore
-from sectum.runner import Runner, retrieval_pivot_rate
-from sectum.spec import AdapterError, ProbeStep
-from sectum.substrate import build_substrate, default_scenario
+from sectum_ai.adapters import FakeVectorStore
+from sectum_ai.runner import Runner, retrieval_pivot_rate
+from sectum_ai.spec import AdapterError, ProbeStep
+from sectum_ai.substrate import build_substrate, default_scenario
 
 _ACTIONS = (
     "vector.query",

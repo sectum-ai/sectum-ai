@@ -205,7 +205,7 @@ def make_openai_assistants() -> tuple[Any, str]:
 
     Requires ``pip install sectum-ai-adapters[openai-assistants]``.
     """
-    from sectum.adapters.agent._openai_assistants_live import LiveAssistantsClient
+    from sectum_ai.adapters.agent._openai_assistants_live import LiveAssistantsClient
 
     def lookup(query: str) -> str:
         """Look up an entity in the tenant's namespace."""
@@ -255,7 +255,7 @@ def make_anthropic_tooluse() -> Any:
 
     Requires ``pip install sectum-ai-adapters[anthropic-tooluse]``.
     """
-    from sectum.adapters.agent._anthropic_tooluse_live import LiveAnthropicClient
+    from sectum_ai.adapters.agent._anthropic_tooluse_live import LiveAnthropicClient
 
     def lookup(query: str) -> str:
         """Look up an entity in the tenant's namespace."""

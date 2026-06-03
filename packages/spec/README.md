@@ -26,8 +26,8 @@ Every model is also published as a standalone JSON Schema document under
 tooling can validate Sectum artifacts without importing Python:
 
 ```python
-from sectum.spec import json_schemas
-from sectum.spec.schema import SCHEMA_DIR  # the committed, packaged artifacts
+from sectum_ai.spec import json_schemas
+from sectum_ai.spec.schema import SCHEMA_DIR  # the committed, packaged artifacts
 
 finding_schema = json_schemas()["Finding"]
 ```

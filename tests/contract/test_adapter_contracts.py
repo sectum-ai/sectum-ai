@@ -4,8 +4,7 @@ its capabilities honestly (the engineering spec, section 15)."""
 from uuid import UUID
 
 import pytest
-
-from sectum.adapters import (
+from sectum_ai.adapters import (
     Adapter,
     AdapterFamily,
     AdapterRegistry,
@@ -32,7 +31,7 @@ from sectum.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum.spec import AdapterError, CorpusDocument
+from sectum_ai.spec import AdapterError, CorpusDocument
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)

@@ -41,7 +41,7 @@ boundaries and non-goals.
 ## The evidence layer is fully open source
 
 The marker substrate, attack catalog, adapters, evidence chain, and the
-independent `sectum verify` are Apache-2.0 — anyone can reproduce a run and
+independent `sectum-ai verify` are Apache-2.0 — anyone can reproduce a run and
 verify a Sectum AI evidence pack without the project. See
 [ADR-0002](docs/adr/0002-evidence-layer-oss-boundary.md).
 
@@ -51,7 +51,7 @@ verify a Sectum AI evidence pack without the project. See
 |---|---|---|
 | License | Apache-2.0 | Commercial |
 | Marker substrate, attack catalog, adapters | ✓ | ✓ |
-| Evidence chain + independent `sectum verify` | ✓ | ✓ |
+| Evidence chain + independent `sectum-ai verify` | ✓ | ✓ |
 | `sectum` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `baseline` / `diff` / `adapters`) | ✓ | ✓ |
 | Continuous scheduled runs against a customer stack | — | ✓ |
 | Attestation hosting and managed audit-pack delivery | — | ✓ |
@@ -59,7 +59,7 @@ verify a Sectum AI evidence pack without the project. See
 | Auditor / DPO channel: pre-curated evidence packages | — | ✓ |
 
 Both share the same evidence format. An evidence pack produced by Sectum Cloud
-verifies under the open-source `sectum verify`, by design — there is no
+verifies under the open-source `sectum-ai verify`, by design — there is no
 proprietary verification path.
 
 ## Repository layout
@@ -68,11 +68,11 @@ A `uv` workspace of five publishable packages:
 
 | Package (PyPI) | Import | Purpose |
 |---|---|---|
-| `sectum-ai` | `sectum` (+ `sectum.cli`) | Core substrate runner and the `sectum` CLI |
-| `sectum-ai-spec` | `sectum.spec` | Pydantic data models and JSON Schema |
-| `sectum-ai-probes` | `sectum.probes` | The multi-tenant leakage attack catalog |
-| `sectum-ai-adapters` | `sectum.adapters` | Connectors to real systems |
-| `sectum-ai-evidence` | `sectum.evidence` | Evidence chain, verification, audit packs |
+| `sectum-ai` | `sectum` (+ `sectum_ai.cli`) | Core substrate runner and the `sectum` CLI |
+| `sectum-ai-spec` | `sectum_ai.spec` | Pydantic data models and JSON Schema |
+| `sectum-ai-probes` | `sectum_ai.probes` | The multi-tenant leakage attack catalog |
+| `sectum-ai-adapters` | `sectum_ai.adapters` | Connectors to real systems |
+| `sectum-ai-evidence` | `sectum_ai.evidence` | Evidence chain, verification, audit packs |
 
 ## Quickstart
 
@@ -93,10 +93,10 @@ erasure-attestation walkthrough.
 Or drive the `sectum` CLI directly:
 
 ```sh
-uv run sectum seed   --workdir .sectum
-uv run sectum probe  --workdir .sectum
-uv run sectum report --workdir .sectum
-uv run sectum verify .sectum/evidence.json
+uv run sectum-ai seed   --workdir .sectum
+uv run sectum-ai probe  --workdir .sectum
+uv run sectum-ai report --workdir .sectum
+uv run sectum-ai verify .sectum/evidence.json
 ```
 
 For richer configuration (live vector store, real embedder/judge, Rekor
