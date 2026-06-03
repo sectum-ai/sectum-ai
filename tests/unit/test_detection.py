@@ -369,3 +369,95 @@ def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
     findings = pipeline.detect(observer, f"context {entity.plaintext} trailer", Surface.VECTOR_DB)
     assert findings  # threshold 0.0 lets the candidate through to the judge
     assert all(0.0 <= finding.confidence <= 1.0 for finding in findings)
+
+
+# --- SECRET_CANARY format detector (the spec, section 6.3: "exact + format") --
+#
+# Every secret value used below is generated at runtime from the seeded
+# substrate (or built by string concatenation), never written as a literal, so
+# nothing here trips secret scanning.
+
+
+def _foreign_secrets(substrate: Substrate, observer: UUID) -> list[Marker]:
+    return [
+        marker
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.SECRET_CANARY and marker.owner_tenant_id != observer
+    ]
+
+
+def _secret_shape(plaintext: str) -> str:
+    if plaintext.startswith("sk-"):
+        return "sk-"
+    if plaintext.startswith("AKIA"):
+        return "AKIA"
+    return "SSN"
+
+
+def test_secret_format_detects_all_three_credential_shapes() -> None:
+    # The default scenario plants sk-, AKIA, and SSN-shaped secrets; every one
+    # that surfaces in a foreign session is a confirmed critical leak (zero-FN).
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    foreign = _foreign_secrets(substrate, observer)
+    assert {_secret_shape(s.plaintext) for s in foreign} == {"sk-", "AKIA", "SSN"}
+    pipeline = DetectionPipeline(substrate)
+    for secret in foreign:
+        found = confirmed_findings(
+            pipeline.detect(observer, f"dumped credentials: {secret.plaintext}", Surface.API)
+        )
+        assert [f.marker_id for f in found] == [secret.marker_id]
+        assert found[0].severity is Severity.CRITICAL
+        assert found[0].confidence == 1.0
+
+
+def test_secret_format_recovers_a_secret_wrapped_in_surrounding_bytes() -> None:
+    # A credential embedded in a JSON blob (no surrounding whitespace) is still
+    # recovered by the format pass - the value-add over a plain exact scan.
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = _foreign_secrets(substrate, observer)[0]
+    blob = f'{{"provider":"x","api_key":"{secret.plaintext}","rotated":false}}'
+    detected = DetectionPipeline(substrate).detect(observer, blob, Surface.PROMPT_LOGS)
+    assert any(f.marker_id == secret.marker_id for f in confirmed_findings(detected))
+
+
+def test_secret_shaped_string_absent_from_the_manifest_is_not_confirmed() -> None:
+    # A credential-shaped string that matches no manifest marker yields no
+    # confirmed finding - the zero-false-positive invariant for the format path.
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    decoy = "sk-" + "a" * 44  # shaped like an OpenAI key, but not a planted marker
+    found = confirmed_findings(DetectionPipeline(substrate).detect(observer, decoy, Surface.API))
+    assert found == []
+
+
+def test_own_tenant_secret_is_not_a_leak() -> None:
+    # A secret observed in its owner's own session is expected, not a leak.
+    substrate = _substrate()
+    secret = next(
+        marker
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.SECRET_CANARY
+    )
+    found = confirmed_findings(
+        DetectionPipeline(substrate).detect(
+            secret.owner_tenant_id, f"config: {secret.plaintext}", Surface.API
+        )
+    )
+    assert found == []
+
+
+def test_secret_evidence_span_is_redacted() -> None:
+    # A confirmed secret leak must not carry the verbatim credential into the
+    # finding's evidence span (the spec, section 16) - an evidence pack leaves the
+    # box in BYOC mode. The marker id ties the finding back to the manifest.
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = _foreign_secrets(substrate, observer)[0]
+    found = confirmed_findings(
+        DetectionPipeline(substrate).detect(observer, f"leaked: {secret.plaintext}", Surface.API)
+    )
+    finding = next(f for f in found if f.marker_id == secret.marker_id)
+    assert secret.plaintext not in finding.evidence_span
+    assert "[redacted]" in finding.evidence_span

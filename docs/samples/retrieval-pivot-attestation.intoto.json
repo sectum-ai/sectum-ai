@@ -4,7 +4,7 @@
     {
       "name": "run-sectum-demo-2026",
       "digest": {
-        "sha256": "16a69a06407b9922801774961c9fae4091801da07e6ccfe5258ab8c83826f64c"
+        "sha256": "cf073fd758c950248819a5270934a048ed4248aeef8dee57832ca29b6d612b99"
       }
     }
   ],
@@ -12,16 +12,16 @@
   "predicate": {
     "schema_version": "0.2.0",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
-    "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-01T22:02:19.963250+00:00",
-    "finished_at": "2026-06-01T22:02:22.688812+00:00",
+    "manifest_hash": "514feea45996025aa07628216320c7e88b716bad5564f99294d833fc1c5c7868",
+    "started_at": "2026-06-03T06:44:26.333672+00:00",
+    "finished_at": "2026-06-03T06:44:29.349085+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,
         "rag-entity-bleed": 45,
         "rag-pipeline-bleed": 15,
         "semantic-cache-contamination": 24,
-        "lora-cross-tenant": 24,
+        "lora-cross-tenant": 28,
         "agent-tool-hijack": 24,
         "agent-framework-hijack": 24,
         "memory-contamination": 24,
@@ -30,7 +30,7 @@
         "rag-poisoning": 24,
         "kv-cache-timing": 12
       },
-      "confirmed_findings": 321,
+      "confirmed_findings": 325,
       "retrieval_pivot_rate": 0.8125,
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {},
@@ -48,9 +48,12 @@
         "d9e603ff20b55c94b3b4f5eded6ef453->7cd276c8b7a85ec3988ec4fec6002ccf": 13.3083,
         "d9e603ff20b55c94b3b4f5eded6ef453->29b2fc2c0d40514590f8851a50ee4378": 13.3083,
         "d9e603ff20b55c94b3b4f5eded6ef453->7de1756785c8540d843252db3fe9026d": 13.3083
-      }
+      },
+      "poisoning_bleed_delta": 1.0,
+      "inversion_reconstruction_rate": 1.0,
+      "extraction_efficiency": 1.0
     },
-    "finding_count": 344,
+    "finding_count": 348,
     "control_mappings": [
       {
         "framework": "SOC 2 (TSC)",

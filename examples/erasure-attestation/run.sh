@@ -17,7 +17,7 @@ rm -rf "$out"
 mkdir -p "$out"
 
 echo "==> 1/3  Seed the marker substrate"
-sectum seed --workdir "$out"
+sectum seed --workdir "$out" --config "$here/sectum.yaml"
 
 echo
 echo "==> 2/3  Run the erasure-verification workflow for 'Acme Robotics'"

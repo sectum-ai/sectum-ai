@@ -1,0 +1,9 @@
+# Pins the flagship retrieval-pivot demo to a small, high-signal corpus.
+#
+# corpus_size 24 keeps the Retrieval-Pivot Rate at a legible 100% (every benign
+# query surfaces a foreign marker), which is the point of this showcase. The
+# package default is ~500 documents/tenant for realistic seeding (the engineering
+# spec, section 6.2); lower it here only because the demo reads better small.
+scenario:
+  seed: 2026
+  corpus_size: 24

@@ -43,9 +43,18 @@ def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
 
 
+def _searchable_text(document: CorpusDocument) -> str:
+    """Every field a marker may be planted in: title, body, and metadata values.
+
+    Markers are planted in a pivot document's body, title, and metadata (the
+    engineering spec, section 6.3), so all three are searched - a query naming a
+    marker or entity surfaced in any field retrieves the document.
+    """
+    return " ".join([document.title, document.content, *document.metadata.values()])
+
+
 def _overlap(query_tokens: set[str], document: CorpusDocument) -> float:
-    document_tokens = _tokens(f"{document.title} {document.content}")
-    return float(len(query_tokens & document_tokens))
+    return float(len(query_tokens & _tokens(_searchable_text(document))))
 
 
 def _rank(query: str, candidates: list[tuple[UUID, CorpusDocument]], k: int) -> list[VectorHit]:

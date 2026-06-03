@@ -18,13 +18,13 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 | File | Source example | Size | What it is |
 |---|---|---|---|
-| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | 33 KB | The auditor-facing PDF: executive summary, scope / methodology, all 321 findings (with per-finding OWASP / ATLAS / NIST IDs and remediation pointers), compliance-control coverage, and the integrity / verification block. |
+| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | 33 KB | The auditor-facing PDF: executive summary, scope / methodology, all 348 findings (with per-finding OWASP / ATLAS / NIST IDs and remediation pointers), compliance-control coverage, and the integrity / verification block. |
 | [`retrieval-pivot-attestation.intoto.json`](retrieval-pivot-attestation.intoto.json) | `examples/retrieval-pivot` | 4 KB | The [in-toto](https://in-toto.io/) attestation envelope: the run digest, the timestamp token, and the manifest hash that pin the test condition. |
 | [`erasure-attestation-audit-pack.pdf`](erasure-attestation-audit-pack.pdf) | `examples/erasure-attestation` | 4 KB | The DPO-facing GDPR Article 17 erasure attestation, **happy path**: per-surface verdicts ERASED across all seven configured surfaces. |
 | [`erasure-attestation-evidence.json`](erasure-attestation-evidence.json) | `examples/erasure-attestation` | 3 KB | The machine-readable evidence pack for the happy-path erasure run (the JSON sibling of the PDF, schema-versioned). |
 | [`erasure-attestation-attestation.intoto.json`](erasure-attestation-attestation.intoto.json) | `examples/erasure-attestation` | 3 KB | The happy-path erasure attestation's in-toto envelope. |
-| [`erasure-attestation-residual-data-audit-pack.pdf`](erasure-attestation-residual-data-audit-pack.pdf) | `examples/erasure-attestation` (`--soft-delete`) | 6 KB | The DPO-facing PDF when the erasure was **partial** — per-surface RESIDUAL DATA verdicts with the residual marker counts. This is the artefact the controller would attach when remediating the gap. |
-| [`erasure-attestation-residual-data-evidence.json`](erasure-attestation-residual-data-evidence.json) | `examples/erasure-attestation` (`--soft-delete`) | 14 KB | Machine-readable evidence pack for the residual-data run; carries the per-marker residual hits so a DPO or controller can trace which canaries survived which surface. |
+| [`erasure-attestation-residual-data-audit-pack.pdf`](erasure-attestation-residual-data-audit-pack.pdf) | `examples/erasure-attestation` (`--soft-delete`) | 7 KB | The DPO-facing PDF when the erasure was **partial** — per-surface RESIDUAL DATA verdicts with the residual marker counts. This is the artefact the controller would attach when remediating the gap. |
+| [`erasure-attestation-residual-data-evidence.json`](erasure-attestation-residual-data-evidence.json) | `examples/erasure-attestation` (`--soft-delete`) | 17 KB | Machine-readable evidence pack for the residual-data run; carries the per-marker residual hits so a DPO or controller can trace which canaries survived which surface. |
 | [`erasure-attestation-residual-data-attestation.intoto.json`](erasure-attestation-residual-data-attestation.intoto.json) | `examples/erasure-attestation` (`--soft-delete`) | 3 KB | The residual-data run's in-toto envelope. |
 
 ## Verifying these packs
@@ -60,7 +60,8 @@ cp examples/erasure-attestation/out/erasure-attestation.intoto.json docs/samples
 # Re-seed into a separate workdir so the happy-path artifacts survive,
 # then run erasure with --soft-delete to reproduce the failure mode.
 mkdir -p examples/erasure-attestation/out-residual
-uv run sectum seed --workdir examples/erasure-attestation/out-residual
+uv run sectum seed --workdir examples/erasure-attestation/out-residual \
+  --config examples/erasure-attestation/sectum.yaml
 uv run sectum erasure \
   --workdir examples/erasure-attestation/out-residual \
   --target-tenant "Acme Robotics" \
@@ -71,7 +72,7 @@ cp examples/erasure-attestation/out-residual/erasure-attestation.intoto.json doc
 ```
 
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
-(~271 KB with 321 findings); run the example locally to inspect the JSON
+(~296 KB with 348 findings); run the example locally to inspect the JSON
 structure, or read the
 [`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum/spec/models.py)
 schema.

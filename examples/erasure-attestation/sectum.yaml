@@ -1,0 +1,7 @@
+# Pins the erasure-attestation sample to a small corpus for a fast, deterministic
+# regeneration. The erasure verdict is marker-driven, so the corpus size does not
+# change the finding count - only how many documents are seeded. The package
+# default is ~500 documents/tenant (the engineering spec, section 6.2).
+scenario:
+  seed: 2026
+  corpus_size: 24
