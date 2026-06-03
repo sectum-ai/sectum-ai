@@ -42,9 +42,10 @@ def test_pipeline_findings_carry_the_probes_atlas_and_nist() -> None:
     )
     assert findings
     # the probe declares non-empty mappings, and every finding carries them
-    assert probe.atlas_techniques and probe.nist_rmf
+    assert probe.atlas_techniques and probe.nist_rmf and probe.owasp_secondary
     for finding in findings:
         assert finding.owasp_llm == probe.owasp_llm
+        assert finding.owasp_secondary == probe.owasp_secondary  # §18 secondary mapping
         assert finding.atlas == probe.atlas_techniques
         assert finding.nist == probe.nist_rmf
 
@@ -56,6 +57,7 @@ def test_erasure_findings_carry_the_nist_mapping() -> None:
     assert report.findings
     for finding in report.findings:
         assert finding.owasp_llm == "LLM08:2025"
+        assert finding.owasp_secondary == ("LLM02:2025",)  # sensitive-info disclosure
         assert finding.atlas == ()  # erasure verification is a control check, not an attack
         assert finding.nist == ("MEASURE 2.7",)
 
@@ -83,5 +85,27 @@ def test_manual_detect_leaves_classification_at_defaults() -> None:
     assert findings
     for finding in findings:
         assert finding.owasp_llm == "LLM08:2025"
+        assert finding.owasp_secondary == ()  # no probe classification on a manual call
         assert finding.atlas == ()
         assert finding.nist == ()
+
+
+def test_agent_probe_findings_carry_the_excessive_agency_secondary() -> None:
+    """The agent/tool probes map to LLM06 (Excessive Agency), not the LLM02
+    disclosure default the leakage probes inherit (the spec §18)."""
+    assert AgentToolHijackProbe.owasp_secondary == ("LLM06:2025",)
+    substrate = build_substrate(default_scenario(seed=2026))
+    marker = next(m for m in substrate.manifest.markers if m.marker_type is MarkerType.HARD_CANARY)
+    pipeline = DetectionPipeline(substrate)
+    probe = AgentToolHijackProbe()
+    findings = pipeline.detect(
+        UUID(int=999),
+        f"tool result leaking {marker.plaintext}",
+        Surface.MCP,
+        probe_id=probe.id,
+        owasp_llm=probe.owasp_llm,
+        owasp_secondary=probe.owasp_secondary,
+    )
+    assert findings
+    for finding in findings:
+        assert finding.owasp_secondary == ("LLM06:2025",)

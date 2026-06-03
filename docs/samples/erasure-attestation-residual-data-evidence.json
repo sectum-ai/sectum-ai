@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bd7c26d06213ee2853cd1d8a929f3a351cebb9bf284c7eef92e429c3e0b2150d",
     "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-    "started_at": "2026-06-03T00:18:42.439603+00:00",
-    "finished_at": "2026-06-03T00:18:42.440395+00:00",
+    "started_at": "2026-06-03T02:07:44.299565+00:00",
+    "finished_at": "2026-06-03T02:07:44.300309+00:00",
     "adapter_versions": {
       "fake-vector": "0.1.0",
       "fake-observability": "0.1.0",
@@ -33,6 +33,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -53,6 +56,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -73,6 +79,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -93,6 +102,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -113,6 +125,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -133,6 +148,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -153,6 +171,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -173,6 +194,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -193,6 +217,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -213,6 +240,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -233,6 +263,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -253,6 +286,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -273,6 +309,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -293,6 +332,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -313,6 +355,9 @@
         "marker_id": "mkr-00000",
         "evidence_span": "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -333,6 +378,9 @@
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
         "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
         "atlas": [],
         "nist": [
           "MEASURE 2.7"
@@ -364,7 +412,7 @@
     "schema_version": "0.2.0"
   },
   "manifest_hash": "ba32ef71258b411cb63afa63f237f6faa7ae6df90f2c5b52219df4cc9ee1d6de",
-  "tsa_token": "{\"digest\":\"f74e944f0e7bca1ea22a1e3b484d1fb6f0410f2bbd6919cf9ab01c88809f820c\",\"timestamped_at\":\"2026-06-03T00:18:42.451313+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"e1b65af0ade7726b7f3fff21afc808e926af920f48aa239c423df090f74962f1\",\"timestamped_at\":\"2026-06-03T02:07:44.311063+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -426,7 +474,7 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "5346ce535aaa17b27154f49ccc2774805a6b45555132477a53153ae93b23d6c6",
+  "pdf_ref": "d64c81a2b607ea1550c6278cd4e0d117ec6db273dafef8e6610b38f34a5dd0c8",
   "anchored_in_log": false,
   "schema_version": "0.2.0"
 }

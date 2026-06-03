@@ -188,6 +188,11 @@ class DetectingProbe:
     Subclasses call ``self._providers.pipeline(substrate)`` in ``detect``.
     """
 
+    # Secondary OWASP LLM Top 10 mapping (the spec §18: "LLM02/LLM06 secondary").
+    # Every leakage probe also evidences Sensitive Information Disclosure; the
+    # agent/tool probes override this to Excessive Agency (LLM06).
+    owasp_secondary: tuple[str, ...] = ("LLM02:2025",)
+
     def __init__(self, providers: DetectionProviders | None = None) -> None:
         self._providers = providers if providers is not None else DetectionProviders()
 
@@ -359,6 +364,7 @@ class DetectionPipeline:
         *,
         observed_user: UUID | None = None,
         owasp_llm: str = _OWASP_MULTI_TENANT,
+        owasp_secondary: tuple[str, ...] = (),
         atlas: tuple[str, ...] = (),
         nist: tuple[str, ...] = (),
     ) -> list[Finding]:
@@ -381,7 +387,14 @@ class DetectionPipeline:
         findings = self._exact(observer, observation_text, surface, probe_id)
         findings.extend(self._semantic(observer, observation_text, surface, probe_id))
         stamped = [
-            finding.model_copy(update={"owasp_llm": owasp_llm, "atlas": atlas, "nist": nist})
+            finding.model_copy(
+                update={
+                    "owasp_llm": owasp_llm,
+                    "owasp_secondary": owasp_secondary,
+                    "atlas": atlas,
+                    "nist": nist,
+                }
+            )
             for finding in findings
         ]
         for finding in stamped:
