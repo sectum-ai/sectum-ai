@@ -4,6 +4,13 @@ Hashes are computed over a canonical JSON form (sorted keys, no insignificant
 whitespace) so the same logical content always yields the same digest. This is
 the foundation of the reproducibility contract (the engineering spec, section 6.5) and the
 evidence chain (the engineering spec, section 8).
+
+Finite floats need no rounding: ``json.dumps`` emits CPython's shortest
+round-tripping ``repr``, which is deterministic, so a value reached by different
+arithmetic but equal in IEEE-754 canonicalizes identically across machines.
+Rounding would only risk colliding genuinely distinct metrics, so it is
+deliberately not done (ADR-0021). Non-finite floats (NaN/Infinity) have no valid,
+injective JSON form and are refused below.
 """
 
 import hashlib

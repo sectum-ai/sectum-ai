@@ -63,6 +63,7 @@ nav:
       - adr/0018-embedding-provider-sweep.md
       - adr/0019-job-runner-abstraction.md
       - adr/0020-structured-logging.md
+      - adr/0021-canonical-float-determinism.md
   - Maintainers:
       - Build phases and acceptance: phases.md
       - Releasing: RELEASING.md

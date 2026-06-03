@@ -22,3 +22,4 @@ ADR is immutable — supersede it with a new ADR rather than editing it.
 | [0018](0018-embedding-provider-sweep.md) | Real embedding providers are opt-in extras; a deterministic hashing model is the default | Accepted |
 | [0019](0019-job-runner-abstraction.md) | A `JobRunner` interface with local runners; a distributed backend stays swappable | Accepted |
 | [0020](0020-structured-logging.md) | Structured logging with redaction, to stderr, DEBUG off by default | Accepted |
+| [0021](0021-canonical-float-determinism.md) | Canonical hashing relies on deterministic float repr, not rounding | Accepted |
