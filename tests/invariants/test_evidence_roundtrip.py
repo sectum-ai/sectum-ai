@@ -10,6 +10,7 @@ from uuid import UUID
 
 from sectum.evidence import attested_digest, build_evidence_pack, verify_pack
 from sectum.spec import (
+    SCHEMA_VERSION,
     ControlMapping,
     Finding,
     FindingStatus,
@@ -383,6 +384,39 @@ def test_a_naive_datetime_is_treated_as_utc_in_the_digest() -> None:
         datetime(2026, 5, 17, 13, 30),
     )
     assert canonical_hash(aware) == canonical_hash(naive)
+
+
+def test_an_incompatible_schema_version_fails_verification() -> None:
+    # A pack from an incompatible major.minor cannot be re-verified reliably (the
+    # canonical-hashing scheme is tied to the schema version), so the verifier
+    # refuses it rather than mis-verifying. schema_version is not part of the
+    # attested digest, so only the schema-version check trips - which is the point.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    incompatible = pack.model_copy(update={"schema_version": "9.9.0"})
+    result = verify_pack(incompatible, manifest)
+    assert not result.passed
+    schema = next(c for c in result.checks if c.name == "schema-version")
+    assert not schema.ok and "incompatible" in schema.detail
+
+
+def test_a_matching_schema_version_passes_the_gate() -> None:
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    schema = next(c for c in verify_pack(pack, manifest).checks if c.name == "schema-version")
+    assert schema.ok and schema.detail
+
+
+def test_a_patch_level_schema_difference_is_compatible() -> None:
+    # Same major.minor, different patch -> compatible (the digest scheme is stable
+    # across patch releases). Derived from SCHEMA_VERSION so a future minor bump
+    # does not silently invert this assertion.
+    manifest = _manifest()
+    major_minor = ".".join(SCHEMA_VERSION.split(".")[:2])
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    patched = pack.model_copy(update={"schema_version": f"{major_minor}.99"})
+    schema = next(c for c in verify_pack(patched, manifest).checks if c.name == "schema-version")
+    assert schema.ok
 
 
 def test_a_pack_built_in_a_non_utc_zone_still_verifies() -> None:

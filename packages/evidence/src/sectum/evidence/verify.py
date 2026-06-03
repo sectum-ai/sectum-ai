@@ -11,7 +11,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum.evidence.chain import LocalTimestamper, attested_digest
-from sectum.spec import EvidenceError, EvidencePack, GroundTruthManifest, canonical_hash, sha256_hex
+from sectum.spec import (
+    SCHEMA_VERSION,
+    EvidenceError,
+    EvidencePack,
+    GroundTruthManifest,
+    canonical_hash,
+    sha256_hex,
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,7 @@ def verify_pack(
     """
     digest = attested_digest(pack)
     checks = [
+        _check_schema_version(pack),
         _check_token(pack.tsa_token, digest, tsa_certificate, tsa_root),
         _check_consistency(pack),
     ]
@@ -176,6 +184,33 @@ def _check_rfc3161_token(
         ok=True,
         detail=f"pack digest timestamped by an RFC 3161 TSA at {timestamped_at.isoformat()}",
     )
+
+
+def _schema_major_minor(version: str) -> tuple[str, str]:
+    """The ``(major, minor)`` of a ``major.minor.patch`` schema version."""
+    parts = version.split(".")
+    return (parts[0], parts[1] if len(parts) > 1 else "0")
+
+
+def _check_schema_version(pack: EvidencePack) -> Check:
+    """Refuse a pack whose schema version this verifier cannot interpret.
+
+    The attested digest is recomputed under a canonical-serialization scheme tied
+    to the schema version; a pack from an incompatible ``major.minor`` may hash
+    under different rules or carry different fields, so it is refused rather than
+    silently mis-verified. A patch-level difference is compatible (the spec, §9 -
+    every aggregate model is ``schema_version``-stamped).
+    """
+    ok = _schema_major_minor(pack.schema_version) == _schema_major_minor(SCHEMA_VERSION)
+    detail = (
+        f"pack schema_version {pack.schema_version} is supported by this verifier"
+        if ok
+        else (
+            f"pack schema_version {pack.schema_version!r} is incompatible with this verifier "
+            f"(supports {SCHEMA_VERSION!r}); verify with a matching sectum version"
+        )
+    )
+    return Check("schema-version", ok=ok, detail=detail)
 
 
 def _check_consistency(pack: EvidencePack) -> Check:
