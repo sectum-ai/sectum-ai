@@ -62,13 +62,17 @@ support is the optional `sectum-ai-evidence[rekor]` extra.
 
 `sectum-ai verify <pack>` recomputes the **pack digest** (over the run record, the
 manifest hash, the control mappings, the PDF reference, and the transparency-log
-flag) and checks it against the timestamp token, the Rekor inclusion proof (when
+and timestamp-anchor flags) and checks it against the timestamp token, the Rekor
+inclusion proof (when
 present), and the manifest-hash consistency. For an RFC 3161 token it also
 validates the token's signature against the pinned TSA chain. Any edit to the
 attested content — a changed finding, a forged control mapping, a repointed PDF,
 an altered hash — changes the digest and fails verification with a clear reason
 and exit code 4. A pack anchored in the Rekor log fails if its proof is stripped
-(a downgrade), and a `local-dev` timestamp is reported as *unanchored*. Because
+(a downgrade); likewise a pack that claims a real RFC 3161 timestamp anchor fails
+if its binary token is swapped for a `local-dev` one (also a downgrade). A
+`local-dev` timestamp on a pack that never claimed an anchor is reported as
+*unanchored*. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 

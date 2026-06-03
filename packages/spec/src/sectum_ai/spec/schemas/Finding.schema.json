@@ -43,7 +43,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.2.0/Finding.schema.json",
+  "$id": "https://schemas.sectum.ai/0.3.0/Finding.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A detected cross-tenant leakage result (the engineering spec, section 9).\n\nFrozen like every other aggregate model. The detection pipeline classifies\neach finding as confirmed or unverified - the false-positive control (the\nengineering spec, section 6.4) - when it constructs the finding.",

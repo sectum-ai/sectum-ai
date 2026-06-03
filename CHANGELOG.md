@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
+  by a real TSA could have its binary `tsa_token` swapped for a `local-dev` JSON
+  token carrying the same digest and still verify (reported as "unanchored"),
+  silently dropping the one independent proof of *when* the evidence existed —
+  load-bearing for the GDPR Art. 17 erasure timeline. A new `anchored_with_timestamp`
+  flag, bound into the attested digest (mirroring `anchored_in_log`), makes
+  `sectum-ai verify` demand a real RFC 3161 token whenever a pack claims one, so the
+  swap fails. This bumps `SCHEMA_VERSION` `0.2.0` → `0.3.0`; the committed JSON
+  schemas, the reproducibility golden hashes, and the `docs/samples/` packs are
+  regenerated, and pre-`0.3.0` packs are refused by the schema gate with a clear
+  version-mismatch message (ADR-0016).
+
 - **`verify_bundle` now reconciles a bundle's ZIP members against its digest
   manifest, closing a tamper-evidence hole.** The integrity loop only iterated
   manifest-*listed* members, so a file physically present in the archive but absent

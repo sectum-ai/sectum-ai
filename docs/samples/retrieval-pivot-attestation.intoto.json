@@ -4,17 +4,17 @@
     {
       "name": "run-sectum-ai-demo-2026",
       "digest": {
-        "sha256": "97c92663ef2b0afae9386405a4530d5a8a4739617edb8050b32c0db6340e5b07"
+        "sha256": "d31c66aaffcf4b9a50440c18cbe0306e38cec0f60dbc09cdc646807f78fcca8a"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.2.0",
-    "scenario_hash": "ae01e2877bfe733c560987e1ae402f3854f00e95a11bc78ed2d4888b6a397ddb",
-    "manifest_hash": "2020041f3ea27e0c91241a8aa11d7a4d2d38bdf843d390d2372850bd6808f247",
-    "started_at": "2026-06-03T21:54:04.488137+00:00",
-    "finished_at": "2026-06-03T21:54:08.996999+00:00",
+    "schema_version": "0.3.0",
+    "scenario_hash": "af9da02efda26ece5756ff94e491922081446803f49399b1dea2468f54a0521e",
+    "manifest_hash": "01621727cafdd8a1adab1acd505aa5161332b227c9eb4f900914dbff5e8ea4a6",
+    "started_at": "2026-06-03T23:17:21.036676+00:00",
+    "finished_at": "2026-06-03T23:17:23.923460+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,

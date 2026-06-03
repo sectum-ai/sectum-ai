@@ -34,6 +34,12 @@ _log = get_logger(__name__)
 class Timestamper(Protocol):
     """Produces a verifiable timestamp token for a digest."""
 
+    anchored: bool
+    """True for a real, independent timestamp anchor (an RFC 3161 TSA); False for
+    the local-dev timestamper, which binds the digest but is not an external
+    anchor. Recorded on the pack (``anchored_with_timestamp``) so a verifier can
+    refuse a pack that claims a real anchor but carries only a local-dev token."""
+
     def timestamp(self, digest: str) -> str:
         """Return a token attesting that ``digest`` existed at a point in time."""
         ...
@@ -58,6 +64,7 @@ class LocalTimestamper:
     """
 
     tsa = "local-dev"
+    anchored = False
 
     def timestamp(self, digest: str) -> str:
         """Return a JSON token recording ``digest`` and the current time."""
@@ -85,13 +92,14 @@ def _attested_content(
     control_mappings: tuple[ControlMapping, ...],
     pdf_ref: str | None,
     anchored_in_log: bool,
+    anchored_with_timestamp: bool,
 ) -> dict[str, Any]:
     """The full set of pack fields the anchored digest binds.
 
     Everything a verifier or auditor relies on - the run record, the manifest
     binding, the compliance claims, the audit-pack pointer, and whether the pack
-    claims a transparency-log anchor - is included, so mutating any of it changes
-    the digest.
+    claims a transparency-log anchor and a real RFC 3161 timestamp anchor - is
+    included, so mutating any of it changes the digest.
     """
     return {
         "run_result": run_result.model_dump(mode="json"),
@@ -99,6 +107,7 @@ def _attested_content(
         "control_mappings": [mapping.model_dump(mode="json") for mapping in control_mappings],
         "pdf_ref": pdf_ref,
         "anchored_in_log": anchored_in_log,
+        "anchored_with_timestamp": anchored_with_timestamp,
     }
 
 
@@ -117,6 +126,7 @@ def attested_digest(pack: EvidencePack) -> str:
             pack.control_mappings,
             pack.pdf_ref,
             pack.anchored_in_log,
+            pack.anchored_with_timestamp,
         )
     )
 
@@ -138,12 +148,26 @@ def build_evidence_pack(
     anchor (the engineering spec, section 8.2). ``anchored_in_log`` records
     whether a transparency log was used and is itself bound into the digest, so a
     later attempt to strip the Rekor proof and skip the check is detected.
+    ``anchored_with_timestamp`` likewise records whether a real RFC 3161 TSA (not
+    the local-dev timestamper) anchored the pack and is bound into the digest, so
+    swapping the binary token for a local-dev one to drop the independent
+    timestamp (a downgrade) is detected.
     """
     stamper = timestamper if timestamper is not None else LocalTimestamper()
     manifest_hash = canonical_hash(manifest)
     anchored_in_log = transparency_log is not None
+    # A real RFC 3161 TSA self-reports anchored=True; the local-dev timestamper is
+    # False. Bound into the digest so the anchor cannot be dropped (see below).
+    anchored_with_timestamp = bool(getattr(stamper, "anchored", False))
     digest = canonical_hash(
-        _attested_content(run_result, manifest_hash, control_mappings, pdf_ref, anchored_in_log)
+        _attested_content(
+            run_result,
+            manifest_hash,
+            control_mappings,
+            pdf_ref,
+            anchored_in_log,
+            anchored_with_timestamp,
+        )
     )
     pack = EvidencePack(
         run_result=run_result,
@@ -153,6 +177,7 @@ def build_evidence_pack(
         control_mappings=control_mappings,
         pdf_ref=pdf_ref,
         anchored_in_log=anchored_in_log,
+        anchored_with_timestamp=anchored_with_timestamp,
     )
     # Digests and the run id are safe to log; the TSA/Rekor tokens are not (§16).
     _log.info(
@@ -160,5 +185,6 @@ def build_evidence_pack(
         run_id=run_result.run_id,
         digest=digest,
         anchored_in_log=anchored_in_log,
+        anchored_with_timestamp=anchored_with_timestamp,
     )
     return pack

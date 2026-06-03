@@ -55,6 +55,17 @@ This is a schema change: `SCHEMA_VERSION` is bumped `0.1.0` → `0.2.0`, and pac
 produced under the old scheme do not verify under the new verifier (acceptable —
 v0.1.0 is not yet published and no packs are in the wild).
 
+**Update (2026-06-03): the timestamp anchor is downgrade-resistant too.** A later
+hardening review found the RFC 3161 TSA anchor still had the asymmetry this ADR
+closed for Rekor: a pack timestamped by a real TSA could have its binary token
+swapped for a `local-dev` JSON token carrying the same digest, and still verify
+(reported as "unanchored"), silently dropping the independent timestamp. A new
+**`anchored_with_timestamp: bool`** field — set when a real TSA stamps the pack and
+**bound into the attested digest** — closes it: the verifier demands a real RFC
+3161 token whenever the flag is set, and flipping the flag to dodge that changes
+the digest (which the token then rejects), exactly mirroring `anchored_in_log`.
+This is a further schema change: `SCHEMA_VERSION` `0.2.0` → `0.3.0`.
+
 The canonical form itself is also hardened (reject non-finite floats, normalize
 timestamps to UTC) — see the update note in
 [ADR-0007](0007-canonical-hashing-serializes-every-field.md).
