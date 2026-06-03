@@ -232,6 +232,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The canonical-hash finite-float determinism contract is now pinned (ADR-0021).**
+  The evidence chain's reproducibility rests on the canonical hash being stable for
+  the float metrics it covers (RPR, effect sizes, confidences). A dedicated
+  `tests/unit/test_hashing.py` pins that contract: a finite float reached by
+  different arithmetic but equal in IEEE-754 hashes identically (CPython's
+  shortest round-tripping `repr` is deterministic — no rounding needed), genuinely
+  distinct floats stay distinct (so a real metric change is never masked by a
+  rounded collision), and non-finite (NaN/±Inf) and non-JSON values are refused
+  with typed errors. ADR-0021 records why finite floats are *not* rounded — the
+  rounding alternative was considered and rejected as lossy for a verification
+  tool, and `canonical_hash`/`SCHEMA_VERSION` are deliberately left unchanged (no
+  artifact churn). Refines, not supersedes, ADR-0007.
 - **DSSE in-toto envelope for the evidence pack (the spec §8/§13).** The in-toto
   Statement can now be wrapped in a DSSE (Dead Simple Signing Envelope) — the
   standard signable carrier and the body of a Sigstore Rekor `dsse` log entry.
