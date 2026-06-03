@@ -232,6 +232,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Single-archive evidence bundle (`sectum report --bundle`, the spec §8.2).**
+  Section 8.2 step 5 calls for bundling a run's attested artifacts into one pack;
+  until now `report` wrote three loose sidecars a verifier had to keep together by
+  convention. `evidence/bundle.py` builds a deterministic ZIP carrying a
+  `bundle-manifest.json` of each member's SHA-256, and `verify_bundle` recomputes
+  every digest **and** re-runs `verify_pack` on the contained evidence — so editing
+  any member, or the pack itself, fails. `sectum report --bundle` writes
+  `evidence-bundle.zip` (with `--include-manifest` sealing the ground-truth manifest
+  AES-256-GCM, off by default); `sectum verify <bundle.zip>` verifies the archive
+  end to end (exit `4` on failure). The bundler is crypto-agnostic and stays in the
+  evidence layer.
 - **Class 9 routing assertion: `ModelAdapter.served_by` (the spec, Class 9).**
   Class 9 must verify adapter *routing correctness*, not only weight bleed. A new
   non-abstract `ModelAdapter.served_by(tenant, prompt)` reports which tenant's

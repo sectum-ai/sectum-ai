@@ -58,11 +58,13 @@ from sectum.evidence import (
     Rfc3161Timestamper,
     Timestamper,
     TransparencyLog,
+    build_bundle,
     build_evidence_pack,
     control_mappings,
     rekor_keyring,
     render_audit_pack_and_hash,
     to_in_toto_statement,
+    verify_bundle,
     verify_in_toto_statement,
     verify_pack,
 )
@@ -777,6 +779,24 @@ def report(
             case_sensitive=False,
         ),
     ] = PdfEngine.REPORTLAB,
+    bundle: Annotated[
+        bool,
+        typer.Option(
+            "--bundle",
+            help="Also write a single verifiable evidence-bundle.zip (the spec, section 8.2).",
+        ),
+    ] = False,
+    include_manifest: Annotated[
+        bool,
+        typer.Option(
+            "--include-manifest",
+            help=(
+                "Include the ground-truth manifest in the bundle, sealed AES-256-GCM "
+                "under the configured security.manifest_key_env. Off by default - the "
+                "manifest holds canary plaintexts."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Assemble a tamper-evident evidence pack (JSON and PDF) from the run."""
     loaded = load_config(config) if config is not None else SectumConfig()
@@ -809,6 +829,27 @@ def report(
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
     typer.echo(f"evidence pack -> {json_path}")
     typer.echo(f"audit pack -> {pdf_path}")
+    if bundle:
+        members = {
+            "evidence.json": json_path.read_bytes(),
+            "audit-pack.pdf": pdf_path.read_bytes(),
+            "attestation.intoto.json": intoto_path.read_bytes(),
+        }
+        if include_manifest:
+            # The manifest holds canary plaintexts, so it is sealed AES-256-GCM
+            # before it enters the bundle; the bundler itself stays crypto-agnostic.
+            key_env = loaded.security.manifest_key_env
+            if key_env is None:
+                raise ConfigError(
+                    "--include-manifest needs security.manifest_key_env set to seal the manifest"
+                )
+            sealed = seal_bytes(
+                substrate.manifest.model_dump_json().encode("utf-8"), load_key_from_env(key_env)
+            )
+            members["ground-truth-manifest.json.aes"] = sealed
+        bundle_path = workdir / "evidence-bundle.zip"
+        bundle_path.write_bytes(build_bundle(members))
+        typer.echo(f"evidence bundle -> {bundle_path}")
     typer.echo(f"in-toto attestation -> {intoto_path}")
 
 
@@ -859,10 +900,23 @@ def verify(
         typer.Option("--rekor-key", help="PEM of a Rekor public key (pins a private instance)."),
     ] = None,
 ) -> None:
-    """Independently verify a tamper-evident evidence pack."""
+    """Independently verify a tamper-evident evidence pack (or an .zip bundle)."""
     if not pack.exists():
         typer.echo(f"no evidence pack at {pack}", err=True)
         raise typer.Exit(code=3)
+    if pack.suffix == ".zip":
+        # A bundle (report --bundle) carries the pack and its sidecars in one
+        # archive; verify each member's digest and the contained pack together.
+        bundle_result = verify_bundle(
+            pack.read_bytes(), rekor_keyring=_rekor_keyring_override(rekor_key)
+        )
+        for check in bundle_result.checks:
+            typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+        if not bundle_result.passed:
+            typer.echo("VERIFICATION FAILED", err=True)
+            raise typer.Exit(code=4)
+        typer.echo("VERIFIED: the evidence bundle is intact and its pack is consistent.")
+        return
     for label, cert_path in (
         ("--tsa-cert", tsa_cert),
         ("--tsa-root", tsa_root),

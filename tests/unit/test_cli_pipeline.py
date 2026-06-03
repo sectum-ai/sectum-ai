@@ -266,6 +266,18 @@ def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
     assert result.exit_code == 4
 
 
+def test_report_bundle_round_trips_through_verify(tmp_path: Path) -> None:
+    # report --bundle writes one evidence-bundle.zip; `verify <bundle.zip>` checks
+    # every member digest and the contained pack together (the spec, section 8.2).
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
+    bundle_path = tmp_path / "evidence-bundle.zip"
+    assert bundle_path.exists()
+    result = _runner.invoke(app, ["verify", str(bundle_path)])
+    assert result.exit_code == 0
+    assert "VERIFIED" in result.output
+
+
 def test_cli_version_is_the_installed_package_version_and_is_stamped(tmp_path: Path) -> None:
     # The embedded version must match the packaged release (not a hard-coded
     # 0.0.0): it is stamped into every evidence pack's adapter/probe versions and
