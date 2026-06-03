@@ -4245,6 +4245,7 @@ name = "sectum-ai"
 version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "sectum-ai-adapters" },
     { name = "sectum-ai-evidence" },
@@ -4271,6 +4272,7 @@ weasyprint = [
 requires-dist = [
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.40" },
+    { name = "pydantic", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
     { name = "sectum-ai-evidence", editable = "packages/evidence" },
@@ -4410,12 +4412,14 @@ version = "0.1.0"
 source = { editable = "packages/probes" }
 dependencies = [
     { name = "pyyaml" },
+    { name = "sectum-ai-adapters" },
     { name = "sectum-ai-spec" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
+    { name = "sectum-ai-adapters", editable = "packages/adapters" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
 ]
 

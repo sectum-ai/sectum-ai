@@ -34,12 +34,13 @@ StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
 
 
-def _payload_int(step: ProbeStep, key: str, default: str) -> int:
+def payload_int(step: ProbeStep, key: str, default: str) -> int:
     """Read an integer payload value, raising a typed ``AdapterError`` on bad input.
 
     A malformed step payload is a configuration error, not a crash: a bare
     ``ValueError`` would escape the ``SectumError`` hierarchy and the CLI's
-    exit-code mapping (the engineering spec, sections 10 and 16).
+    exit-code mapping (the engineering spec, sections 10 and 16). Public so
+    ``sweep.py`` (and other in-package callers) can reuse it across modules.
     """
     raw = step.payload.get(key, default)
     try:
@@ -156,7 +157,7 @@ class Runner:
     def _vector_query(self, step: ProbeStep) -> Observation:
         if self._vector is None:
             raise AdapterError("a vector.query step needs a vector adapter")
-        k = _payload_int(step, "k", "5")
+        k = payload_int(step, "k", "5")
         hits = self._vector.query(
             step.actor_tenant_id, _payload_required(step, "query"), k, user=step.actor_user_id
         )

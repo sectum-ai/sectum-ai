@@ -21,6 +21,7 @@ class Probe(Protocol):
     id: str
     name: str
     owasp_llm: str
+    owasp_secondary: tuple[str, ...]
     atlas_techniques: tuple[str, ...]
     nist_rmf: tuple[str, ...]
     surfaces: tuple[Surface, ...]
