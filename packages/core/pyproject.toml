@@ -21,6 +21,9 @@ classifiers = [
 dependencies = [
     "typer>=0.12",
     "pyyaml>=6",
+    # config.py and cli/app.py import pydantic directly; declare it rather than
+    # relying on the transitive dependency via sectum-ai-spec (§13, mirrors adapters).
+    "pydantic>=2.9",
     "sectum-ai-spec",
     "sectum-ai-adapters",
     "sectum-ai-probes",

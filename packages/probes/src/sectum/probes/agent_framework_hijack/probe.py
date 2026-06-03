@@ -27,7 +27,7 @@ class AgentFrameworkHijackProbe(DetectingProbe):
     id = "agent-framework-hijack"
     name = "Cross-tenant agent-framework tool-call hijacking"
     owasp_llm = "LLM08:2025"
-    owasp_secondary = ("LLM06:2025",)
+    owasp_secondary: tuple[str, ...] = ("LLM06:2025",)
     # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough
     # technique; T0024 Exfiltration via AI Inference API is the leak it causes.
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")

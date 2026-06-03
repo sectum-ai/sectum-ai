@@ -24,12 +24,12 @@ document IDs from the ground-truth manifest - need the seeded `Substrate`.
 ## Decision
 
 - **The leak-detection pipeline moves into `sectum-ai-probes`**
-  (`sectum.probes.detection`). It depends only on `sectum.spec` data models,
-  never on the substrate generators, so `sectum-ai-probes` becomes
-  self-contained (it depends on `sectum-ai-spec` only). The package dependency
-  graph is then acyclic: `core` depends on `spec`, `adapters`, `probes`, and
-  `evidence`; each of `probes`, `adapters`, and `evidence` depends only on
-  `spec`.
+  (`sectum.probes.detection`). The pipeline itself depends only on `sectum.spec`
+  data models, never on the substrate generators. The package dependency graph
+  stays acyclic: `core` depends on `spec`, `adapters`, `probes`, and `evidence`;
+  `probes` depends on `spec` **and `adapters`** (the erasure and
+  kv-cache-timing probes drive adapter protocols, so the package declares the
+  edge); `adapters` and `evidence` each depend only on `spec`.
 - **`Probe.plan` takes the full `Substrate`** - `plan(self, substrate: Substrate)`
   rather than `plan(self, scenario)`. `Substrate` carries `scenario`, so nothing
   is lost.

@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from sectum.adapters.fakes import FakeVectorStore
 from sectum.embeddings import EmbeddingModel, cosine
 from sectum.probes import RagEntityBleedProbe
-from sectum.runner import StepResult, _payload_int, retrieval_pivot_rate
+from sectum.runner import StepResult, payload_int, retrieval_pivot_rate
 from sectum.spec import Observation, Substrate, Surface
 
 FAKE_EMBEDDING_STRENGTH: dict[str, float] = {
@@ -55,7 +55,7 @@ def embedding_model_sweep(substrate: Substrate, models: tuple[str, ...]) -> dict
             )
         results: list[StepResult] = []
         for step in steps:
-            k = _payload_int(step, "k", "5")
+            k = payload_int(step, "k", "5")
             hits = store.query(step.actor_tenant_id, step.payload["query"], k)
             observation = Observation(
                 step_id=step.step_id,
@@ -92,7 +92,7 @@ def embedding_provider_sweep(
         query_vectors = model.embed([step.payload["query"] for step in steps])
         results: list[StepResult] = []
         for step, query_vector in zip(steps, query_vectors, strict=True):
-            k = _payload_int(step, "k", "5")
+            k = payload_int(step, "k", "5")
             ranked = sorted(
                 ((cosine(query_vector, vector), doc) for doc, vector in index),
                 key=lambda scored: (-scored[0], scored[1].doc_id),

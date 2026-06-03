@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`sectum-ai-probes` now declares the `sectum-ai-adapters` dependency it imports
+  — the published wheel was un-importable on its own.** `erasure/probe.py` and
+  `kv_cache_timing/probe.py` import `sectum.adapters` at module load (eagerly via
+  `probes/__init__`), but `sectum-ai-probes` declared only `sectum-ai-spec` +
+  `pyyaml`, so a clean `pip install sectum-ai-probes` followed by `import
+  sectum.probes` raised `ModuleNotFoundError: No module named 'sectum.adapters'`
+  (the dev uv workspace installs every package, which masked the missing edge). The
+  dependency (and uv source) are now declared; the edge is acyclic since
+  `sectum-ai-adapters` imports only `sectum.spec`, and ADR-0004 is corrected (its
+  "probes depends on `sectum-ai-spec` only" claim was stale). A new
+  `tests/unit/test_packaging.py` guards this and the related direct-dependency
+  declarations.
+
+- **`sectum-ai` (core) now declares the `pydantic` it imports directly** rather
+  than relying on the transitive edge via `sectum-ai-spec` (`config.py` /
+  `cli/app.py` import pydantic), mirroring the adapters package and the §13
+  declare-what-you-import discipline.
+
+- **The `Probe` protocol now declares `owasp_secondary`**, the fourth
+  control-classification attribute every probe already carries (§18 LLM02/LLM06
+  secondary mapping) — so a `Probe`-typed consumer can read it without a type
+  error. The public `payload_int` helper (formerly the private `_payload_int`) is
+  no longer imported across a module boundary by `sweep.py`.
+
 - **`scenario.embedding_models` is now wired end to end, so the per-model
   Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
   `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
