@@ -93,16 +93,16 @@ erasure-attestation walkthrough.
 Or drive the `sectum` CLI directly:
 
 ```sh
-uv run sectum-ai seed   --workdir .sectum
-uv run sectum-ai probe  --workdir .sectum
-uv run sectum-ai report --workdir .sectum
-uv run sectum-ai verify .sectum/evidence.json
+uv run sectum-ai seed   --workdir .sectum-ai
+uv run sectum-ai probe  --workdir .sectum-ai
+uv run sectum-ai report --workdir .sectum-ai
+uv run sectum-ai verify .sectum-ai/evidence.json
 ```
 
 For richer configuration (live vector store, real embedder/judge, Rekor
 signing, manifest-at-rest), copy
-[`sectum.yaml.example`](sectum.yaml.example) to `sectum.yaml` and pass
-`--config sectum.yaml` to each command.
+[`sectum-ai.yaml.example`](sectum-ai.yaml.example) to `sectum-ai.yaml` and pass
+`--config sectum-ai.yaml` to each command.
 
 To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

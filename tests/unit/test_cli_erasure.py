@@ -42,7 +42,7 @@ def test_erasure_rejects_an_unknown_tenant(tmp_path: Path) -> None:
 
 def test_erasure_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
     workdir = tmp_path / "from-config"
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"workdir: {workdir}\n")
     _runner.invoke(app, ["seed", "--workdir", str(workdir)])
     result = _runner.invoke(app, ["erasure", "--config", str(config_path)])
@@ -52,7 +52,7 @@ def test_erasure_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
 
 def test_erasure_uses_the_configs_soft_delete_setting(tmp_path: Path) -> None:
     """A config with soft-delete fakes drives the erasure failure (exit 2)."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -67,7 +67,7 @@ def test_erasure_uses_the_configs_soft_delete_setting(tmp_path: Path) -> None:
 
 def test_erasure_honors_only_observability_soft_delete_from_config(tmp_path: Path) -> None:
     """Asymmetric soft-delete: vector hard-deletes; only observability leaves residue."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -90,7 +90,7 @@ def test_erasure_attestable_with_caveat_when_observability_has_no_erasure_api(
     message must say ATTESTABLE WITH CAVEAT - distinct from the bare 'ERASURE
     FAILED' a soft-delete (residual) surface produces - spec §7 #8.
     """
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -126,7 +126,7 @@ def test_erasure_reports_the_memory_surface(tmp_path: Path) -> None:
 
 def test_erasure_honors_only_memory_soft_delete_from_config(tmp_path: Path) -> None:
     """Asymmetric soft-delete: only the memory surface leaves residue."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -150,7 +150,7 @@ def test_erasure_reports_the_cache_surface(tmp_path: Path) -> None:
 
 def test_erasure_honors_only_cache_soft_delete_from_config(tmp_path: Path) -> None:
     """Asymmetric soft-delete: only the cache surface leaves residue."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -175,7 +175,7 @@ def test_erasure_reports_the_model_surface(tmp_path: Path) -> None:
 
 def test_erasure_honors_only_model_soft_delete_from_config(tmp_path: Path) -> None:
     """Asymmetric soft-delete: only the model surface leaves residue."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"
@@ -193,7 +193,7 @@ def test_erasure_honors_only_model_soft_delete_from_config(tmp_path: Path) -> No
 
 def test_erasure_warns_when_soft_delete_is_combined_with_config(tmp_path: Path) -> None:
     """--soft-delete is ignored when --config is given; a warning is emitted."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"workdir: {tmp_path}\n")
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["erasure", "--config", str(config_path), "--soft-delete"])
@@ -207,7 +207,7 @@ def test_erasure_itemizes_a_caveat_alongside_a_genuine_residual(tmp_path: Path) 
     """A genuine residual (soft-delete) and a caveat (no-erasure-API) can
     co-exist; the dominant failure must not hide the caveat - both are reported
     so a DPO sees every surface that still holds data (exit 2)."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         f"workdir: {tmp_path}\n"
         "adapters:\n"

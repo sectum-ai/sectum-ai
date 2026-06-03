@@ -41,7 +41,7 @@ seed. Each tenant owns:
   marker.
 
 Corpus size is configurable. The demo default is ~500 documents per tenant (set
-`scenario.corpus_size` in `sectum.yaml` to change it); the checked-in example
+`scenario.corpus_size` in `sectum-ai.yaml` to change it); the checked-in example
 walkthroughs pin a small corpus so they stay fast and their headline numbers
 stay legible.
 

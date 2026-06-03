@@ -3,10 +3,10 @@
 #
 # This script drives the same workflow the README quickstart promises:
 #
-#   sectum-ai seed   --workdir .sectum --config sectum.yaml
-#   sectum-ai probe  --workdir .sectum --config sectum.yaml --output json
-#   sectum-ai report --workdir .sectum --config sectum.yaml
-#   sectum-ai verify .sectum/evidence.json
+#   sectum-ai seed   --workdir .sectum-ai --config sectum-ai.yaml
+#   sectum-ai probe  --workdir .sectum-ai --config sectum-ai.yaml --output json
+#   sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml
+#   sectum-ai verify .sectum-ai/evidence.json
 #
 # Wrapped with `asciinema rec`, the run produces a deterministic
 # `demo.cast` file that's embeddable on the website and linkable from
@@ -28,8 +28,8 @@
 # embeds it on /docs/quickstart and the website index page via the
 # asciinema-player JS embed.
 #
-# Determinism: the script wipes .sectum/ first, sets a fixed
-# substrate seed in sectum.yaml, and runs everything offline so the
+# Determinism: the script wipes .sectum-ai/ first, sets a fixed
+# substrate seed in sectum-ai.yaml, and runs everything offline so the
 # cast file is byte-identical across re-recordings except for
 # timestamps. That makes regression-checking the demo cheap.
 
@@ -52,11 +52,11 @@ command -v sectum    >/dev/null || { echo "sectum not on PATH; pip install sectu
 cd "$(dirname "$0")"
 
 # Fresh substrate each recording.
-rm -rf .sectum
+rm -rf .sectum-ai
 
 # The recording uses the built-in leaky-fakes defaults — the same path
 # `examples/retrieval-pivot/run.sh` drives. Earlier revisions of this
-# script supplied a custom `sectum.yaml`; that turned out to override
+# script supplied a custom `sectum-ai.yaml`; that turned out to override
 # the substrate flags that make the demo *leaky*, and the resulting
 # cast showed 0 findings — directly contradicting the title. The
 # in-memory leaky fakes are what produce the 264-finding pack the
@@ -65,22 +65,22 @@ rm -rf .sectum
 cast=demo.cast
 asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --command "bash -c '
   # === 1. Seed a 4-tenant marker substrate (Acme, Globex, Initech, Hooli)
-  sectum-ai seed --workdir .sectum
+  sectum-ai seed --workdir .sectum-ai
   echo
   # === 2. Run the cross-tenant probe suite. The default in-memory
   #        substrate is deliberately leaky so the headline RPR shows
   #        real findings; sectum-ai probe exits 2 when it confirms
   #        cross-tenant leaks, so tolerate the non-zero exit.
-  sectum-ai probe --workdir .sectum --output json || true
+  sectum-ai probe --workdir .sectum-ai --output json || true
   echo
   # === 3. Build the tamper-evident evidence pack (JSON + PDF + in-toto envelope).
-  sectum-ai report --workdir .sectum
+  sectum-ai report --workdir .sectum-ai
   echo
   # === 4. Independently verify the pack with no Sectum installation trust.
-  sectum-ai verify .sectum/evidence.json
+  sectum-ai verify .sectum-ai/evidence.json
   echo
   # === 5. Inspect what landed on disk.
-  ls -lh .sectum/*.json .sectum/*.pdf
+  ls -lh .sectum-ai/*.json .sectum-ai/*.pdf
 '" "$cast"
 
 echo

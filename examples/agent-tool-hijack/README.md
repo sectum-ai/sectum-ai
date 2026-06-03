@@ -62,7 +62,7 @@ results. The PDF page-3 findings table itemises each.
 ## Swap the agent caller
 
 The probe consumes whatever `agent.kind` resolves to in
-`sectum.yaml`. The default (no config) is the in-memory `FakeAgent`,
+`sectum-ai.yaml`. The default (no config) is the in-memory `FakeAgent`,
 which is what `run.sh` uses. To drive the same probe through a real
 agent framework, point `agent.kind` at one of the five factory-driven
 adapters below and supply a factory callable that constructs the
@@ -70,7 +70,7 @@ runtime object (`http` needs only a URL; `fake` needs nothing).
 
 [`factories.py`](factories.py) in this directory holds copy-pasteable
 factory functions for each agent kind. Pick the one your stack uses
-and reference it from `sectum.yaml`:
+and reference it from `sectum-ai.yaml`:
 
 ### LangGraph
 
@@ -85,7 +85,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The LangGraph adapter scopes by `thread_id`: each probe step passes
@@ -107,7 +107,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[autogen]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The AutoGen adapter scopes by prefixing every user-proxy message with
@@ -130,7 +130,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[crewai]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The CrewAI adapter scopes by passing `tenant_id` as a named input to
@@ -151,7 +151,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[openai-assistants]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The OpenAI Assistants adapter scopes by caching one `Thread` per
@@ -173,7 +173,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[anthropic-tooluse]
 export ANTHROPIC_API_KEY=sk-ant-...
-sectum-ai probe --probe agent-tool-hijack --config sectum.yaml --workdir out
+sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The Anthropic tool-use adapter scopes by caching one conversation

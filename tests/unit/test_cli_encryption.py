@@ -14,7 +14,7 @@ _KEY_ENV = "SECTUM_TEST_MANIFEST_KEY"
 
 
 def _config(workdir: Path) -> Path:
-    path = workdir / "sectum.yaml"
+    path = workdir / "sectum-ai.yaml"
     path.write_text(f"workdir: {workdir}\nsecurity:\n  manifest_key_env: {_KEY_ENV}\n")
     return path
 

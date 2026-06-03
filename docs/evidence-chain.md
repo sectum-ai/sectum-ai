@@ -22,7 +22,7 @@ verifies independently.
 
 ## Trusted timestamping (RFC 3161)
 
-`sectum-ai report --tsa <url>` (or `evidence.timestamper: rfc3161` in `sectum.yaml`)
+`sectum-ai report --tsa <url>` (or `evidence.timestamper: rfc3161` in `sectum-ai.yaml`)
 submits the run digest to an RFC 3161 Time-Stamp Authority and stores the
 returned token in the pack. The token proves the digest existed at the TSA's
 attested time, signed by an authority independent of Sectum AI.
@@ -39,7 +39,7 @@ RFC 3161 support is an optional extra, `sectum-ai-evidence[rfc3161]` (the
 
 ## Transparency log (Sigstore Rekor)
 
-`sectum-ai report --rekor` (or `evidence.rekor: true` in `sectum.yaml`) also records
+`sectum-ai report --rekor` (or `evidence.rekor: true` in `sectum-ai.yaml`) also records
 the run digest in the [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/)
 transparency log — a public, append-only Merkle log. The log returns an
 *inclusion proof*: the entry's position, the Merkle audit path to the tree root,

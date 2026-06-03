@@ -26,7 +26,7 @@ scenario:
 
 # Where seed/probe/report write their artifacts (substrate.json, run.json,
 # evidence.json, audit-pack.pdf, attestation.intoto.json).
-workdir: .sectum
+workdir: .sectum-ai
 
 # -----------------------------------------------------------------------------
 # Adapters: a `kind` per family. `fake` is the in-memory deterministic adapter
@@ -155,7 +155,7 @@ adapters:
     #                         # Requires the optional `huggingface` extras:
     #                         # `pip install sectum-ai-adapters[huggingface]`.
     #   base_model_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-    #   adapters_dir: ./.sectum/lora-adapters
+    #   adapters_dir: ./.sectum-ai/lora-adapters
     #   lora_rank: 8
     #   lora_alpha: 16
     #   train_epochs: 1

@@ -32,7 +32,7 @@ sectum-ai seed --workdir "$out"
 echo
 echo "==> 2/4  Probe Class 7 from the agent-adapter perspective"
 echo "         (the leaky in-memory MCP server stands in for any backend an"
-echo "         agent might reach; swap the agent adapter via sectum.yaml -"
+echo "         agent might reach; swap the agent adapter via sectum-ai.yaml -"
 echo "         see README.md and factories.py)"
 # 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on the
 # leaky demo MCP server, so tolerate the non-zero exit.

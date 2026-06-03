@@ -2,39 +2,36 @@
   "_type": "https://in-toto.io/Statement/v1",
   "subject": [
     {
-      "name": "run-sectum-ai-demo-2026",
+      "name": "run-sectum-demo-2026",
       "digest": {
-        "sha256": "06c78fa654e19da58b5f5d3e47823f4d4d36cb9d5534141e3a85ee0b0d8d7029"
+        "sha256": "c9670db32160fb236ee3bea5558629848bfda314256315b83ca559f258b35220"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.2.0",
-    "scenario_hash": "ae01e2877bfe733c560987e1ae402f3854f00e95a11bc78ed2d4888b6a397ddb",
-    "manifest_hash": "2020041f3ea27e0c91241a8aa11d7a4d2d38bdf843d390d2372850bd6808f247",
-    "started_at": "2026-06-03T20:40:45.207237+00:00",
-    "finished_at": "2026-06-03T20:40:48.068741+00:00",
+    "schema_version": "0.1.0",
+    "scenario_hash": "083169e020ae06d60d7fb74426120e158f83b4561fccb1a1d03dbe7350f6fdfc",
+    "manifest_hash": "8fe3474ce0b74594e8104086141794055a08d959f3858efcf802fea3279fece6",
+    "started_at": "2026-05-27T01:47:45.150652+00:00",
+    "finished_at": "2026-05-27T01:47:46.792073+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,
-        "rag-entity-bleed": 45,
-        "rag-pipeline-bleed": 15,
+        "rag-entity-bleed": 36,
         "semantic-cache-contamination": 24,
-        "lora-cross-tenant": 28,
+        "lora-cross-tenant": 24,
         "agent-tool-hijack": 24,
-        "agent-framework-hijack": 24,
         "memory-contamination": 24,
         "embedding-inversion": 24,
-        "ikea-extraction": 57,
+        "ikea-extraction": 48,
         "rag-poisoning": 24,
         "kv-cache-timing": 12
       },
-      "confirmed_findings": 325,
-      "retrieval_pivot_rate": 0.8125,
+      "confirmed_findings": 264,
+      "retrieval_pivot_rate": 1.0,
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {},
-      "erasure_caveats": {},
       "side_channel_effect_sizes": {
         "7cd276c8b7a85ec3988ec4fec6002ccf->29b2fc2c0d40514590f8851a50ee4378": 13.3083,
         "7cd276c8b7a85ec3988ec4fec6002ccf->7de1756785c8540d843252db3fe9026d": 13.3083,
@@ -48,12 +45,9 @@
         "d9e603ff20b55c94b3b4f5eded6ef453->7cd276c8b7a85ec3988ec4fec6002ccf": 13.3083,
         "d9e603ff20b55c94b3b4f5eded6ef453->29b2fc2c0d40514590f8851a50ee4378": 13.3083,
         "d9e603ff20b55c94b3b4f5eded6ef453->7de1756785c8540d843252db3fe9026d": 13.3083
-      },
-      "poisoning_bleed_delta": 1.0,
-      "inversion_reconstruction_rate": 1.0,
-      "extraction_efficiency": 1.0
+      }
     },
-    "finding_count": 348,
+    "finding_count": 296,
     "control_mappings": [
       {
         "framework": "SOC 2 (TSC)",
@@ -115,7 +109,7 @@
       }
     ],
     "anchors": {
-      "timestamp": false,
+      "timestamp": true,
       "transparency_log": false
     }
   }

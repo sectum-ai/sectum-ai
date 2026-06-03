@@ -26,10 +26,10 @@ sectum-ai() { uv run --quiet --project "$repo_root" sectum-ai "$@"; }
 rm -rf "$out"
 mkdir -p "$out"
 
-cp "$here/sectum.yaml" "$out/sectum.yaml"
+cp "$here/sectum-ai.yaml" "$out/sectum-ai.yaml"
 
 echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
-sectum-ai seed --workdir "$out" --config "$out/sectum.yaml"
+sectum-ai seed --workdir "$out" --config "$out/sectum-ai.yaml"
 
 echo
 echo "==> 2/4  Probe Class 7 from the agent-framework end"
@@ -38,11 +38,11 @@ echo "         swap it for a live backend via the factories.py wiring in"
 echo "         examples/agent-tool-hijack/)"
 # 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on the
 # leaky demo agent, so tolerate the non-zero exit.
-sectum-ai probe --workdir "$out" --config "$out/sectum.yaml" --probe agent-framework-hijack || true
+sectum-ai probe --workdir "$out" --config "$out/sectum-ai.yaml" --probe agent-framework-hijack || true
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
-sectum-ai report --workdir "$out" --config "$out/sectum.yaml"
+sectum-ai report --workdir "$out" --config "$out/sectum-ai.yaml"
 
 echo
 echo "==> 4/4  Independently verify the evidence pack"
@@ -54,4 +54,4 @@ echo
 echo "The page-3 findings table itemises each confirmed Class 7 leak via the"
 echo "agent-framework surface. To swap the agent caller to a live backend, see"
 echo "examples/agent-tool-hijack/factories.py - the probe stays the same; only"
-echo "the agent.kind in sectum.yaml changes."
+echo "the agent.kind in sectum-ai.yaml changes."

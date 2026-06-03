@@ -10,11 +10,11 @@
 # Wire this into cron to make a Snapshot subscription self-running. The
 # 10-line CI / cron contract looks like:
 #
-#   sectum-ai seed   --workdir .sectum --config /etc/sectum/sectum.yaml
-#   sectum-ai probe  --workdir .sectum --config /etc/sectum/sectum.yaml --output json
-#   sectum-ai report --workdir .sectum --config /etc/sectum/sectum.yaml
+#   sectum-ai seed   --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml
+#   sectum-ai probe  --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml --output json
+#   sectum-ai report --workdir .sectum-ai --config /etc/sectum/sectum-ai.yaml
 #   ./upload-evidence-pack.sh \
-#     --workdir .sectum \
+#     --workdir .sectum-ai \
 #     --customer-id "$SECTUM_CUSTOMER_ID" \
 #     --customer-email "$SECTUM_CUSTOMER_EMAIL" \
 #     --api-url "https://platform.sectum.ai/evidence/upload"
@@ -28,7 +28,7 @@
 #       --customer-email EMAIL [--engagement-id ULID] [--api-url URL]
 #
 # Defaults:
-#   --workdir       .sectum
+#   --workdir       .sectum-ai
 #   --engagement-id auto-generated ULID (time-sortable; the operator can
 #                                       reproduce the order in
 #                                       internal/engagements/<id>.md)
@@ -36,7 +36,7 @@
 
 set -euo pipefail
 
-workdir=".sectum"
+workdir=".sectum-ai"
 customer_id=""
 customer_email=""
 engagement_id=""

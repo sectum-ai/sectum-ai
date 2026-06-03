@@ -76,7 +76,7 @@ def test_seed_writes_a_substrate(tmp_path: Path) -> None:
 
 def test_seed_reads_workdir_and_seed_from_a_config(tmp_path: Path) -> None:
     workdir = tmp_path / "from-config"
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"scenario:\n  seed: 1\nworkdir: {workdir}\n")
     result = _runner.invoke(app, ["seed", "--config", str(config_path)])
     assert result.exit_code == 0
@@ -86,7 +86,7 @@ def test_seed_reads_workdir_and_seed_from_a_config(tmp_path: Path) -> None:
 def test_seed_explicit_flag_overrides_a_config_value(tmp_path: Path) -> None:
     config_workdir = tmp_path / "from-config"
     explicit_workdir = tmp_path / "from-flag"
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"workdir: {config_workdir}\n")
     result = _runner.invoke(
         app,
@@ -109,7 +109,7 @@ def test_probe_records_a_run_and_exits_two_on_confirmed_leaks(tmp_path: Path) ->
 
 def test_probe_with_an_isolated_config_yields_no_findings(tmp_path: Path) -> None:
     """A config with non-leaky fakes produces zero confirmed cross-tenant findings."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         "adapters:\n"
         "  vector_store: {kind: fake, shared_index: false}\n"
@@ -403,7 +403,7 @@ def test_verify_with_a_missing_rekor_key_errors(tmp_path: Path) -> None:
 
 def test_report_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
     workdir = tmp_path / "from-config"
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"workdir: {workdir}\n")
     _runner.invoke(app, ["seed", "--workdir", str(workdir)])
     _runner.invoke(app, ["probe", "--workdir", str(workdir)])
@@ -414,7 +414,7 @@ def test_report_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
 
 def test_baseline_save_with_a_config_uses_its_workdir(tmp_path: Path) -> None:
     workdir = tmp_path / "from-config"
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(f"workdir: {workdir}\n")
     _runner.invoke(app, ["seed", "--workdir", str(workdir)])
     _runner.invoke(app, ["probe", "--workdir", str(workdir)])
@@ -427,7 +427,7 @@ def test_probe_with_max_concurrency_and_isolated_config_yields_no_findings(
     tmp_path: Path,
 ) -> None:
     """An isolated config runs to completion under --max-concurrency 4."""
-    config_path = tmp_path / "sectum.yaml"
+    config_path = tmp_path / "sectum-ai.yaml"
     config_path.write_text(
         "adapters:\n"
         "  vector_store: {kind: fake, shared_index: false}\n"

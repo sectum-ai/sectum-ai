@@ -80,7 +80,7 @@ adapters:
 ```
 
 ```sh
-sectum-ai probe --probe tenant-boundary-fetch --config sectum.yaml --workdir out
+sectum-ai probe --probe tenant-boundary-fetch --config sectum-ai.yaml --workdir out
 ```
 
 A real engagement runs the probe with `shared_index: false` to

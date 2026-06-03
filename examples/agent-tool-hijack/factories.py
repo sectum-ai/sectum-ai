@@ -1,7 +1,7 @@
 """Factory callables for the five shipped v1 agent adapters.
 
 These are the connect-time wiring shapes the CLI resolver expects when
-``agent.kind`` in ``sectum.yaml`` is set to ``langgraph``, ``autogen``,
+``agent.kind`` in ``sectum-ai.yaml`` is set to ``langgraph``, ``autogen``,
 ``crewai``, ``openai-assistants``, or ``anthropic-tooluse``. Each factory
 takes no arguments and returns the runtime object the matching adapter
 wraps:
@@ -12,7 +12,7 @@ wraps:
 - ``make_openai_assistants()``     returns a 2-tuple ``(_AssistantsClient, assistant_id)``.
 - ``make_anthropic_tooluse()``     returns an ``_AnthropicClient`` instance.
 
-Reference each from ``sectum.yaml`` as ``module.path:callable``::
+Reference each from ``sectum-ai.yaml`` as ``module.path:callable``::
 
     adapters:
       agent:

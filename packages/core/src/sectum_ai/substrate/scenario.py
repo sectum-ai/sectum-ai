@@ -26,7 +26,7 @@ def default_scenario(
     entries make ``sectum probe`` record a per-model Retrieval-Pivot Rate.
     """
     return Scenario(
-        scenario_id=f"sectum-demo-{seed}",
+        scenario_id=f"sectum-ai-demo-{seed}",
         seed=seed,
         tenants=default_tenant_specs(seed, corpus_size),
         corpus_profile="demo",

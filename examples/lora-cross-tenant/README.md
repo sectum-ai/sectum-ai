@@ -71,7 +71,7 @@ adapters:
   model:
     kind: huggingface
     base_model_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-    adapters_dir: ./.sectum/lora-adapters
+    adapters_dir: ./.sectum-ai/lora-adapters
     # adapter_bleed: true   # uncomment to reproduce the leak condition
     lora_rank: 8
     lora_alpha: 16
@@ -81,7 +81,7 @@ adapters:
 
 ```sh
 pip install sectum-ai-adapters[huggingface]
-sectum-ai probe --probe lora-cross-tenant --config sectum.yaml --workdir out
+sectum-ai probe --probe lora-cross-tenant --config sectum-ai.yaml --workdir out
 ```
 
 A real base model on CPU runs slowly (TinyLlama-1.1B takes ~30s per

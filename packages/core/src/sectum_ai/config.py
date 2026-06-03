@@ -1,6 +1,6 @@
-"""Read and validate ``sectum.yaml`` and resolve its adapter blocks.
+"""Read and validate ``sectum-ai.yaml`` and resolve its adapter blocks.
 
-The CLI flag ``--config sectum.yaml`` loads a ``SectumConfig``: a typed view
+The CLI flag ``--config sectum-ai.yaml`` loads a ``SectumConfig``: a typed view
 of the configuration that ``sectum init`` scaffolds. Explicit CLI flags
 override the values the config supplies, and the config supplies values the
 built-in defaults would otherwise use (the engineering spec, section 10).
@@ -159,12 +159,12 @@ class DetectionConfig(BaseModel):
 
 
 class SectumConfig(BaseModel):
-    """The parsed ``sectum.yaml`` configuration."""
+    """The parsed ``sectum-ai.yaml`` configuration."""
 
     model_config = ConfigDict(extra="forbid")
 
     scenario: ScenarioConfig = Field(default_factory=ScenarioConfig)
-    workdir: Path = Path(".sectum")
+    workdir: Path = Path(".sectum-ai")
     adapters: dict[str, AdapterConfig] = Field(default_factory=dict)
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
@@ -175,7 +175,7 @@ class SectumConfig(BaseModel):
     def _drop_null_sections(cls, data: Any) -> Any:
         """Treat a section commented down to ``key: null`` as absent (use its default).
 
-        A ``sectum.yaml`` that comments out a whole section's body - e.g. a
+        A ``sectum-ai.yaml`` that comments out a whole section's body - e.g. a
         ``security:`` header whose only remaining line is ``# manifest_key_env:`` -
         parses that section to ``None``. A non-optional section field would then
         reject ``None``; dropping such keys lets the field's default apply, which
@@ -187,7 +187,7 @@ class SectumConfig(BaseModel):
 
 
 def load_config(path: Path) -> SectumConfig:
-    """Load and validate a ``sectum.yaml`` configuration file.
+    """Load and validate a ``sectum-ai.yaml`` configuration file.
 
     Raises:
         ConfigError: if the file is missing, contains malformed YAML, or fails

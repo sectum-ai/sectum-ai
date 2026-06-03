@@ -25,7 +25,7 @@ verifiable by any third party.
 - [`upload-evidence-pack.sh`](./upload-evidence-pack.sh) — POSTs the
   pack to `/evidence/upload` with the bearer secret Sectum Cloud
   issued at subscription time.
-- [`sectum.yaml.example`](./sectum.yaml.example) — minimal config
+- [`sectum-ai.yaml.example`](./sectum-ai.yaml.example) — minimal config
   pointing at the customer's adapters (Pinecone vector DB + Langfuse
   observability is the most common shape).
 - [`crontab.example`](./crontab.example) — the 4-line cron entry that
@@ -41,9 +41,9 @@ in the welcome email. Store the bearer in your secret manager (AWS
 SSM SecureString, Hashicorp Vault, 1Password, kubectl secret —
 whatever you use for everything else).
 
-### 2. Author your `sectum.yaml` (one-time)
+### 2. Author your `sectum-ai.yaml` (one-time)
 
-Copy `sectum.yaml.example` to `/etc/sectum/sectum.yaml` and edit:
+Copy `sectum-ai.yaml.example` to `/etc/sectum/sectum-ai.yaml` and edit:
 
 - Point each adapter at your actual stack (vector DB DSN reference,
   RAG endpoint, observability backend, etc.). Use env-var references
@@ -55,8 +55,8 @@ Scaffold a config, then validate it parses by seeding into a scratch workdir you
 discard afterwards (`sectum-ai seed` has no dry-run mode):
 
 ```sh
-sectum-ai init --output /etc/sectum/sectum.yaml.draft
-sectum-ai seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum.yaml
+sectum-ai init --output /etc/sectum/sectum-ai.yaml.draft
+sectum-ai seed --workdir /tmp/sectum-validate --config /etc/sectum/sectum-ai.yaml
 rm -rf /tmp/sectum-validate
 ```
 
@@ -71,7 +71,7 @@ sudo crontab -u sectum /path/to/crontab.example
 
 The cron fires at 03:00 on the 1st of every month. The runner:
 
-1. Drops the existing `.sectum/` work directory (we want a fresh
+1. Drops the existing `.sectum-ai/` work directory (we want a fresh
    substrate every cycle — running against the same canaries month
    over month would let an attacker game the markers).
 2. `sectum-ai seed` — provisions synthetic tenants + plants canaries.
