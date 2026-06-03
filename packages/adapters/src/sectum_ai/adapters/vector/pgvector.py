@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from uuid import UUID
 
 import psycopg
+
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
 from sectum_ai.spec import AdapterError, CorpusDocument
 

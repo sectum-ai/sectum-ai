@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
+
 from sectum_ai.probes import FakeJudge
 from sectum_ai.spec import (
     ConfigError,

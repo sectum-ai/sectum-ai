@@ -1,9 +1,10 @@
-"""Tests for the ``sectum erasure`` CLI command (Class 11, the wedge)."""
+"""Tests for the ``sectum-ai erasure`` CLI command (Class 11, the wedge)."""
 
 from pathlib import Path
 
-from sectum_ai.cli.app import app
 from typer.testing import CliRunner
+
+from sectum_ai.cli.app import app
 
 _runner = CliRunner()
 

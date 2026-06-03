@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.rag.http import HttpRAGPipeline
 from sectum_ai.spec import AdapterError
 

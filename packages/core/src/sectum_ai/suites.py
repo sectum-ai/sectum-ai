@@ -2,13 +2,13 @@
 
 A *suite* fixes a probe set plus the compliance frameworks it speaks to, so an
 operator runs a named, control-mapped subset for a specific SKU
-(`sectum probe --suite soc2-tenant-isolation`) instead of hand-picking probes.
+(`sectum-ai probe --suite soc2-tenant-isolation`) instead of hand-picking probes.
 The probe ids are validated against the live catalog by the test suite, so a
 suite can never name a probe that does not exist. See ``docs/skus.md``.
 
 The GDPR Article 17 erasure-attestation SKU is **not** a probe suite: it is the
-standalone ``sectum erasure`` workflow (Class 11). Continuous verification is the
-default ``sectum probe`` (every probe), so it needs no named suite.
+standalone ``sectum-ai erasure`` workflow (Class 11). Continuous verification is the
+default ``sectum-ai probe`` (every probe), so it needs no named suite.
 """
 
 from dataclasses import dataclass, field

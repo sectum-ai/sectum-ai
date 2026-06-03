@@ -21,6 +21,7 @@ from uuid import UUID
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import TextContent
+
 from sectum_ai.adapters.base import Capability, MCPAdapter, McpResult
 from sectum_ai.spec import AdapterError
 

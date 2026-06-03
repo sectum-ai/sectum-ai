@@ -13,6 +13,7 @@ from uuid import UUID
 
 import psycopg
 import pytest
+
 from sectum_ai.adapters.base import Capability
 from sectum_ai.adapters.vector.pgvector import PgVectorStore
 from sectum_ai.spec import CorpusDocument

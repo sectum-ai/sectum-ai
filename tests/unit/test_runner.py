@@ -9,6 +9,7 @@ adapter wired → a typed ``AdapterError``).
 from uuid import UUID
 
 import pytest
+
 import sectum_ai.probes as probes
 from sectum_ai.adapters import (
     FakeAgent,

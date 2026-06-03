@@ -15,6 +15,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.base import TraceHit
 from sectum_ai.adapters.observability.langfuse import LangfuseObservability
 

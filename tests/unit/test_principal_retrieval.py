@@ -10,6 +10,7 @@ runner, which threads the actor's user into every vector call.
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.probes import (
     EmbeddingInversionProbe,

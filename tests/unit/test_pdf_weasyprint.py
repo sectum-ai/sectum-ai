@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.evidence import PdfEngine, render_audit_pack
 from sectum_ai.evidence.pdf_weasyprint import build_audit_html, render_weasyprint
 from sectum_ai.spec import (
@@ -110,7 +111,7 @@ def test_verification_instruction_points_at_the_attested_digest_not_the_run_dige
     # mismatches and reads as tampering). The run digest is shown only as a run
     # identifier. Guards the prose against regressing to the pre-ADR-0016 wording.
     html = build_audit_html(_pack())
-    assert "sectum verify" in html
+    assert "sectum-ai verify" in html
     assert "attested digest" in html.lower()
     assert "run identifier" in html.lower()  # the displayed run digest is labelled as such
     # The stale instruction (recompute the RUN digest, check it against the token)

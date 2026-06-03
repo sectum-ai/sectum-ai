@@ -1,10 +1,11 @@
-"""Tests for the ``sectum init`` CLI command."""
+"""Tests for the ``sectum-ai init`` CLI command."""
 
 from pathlib import Path
 
+from typer.testing import CliRunner
+
 from sectum_ai.cli.app import app
 from sectum_ai.config import load_config
-from typer.testing import CliRunner
 
 _runner = CliRunner()
 
@@ -20,9 +21,9 @@ def test_init_writes_a_config(tmp_path: Path) -> None:
 
 
 def test_generated_config_round_trips_through_load_config(tmp_path: Path) -> None:
-    # Regression: the documented `sectum init` -> `--config` onboarding must work.
+    # Regression: the documented `sectum-ai init` -> `--config` onboarding must work.
     # A comment-only `security:` block previously parsed to None and load_config
-    # rejected it, so `sectum seed --config <generated>` exited 3.
+    # rejected it, so `sectum-ai seed --config <generated>` exited 3.
     config = tmp_path / "sectum-ai.yaml"
     assert _runner.invoke(app, ["init", "--output", str(config)]).exit_code == 0
     loaded = load_config(config)

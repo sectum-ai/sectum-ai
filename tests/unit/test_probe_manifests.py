@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+
 import sectum_ai.probes as probes
 from sectum_ai.probes import load_probe_manifest
 

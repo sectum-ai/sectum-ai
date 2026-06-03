@@ -3,6 +3,7 @@
 import math
 
 import pytest
+
 from sectum_ai.embeddings import (
     EmbeddingModel,
     HashingEmbedding,

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.agent.openai_assistants import OpenAIAssistantsAgent
 from sectum_ai.adapters.base import AgentAdapter, Capability
 from sectum_ai.spec import AdapterError

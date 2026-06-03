@@ -1,13 +1,14 @@
-"""Tests for named, sellable probe suites (`sectum probe --suite`, the spec §19)."""
+"""Tests for named, sellable probe suites (`sectum-ai probe --suite`, the spec §19)."""
 
 from pathlib import Path
 from typing import Any, cast
+
+from typer.testing import CliRunner
 
 import sectum_ai.probes as probes
 from sectum_ai.cli.app import app
 from sectum_ai.spec import RunResult
 from sectum_ai.suites import SUITES
-from typer.testing import CliRunner
 
 _runner = CliRunner()
 

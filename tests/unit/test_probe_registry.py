@@ -1,6 +1,7 @@
 """Tests for the probe registry (the engineering spec, section 7)."""
 
 import pytest
+
 from sectum_ai.probes import ProbeRegistry, RagEntityBleedProbe, TenantBoundaryProbe
 
 

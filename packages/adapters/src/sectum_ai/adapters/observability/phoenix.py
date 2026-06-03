@@ -11,6 +11,7 @@ from uuid import UUID
 
 import httpx
 from phoenix.client import Client
+
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 
 _SPAN_LIMIT = 1000
@@ -20,7 +21,7 @@ _SPAN_LIMIT = 1000
 class PhoenixObservability(ObservabilityAdapter):
     """An observability backend backed by an Arize Phoenix server."""
 
-    def __init__(self, base_url: str, *, name: str = "phoenix", prefix: str = "sectum") -> None:
+    def __init__(self, base_url: str, *, name: str = "phoenix", prefix: str = "sectum-ai") -> None:
         super().__init__(name, frozenset({Capability.TRACE_SEARCH}))
         self._client = Client(base_url=base_url)
         self._prefix = prefix

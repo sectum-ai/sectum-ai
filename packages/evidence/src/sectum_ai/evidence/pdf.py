@@ -14,6 +14,7 @@ from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
 from sectum_ai.spec import (
@@ -66,7 +67,7 @@ _SCOPE_METHODOLOGY: tuple[str, ...] = (
 # digest shown above is only a run identifier, so the instruction must not tell
 # the reader to check it against the token (mirrors docs/evidence-chain.md).
 _VERIFICATION_INSTRUCTION: str = (
-    "Verify this pack independently by running 'sectum verify' on it. That "
+    "Verify this pack independently by running 'sectum-ai verify' on it. That "
     "recomputes the whole-pack attested digest - over the run record, the "
     "manifest hash, the control mappings, and the PDF reference - and checks it "
     "against the timestamp token (and the Rekor inclusion proof when present). "

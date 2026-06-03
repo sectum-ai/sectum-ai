@@ -16,6 +16,7 @@ import anyio
 import pytest
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_client_server_memory_streams
+
 from sectum_ai.adapters.base import Capability
 from sectum_ai.adapters.mcp.http import HttpMCPClient
 from sectum_ai.spec import AdapterError

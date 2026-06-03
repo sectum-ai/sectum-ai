@@ -22,7 +22,7 @@ _RUN_LIMIT = 1000
 class LangSmithObservability(ObservabilityAdapter):
     """An observability backend backed by LangSmith, one project per tenant."""
 
-    def __init__(self, client: Any, *, name: str = "langsmith", prefix: str = "sectum") -> None:
+    def __init__(self, client: Any, *, name: str = "langsmith", prefix: str = "sectum-ai") -> None:
         super().__init__(name, frozenset({Capability.TRACE_SEARCH}))
         self._client = client
         self._prefix = prefix
@@ -34,7 +34,7 @@ class LangSmithObservability(ObservabilityAdapter):
         api_url: str | None = None,
         *,
         name: str = "langsmith",
-        prefix: str = "sectum",
+        prefix: str = "sectum-ai",
     ) -> Self:
         """Open a LangSmith client and return the adapter.
 

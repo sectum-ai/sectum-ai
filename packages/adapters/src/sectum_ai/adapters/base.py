@@ -15,6 +15,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
 from sectum_ai.spec import CorpusDocument, get_logger
 
 _log = get_logger(__name__)

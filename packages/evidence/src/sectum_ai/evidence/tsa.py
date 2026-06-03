@@ -3,7 +3,7 @@
 The default :class:`~sectum_ai.evidence.chain.LocalTimestamper` records a wall-clock
 time with no external anchor. ``Rfc3161Timestamper`` instead submits the run
 digest to an RFC 3161 Time-Stamp Authority (TSA) and stores the returned token;
-``sectum verify`` then checks that token against the recomputed digest, so the
+``sectum-ai verify`` then checks that token against the recomputed digest, so the
 timestamp is independently verifiable rather than self-asserted.
 
 Trust model: a TSA token is only as trustworthy as the root it is checked
@@ -93,7 +93,7 @@ class Rfc3161Timestamper:
         token = decode_timestamp_response(body)
         # Accept only PKIStatus 0 (granted). grantedWithMods (1) also issues a
         # token, but the verifier rejects it, so storing one would yield a pack
-        # that fails `sectum verify`; fail fast at issue time instead.
+        # that fails `sectum-ai verify`; fail fast at issue time instead.
         if int(token.status) != 0:
             detail = ", ".join(token.status_string) or "no detail"
             raise EvidenceError(

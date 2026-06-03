@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.evidence import (
     PREDICATE_TYPE,
     STATEMENT_TYPE,

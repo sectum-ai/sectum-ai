@@ -10,6 +10,7 @@ from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+
 from sectum_ai.spec.enums import (
     AccessOutcome,
     FindingStatus,

@@ -1,11 +1,11 @@
 # Sectum AI configuration template.
 #
-# Copy to `sectum.yaml` at the project root, edit the blocks you need, and pass
-# `--config sectum.yaml` to the CLI:
+# Copy to `sectum-ai.yaml` at the project root, edit the blocks you need, and pass
+# `--config sectum-ai.yaml` to the CLI:
 #
-#     uv run sectum seed   --config sectum.yaml
-#     uv run sectum probe  --config sectum.yaml
-#     uv run sectum report --config sectum.yaml
+#     uv run sectum-ai seed   --config sectum-ai.yaml
+#     uv run sectum-ai probe  --config sectum-ai.yaml
+#     uv run sectum-ai report --config sectum-ai.yaml
 #
 # Anything omitted uses the built-in default; explicit CLI flags
 # (--seed, --workdir, --probe) override the values here.
@@ -102,14 +102,14 @@ adapters:
     #   url_env: SECTUM_AGENT_URL
     # kind: langgraph          # a compiled LangGraph StateGraph (per-thread checkpoint)
     #                          # construct via `LangGraphAgent.connect(model, tools)`
-    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # in Python — sectum-ai.yaml only flips the kind so the
     #                          # config validator accepts a langgraph adapter built
     #                          # by the caller. Requires the optional `langgraph`
     #                          # extra: `pip install sectum-ai-adapters[langgraph]`.
     # kind: autogen            # an AutoGen AssistantAgent + UserProxyAgent pair
     #                          # (each per-tenant message prefixed with [tenant:<hex>])
     #                          # construct via `AutoGenAgent.connect(model, tools)`
-    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # in Python — sectum-ai.yaml only flips the kind so the
     #                          # config validator accepts an autogen adapter built
     #                          # by the caller. Requires the optional `autogen`
     #                          # extra: `pip install sectum-ai-adapters[autogen]`.
@@ -117,14 +117,14 @@ adapters:
     #                          # (tenant.hex passed in as the `tenant_id` input
     #                          # variable; templated task descriptions interpolate it)
     #                          # construct via `CrewAIAgent.connect(agents, tasks)`
-    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # in Python — sectum-ai.yaml only flips the kind so the
     #                          # config validator accepts a crewai adapter built
     #                          # by the caller. Requires the optional `crewai`
     #                          # extra: `pip install sectum-ai-adapters[crewai]`.
     # kind: openai-assistants  # an OpenAI Assistant + per-tenant Thread (the API
     #                          # caches Threads server-side; one per tenant.hex)
     #                          # construct via `OpenAIAssistantsAgent.connect(model, tools)`
-    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # in Python — sectum-ai.yaml only flips the kind so the
     #                          # config validator accepts an openai-assistants
     #                          # adapter built by the caller. Requires the optional
     #                          # `openai-assistants` extra:
@@ -134,7 +134,7 @@ adapters:
     #                          # per-tenant user message is prefixed with [tenant:<hex>]
     #                          # and the loop runs to `stop_reason: end_turn` per turn.
     #                          # construct via `AnthropicToolUseAgent.connect(model, tools)`
-    #                          # in Python — sectum.yaml only flips the kind so the
+    #                          # in Python — sectum-ai.yaml only flips the kind so the
     #                          # config validator accepts an anthropic-tooluse adapter
     #                          # built by the caller. Requires the optional
     #                          # `anthropic-tooluse` extra:
@@ -184,7 +184,7 @@ evidence:
 # -----------------------------------------------------------------------------
 security:
   # Name of the env var holding a base64-encoded 32-byte AES-256 key.
-  # When set, `sectum seed` seals the substrate and its manifest at rest.
+  # When set, `sectum-ai seed` seals the substrate and its manifest at rest.
   manifest_key_env: null   # set to e.g. "SECTUM_MANIFEST_KEY" to seal at rest
 
 # -----------------------------------------------------------------------------

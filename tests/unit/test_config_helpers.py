@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 import pytest
+
 from sectum_ai.config import (
     AdapterConfig,
     _optional_str,

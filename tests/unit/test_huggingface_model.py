@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.base import Capability, ModelAdapter
 from sectum_ai.adapters.model.huggingface import HuggingFaceLoraModel
 from sectum_ai.spec import AdapterError

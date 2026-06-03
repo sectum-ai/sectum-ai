@@ -1,9 +1,11 @@
-"""Tests for ``sectum diff`` and the run-diff library functions."""
+"""Tests for ``sectum-ai diff`` and the run-diff library functions."""
 
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
+
+from typer.testing import CliRunner
 
 from sectum_ai.baseline import diff_findings, diff_runs
 from sectum_ai.cli.app import app
@@ -16,7 +18,6 @@ from sectum_ai.spec import (
     Severity,
     Surface,
 )
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -192,7 +193,7 @@ def test_run_diff_flags_a_worsened_metric() -> None:
     assert result.regressed
 
 
-# --- CLI: sectum diff --------------------------------------------------------
+# --- CLI: sectum-ai diff --------------------------------------------------------
 
 
 def test_cli_diff_reports_no_regression_for_identical_runs(tmp_path: Path) -> None:

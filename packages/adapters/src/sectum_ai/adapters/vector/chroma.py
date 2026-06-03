@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from uuid import UUID
 
 import chromadb
+
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
 from sectum_ai.spec import CorpusDocument
 
@@ -40,7 +41,7 @@ class ChromaVectorStore(VectorStoreAdapter):
         embed: Embedder,
         *,
         name: str = "chroma",
-        prefix: str = "sectum",
+        prefix: str = "sectum-ai",
         user_scoped: bool = False,
     ) -> None:
         capabilities = {Capability.PER_TENANT_NAMESPACE}

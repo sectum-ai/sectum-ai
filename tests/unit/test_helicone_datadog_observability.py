@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
 from sectum_ai.adapters.observability.datadog import DatadogObservability
 from sectum_ai.adapters.observability.helicone import HeliconeObservability

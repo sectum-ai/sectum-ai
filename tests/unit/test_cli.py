@@ -6,6 +6,8 @@ from uuid import UUID
 
 import pytest
 import typer
+from typer.testing import CliRunner
+
 from sectum_ai.cli.app import _handle_typed_errors, _load_run, _load_substrate, app
 from sectum_ai.spec import (
     AdapterError,
@@ -18,7 +20,6 @@ from sectum_ai.spec import (
     Severity,
     Surface,
 )
-from typer.testing import CliRunner
 
 _runner = CliRunner()
 
@@ -26,7 +27,7 @@ _runner = CliRunner()
 def test_version_flag_prints_the_version() -> None:
     result = _runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "sectum" in result.output
+    assert "sectum-ai" in result.output
 
 
 def test_adapters_command_lists_every_family() -> None:
@@ -136,7 +137,7 @@ def _run_with(findings: tuple[Finding, ...]) -> RunResult:
 
 
 def test_baseline_compare_flags_a_newly_confirmed_finding(tmp_path: Path) -> None:
-    # baseline --compare now runs the full run diff (like `sectum diff`), so a leak
+    # baseline --compare now runs the full run diff (like `sectum-ai diff`), so a leak
     # that newly confirms between the baseline and the current run is a regression
     # (exit 2) even when the headline metric counts are unchanged.
     leak = Finding(

@@ -30,7 +30,7 @@ def _seeded_observability(substrate: Substrate, *, soft_delete: bool) -> FakeObs
         if marker.marker_type is MarkerType.HARD_CANARY:
             obs.record(
                 marker.owner_tenant_id,
-                "sectum-erasure",
+                "sectum-ai-erasure",
                 f"trace recording marker {marker.plaintext}",
             )
     return obs
@@ -50,7 +50,7 @@ def _seeded_cache(substrate: Substrate, *, soft_delete: bool) -> FakeCache:
         if marker.marker_type is MarkerType.HARD_CANARY:
             cache.set(
                 marker.owner_tenant_id,
-                f"sectum-erasure-{marker.marker_id}",
+                f"sectum-ai-erasure-{marker.marker_id}",
                 f"cached answer mentioning {marker.plaintext}",
             )
     return cache
@@ -449,7 +449,7 @@ def _no_erasure_observability(substrate: Substrate) -> ObservabilityAdapter:
 def test_attestable_with_caveat_finding_is_unverified_not_confirmed() -> None:
     # An attestable-with-caveat finding is a same-tenant backend limitation, not
     # a confirmed cross-tenant leak. It must be UNVERIFIED so the false-positive
-    # control (confirmed-count, sectum diff/baseline gates) never treats a
+    # control (confirmed-count, sectum-ai diff/baseline gates) never treats a
     # no-per-tenant-erasure-API backend as a confirmed finding (spec §7 #8).
     from sectum_ai.spec import FindingStatus
 
@@ -474,7 +474,7 @@ def test_onboarding_a_caveat_backend_is_not_a_diff_regression() -> None:
     # The "caveats never regress" contract end to end: a later erasure
     # attestation that differs from a clean baseline only by an added
     # no-per-tenant-erasure-API surface must NOT read as a regression in
-    # `sectum diff` (no newly-confirmed finding, no confirmed-count bump).
+    # `sectum-ai diff` (no newly-confirmed finding, no confirmed-count bump).
     from sectum_ai.baseline import diff_findings
     from sectum_ai.probes import confirmed_findings
 

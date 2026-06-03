@@ -9,6 +9,7 @@ types).
 import math
 
 import pytest
+
 from sectum_ai.spec import canonical_hash, sha256_hex, to_canonical_json
 
 

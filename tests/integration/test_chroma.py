@@ -14,6 +14,7 @@ from uuid import UUID
 
 import chromadb
 import pytest
+
 from sectum_ai.adapters.base import Capability
 from sectum_ai.adapters.vector.chroma import ChromaVectorStore
 from sectum_ai.spec import CorpusDocument

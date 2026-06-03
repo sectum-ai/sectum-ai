@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from sectum_ai.evidence import (
     RekorTransparencyLog,
     build_evidence_pack,

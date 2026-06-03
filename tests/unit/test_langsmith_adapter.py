@@ -14,7 +14,7 @@ from uuid import UUID
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
 from sectum_ai.adapters.observability.langsmith import LangSmithObservability
 
-_PREFIX = "sectum"
+_PREFIX = "sectum-ai"
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
 

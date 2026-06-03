@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 
 import pytest
-from sectum_ai.cli.app import app
 from typer.testing import CliRunner
+
+from sectum_ai.cli.app import app
 
 _runner = CliRunner()
 _KEY_B64 = base64.b64encode(os.urandom(32)).decode()

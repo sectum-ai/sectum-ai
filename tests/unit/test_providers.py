@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
 from sectum_ai.config import (
     DetectionConfig,
     EmbedderConfig,
