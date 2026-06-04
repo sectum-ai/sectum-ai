@@ -42,7 +42,7 @@ _INSTALL_HINT = "Rekor support requires the 'rekor' extra: pip install 'sectum-a
 
 
 def _builtin_keyring() -> dict[str, bytes]:
-    """Return the shipped Rekor public keys, keyed by log id (base64 SHA-256 of the DER key)."""
+    """Return the shipped Rekor public keys, keyed by log id (hex SHA-256 of the DER key)."""
     keyring: dict[str, bytes] = {}
     anchor = resources.files("sectum_ai.evidence").joinpath("_rekor")
     for entry in anchor.iterdir():
@@ -64,8 +64,15 @@ def _der_spki(pem: bytes) -> bytes:
 
 
 def _log_id(der_spki: bytes) -> str:
-    """Return a Rekor log id: base64 of the SHA-256 of the DER public key."""
-    return base64.b64encode(hashlib.sha256(der_spki).digest()).decode("ascii")
+    """Return a Rekor log id: the hex SHA-256 of the DER public key.
+
+    This matches Rekor's own ``logID`` - the ``entry["logID"]`` the API returns and
+    that :func:`_normalize_entry` stores verbatim as the proof's ``log_id`` - so a
+    real inclusion proof's log id matches the keyring. Keying by base64 here was a
+    bug: a real proof carries the hex log id, which never matched the base64 key, so
+    a ``--rekor``-anchored pack failed to verify even with the correct key shipped.
+    """
+    return hashlib.sha256(der_spki).hexdigest()
 
 
 def rekor_keyring(*key_pems: bytes) -> dict[str, bytes]:
