@@ -214,6 +214,18 @@ def test_the_builtin_keyring_holds_the_production_rekor_keys() -> None:
     assert all(pem.startswith(b"-----BEGIN PUBLIC KEY-----") for pem in keyring.values())
 
 
+def test_the_builtin_keyring_is_keyed_by_rekor_hex_log_id() -> None:
+    # Regression: Rekor's API logID - which _normalize_entry stores verbatim as the
+    # proof's log_id - is the HEX SHA-256 of the log key. The keyring must key by
+    # that same hex, or a real inclusion proof never matches (keying by base64 was
+    # the bug that made every --rekor-anchored pack fail verification even with the
+    # correct key shipped). The public-good Rekor instance's well-known log id must
+    # be trusted out of the box.
+    keyring = _builtin_keyring()
+    assert "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d" in keyring
+    assert all(len(log_id) == 64 and set(log_id) <= set("0123456789abcdef") for log_id in keyring)
+
+
 def test_the_transparency_log_rejects_a_non_http_url() -> None:
     with pytest.raises(EvidenceError, match="http"):
         RekorTransparencyLog(rekor_url="ftp://rekor.example")

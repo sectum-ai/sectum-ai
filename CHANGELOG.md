@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `--rekor`-anchored evidence pack now verifies out of the box.** `verify`
+  rejected a valid Sigstore Rekor inclusion proof with *"the Rekor log id … is not
+  in the trusted keyring"* even though the correct public-good key ships: the
+  keyring was keyed by the **base64** SHA-256 of the log key, but Rekor's API
+  `logID` (stored verbatim as the proof's `log_id`) is the **hex** SHA-256, so a
+  real proof's log id never matched. `_log_id` now uses hex (Rekor's own
+  convention), so the shipped public-good key (`c0d23d6…`) is matched and a
+  `report --rekor` → `verify` round-trip passes with no `--rekor-key`. (Surfaced by
+  the first live Open WebUI run; the TSA anchor was unaffected.) Regression test
+  pins the hex keying and that the public-good log id is trusted.
+
 ### Security
 
 - **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
