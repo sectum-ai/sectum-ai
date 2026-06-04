@@ -48,7 +48,15 @@ real product).
   **as the tenant's own user** so Open WebUI's real retrieval + authorization
   path runs.
 - **Sectum detects** the foreign canary in Open WebUI's answer + retrieved
-  source chunks by exact match against the manifest — zero false positives.
+  source chunks against the manifest — zero false positives. **Note on what the
+  default run measures:** with the default `fake` embedder, detection is the
+  **exact** `HARD_CANARY` and **credential-format** `SECRET_CANARY` paths, so the
+  headline RPR is an *exact-match* result. The organic `ENTITY_CANARY` **semantic**
+  entity-bleed — the actual 95.4% Retrieval-Pivot finding (arXiv:2602.08668) —
+  requires a real embedder: set `detection.embedder.kind: openai` (+ `OPENAI_API_KEY`,
+  and `judge.kind: openai`) and query the shared entity, not the canary token.
+  (Earlier the provisioner uploaded only `HARD_CANARY` docs; it now uploads the
+  entity and secret pivots too, so that semantic run is possible.)
 
 ## Adapter mapping (why the RAG shim, not the Chroma adapter)
 

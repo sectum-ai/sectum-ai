@@ -24,6 +24,9 @@ adapters:
   vector_store:
     kind: fake
 
+# Detection (isolated control). Same defaults as the shared config; the embedder
+# choice does not affect the expected RPR=0 here. See sectum-ai.yaml for the
+# fake-vs-real note (a real embedder is needed for the semantic ENTITY gradient).
 detection:
   embedder:
     kind: fake

@@ -54,16 +54,18 @@ adapters:
   # families stay plain (non-leaky) fakes and their probes are not part of the
   # Open WebUI evidence. See the class->surface matrix in the README.
 
-# Detection: the offline deterministic defaults are sufficient and BYOC-safe -
-# the HARD_CANARY markers Open WebUI returns verbatim are caught by exact match
-# (zero false positives) with no embedding-model account needed. To run the
-# semantic Class 2 (ENTITY_CANARY) gradient against real embeddings, configure a
-# provider here (api_key_env, never inlined).
+# Detection. The offline deterministic defaults catch the HARD_CANARY (exact) and
+# SECRET_CANARY (credential-format) markers Open WebUI returns verbatim - zero
+# false positives, no embedding account needed. IMPORTANT: with the fake embedder
+# the headline RPR is an EXACT-MATCH result; it does NOT measure the organic
+# ENTITY_CANARY *semantic* entity-bleed the flagship is about (arXiv:2602.08668).
+# For that, point the embedder + judge at a real provider (set OPENAI_API_KEY,
+# never inlined) and query the shared organic entity rather than the canary token.
 detection:
   embedder:
-    kind: fake
+    kind: fake # set `kind: openai` (+ OPENAI_API_KEY) for the semantic ENTITY gradient
   judge:
-    kind: fake
+    kind: fake # set `kind: openai` / `anthropic` to confirm semantic candidates
 
 # Local development anchoring for the dry-run. The operator's official run
 # switches to an RFC 3161 TSA (and optionally Rekor) via `sectum-ai report --tsa
