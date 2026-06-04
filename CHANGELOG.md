@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`examples/open-webui-run/` — a push-button harness that runs Sectum AI against
+  a self-hosted [Open WebUI](https://github.com/open-webui/open-webui).** It stands
+  up Open WebUI + Ollama in Docker, provisions four synthetic tenants from Sectum's
+  marker substrate, and drives the flagship **Class 2** organic entity-bleed Retrieval
+  Pivot through Open WebUI's chat-with-knowledge API (plus **Class 1** cross-user file
+  fetch), contrasting a `shared` public-KB config (RPR ≈ 100%) against an `isolated`
+  per-tenant config (RPR ≈ 0%) and emitting a signed, `verify`-able evidence pack —
+  the same demo as `retrieval-pivot`, here against a real product. Lawful-testing
+  posture: our own deployment, synthetic corpora, manifest-grounded detection.
+
 - **Class 1 now flags the "200-empty vs 403" deny ambiguity.** A direct
   cross-tenant fetch that comes back empty is not a proven deny — a backend can
   return `200` with an empty body without ever enforcing authorization. The

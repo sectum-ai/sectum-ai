@@ -48,9 +48,7 @@ LISTEN_PORT = int(os.environ.get("SECTUM_SHIM_PORT", "8099"))
 
 def _load_map() -> dict:
     if not MAP_PATH.exists():
-        raise SystemExit(
-            f"no tenant map at {MAP_PATH}; run scripts/provision.sh first"
-        )
+        raise SystemExit(f"no tenant map at {MAP_PATH}; run scripts/provision.sh first")
     return json.loads(MAP_PATH.read_text())
 
 
@@ -118,9 +116,7 @@ def _extract(completion: dict) -> tuple[str, list[dict]]:
             )
             # distances, when present, are 1 - score-ish; default to 1.0 so the
             # adapter's optional score parse is satisfied.
-            retrieved.append(
-                {"doc_id": str(doc_id), "content": str(chunk), "score": 1.0}
-            )
+            retrieved.append({"doc_id": str(doc_id), "content": str(chunk), "score": 1.0})
     return answer, retrieved
 
 

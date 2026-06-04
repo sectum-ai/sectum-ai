@@ -158,9 +158,7 @@ class OwuiClient:
         mime = mimetypes.guess_type(filename)[0] or "text/plain"
         parts = [
             f"--{boundary}".encode(),
-            (
-                f'Content-Disposition: form-data; name="file"; filename="{filename}"'
-            ).encode(),
+            (f'Content-Disposition: form-data; name="file"; filename="{filename}"').encode(),
             f"Content-Type: {mime}".encode(),
             b"",
             content,
@@ -186,9 +184,7 @@ class OwuiClient:
         deadline = time.time() + PROCESS_POLL_TIMEOUT_S
         while time.time() < deadline:
             try:
-                status = self._request(
-                    "GET", f"/api/v1/files/{file_id}/process/status"
-                )
+                status = self._request("GET", f"/api/v1/files/{file_id}/process/status")
             except RuntimeError:
                 # Endpoint absent on this build: fall back to a short settle.
                 time.sleep(PROCESS_POLL_INTERVAL_S)
@@ -281,11 +277,7 @@ def _doc_to_bytes(doc: dict) -> tuple[str, bytes]:
     how the substrate plants the marker in body+title+metadata.
     """
     meta_lines = "\n".join(f"{k}: {v}" for k, v in doc.get("metadata", {}).items())
-    text = (
-        f"Title: {doc['title']}\n"
-        f"{meta_lines}\n\n"
-        f"{doc['content']}\n"
-    )
+    text = f"Title: {doc['title']}\n{meta_lines}\n\n{doc['content']}\n"
     return f"{doc['doc_id']}.txt", text.encode("utf-8")
 
 
@@ -417,10 +409,7 @@ def provision(substrate_path: Path, base_url: str, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(tenant_map, indent=2))
     print(f"\nwrote tenant map -> {out_path}")
-    print(
-        "  (holds JWTs - treat as a lab secret; it is under out/ which is "
-        "gitignored)"
-    )
+    print("  (holds JWTs - treat as a lab secret; it is under out/ which is gitignored)")
 
 
 def main() -> int:

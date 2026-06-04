@@ -93,9 +93,7 @@ def main() -> int:
                 if observer_tid == owner_tid:
                     continue
                 attempts += 1
-                status, body = _get(
-                    base_url, f"/api/v1/files/{file_id}/content", observer["token"]
-                )
+                status, body = _get(base_url, f"/api/v1/files/{file_id}/content", observer["token"])
                 text = body.decode("utf-8", "replace") if status == 200 else ""
                 leaked = status == 200 and any(c in text for c in owner_canaries)
                 if leaked:
