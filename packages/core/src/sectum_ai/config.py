@@ -24,6 +24,7 @@ adapter resolver can look them up at run time without storing secrets.
 import hashlib
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -135,6 +136,12 @@ class EmbedderConfig(BaseModel):
     kind: Literal["fake", "openai"] = "fake"
     model: str | None = None
     api_key_env: str | None = None
+    # An OpenAI-compatible base URL. Point it at a local server that speaks the
+    # OpenAI embeddings API - e.g. Ollama at "http://localhost:11434/v1"
+    # (model: "nomic-embed-text"), vLLM, or LM Studio - to run the semantic step
+    # with no OpenAI account. When set, the API key is optional (these endpoints
+    # ignore the Authorization header); leave it unset for the real OpenAI API.
+    base_url: str | None = None
 
 
 class JudgeConfig(BaseModel):
@@ -145,6 +152,10 @@ class JudgeConfig(BaseModel):
     kind: Literal["fake", "openai", "anthropic"] = "fake"
     model: str | None = None
     api_key_env: str | None = None
+    # An OpenAI-/Anthropic-compatible base URL (see EmbedderConfig.base_url): point
+    # `kind: openai` at a local Ollama ("http://localhost:11434/v1",
+    # model: "qwen2.5") to adjudicate candidates with no OpenAI account.
+    base_url: str | None = None
 
 
 class DetectionConfig(BaseModel):
@@ -803,15 +814,42 @@ def _resolve_api_key(api_key_env: str | None, default_env: str) -> str:
     return value
 
 
+def _provider_api_key(api_key_env: str | None, default_env: str, base_url: str | None) -> str:
+    """Resolve a provider API key, lenient for OpenAI-compatible local endpoints.
+
+    A real remote endpoint (``base_url`` unset) requires the key. A local
+    OpenAI-compatible server (e.g. Ollama or vLLM, ``base_url`` set) ignores the
+    Authorization header, so fall back to a placeholder when no key is configured -
+    letting ``kind: openai`` run against a local model with no account.
+    """
+    if base_url is not None:
+        return os.environ.get(api_key_env or default_env) or "sk-local-no-auth"
+    return _resolve_api_key(api_key_env, default_env)
+
+
+def _build_provider[ProviderT](
+    ctor: Callable[..., ProviderT], api_key: str, model: str | None, base_url: str | None
+) -> ProviderT:
+    """Construct an OpenAI-/Anthropic-style provider, passing only the set options.
+
+    The provider classes take ``model`` and ``base_url`` as keyword args with their
+    own defaults, so each is forwarded only when the config sets it.
+    """
+    kwargs: dict[str, str] = {}
+    if model is not None:
+        kwargs["model"] = model
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    return ctor(api_key, **kwargs)
+
+
 def build_embedder(config: EmbedderConfig) -> EmbeddingProvider | None:
     """Resolve the configured embedding provider, or ``None`` to use the fake."""
     if config.kind == "fake":
         return None
     if config.kind == "openai":
-        api_key = _resolve_api_key(config.api_key_env, "OPENAI_API_KEY")
-        if config.model is not None:
-            return OpenAIEmbeddingProvider(api_key, model=config.model)
-        return OpenAIEmbeddingProvider(api_key)
+        api_key = _provider_api_key(config.api_key_env, "OPENAI_API_KEY", config.base_url)
+        return _build_provider(OpenAIEmbeddingProvider, api_key, config.model, config.base_url)
     raise ConfigError(f"unknown embedder kind: {config.kind!r}")
 
 
@@ -820,15 +858,11 @@ def build_judge(config: JudgeConfig) -> Judge | None:
     if config.kind == "fake":
         return None
     if config.kind == "openai":
-        api_key = _resolve_api_key(config.api_key_env, "OPENAI_API_KEY")
-        if config.model is not None:
-            return OpenAIJudge(api_key, model=config.model)
-        return OpenAIJudge(api_key)
+        api_key = _provider_api_key(config.api_key_env, "OPENAI_API_KEY", config.base_url)
+        return _build_provider(OpenAIJudge, api_key, config.model, config.base_url)
     if config.kind == "anthropic":
-        api_key = _resolve_api_key(config.api_key_env, "ANTHROPIC_API_KEY")
-        if config.model is not None:
-            return AnthropicJudge(api_key, model=config.model)
-        return AnthropicJudge(api_key)
+        api_key = _provider_api_key(config.api_key_env, "ANTHROPIC_API_KEY", config.base_url)
+        return _build_provider(AnthropicJudge, api_key, config.model, config.base_url)
     raise ConfigError(f"unknown judge kind: {config.kind!r}")
 
 

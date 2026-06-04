@@ -166,16 +166,21 @@ deterministic offline fakes; configure real providers for production detection.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `embedder.kind` | `fake` \| `openai` | `fake` | `openai` embeds over the OpenAI API. |
-| `embedder.model` | str | provider default | e.g. `text-embedding-3-small`. |
-| `embedder.api_key_env` | str | `OPENAI_API_KEY` | Env var holding the API key. |
+| `embedder.kind` | `fake` \| `openai` | `fake` | `openai` embeds over the OpenAI API (or any OpenAI-compatible endpoint via `base_url`). |
+| `embedder.model` | str | provider default | e.g. `text-embedding-3-small`, or `nomic-embed-text` for Ollama. |
+| `embedder.api_key_env` | str | `OPENAI_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
+| `embedder.base_url` | str | OpenAI API | OpenAI-compatible base URL — point at a local **Ollama** (`http://localhost:11434/v1`), vLLM, or LM Studio to run the semantic step with no OpenAI account. |
 | `judge.kind` | `fake` \| `openai` \| `anthropic` | `fake` | The LLM judge that adjudicates semantic candidates. |
-| `judge.model` | str | provider default | e.g. `gpt-4o-mini`, `claude-3-5-haiku-latest`. |
-| `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. |
+| `judge.model` | str | provider default | e.g. `gpt-4o-mini`, `claude-3-5-haiku-latest`, or `qwen2.5` for Ollama. |
+| `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
+| `judge.base_url` | str | provider API | OpenAI-/Anthropic-compatible base URL; `kind: openai` + a local Ollama runs the judge with no account. |
 | `semantic_threshold` | float | `0.62` | The similarity gate before the judge; raise it once a real embedding model is configured (a stronger model surfaces more — the engineering spec, section 7). |
 
 Real providers reach their HTTP APIs with the standard library only; the API key
-is read from the environment, never inlined.
+is read from the environment, never inlined. A local OpenAI-compatible server —
+**Ollama** (`http://localhost:11434/v1`), vLLM, or LM Studio — is a fully offline,
+BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
+ignore it), so the semantic embedder + judge run with no external account.
 
 ## Secrets and environment variables
 

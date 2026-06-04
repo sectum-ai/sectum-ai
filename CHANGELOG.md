@@ -58,6 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The detection embedder + judge accept an OpenAI-compatible `base_url`, so the
+  semantic pipeline can run against a local Ollama (or vLLM / LM Studio) with no
+  OpenAI account.** `detection.embedder.base_url` / `detection.judge.base_url` point
+  the `openai` kind at any OpenAI-compatible server — e.g. Ollama at
+  `http://localhost:11434/v1` (`embedder.model: nomic-embed-text`,
+  `judge.model: qwen2.5`). When `base_url` is set the API key is optional (local
+  endpoints ignore it), so the Class 2 semantic ENTITY gradient and the LLM judge
+  run fully offline / BYOC-safe. The real OpenAI path still requires its key.
+
 - **`examples/open-webui-run/` — a push-button harness that runs Sectum AI against
   a self-hosted [Open WebUI](https://github.com/open-webui/open-webui).** It stands
   up Open WebUI + Ollama in Docker, provisions four synthetic tenants from Sectum's
