@@ -1,0 +1,34 @@
+# examples/open-webui-run/sectum-ai.isolated.yaml
+#
+# The ISOLATED counterpart to sectum-ai.yaml. Identical except it is run with the
+# RAG shim in SECTUM_OWUI_MODE=isolated, where each tenant's chat attaches ONLY
+# its own Private knowledge base. A correctly scoped Open WebUI returns only the
+# tenant's own documents, so the same benign shared-entity queries surface NO
+# foreign canary => expected Retrieval-Pivot Rate ~0% (isolation verified).
+#
+# The contrast between this run (RPR ~0%) and the shared-collection run
+# (sectum-ai.yaml, RPR high) IS the evidence: the rate is a property of the
+# configuration, and Sectum proves which one is deployed.
+
+scenario:
+  seed: 2026
+  corpus_size: 8
+
+workdir: out/sectum-isolated
+
+adapters:
+  rag:
+    kind: http
+    url: http://127.0.0.1:8099/
+    timeout: 180.0
+  vector_store:
+    kind: fake
+
+detection:
+  embedder:
+    kind: fake
+  judge:
+    kind: fake
+
+evidence:
+  timestamper: local

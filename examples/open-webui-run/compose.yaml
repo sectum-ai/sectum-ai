@@ -1,0 +1,87 @@
+# examples/open-webui-run/compose.yaml
+#
+# A self-hosted Open WebUI instance we own and are authorized to test, plus a
+# tiny Ollama so chat-with-knowledge actually runs end to end. Both are pinned.
+#
+# Lawful-testing note: this is OUR OWN deployment (we run it, we own the data).
+# The corpora are Sectum's synthetic marker substrate - no real PII or secrets.
+#
+# Bring it up with ./scripts/up.sh (which also waits for health). Tear it down
+# with ./scripts/teardown.sh.
+services:
+  open-webui:
+    # PINNED image tag - never :main/:latest for an evidence-generating run, so
+    # the pack attests exactly which version was under test. v0.9.6 is the latest
+    # stable as of 2026-06 (post the 0.9.0 / 0.9.5 cross-tenant CVE fixes); the
+    # RBAC/shared-collection surface this harness exercises is independent of
+    # those patched IDOR CVEs. To reproduce a pre-fix baseline, override
+    # OWUI_IMAGE_TAG (e.g. v0.8.12) - see the README.
+    image: ghcr.io/open-webui/open-webui:${OWUI_IMAGE_TAG:-v0.9.6}
+    container_name: sectum-owui
+    ports:
+      - "${OWUI_PORT:-3000}:8080"
+    environment:
+      # Deterministic JWT signing key so re-provisioning yields stable tokens
+      # within a run. Sourced from the environment (.env), never inlined here.
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+      # Headless provisioning: allow the script to register the 4 tenant users.
+      # The FIRST registered user becomes admin automatically (Open WebUI rule);
+      # the provisioning script registers the admin first, then the 4 tenants.
+      ENABLE_SIGNUP: "true"
+      ENABLE_LOGIN_FORM: "true"
+      DEFAULT_USER_ROLE: "user"
+      # Local-only lab: bind the OpenAI-compatible API to the bundled Ollama and
+      # disable outbound model providers. RAG uses the built-in local embeddings
+      # (sentence-transformers all-MiniLM-L6-v2) into the embedded ChromaDB at
+      # $DATA_DIR/vector_db, so no data leaves the box.
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      ENABLE_OPENAI_API: "false"
+      # Let every user reach the local chat model. Open WebUI gates MODEL access
+      # per user by default, so a fresh tenant user sees zero models and chat
+      # 400s "Model not found". This bypass is the MODEL boundary only; the
+      # KNOWLEDGE/retrieval boundary we actually test stays enforced via
+      # BYPASS_RETRIEVAL_ACCESS_CONTROL=false below (its default).
+      BYPASS_MODEL_ACCESS_CONTROL: "true"
+      # Keep retrieval access control ON (default) so a user can only retrieve
+      # from a knowledge collection it can read - this is the isolation property
+      # the Class 2 probe verifies. The leak in 'shared' mode comes from the KB
+      # being public-read and holding every tenant's docs, NOT from disabling
+      # this check.
+      BYPASS_RETRIEVAL_ACCESS_CONTROL: "false"
+      # Keep config in the DB so our env vars + provisioning are the source of
+      # truth on every fresh `up` (no surprise persisted overrides).
+      ENABLE_PERSISTENT_CONFIG: "false"
+      # Quiet the first-run model-list/telemetry calls in an offline lab.
+      WEBUI_AUTH: "true"
+      SCARF_NO_ANALYTICS: "true"
+      DO_NOT_TRACK: "true"
+      ANONYMIZED_TELEMETRY: "false"
+    volumes:
+      # Named volume holds DATA_DIR (/app/backend/data): webui.db (users, KBs),
+      # uploads/, and vector_db/ (the embedded ChromaDB). Wiped by teardown.sh.
+      - sectum-owui-data:/app/backend/data
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      # Open WebUI serves /health unauthenticated once the app is up.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.6.8}
+    container_name: sectum-owui-ollama
+    # Not published to the host - only Open WebUI talks to it over the compose net.
+    expose:
+      - "11434"
+    volumes:
+      - sectum-owui-ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  sectum-owui-data:
+  sectum-owui-ollama:

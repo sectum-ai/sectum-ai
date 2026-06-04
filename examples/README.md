@@ -18,6 +18,7 @@ example is a self-contained directory with a `run.sh` script and a `README.md`.
 | [`lora-cross-tenant/`](lora-cross-tenant/) | Class 9 | A mis-routed per-tenant LoRA stack bleeds one tenant's memorized canary into another tenant's inference. |
 | [`ikea-extraction/`](ikea-extraction/) | Class 10 | A fixed multi-turn benign query sequence surfaces a foreign tenant's canary from a shared vector index — no prompt injection. |
 | [`erasure-attestation/`](erasure-attestation/) | Class 11 | A GDPR Article 17 erasure-verification run and its attestation pack. |
+| [`open-webui-run/`](open-webui-run/) | Class 2 (flagship), 1, 11 | Sectum against a **self-hosted Open WebUI** (real product): seeds the substrate, uploads each tenant's corpus into Open WebUI Knowledge via its API, and measures the Retrieval-Pivot Rate through Open WebUI's chat-with-knowledge endpoint. Requires Docker; not part of the offline `SECTUM_RUN_E2E` suite. |
 | [`byoc-runner/`](byoc-runner/) | — | A BYOC operator workflow: a Sectum CLI install reads a Cloud snapshot subscription. |
 
 Each `run.sh` invokes the `sectum` CLI from this repository through `uv` and

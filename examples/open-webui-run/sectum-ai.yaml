@@ -1,0 +1,72 @@
+# examples/open-webui-run/sectum-ai.yaml
+#
+# Sectum configuration for probing a self-hosted Open WebUI we own.
+#
+# This is the SHARED-collection (leak) configuration: the RAG shim attaches the
+# one shared knowledge base that holds every tenant's docs, so a benign
+# shared-entity query pivots into a foreign tenant's pivot document. The flagship
+# Class 2 (rag-pipeline-bleed) measures the Retrieval-Pivot Rate over Open WebUI's
+# REAL chat-with-knowledge retrieval path.
+#
+# Run the isolated counterpart with --config sectum-ai.isolated.yaml to get the
+# before/after contrast (expected RPR ~0%).
+#
+# Secrets are never inlined: the shim reads JWTs from out/tenant-map.json (a lab
+# artifact under the gitignored out/), and this file references no credentials.
+
+scenario:
+  seed: 2026
+  # Small, legible corpus so the upload + run stay fast. 8 marker-bearing pivot
+  # docs per scenario (2 per tenant) is plenty to demonstrate the pivot; the
+  # package default is ~500 docs/tenant (docs/substrate.md).
+  corpus_size: 8
+
+# Where Sectum writes the substrate, run record, and evidence pack.
+workdir: out/sectum
+
+adapters:
+  # The flagship surface: Open WebUI's chat-with-knowledge endpoint, reached
+  # through the local RAG shim (scripts/rag_shim.py) that speaks Sectum's
+  # {tenant,query} -> {answer,retrieved} contract on one side and Open WebUI's
+  # OpenAI-compatible /api/chat/completions on the other. Class 2's
+  # rag-pipeline-bleed probe drives this.
+  rag:
+    kind: http
+    url: http://127.0.0.1:8099/
+    timeout: 180.0
+
+  # The vector_store stays a fake here ON PURPOSE. Sectum's chroma adapter scopes
+  # every read to its OWN per-tenant collection name (sectum-ai-<tenant.hex>),
+  # and `sectum-ai probe` upserts the substrate into those collections itself -
+  # so pointing it at Open WebUI's Chroma would test Sectum's own collection
+  # layout living inside Open WebUI's Chroma process, NOT Open WebUI's retrieval
+  # isolation. Open WebUI's real isolation boundary is its chat-with-knowledge
+  # API, which we exercise via the RAG shim above. (See the README "Adapter
+  # mapping" section.) The vector-store-end Class 1/2 probes therefore run
+  # against the fake and are not part of the Open WebUI evidence; the
+  # boundary-fetch surface that DOES matter for Open WebUI - cross-user file
+  # fetch by id - is exercised by scripts/class1_boundary_fetch.py.
+  vector_store:
+    kind: fake
+
+  # No semantic cache, KV cache, agent memory, MCP, model fine-tuning, or
+  # tracing backend is exposed by a vanilla Open WebUI deployment, so those
+  # families stay plain (non-leaky) fakes and their probes are not part of the
+  # Open WebUI evidence. See the class->surface matrix in the README.
+
+# Detection: the offline deterministic defaults are sufficient and BYOC-safe -
+# the HARD_CANARY markers Open WebUI returns verbatim are caught by exact match
+# (zero false positives) with no embedding-model account needed. To run the
+# semantic Class 2 (ENTITY_CANARY) gradient against real embeddings, configure a
+# provider here (api_key_env, never inlined).
+detection:
+  embedder:
+    kind: fake
+  judge:
+    kind: fake
+
+# Local development anchoring for the dry-run. The operator's official run
+# switches to an RFC 3161 TSA (and optionally Rekor) via `sectum-ai report --tsa
+# ... --rekor` - see the README runbook.
+evidence:
+  timestamper: local
