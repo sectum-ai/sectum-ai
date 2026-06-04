@@ -34,6 +34,7 @@ from sectum_ai.config import (
     build_vector_store,
     load_config,
 )
+from sectum_ai.probes import OpenAIEmbeddingProvider, OpenAIJudge
 from sectum_ai.spec import ConfigError
 
 
@@ -1120,6 +1121,34 @@ def test_build_embedder_openai_raises_when_custom_api_key_env_is_unset(
     monkeypatch.delenv("CUSTOM_OPENAI_KEY", raising=False)
     with pytest.raises(ConfigError, match="CUSTOM_OPENAI_KEY"):
         build_embedder(EmbedderConfig(kind="openai", api_key_env="CUSTOM_OPENAI_KEY"))
+
+
+def test_build_embedder_openai_base_url_runs_without_an_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pointing `kind: openai` at a local OpenAI-compatible server (e.g. Ollama at
+    # http://localhost:11434/v1) must NOT require an OpenAI account: the base_url is
+    # honored and a missing key falls back to a placeholder instead of raising.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    provider = build_embedder(
+        EmbedderConfig(
+            kind="openai", base_url="http://localhost:11434/v1", model="nomic-embed-text"
+        )
+    )
+    assert isinstance(provider, OpenAIEmbeddingProvider)
+    assert provider._base_url == "http://localhost:11434/v1"
+
+
+def test_build_judge_openai_base_url_runs_without_an_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The judge likewise runs against a local Ollama with no OpenAI account.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    provider = build_judge(
+        JudgeConfig(kind="openai", base_url="http://localhost:11434/v1", model="qwen2.5")
+    )
+    assert isinstance(provider, OpenAIJudge)
+    assert provider._base_url == "http://localhost:11434/v1"
 
 
 def test_build_judge_fake_returns_none() -> None:
