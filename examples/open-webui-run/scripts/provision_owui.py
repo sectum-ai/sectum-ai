@@ -254,16 +254,18 @@ class TenantEntry:
 
 
 def _marker_doc_ids(substrate: dict) -> set[str]:
-    """The set of doc ids that carry a HARD_CANARY (the pivot documents).
+    """The set of doc ids that carry a planted marker (the pivot documents).
 
     Uploading every filler doc (500/tenant) is slow and unnecessary: only the
     marker-bearing pivot documents are the leak bait Sectum detects. We upload
-    exactly those, keeping the integration deterministic and fast.
+    exactly those - across ALL marker types: HARD_CANARY (exact),
+    SECRET_CANARY (credential-format), and ENTITY_CANARY (semantic). Filtering to
+    HARD_CANARY only - as an earlier version did - silently dropped the entity and
+    secret pivots, so the flagship's organic entity-bleed and secret-surfacing
+    paths were never exercised and the run measured only exact-substring matches.
     """
     ids: set[str] = set()
     for marker in substrate["manifest"]["markers"]:
-        if marker["marker_type"] != "HARD_CANARY":
-            continue
         for loc in marker["planted_locations"]:
             ids.add(loc["doc_id"])
     return ids
@@ -273,7 +275,7 @@ def _doc_to_bytes(doc: dict) -> tuple[str, bytes]:
     """Render a corpus document to an uploadable text file, markers intact.
 
     Title, body, and the marker_ref metadata are all included verbatim so the
-    HARD_CANARY survives chunking and can be retrieved by any field - mirroring
+    planted marker survives chunking and can be retrieved by any field - mirroring
     how the substrate plants the marker in body+title+metadata.
     """
     meta_lines = "\n".join(f"{k}: {v}" for k, v in doc.get("metadata", {}).items())

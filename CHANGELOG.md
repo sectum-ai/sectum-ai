@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Open WebUI example: the provisioner now uploads every marker type, and the
+  flagship's exact-vs-semantic distinction is stated honestly.** `provision_owui.py`
+  filtered uploads to `HARD_CANARY` docs, silently dropping the `ENTITY_CANARY` and
+  `SECRET_CANARY` pivot documents the substrate generates — so the run only ever
+  exercised exact-substring matching, and the headline Retrieval-Pivot Rate was an
+  *exact-match* figure, not the organic semantic entity-bleed the flagship is named
+  for. The filter is removed (all pivot docs upload), and the README + configs now
+  state that the default `fake` embedder measures the exact (HARD) + credential-format
+  (SECRET) paths, while the semantic `ENTITY_CANARY` gradient requires a real
+  embedder (`detection.embedder.kind: openai`). Surfaced by the first-run coverage analysis.
+
 - **A `--rekor`-anchored evidence pack now verifies out of the box.** `verify`
   rejected a valid Sigstore Rekor inclusion proof with *"the Rekor log id … is not
   in the trusted keyring"* even though the correct public-good key ships: the
