@@ -38,7 +38,7 @@ jobs:
         run: uv run mypy
 
       - name: Tests
-        run: uv run pytest -n auto --cov=sectum --cov-report=term-missing
+        run: uv run pytest -n auto --cov=sectum_ai --cov-report=term-missing
 
       # Per-package floors (the engineering spec, §15): core, probes, and evidence
       # must each stay at or above 85% line coverage. Reuses the .coverage written
