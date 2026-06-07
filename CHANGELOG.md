@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The live Langfuse observability adapter works against current Langfuse
+  (v3).** Two issues surfaced by a self-hosted Langfuse erasure run: (1) the
+  adapter requested `trace.list(limit=1000)`, but current Langfuse caps the
+  public trace-list page size at 100 and rejects larger limits with HTTP 400 — it
+  now pages at the API maximum up to the same scan budget; (2) Langfuse processes
+  trace deletion asynchronously, so the erasure probe's immediate post-delete
+  re-scan reported a **false RESIDUAL** for a backend that does fully erase —
+  `delete()` now waits (bounded) for the tenant's traces to disappear before
+  returning, so the erasure verdict is accurate.
+
 - **Open WebUI example: the provisioner now uploads every marker type, and the
   flagship's exact-vs-semantic distinction is stated honestly.** `provision_owui.py`
   filtered uploads to `HARD_CANARY` docs, silently dropping the `ENTITY_CANARY` and

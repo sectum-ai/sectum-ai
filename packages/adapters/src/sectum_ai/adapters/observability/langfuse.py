@@ -13,6 +13,7 @@ no dependency. The live path requires the ``langfuse`` optional dependency:
 ``pip install sectum-ai-adapters[langfuse]``.
 """
 
+import time
 from typing import Any, Self
 from uuid import UUID
 
@@ -20,6 +21,15 @@ from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 
 _TRACE_LIMIT = 1000
 """How many of a tenant's most recent traces to scan or purge per call."""
+
+_TRACE_PAGE = 100
+"""Max page size the Langfuse public trace-list API accepts (it rejects >100)."""
+
+_DELETE_SETTLE_TRIES = 60
+"""Bounded polls to confirm Langfuse's asynchronous trace deletion completed."""
+
+_DELETE_SETTLE_INTERVAL = 2.0
+"""Seconds between deletion-settle polls."""
 
 
 class LangfuseObservability(ObservabilityAdapter):
@@ -65,7 +75,23 @@ class LangfuseObservability(ObservabilityAdapter):
         return " ".join(str(part) for part in parts if part)
 
     def _tenant_traces(self, tenant: UUID) -> list[Any]:
-        return list(self._client.api.trace.list(user_id=tenant.hex, limit=_TRACE_LIMIT).data)
+        # Page through the tenant's traces: Langfuse caps the list page size at
+        # _TRACE_PAGE (rejecting larger limits with HTTP 400), so request
+        # fixed-size pages until a short/empty page or the _TRACE_LIMIT scan
+        # budget is reached.
+        traces: list[Any] = []
+        page = 1
+        while len(traces) < _TRACE_LIMIT:
+            batch = self._client.api.trace.list(
+                user_id=tenant.hex, limit=_TRACE_PAGE, page=page
+            ).data
+            if not batch:
+                break
+            traces.extend(batch)
+            if len(batch) < _TRACE_PAGE:
+                break
+            page += 1
+        return traces[:_TRACE_LIMIT]
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         project = self._project_name()
@@ -81,5 +107,14 @@ class LangfuseObservability(ObservabilityAdapter):
 
     def delete(self, tenant: UUID) -> None:
         trace_ids = [str(trace.id) for trace in self._tenant_traces(tenant)]
-        if trace_ids:
-            self._client.api.trace.delete_multiple(trace_ids=trace_ids)
+        if not trace_ids:
+            return
+        self._client.api.trace.delete_multiple(trace_ids=trace_ids)
+        # Langfuse processes trace deletion asynchronously, so a caller that
+        # re-scans immediately would see the not-yet-purged traces and wrongly
+        # report residual data. Wait, bounded, until the tenant's traces are no
+        # longer listed before returning.
+        for _ in range(_DELETE_SETTLE_TRIES):
+            if not self._tenant_traces(tenant):
+                return
+            time.sleep(_DELETE_SETTLE_INTERVAL)
