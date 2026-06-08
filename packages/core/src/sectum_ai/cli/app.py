@@ -67,6 +67,7 @@ from sectum_ai.evidence import (
     control_mappings,
     rekor_keyring,
     render_audit_pack_and_hash,
+    run_to_oscal,
     run_to_sarif,
     to_in_toto_statement,
     verify_bundle,
@@ -143,12 +144,16 @@ class OutputFormat(StrEnum):
     machine-parseable JSON object so CI pipelines and scripts can read the
     summary off stdout without scraping prose. `sarif` emits a SARIF 2.1.0 log of
     the findings so GitHub code scanning (and SAST dashboards) can ingest them.
-    Error messages stay on stderr in every mode, and exit codes are unchanged.
+    `oscal` emits a NIST OSCAL 1.1.x assessment-results document so GRC platforms
+    and auditors can ingest the run as a machine-readable, control-mapped
+    assessment. Error messages stay on stderr in every mode, and exit codes are
+    unchanged.
     """
 
     TEXT = "text"
     JSON = "json"
     SARIF = "sarif"
+    OSCAL = "oscal"
 
 
 def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
@@ -584,7 +589,9 @@ def probe(
             "--output",
             help=(
                 "Render the run summary on stdout. `text` is human-readable (default); "
-                "`json` emits a single machine-parseable object for CI pipelines."
+                "`json` emits a machine-parseable object for CI pipelines; `sarif` a "
+                "SARIF 2.1.0 log for code scanning; `oscal` a NIST OSCAL 1.1.x "
+                "assessment-results document for GRC platforms and auditors."
             ),
             case_sensitive=False,
         ),
@@ -752,6 +759,11 @@ def probe(
         # SARIF 2.1.0 log of the findings for GitHub code scanning / SAST
         # dashboards; the signed evidence.json on disk stays the canonical record.
         typer.echo(json.dumps(run_to_sarif(run, tool_version=__version__), indent=2))
+    elif output is OutputFormat.OSCAL:
+        # NIST OSCAL 1.1.x assessment-results for GRC platforms / auditors: one
+        # observation per finding, one finding per mapped control. Derived and
+        # unsigned; the signed evidence.json on disk stays the canonical record.
+        typer.echo(json.dumps(run_to_oscal(run, tool_version=__version__), indent=2))
     else:
         plural = "" if probe_count == 1 else "s"
         typer.echo(
@@ -1475,8 +1487,8 @@ def calibrate(
     recommended value as ``detection.semantic_threshold`` (or use ``auto`` for the
     built-in preset).
     """
-    if output is OutputFormat.SARIF:
-        raise ConfigError("calibrate supports --output text or json, not sarif")
+    if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
+        raise ConfigError(f"calibrate supports --output text or json, not {output.value}")
     loaded = load_config(config) if config is not None else SectumConfig()
     effective_seed = scenario_seed if scenario_seed is not None else loaded.scenario.seed
     # workdir is accepted for parity with the other workflow commands and to source
@@ -1746,6 +1758,11 @@ def diff(
     confirmed in both runs - else 0, so the command can gate a CI pipeline (the
     engineering spec, section 10).
     """
+    if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
+        # SARIF and OSCAL project a single run's findings; a two-run delta has no
+        # meaningful rendering in either, so reject them rather than silently
+        # falling through to text (the guard symmetry the calibrate command uses).
+        raise ConfigError(f"diff supports --output text or json, not {output.value}")
     earlier_run = _load_run_artifact(earlier)
     later_run = _load_run_artifact(later)
     result = diff_runs(earlier_run, later_run)

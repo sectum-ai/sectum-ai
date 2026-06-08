@@ -34,6 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   canonical record; the SARIF is a derived, unsigned projection. An unverified
   candidate is capped at SARIF `note` so the manifest-grounded, zero-false-positive
   headline is never overstated.
+- **OSCAL assessment-results output (`sectum-ai probe --output oscal`).** Emits a
+  NIST OSCAL 1.1.x `assessment-results` JSON document so GRC platforms and auditors
+  can ingest a run as a machine-readable, control-mapped assessment. It carries one
+  OSCAL *observation* per finding (the marker-grounded evidence, with the Sectum
+  finding id/status/surface in `props` for traceability back to the signed record)
+  and one OSCAL *finding* per mapped framework control from `control_mappings()`
+  (SOC 2, ISO 27001, GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM Top 10), each
+  linking to the observations via `related-observations`. Status is honest:
+  `target.status.state` is `not-satisfied` only when a **confirmed**
+  (manifest-grounded) cross-tenant leak exists; an UNVERIFIED candidate is recorded
+  as evidence but never on its own presents as a control failure, and a run with
+  zero confirmed leaks renders a valid "tested, no confirmed cross-tenant leakage"
+  attestation rather than an empty document. The `COVERAGE_DISCLAIMER` (mappings are
+  test-coverage assertions, not legal certification) is embedded in the metadata
+  remarks. All UUIDs are derived deterministically (`uuid5`) from the run id and all
+  timestamps come from the run, so the same run renders byte-identical OSCAL. The
+  document is a derived, unsigned projection; the signed `evidence.json` stays the
+  canonical record. `calibrate` and `diff` reject `--output oscal` (and `sarif`)
+  with a clear error, mirroring the existing guard symmetry.
 - **Erasure "snapshot" scope (`sectum-ai erasure --scope`).** An engagement can
   now verify a subset of erasure surfaces — for example `--scope vector_db` or
   `--scope vector_db,tracing` — backing a cheaper single-surface snapshot

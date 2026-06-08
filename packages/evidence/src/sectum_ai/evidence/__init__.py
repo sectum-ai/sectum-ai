@@ -32,6 +32,7 @@ from sectum_ai.evidence.intoto import (
     to_in_toto_statement,
     verify_in_toto_statement,
 )
+from sectum_ai.evidence.oscal import OSCAL_VERSION, run_to_oscal
 from sectum_ai.evidence.pdf import PdfEngine, render_audit_pack, render_audit_pack_and_hash
 from sectum_ai.evidence.rekor import RekorTransparencyLog, rekor_keyring, verify_rekor_proof
 from sectum_ai.evidence.sarif import SARIF_VERSION, run_to_sarif
@@ -42,6 +43,7 @@ __all__ = [
     "COVERAGE_DISCLAIMER",
     "EVIDENCE_MEMBER",
     "MANIFEST_MEMBER",
+    "OSCAL_VERSION",
     "PAYLOAD_TYPE",
     "PREDICATE_TYPE",
     "SARIF_VERSION",
@@ -65,6 +67,7 @@ __all__ = [
     "render_audit_pack",
     "render_audit_pack_and_hash",
     "run_digest",
+    "run_to_oscal",
     "run_to_sarif",
     "to_in_toto_statement",
     "verify_bundle",

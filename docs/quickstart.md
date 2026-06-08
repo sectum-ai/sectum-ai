@@ -58,6 +58,24 @@ finding. Upload it with `github/codeql-action/upload-sarif` and the cross-tenant
 findings surface in the repository's **Security** tab. An unverified candidate is
 capped at SARIF `note`, and the signed `evidence.json` stays the canonical record.
 
+For a GRC platform or auditor, pass `--output oscal` to emit a **NIST OSCAL 1.1.x
+assessment-results** document so the run can be ingested as a machine-readable,
+control-mapped assessment:
+
+```sh
+uv run sectum-ai probe --workdir .sectum-ai --output oscal > assessment-results.json
+```
+
+It carries one OSCAL *observation* per finding (the marker-grounded evidence) and
+one OSCAL *finding* per mapped framework control (SOC 2, ISO 27001, GDPR, …) whose
+`status.state` reflects the run honestly — `not-satisfied` when a cross-tenant leak
+was *confirmed*, otherwise `satisfied` ("tested, no confirmed cross-tenant
+leakage"). An unverified candidate is recorded as evidence but never on its own
+flips a control to failed, and the coverage disclaimer (these mappings are
+test-coverage assertions, not legal certification) rides in the metadata remarks.
+The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays the
+canonical record.
+
 The summary carries the `run_id`, the probe count, the confirmed-finding
 count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
 when Class 2 swept models), the per-probe finding counts, and a `run_path`
