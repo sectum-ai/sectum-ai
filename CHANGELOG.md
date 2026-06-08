@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SARIF output (`sectum-ai probe --output sarif`).** Emits a SARIF 2.1.0 log of
+  the run's findings so GitHub code scanning (and other SAST dashboards) ingest
+  them and surface cross-tenant findings in a repository's Security tab — one rule
+  per probe, one result per finding. The signed `evidence.json` stays the
+  canonical record; the SARIF is a derived, unsigned projection. An unverified
+  candidate is capped at SARIF `note` so the manifest-grounded, zero-false-positive
+  headline is never overstated.
 - **Erasure "snapshot" scope (`sectum-ai erasure --scope`).** An engagement can
   now verify a subset of erasure surfaces — for example `--scope vector_db` or
   `--scope vector_db,tracing` — backing a cheaper single-surface snapshot
