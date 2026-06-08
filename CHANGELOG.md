@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   trace deletion asynchronously, so the erasure probe's immediate post-delete
   re-scan reported a **false RESIDUAL** for a backend that does fully erase —
   `delete()` now waits (bounded) for the tenant's traces to disappear before
-  returning, so the erasure verdict is accurate.
+  returning, so the erasure verdict is accurate. The adapter's erasure **scope**
+  is now documented in `delete()`: it covers the project's traces (nested
+  observations + scores cascade), not project-level prompts/datasets — full
+  Article 17 erasure of a Langfuse tenant (a project) requires project deletion,
+  so the erasure report attests the tracing surface, not project-level objects.
 
 - **Open WebUI example: the provisioner now uploads every marker type, and the
   flagship's exact-vs-semantic distinction is stated honestly.** `provision_owui.py`

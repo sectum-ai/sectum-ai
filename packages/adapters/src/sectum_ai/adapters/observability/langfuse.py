@@ -106,6 +106,19 @@ class LangfuseObservability(ObservabilityAdapter):
         return sorted(str(project.name) for project in self._client.api.projects.get().data)
 
     def delete(self, tenant: UUID) -> None:
+        """Erase the tenant's traces (the tracing surface) within the bound project.
+
+        Scope: this deletes the tenant's traces — their nested observations and
+        scores cascade with them — within the one bound project. It does NOT
+        erase project-level objects (prompts, datasets, dataset items): those are
+        not user-scoped, so full GDPR Article 17 erasure of a whole Langfuse
+        tenant (= a project) requires deleting the project itself. The erasure
+        report therefore attests the tracing surface, not project-level objects.
+
+        Langfuse deletes asynchronously, so this waits (bounded) for the tenant's
+        traces to disappear before returning so a post-erasure re-scan is
+        accurate.
+        """
         trace_ids = [str(trace.id) for trace in self._tenant_traces(tenant)]
         if not trace_ids:
             return
