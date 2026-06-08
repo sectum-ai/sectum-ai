@@ -73,3 +73,34 @@ class Surface(StrEnum):
     BACKUP = "backup"
     SEARCH_INDEX = "search_index"
     TRACING = "tracing"
+
+
+class CoverageVerdict(StrEnum):
+    """The per-surface coverage verdict in a Class 11 erasure attestation.
+
+    A coverage block (surface -> verdict) makes the attestation honest about
+    *what it actually verified*: an attestation must never imply more coverage
+    than it has. The anti-over-claim guarantee is that a surface which was not
+    scanned can only ever be :data:`NOT_COVERED` - never :data:`ERASED` (the
+    engineering spec, section 7, Class 11).
+
+    The first three values are the tri-state every surface resolves to;
+    :data:`ATTESTABLE_WITH_CAVEAT` is the fourth, DPO-facing distinction the
+    spec calls out at Class 11 hiding place #8: the surface *was* scanned and a
+    baseline existed, but the backend exposes no programmatic per-tenant erasure
+    API, so the data is presumed retained until it ages out of the backend's
+    retention window. It is a documented backend limitation, never a clean pass
+    and never conflated with a residual-after-erasure *failure*.
+    """
+
+    ERASED = "ERASED"
+    """Covered and clean: a baseline existed and no marker survived erasure."""
+
+    RESIDUAL = "RESIDUAL"
+    """Covered and failed: the backend was asked to erase and a marker survived."""
+
+    ATTESTABLE_WITH_CAVEAT = "ATTESTABLE_WITH_CAVEAT"
+    """Covered, but the backend exposes no per-tenant erasure API (hiding place #8)."""
+
+    NOT_COVERED = "NOT_COVERED"
+    """Out of scope, not scanned, or no pre-erasure baseline - never ``ERASED``."""

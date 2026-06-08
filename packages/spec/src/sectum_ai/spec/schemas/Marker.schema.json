@@ -31,7 +31,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.3.0/Marker.schema.json",
+  "$id": "https://schemas.sectum.ai/0.4.0/Marker.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A planted canary whose appearance in the wrong principal proves leakage.\n\n``owner_user_id`` is set only when the marker is owned by a specific user\nwithin ``owner_tenant_id``'s tenant (ADR-0006); a tenant-level marker\nleaves it ``None``.",

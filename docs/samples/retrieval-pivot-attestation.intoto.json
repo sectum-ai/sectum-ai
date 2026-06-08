@@ -4,17 +4,17 @@
     {
       "name": "run-sectum-ai-demo-2026",
       "digest": {
-        "sha256": "d31c66aaffcf4b9a50440c18cbe0306e38cec0f60dbc09cdc646807f78fcca8a"
+        "sha256": "fa421537d9278c8f331e6d32617b851ee04003a8199210ff7b091beb1e0af457"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.3.0",
-    "scenario_hash": "af9da02efda26ece5756ff94e491922081446803f49399b1dea2468f54a0521e",
-    "manifest_hash": "01621727cafdd8a1adab1acd505aa5161332b227c9eb4f900914dbff5e8ea4a6",
-    "started_at": "2026-06-03T23:17:21.036676+00:00",
-    "finished_at": "2026-06-03T23:17:23.923460+00:00",
+    "schema_version": "0.4.0",
+    "scenario_hash": "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb",
+    "manifest_hash": "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514",
+    "started_at": "2026-06-08T06:57:44.186240+00:00",
+    "finished_at": "2026-06-08T06:57:47.129483+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,
@@ -35,6 +35,7 @@
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {},
       "erasure_caveats": {},
+      "erasure_coverage": {},
       "side_channel_effect_sizes": {
         "7cd276c8b7a85ec3988ec4fec6002ccf->29b2fc2c0d40514590f8851a50ee4378": 13.3083,
         "7cd276c8b7a85ec3988ec4fec6002ccf->7de1756785c8540d843252db3fe9026d": 13.3083,

@@ -21,7 +21,12 @@ from sectum_ai.probes.detection import (
     is_cross_principal,
 )
 from sectum_ai.probes.embedding_inversion import EmbeddingInversionProbe
-from sectum_ai.probes.erasure import ErasureProbe, ErasureReport, SurfaceErasure
+from sectum_ai.probes.erasure import (
+    ERASURE_SURFACES,
+    ErasureProbe,
+    ErasureReport,
+    SurfaceErasure,
+)
 from sectum_ai.probes.ikea_extraction import IkeaExtractionProbe
 from sectum_ai.probes.kv_cache_timing import KvCacheTimingProbe, KvCacheTimingReport, TimingSignal
 from sectum_ai.probes.lora_cross_tenant import LoraCrossTenantProbe
@@ -38,6 +43,7 @@ from sectum_ai.probes.semantic_cache import SemanticCacheProbe
 from sectum_ai.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
+    "ERASURE_SURFACES",
     "AgentFrameworkHijackProbe",
     "AgentToolHijackProbe",
     "AnthropicJudge",

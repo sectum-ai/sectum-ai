@@ -6,13 +6,17 @@ from uuid import UUID
 
 from sectum_ai.evidence import build_evidence_pack, control_mappings, render_audit_pack
 from sectum_ai.evidence.pdf import (
+    _COVERAGE_CAVEAT,
     _SCOPE_METHODOLOGY,
+    _coverage_rows,
     _evidence_line,
     _finding_controls,
     _finding_lines,
     _remediation_line,
 )
+from sectum_ai.evidence.pdf_weasyprint import build_audit_html
 from sectum_ai.spec import (
+    CoverageVerdict,
     EvidencePack,
     Finding,
     FindingStatus,
@@ -201,3 +205,84 @@ def test_scope_methodology_states_limits() -> None:
     text = " ".join(_SCOPE_METHODOLOGY)
     assert "does not remediate" in text
     assert "test coverage, not legal certification" in text
+
+
+# --- Coverage & caveats matrix (erasure attestations) ------------------------
+
+
+def _erasure_pack(coverage: dict[str, str]) -> EvidencePack:
+    manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+    moment = datetime(2026, 5, 18, tzinfo=UTC)
+    run = RunResult(
+        run_id="erasure-1",
+        scenario_hash="scenario-hash",
+        manifest_hash=canonical_hash(manifest),
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(erasure_coverage=coverage),
+    )
+    return build_evidence_pack(run, manifest, control_mappings=control_mappings())
+
+
+def test_coverage_rows_empty_for_a_non_erasure_run() -> None:
+    # A run with no erasure_coverage metric (any non-erasure probe) yields no
+    # rows, so the Coverage & caveats section is omitted entirely.
+    assert _coverage_rows(_run_result(_manifest_only(), with_finding=False)) == []
+
+
+def _manifest_only() -> GroundTruthManifest:
+    return GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+
+
+def test_coverage_rows_are_in_canonical_surface_order() -> None:
+    # Rows follow the canonical erasure-surface order regardless of dict insertion
+    # order, so the matrix is deterministic (the PDF is hashed into pdf_ref).
+    coverage = {
+        "backup": CoverageVerdict.NOT_COVERED.value,
+        "vector_db": CoverageVerdict.ERASED.value,
+        "tracing": CoverageVerdict.RESIDUAL.value,
+    }
+    rows = _coverage_rows(_erasure_pack(coverage).run_result)
+    assert [surface for surface, _ in rows] == ["vector_db", "tracing", "backup"]
+
+
+def test_reportlab_audit_pack_renders_a_coverage_run(tmp_path: Path) -> None:
+    # A coverage-bearing erasure pack renders to a valid PDF (the matrix is a
+    # reportlab Table; smoke-test that the build does not blow up).
+    pack = _erasure_pack(
+        {
+            "vector_db": CoverageVerdict.ERASED.value,
+            "tracing": CoverageVerdict.NOT_COVERED.value,
+        }
+    )
+    output = tmp_path / "coverage.pdf"
+    render_audit_pack(pack, output)
+    assert output.read_bytes().startswith(b"%PDF")
+
+
+def test_weasyprint_html_renders_the_coverage_matrix() -> None:
+    # The weasyprint engine (pure-HTML build_audit_html) renders the coverage
+    # matrix: a NOT_COVERED surface is visible to a DPO/auditor, and the standing
+    # caveat is present. Both engines must surface the same NOT_COVERED rows.
+    pack = _erasure_pack(
+        {
+            "vector_db": CoverageVerdict.ERASED.value,
+            "tracing": CoverageVerdict.NOT_COVERED.value,
+            "backup": CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value,
+        }
+    )
+    html = build_audit_html(pack)
+    assert "Coverage &amp; caveats" in html
+    assert "NOT_COVERED" in html
+    assert "ATTESTABLE_WITH_CAVEAT" in html
+    assert "vector_db" in html and "tracing" in html
+    # The standing caveat is present (asserted on a substring with no HTML-special
+    # characters, since build_audit_html escapes apostrophes etc.).
+    assert "must not be read as erased" in _COVERAGE_CAVEAT
+    assert "must not be read as erased" in html
+
+
+def test_weasyprint_html_omits_coverage_for_a_non_erasure_pack() -> None:
+    # A non-erasure pack (no coverage metric) has no Coverage section at all.
+    html = build_audit_html(_pack(with_finding=True))
+    assert "Coverage &amp; caveats" not in html

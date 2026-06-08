@@ -4,17 +4,17 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "258af43408e0e0d8369cf703997d282504c07b11187f7a91323f200259112d59"
+        "sha256": "77cc85d9ea51e8af6c04272b8ef01b342ecf05f08a4b25db5d71d5236e0d2239"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.3.0",
-    "scenario_hash": "af9da02efda26ece5756ff94e491922081446803f49399b1dea2468f54a0521e",
-    "manifest_hash": "01621727cafdd8a1adab1acd505aa5161332b227c9eb4f900914dbff5e8ea4a6",
-    "started_at": "2026-06-03T23:17:26.516370+00:00",
-    "finished_at": "2026-06-03T23:17:26.517214+00:00",
+    "schema_version": "0.4.0",
+    "scenario_hash": "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb",
+    "manifest_hash": "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514",
+    "started_at": "2026-06-08T06:57:25.411230+00:00",
+    "finished_at": "2026-06-08T06:57:25.412112+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 16,
@@ -31,6 +31,16 @@
         "backup": 2
       },
       "erasure_caveats": {},
+      "erasure_coverage": {
+        "vector_db": "RESIDUAL",
+        "tracing": "RESIDUAL",
+        "agent_memory": "RESIDUAL",
+        "semantic_cache": "RESIDUAL",
+        "model_adapter": "RESIDUAL",
+        "search_index": "RESIDUAL",
+        "eval_set": "RESIDUAL",
+        "backup": "RESIDUAL"
+      },
       "side_channel_effect_sizes": {},
       "poisoning_bleed_delta": null,
       "inversion_reconstruction_rate": null,

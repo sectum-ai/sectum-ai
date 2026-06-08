@@ -21,14 +21,16 @@ without running Sectum.
 | `ProbeStep` | One planned action: `step_id`, `probe_id`, `actor_tenant_id`, `actor_user_id?`, `action`, `payload`. |
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
-| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate, erasure residue counts, side-channel effect sizes, and the Class 3/6/10 rates. |
+| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate, erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`), side-channel effect sizes, and the Class 3/6/10 rates. |
 | `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `findings[]`, `metrics`. |
 | `EvidencePack` | The signed bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, and `schema_version`. |
 | `ControlMapping` | A finding's mapped compliance control (framework, control id, assertion) — see the [compliance mappings](compliance-mappings.md). |
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
-schema it does not understand. The current `SCHEMA_VERSION` is **0.3.0**.
+schema it does not understand. The current `SCHEMA_VERSION` is **0.4.0** — it
+added the per-surface erasure `coverage` block to `RunMetrics` (see the
+[erasure attack catalog page](attack-catalog/class-11-erasure.md)).
 
 ## Published JSON Schema
 

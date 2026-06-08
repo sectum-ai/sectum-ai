@@ -223,3 +223,95 @@ def test_erasure_itemizes_a_caveat_alongside_a_genuine_residual(tmp_path: Path) 
     # ... and the co-existing caveat surface is still itemized, not hidden
     assert "also attestable-with-caveat" in result.output
     assert "tracing" in result.output
+
+
+def test_erasure_records_a_coverage_block_for_every_surface(tmp_path: Path) -> None:
+    """The signed evidence pack carries a per-surface coverage verdict for every
+    erasure surface - the honest, anti-over-claim record."""
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    coverage = pack["run_result"]["metrics"]["erasure_coverage"]
+    # Every erasure surface has a verdict; on the default all-hard-delete run they
+    # are all ERASED (no surface implied without being scanned).
+    expected_surfaces = {
+        "vector_db",
+        "tracing",
+        "agent_memory",
+        "semantic_cache",
+        "model_adapter",
+        "search_index",
+        "eval_set",
+        "backup",
+    }
+    assert set(coverage) == expected_surfaces
+    assert all(verdict == "ERASED" for verdict in coverage.values())
+
+
+def test_erasure_scope_restricts_the_run_and_marks_the_rest_not_covered(tmp_path: Path) -> None:
+    """`--scope vector_db` verifies only the vector store; every other surface is
+    NOT_COVERED in the pack and the operator output says so."""
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert result.exit_code == 0
+    assert "ERASURE VERIFIED" in result.output
+    # the operator is told what was NOT verified
+    assert "NOT_COVERED" in result.output
+    coverage = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"][
+        "metrics"
+    ]["erasure_coverage"]
+    assert coverage["vector_db"] == "ERASED"
+    assert coverage["tracing"] == "NOT_COVERED"
+    assert coverage["backup"] == "NOT_COVERED"
+    # only the scoped surface produced a scan line
+    assert "vector_db:" in result.output
+    assert "tracing:" not in result.output
+
+
+def test_erasure_scope_accepts_multiple_surfaces(tmp_path: Path) -> None:
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db,tracing"]
+    )
+    assert result.exit_code == 0
+    coverage = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"][
+        "metrics"
+    ]["erasure_coverage"]
+    assert coverage["vector_db"] == "ERASED"
+    assert coverage["tracing"] == "ERASED"
+    assert coverage["agent_memory"] == "NOT_COVERED"
+
+
+def test_erasure_rejects_an_unknown_scope_surface(tmp_path: Path) -> None:
+    """An unknown --scope surface is a ConfigError (exit 3), not a silent no-op."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db,not_a_surface"]
+    )
+    assert result.exit_code == 3
+    assert "not_a_surface" in result.output
+    # the error lists the valid surfaces so an operator can fix the typo
+    assert "valid surfaces" in result.output
+
+
+def test_erasure_rejects_an_empty_scope(tmp_path: Path) -> None:
+    """A --scope that names no surfaces (e.g. just commas) is a config error."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", ", ,"])
+    assert result.exit_code == 3
+
+
+def test_erasure_scoped_pack_still_verifies(tmp_path: Path) -> None:
+    """A scoped (snapshot) attestation is a fully valid, tamper-evident pack."""
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    result = _runner.invoke(app, ["verify", str(tmp_path / "erasure-evidence.json")])
+    assert result.exit_code == 0
+    assert "VERIFIED" in result.output

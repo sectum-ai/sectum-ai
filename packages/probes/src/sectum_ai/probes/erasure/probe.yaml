@@ -18,6 +18,7 @@ surfaces:
 - model_adapter
 - search_index
 - eval_set
+- backup
 requires_adapters:
 - vector_store
 example: examples/erasure-attestation

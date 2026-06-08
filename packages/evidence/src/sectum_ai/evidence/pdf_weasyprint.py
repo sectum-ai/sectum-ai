@@ -21,8 +21,11 @@ from html import escape
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
 from sectum_ai.evidence.pdf import (
+    _COVERAGE_CAVEAT,
+    _COVERAGE_VERDICT_GLOSS,
     _SCOPE_METHODOLOGY,
     _VERIFICATION_INSTRUCTION,
+    _coverage_rows,
     _finding_controls,
 )
 from sectum_ai.spec import EvidenceError, EvidencePack, Finding, FindingStatus
@@ -80,6 +83,12 @@ p.method { margin: 4pt 0; text-align: justify; }
 .control .fw { font-weight: bold; }
 .disclaimer { font-style: italic; color: #5a6675; font-size: 8.5pt; margin-top: 6pt; }
 .verify { margin-top: 6pt; }
+table.coverage { border-collapse: collapse; width: 100%; margin: 4pt 0; }
+table.coverage th, table.coverage td {
+  padding: 3pt 6pt; border: 0.5px solid #d8dee6; text-align: left; vertical-align: top;
+}
+table.coverage th { background: #eef1f5; color: #2d3a4a; }
+table.coverage td.verdict { font-weight: bold; }
 """
 
 
@@ -113,6 +122,33 @@ def _finding_html(finding: Finding) -> str:
             f'<div class="remediation">Remediation: {escape(finding.remediation_pointer)}</div>'
         )
     return f'<div class="finding" style="border-left-color:{colour}">{"".join(parts)}</div>'
+
+
+def _coverage_html(pack: EvidencePack) -> str:
+    """Render the per-surface erasure coverage matrix as an escaped HTML table.
+
+    Returns ``""`` for a non-erasure pack (no ``erasure_coverage`` metric), so
+    the section is omitted there. Mirrors the reportlab engine's matrix so both
+    engines surface the same NOT_COVERED rows to a DPO/auditor.
+    """
+    rows = _coverage_rows(pack.run_result)
+    if not rows:
+        return ""
+    cells = "".join(
+        f"<tr><td>{escape(surface)}</td>"
+        f'<td class="verdict">{escape(verdict)}</td>'
+        f"<td>{escape(_COVERAGE_VERDICT_GLOSS.get(verdict, ''))}</td></tr>"
+        for surface, verdict in rows
+    )
+    table = (
+        '<table class="coverage"><thead><tr><th>Surface</th><th>Verdict</th>'
+        f"<th>Meaning</th></tr></thead><tbody>{cells}</tbody></table>"
+    )
+    return (
+        "<h2>Coverage &amp; caveats</h2>"
+        f"{table}"
+        f'<p class="disclaimer">{escape(_COVERAGE_CAVEAT)}</p>'
+    )
 
 
 def build_audit_html(pack: EvidencePack) -> str:
@@ -162,6 +198,7 @@ def build_audit_html(pack: EvidencePack) -> str:
         f"{methodology}"
         "<h2>Findings</h2>"
         f"{findings_html}"
+        f"{_coverage_html(pack)}"
         "<h2>Compliance control coverage</h2>"
         f"{controls_html}"
         f'<p class="disclaimer">{escape(COVERAGE_DISCLAIMER)}</p>'

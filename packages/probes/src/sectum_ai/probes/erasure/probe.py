@@ -9,7 +9,7 @@ than a plan/detect probe, so it exposes its own ``run`` entry point and returns
 an ``ErasureReport`` instead of a flat finding list.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -24,6 +24,7 @@ from sectum_ai.adapters import (
     VectorStoreAdapter,
 )
 from sectum_ai.spec import (
+    CoverageVerdict,
     ErasureUnsupported,
     Finding,
     FindingStatus,
@@ -32,6 +33,24 @@ from sectum_ai.spec import (
     Severity,
     Substrate,
     Surface,
+)
+
+# The canonical, ordered set of surfaces a Class 11 erasure run can verify - the
+# spec's "10 hiding places" (the engineering spec, section 7, Class 11) that have
+# a scanning adapter today. A coverage block reports a verdict for *every* one of
+# these, so a surface that was out of scope or unscanned is explicitly
+# NOT_COVERED rather than silently absent (the anti-over-claim guarantee). The
+# vector store leads because it is always present; the rest follow the run plan's
+# order so the coverage matrix reads in a stable, documented sequence.
+ERASURE_SURFACES: tuple[Surface, ...] = (
+    Surface.VECTOR_DB,
+    Surface.TRACING,
+    Surface.AGENT_MEMORY,
+    Surface.SEMANTIC_CACHE,
+    Surface.MODEL_ADAPTER,
+    Surface.SEARCH_INDEX,
+    Surface.EVAL_SET,
+    Surface.BACKUP,
 )
 
 # One surface's pre/post scan (target + markers -> the markers still present)
@@ -94,6 +113,26 @@ class SurfaceErasure:
             return "ERASED"
         return "RESIDUAL DATA"
 
+    @property
+    def coverage_verdict(self) -> CoverageVerdict:
+        """The machine-readable coverage verdict for this scanned surface.
+
+        Maps the human-readable :attr:`verdict` onto the canonical
+        :class:`~sectum_ai.spec.enums.CoverageVerdict` enum recorded in the
+        evidence pack's coverage block. A surface with no pre-erasure baseline
+        is ``NOT_COVERED`` (its erasure cannot be attested - it is not evidence
+        of erasure), aligning the no-baseline case with the unscanned/out-of-scope
+        case in the coverage matrix. The anti-over-claim invariant holds here too:
+        this property returns ``ERASED`` only when :attr:`erased` is true.
+        """
+        if self.markers_before == 0:
+            return CoverageVerdict.NOT_COVERED
+        if not self.erasure_supported:
+            return CoverageVerdict.ATTESTABLE_WITH_CAVEAT
+        if self.residual_after == 0:
+            return CoverageVerdict.ERASED
+        return CoverageVerdict.RESIDUAL
+
 
 @dataclass(frozen=True)
 class ErasureReport:
@@ -126,6 +165,38 @@ class ErasureReport:
     def caveats(self) -> tuple[SurfaceErasure, ...]:
         """Surfaces whose backend exposes no per-tenant erasure API (spec §7 #8)."""
         return tuple(s for s in self.surfaces if s.attestable_with_caveat)
+
+    def coverage(self) -> dict[Surface, CoverageVerdict]:
+        """The per-surface coverage verdict for *every* erasure surface.
+
+        Returns a verdict for each surface in :data:`ERASURE_SURFACES`, not just
+        the scanned ones: a surface that was out of scope or otherwise not
+        scanned is ``NOT_COVERED``. This is the honest, anti-over-claim coverage
+        record the evidence pack carries - the attestation can never imply more
+        coverage than the run actually verified (the engineering spec, section 7,
+        Class 11).
+        """
+        scanned = {surface.surface: surface.coverage_verdict for surface in self.surfaces}
+        return {
+            surface: scanned.get(surface, CoverageVerdict.NOT_COVERED)
+            for surface in ERASURE_SURFACES
+        }
+
+    @property
+    def not_covered(self) -> tuple[Surface, ...]:
+        """Erasure surfaces with no ``ERASED``/``RESIDUAL``/caveat verdict.
+
+        These are the surfaces a DPO must be told the attestation did *not*
+        verify (out of scope, no adapter configured, or no pre-erasure
+        baseline). Listing them is the other half of an honest verdict: a run is
+        "fully erased" only when every scanned surface is ERASED *and* the
+        attestation states what was NOT_COVERED.
+        """
+        return tuple(
+            surface
+            for surface, verdict in self.coverage().items()
+            if verdict is CoverageVerdict.NOT_COVERED
+        )
 
 
 class ErasureProbe:
@@ -164,8 +235,28 @@ class ErasureProbe:
         self._backup = backup
         self._documents = {document.doc_id: document for document in substrate.documents}
 
-    def run(self, target: UUID) -> ErasureReport:
-        """Confirm the target's markers, run the erasure, and re-scan every surface."""
+    def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
+        """Confirm the target's markers, run the erasure, and re-scan each surface.
+
+        Args:
+            target: The tenant whose data the run verifies has been erased.
+            scope: When given, restrict the run to this subset of erasure
+                surfaces - this backs a cheaper single-surface "snapshot"
+                engagement (for example just the vector DB). A surface outside
+                the scope is *not scanned* and is reported ``NOT_COVERED`` in the
+                report's coverage block, never ``ERASED``. ``None`` (the default)
+                scans every configured surface, the unchanged full-run behavior.
+                Surfaces in ``scope`` that have no configured adapter are simply
+                not scanned (they too read ``NOT_COVERED``); the vector store is
+                always present.
+
+        Returns:
+            An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
+            surfaces and whose ``coverage()`` reports a verdict for *every*
+            erasure surface, so the attestation never implies more coverage than
+            it verified.
+        """
+        in_scope = frozenset(scope) if scope is not None else None
         markers = tuple(
             marker
             for marker in self._substrate.manifest.markers
@@ -198,6 +289,10 @@ class ErasureProbe:
             plan.append((Surface.BACKUP, self._scan_backup, self._backup.delete))
 
         for surface, scan, delete in plan:
+            # A scope skips a surface entirely - it is left out of ``surfaces`` so
+            # the coverage block marks it NOT_COVERED rather than scanning it.
+            if in_scope is not None and surface not in in_scope:
+                continue
             surface_result, surface_findings = self._erase_surface(
                 target, markers, surface, scan, delete
             )

@@ -20,13 +20,19 @@ from sectum_ai.spec.enums import (
     Surface,
 )
 
-SCHEMA_VERSION = "0.3.0"
+SCHEMA_VERSION = "0.4.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
 mappings, pdf ref, transparency-log intent), not just the run record, and
 timestamps in the canonical form are normalized to UTC so the digest is
 reproducible regardless of the producer's local timezone.
+
+0.4.0 — :class:`RunMetrics` carries an ``erasure_coverage`` block (surface ->
+:class:`~sectum_ai.spec.enums.CoverageVerdict`) so a Class 11 attestation states
+an explicit verdict for *every* erasure surface, including the ones it did not
+scan (``NOT_COVERED``). The block is the anti-over-claim guarantee: an unscanned
+surface can never read as ``ERASED``.
 """
 
 
@@ -290,6 +296,15 @@ class RunMetrics(SectumModel):
     # the signed evidence pack.
     erasure_residue: dict[str, int] = Field(default_factory=dict)
     erasure_caveats: dict[str, int] = Field(default_factory=dict)
+    # Per-surface erasure coverage (surface value -> CoverageVerdict value): the
+    # honest, anti-over-claim record of what a Class 11 attestation verified.
+    # Every erasure surface appears - including the ones that were out of scope or
+    # never scanned, which carry NOT_COVERED - so the signed pack can never imply
+    # more coverage than it has. Stored as plain strings (the enum's values) to
+    # keep the canonical-hash form and exported JSON Schema identical to the other
+    # metric dicts; the values are CoverageVerdict members. Empty for runs that are
+    # not erasure runs (the other probe classes leave it untouched).
+    erasure_coverage: dict[str, str] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
     # Headline rates for Class 3 (poisoning), Class 6 (inversion), and Class 10
     # (extraction), each in [0, 1]: the fraction of that probe's benign query

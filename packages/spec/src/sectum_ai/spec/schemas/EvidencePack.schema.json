@@ -181,6 +181,13 @@
           "title": "Erasure Caveats",
           "type": "object"
         },
+        "erasure_coverage": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Erasure Coverage",
+          "type": "object"
+        },
         "erasure_residue": {
           "additionalProperties": {
             "type": "integer"
@@ -308,7 +315,7 @@
           "type": "string"
         },
         "schema_version": {
-          "default": "0.3.0",
+          "default": "0.4.0",
           "title": "Schema Version",
           "type": "string"
         },
@@ -362,7 +369,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.3.0/EvidencePack.schema.json",
+  "$id": "https://schemas.sectum.ai/0.4.0/EvidencePack.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A signed, control-mapped evidence bundle (the engineering spec, section 8).",
@@ -417,7 +424,7 @@
       "$ref": "#/$defs/RunResult"
     },
     "schema_version": {
-      "default": "0.3.0",
+      "default": "0.4.0",
       "title": "Schema Version",
       "type": "string"
     },
