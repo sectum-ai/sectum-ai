@@ -65,6 +65,7 @@ from sectum_ai.probes import (
     Judge,
     OpenAIEmbeddingProvider,
     OpenAIJudge,
+    resolve_semantic_threshold,
 )
 from sectum_ai.spec import ConfigError
 
@@ -165,9 +166,13 @@ class DetectionConfig(BaseModel):
 
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
-    # The semantic-similarity gate; the conservative default suits the fake
-    # embedder and is the knob to raise once a real embedding model is configured.
-    semantic_threshold: float = 0.62
+    # The semantic-similarity gate. A number is used verbatim (back-compat). The
+    # literal "auto" resolves to the calibrated per-model preset for the configured
+    # embedder (`sectum-ai calibrate` recommends these), falling back to the
+    # conservative 0.62 default with a logged warning for an unknown model. The
+    # default suits the fake embedder; raise it (or set "auto") once a real
+    # embedding model is configured - a stronger model surfaces more (the spec §7).
+    semantic_threshold: float | Literal["auto"] = 0.62
 
 
 class SectumConfig(BaseModel):
@@ -843,6 +848,26 @@ def _build_provider[ProviderT](
     return ctor(api_key, **kwargs)
 
 
+# The OpenAI embedding model the provider defaults to when the config names
+# none; kept in sync with OpenAIEmbeddingProvider's default so a bare
+# ``kind: openai`` resolves to the right per-model preset under ``auto``.
+_DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
+
+def embedder_model_name(config: EmbedderConfig) -> str | None:
+    """The canonical embedder model name for preset lookup, or ``None`` for the fake.
+
+    Mirrors the ``kind:model`` naming ``sectum_ai.embeddings`` produces and the
+    keys in ``MODEL_THRESHOLDS``: an ``openai`` embedder is ``openai:<model>``
+    (defaulting the model to the provider's own default when unset). The fake
+    embedder has no model, so ``semantic_threshold: auto`` falls back to the
+    conservative default for it.
+    """
+    if config.kind == "openai":
+        return f"openai:{config.model or _DEFAULT_OPENAI_EMBEDDING_MODEL}"
+    return None
+
+
 def build_embedder(config: EmbedderConfig) -> EmbeddingProvider | None:
     """Resolve the configured embedding provider, or ``None`` to use the fake."""
     if config.kind == "fake":
@@ -866,10 +891,24 @@ def build_judge(config: JudgeConfig) -> Judge | None:
     raise ConfigError(f"unknown judge kind: {config.kind!r}")
 
 
+def resolve_semantic_threshold_config(config: DetectionConfig) -> float:
+    """Resolve ``detection.semantic_threshold`` to a concrete gate value.
+
+    A numeric value is used verbatim (the back-compatible behaviour). The literal
+    ``"auto"`` resolves to the calibrated per-model preset for the configured
+    embedder (``resolve_semantic_threshold``), which falls back to the conservative
+    default - with a logged warning - for an unknown or absent model.
+    """
+    threshold = config.semantic_threshold
+    if isinstance(threshold, str):  # the only string form Literal allows is "auto"
+        return resolve_semantic_threshold(embedder_model_name(config.embedder))
+    return threshold
+
+
 def build_detection_providers(config: DetectionConfig) -> DetectionProviders:
     """Build the detection-providers bundle from config (the fakes by default)."""
     return DetectionProviders(
         embedder=build_embedder(config.embedder),
         judge=build_judge(config.judge),
-        semantic_threshold=config.semantic_threshold,
+        semantic_threshold=resolve_semantic_threshold_config(config),
     )

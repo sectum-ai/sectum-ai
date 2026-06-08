@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Threshold calibration (`sectum-ai calibrate`) + per-embedding-model semantic
+  thresholds.** The semantic-similarity gate was a single hand-picked float
+  (0.62) that had to be retuned to ≈ 0.80 for `text-embedding-3-small` on a real
+  run. `sectum-ai calibrate` now derives it principally: it builds a labeled set
+  from a seeded substrate — positives are a foreign tenant's `ENTITY_CANARY`
+  genuinely surfaced into another tenant's session, negatives are same-tenant and
+  unrelated text that must not trip the gate — scores each with the configured
+  embedder, and recommends the threshold that **maximises F1 subject to zero
+  false positives** among the negatives (the zero-FP property is non-negotiable;
+  a threshold that admits any negative is never recommended). It prints a
+  precision/recall/F1 table and the value to paste; `--embedder <kind:model>`
+  (default from config; `st:…`/`openai:…`/`hash-…`/`fake`), `--seed`, `--workdir`,
+  `--config`, `--output {text,json}`, deterministic from the seed. Alongside it,
+  `detection.semantic_threshold` now accepts the literal `auto`, which resolves to
+  a shipped per-model preset (`st:all-MiniLM-L6-v2` 0.55, `st:all-mpnet-base-v2`
+  0.60, `openai:text-embedding-3-small` 0.80, `openai:text-embedding-3-large`
+  0.78), falling back to 0.62 with a logged warning for an unknown model. A
+  numeric threshold is unchanged (back-compat).
 - **SARIF output (`sectum-ai probe --output sarif`).** Emits a SARIF 2.1.0 log of
   the run's findings so GitHub code scanning (and other SAST dashboards) ingest
   them and surface cross-tenant findings in a repository's Security tab — one rule

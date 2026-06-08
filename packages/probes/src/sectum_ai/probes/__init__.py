@@ -7,7 +7,15 @@ This is the ``sectum_ai.probes`` namespace package (the engineering spec, sectio
 from sectum_ai.probes.agent_framework_hijack import AgentFrameworkHijackProbe
 from sectum_ai.probes.agent_tool_hijack import AgentToolHijackProbe
 from sectum_ai.probes.base import Probe, ProbeRegistry, load_probe_manifest
+from sectum_ai.probes.calibrate import (
+    CalibrationExample,
+    CalibrationResult,
+    ThresholdScore,
+    calibrate_threshold,
+)
 from sectum_ai.probes.detection import (
+    DEFAULT_SEMANTIC_THRESHOLD,
+    MODEL_THRESHOLDS,
     DetectingProbe,
     DetectionPipeline,
     DetectionProviders,
@@ -19,6 +27,7 @@ from sectum_ai.probes.detection import (
     confirmed_findings,
     dedupe_findings,
     is_cross_principal,
+    resolve_semantic_threshold,
 )
 from sectum_ai.probes.embedding_inversion import EmbeddingInversionProbe
 from sectum_ai.probes.erasure import (
@@ -43,10 +52,14 @@ from sectum_ai.probes.semantic_cache import SemanticCacheProbe
 from sectum_ai.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
+    "DEFAULT_SEMANTIC_THRESHOLD",
     "ERASURE_SURFACES",
+    "MODEL_THRESHOLDS",
     "AgentFrameworkHijackProbe",
     "AgentToolHijackProbe",
     "AnthropicJudge",
+    "CalibrationExample",
+    "CalibrationResult",
     "DetectingProbe",
     "DetectionPipeline",
     "DetectionProviders",
@@ -73,9 +86,12 @@ __all__ = [
     "SemanticCacheProbe",
     "SurfaceErasure",
     "TenantBoundaryProbe",
+    "ThresholdScore",
     "TimingSignal",
+    "calibrate_threshold",
     "confirmed_findings",
     "dedupe_findings",
     "is_cross_principal",
     "load_probe_manifest",
+    "resolve_semantic_threshold",
 ]

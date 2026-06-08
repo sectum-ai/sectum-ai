@@ -41,6 +41,56 @@ _log = get_logger(__name__)
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _OWASP_MULTI_TENANT = "LLM08:2025"
 
+# The conservative semantic-similarity gate that suits the deterministic fake
+# embedder; the back-compatible default when no per-model preset applies (the
+# engineering spec, section 6.4: "default conservative").
+DEFAULT_SEMANTIC_THRESHOLD = 0.62
+
+# Per-embedding-model semantic-threshold presets: sensible per-model STARTING
+# POINTS, not a substitute for calibration. ``semantic_threshold: auto`` resolves
+# to one of these by the configured embedder model. Today the config exposes the
+# ``fake`` and ``openai`` embedder kinds, so ``auto`` reaches the ``openai:*``
+# entries (and the fake's default); the ``st:*`` presets apply when those models
+# are calibrated or swept by name (``sectum-ai calibrate --embedder st:<model>``),
+# since ``EmbeddingModel`` produces the same ``st:<model>`` / ``openai:<model>``
+# canonical names. Only ``openai:text-embedding-3-small`` (~0.80) is grounded in a
+# real run, where the gate had to be raised from the 0.62 default to avoid
+# flooding the judge (a stronger model packs unrelated text closer together); the
+# others are conservative starting points. The exact F1-maximising, zero-FP gate
+# depends on your substrate and model, so run ``sectum-ai calibrate --embedder
+# <kind:model>`` to derive the right value rather than trusting the preset.
+MODEL_THRESHOLDS: dict[str, float] = {
+    "st:all-MiniLM-L6-v2": 0.55,
+    "st:all-mpnet-base-v2": 0.60,
+    "openai:text-embedding-3-small": 0.80,
+    "openai:text-embedding-3-large": 0.78,
+}
+
+
+def resolve_semantic_threshold(model_name: str | None) -> float:
+    """Resolve the calibrated semantic threshold for an embedder ``model_name``.
+
+    Returns the per-model preset from :data:`MODEL_THRESHOLDS` when the model is
+    known, else falls back to :data:`DEFAULT_SEMANTIC_THRESHOLD` and logs a
+    warning so an unrecognised model never silently runs the wrong gate. A
+    ``None`` name (no model configured, i.e. the fake embedder) resolves to the
+    conservative default without a warning - the fake's gate is intentionally the
+    default. This backs the ``semantic_threshold: auto`` config form; an explicit
+    numeric threshold bypasses it entirely (back-compat).
+    """
+    if model_name is None:
+        return DEFAULT_SEMANTIC_THRESHOLD
+    preset = MODEL_THRESHOLDS.get(model_name)
+    if preset is not None:
+        return preset
+    _log.warning(
+        "detect.semantic_threshold.unknown_model",
+        model=model_name,
+        fallback=DEFAULT_SEMANTIC_THRESHOLD,
+    )
+    return DEFAULT_SEMANTIC_THRESHOLD
+
+
 # Credential shapes for the SECRET_CANARY format detector (the spec, section
 # 6.3: "exact + format detector"). They mirror the shapes the substrate plants
 # (``sectum_ai.substrate.markers``): an OpenAI-style ``sk-`` key, an AWS access-key
@@ -198,7 +248,7 @@ class DetectionProviders:
 
     embedder: "EmbeddingProvider | None" = None
     judge: "Judge | None" = None
-    semantic_threshold: float = 0.62
+    semantic_threshold: float = DEFAULT_SEMANTIC_THRESHOLD
 
     def pipeline(self, substrate: Substrate) -> "DetectionPipeline":
         """Build a detection pipeline for ``substrate`` with these providers."""
@@ -369,7 +419,7 @@ class DetectionPipeline:
         substrate: Substrate,
         embedder: EmbeddingProvider | None = None,
         judge: Judge | None = None,
-        semantic_threshold: float = 0.62,
+        semantic_threshold: float = DEFAULT_SEMANTIC_THRESHOLD,
     ) -> None:
         self._markers: tuple[Marker, ...] = substrate.manifest.markers
         self._embedder: EmbeddingProvider = embedder or FakeEmbeddingProvider()
@@ -446,6 +496,32 @@ class DetectionPipeline:
                     severity=finding.severity.value,
                 )
         return stamped
+
+    def best_foreign_similarity(
+        self,
+        observed_in_tenant: UUID,
+        observation_text: str,
+        *,
+        observed_user: UUID | None = None,
+    ) -> float:
+        """Max cosine of ``observation_text`` to any *foreign* ENTITY_CANARY.
+
+        This is exactly the value the semantic gate (:meth:`_semantic`) compares
+        against ``semantic_threshold`` before invoking the judge, so a calibration
+        built on this method is provably consistent with detection: a threshold at
+        or below this score would admit the observation as a candidate. Returns
+        ``0.0`` when the observer has no foreign entity markers (nothing to gate
+        against). Side-effect-free; it never builds a :class:`Finding`.
+        """
+        observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
+        observation_tokens = _tokenize(observation_text)
+        best = 0.0
+        for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
+            best = max(best, self._best_window_similarity(observation_tokens, marker))
+        # Clamp defensively: a true cosine is already <= 1.0, but float rounding
+        # can nudge it just past 1.0 (the same clamp _semantic applies before it
+        # writes Finding.confidence), which would break a calibration's [0, 1] bound.
+        return min(1.0, best)
 
     def _foreign(self, observer: Principal, marker_type: MarkerType) -> list[Marker]:
         return [

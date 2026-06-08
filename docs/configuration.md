@@ -1,8 +1,8 @@
 # Configuration
 
 `sectum-ai init` scaffolds a `sectum-ai.yaml` configuration file; every CLI command
-that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`) accepts
-`--config sectum-ai.yaml` to read its defaults from that
+that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`,
+`calibrate`) accepts `--config sectum-ai.yaml` to read its defaults from that
 file. Explicit CLI flags — for example `--seed` or `--workdir` — always
 override the values the config supplies.
 
@@ -174,13 +174,48 @@ deterministic offline fakes; configure real providers for production detection.
 | `judge.model` | str | provider default | e.g. `gpt-4o-mini`, `claude-3-5-haiku-latest`, or `qwen2.5` for Ollama. |
 | `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
 | `judge.base_url` | str | provider API | OpenAI-/Anthropic-compatible base URL; `kind: openai` + a local Ollama runs the judge with no account. |
-| `semantic_threshold` | float | `0.62` | The similarity gate before the judge; raise it once a real embedding model is configured (a stronger model surfaces more — the engineering spec, section 7). |
+| `semantic_threshold` | float \| `auto` | `0.62` | The similarity gate before the judge. A number is used verbatim. `auto` resolves to the calibrated per-model preset for the embedder above (see below), falling back to `0.62` with a logged warning for an unknown model. Raise it (or use `auto`) once a real embedding model is configured — a stronger model surfaces more (the engineering spec, section 7). |
 
 Real providers reach their HTTP APIs with the standard library only; the API key
 is read from the environment, never inlined. A local OpenAI-compatible server —
 **Ollama** (`http://localhost:11434/v1`), vLLM, or LM Studio — is a fully offline,
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
+
+### Calibrating the semantic threshold
+
+The semantic threshold is **per embedding model**: a stronger model packs
+unrelated text closer together, so a gate tuned for the offline fake floods the
+judge with candidates on a real model (on one real run `text-embedding-3-small`
+needed ≈ 0.80, not the 0.62 default). `sectum-ai calibrate` derives a principled
+value instead of hand-picking one:
+
+```sh
+sectum-ai calibrate --embedder openai:text-embedding-3-small
+```
+
+It builds a labeled set from a seeded substrate — **positives** are a foreign
+tenant's entity genuinely surfaced into another tenant's session, **negatives**
+are same-tenant and unrelated text that must not trip the gate — scores each with
+the chosen embedder, and recommends the threshold that **maximises F1 subject to
+zero false positives** among the negatives (the zero-false-positive property is
+non-negotiable; a threshold that admits any negative is never recommended). It
+prints a precision/recall/F1 table and the value to paste into
+`detection.semantic_threshold`. Flags: `--embedder <kind:model>` (default: the
+configured `detection.embedder`; `st:…`, `openai:…`, `hash-…`, or `fake`),
+`--seed`, `--workdir`, `--config`, and `--output {text,json}`. The run is
+deterministic from the seed.
+
+`semantic_threshold: auto` skips the per-run calibration and uses a built-in
+preset for the configured embedder model. The shipped presets:
+
+| Embedder model | Preset |
+|---|---|
+| `st:all-MiniLM-L6-v2` | 0.55 |
+| `st:all-mpnet-base-v2` | 0.60 |
+| `openai:text-embedding-3-small` | 0.80 |
+| `openai:text-embedding-3-large` | 0.78 |
+| (any other / fake) | 0.62 (the conservative default) |
 
 ## Secrets and environment variables
 
