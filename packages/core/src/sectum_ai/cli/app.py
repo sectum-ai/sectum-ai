@@ -38,20 +38,23 @@ from sectum_ai.adapters import (
 from sectum_ai.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum_ai.config import (
     AdapterConfig,
+    EmbedderConfig,
     EvidenceConfig,
     SectumConfig,
     SecurityConfig,
     build_adapters,
     build_cache,
     build_detection_providers,
+    build_embedder,
     build_memory,
     build_model,
     build_observability,
     build_vector_store,
+    embedder_model_name,
     load_config,
 )
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
-from sectum_ai.embeddings import resolve_embedding_model, validate_embedding_spec
+from sectum_ai.embeddings import EmbeddingModel, resolve_embedding_model, validate_embedding_spec
 from sectum_ai.evidence import (
     PdfEngine,
     RekorTransparencyLog,
@@ -76,9 +79,12 @@ from sectum_ai.probes import (
     ERASURE_SURFACES,
     AgentFrameworkHijackProbe,
     AgentToolHijackProbe,
+    CalibrationResult,
     DetectionProviders,
     EmbeddingInversionProbe,
+    EmbeddingProvider,
     ErasureProbe,
+    FakeEmbeddingProvider,
     IkeaExtractionProbe,
     KvCacheTimingProbe,
     LoraCrossTenantProbe,
@@ -89,6 +95,7 @@ from sectum_ai.probes import (
     RagPoisoningProbe,
     SemanticCacheProbe,
     TenantBoundaryProbe,
+    calibrate_threshold,
     confirmed_findings,
     dedupe_findings,
 )
@@ -250,7 +257,10 @@ detection:
     kind: fake             # fake | openai | anthropic
     # model: gpt-4o-mini
     # api_key_env: OPENAI_API_KEY
-  semantic_threshold: 0.62  # raise once a real embedding model is configured
+  # The semantic gate. A number is used as-is; "auto" resolves to the calibrated
+  # per-model preset for the embedder above (run `sectum-ai calibrate` to derive
+  # one for your model). Raise it once a real embedding model is configured.
+  semantic_threshold: 0.62  # 0.62 | <float> | auto
 """
 
 app = typer.Typer(
@@ -1303,6 +1313,185 @@ def init(
         raise typer.Exit(code=3)
     output.write_text(_CONFIG_TEMPLATE)
     typer.echo(f"wrote {output}")
+
+
+class _BatchToSingleEmbedder:
+    """Adapt a batch ``EmbeddingModel`` to the single-text ``EmbeddingProvider`` protocol.
+
+    The detection pipeline (and the calibration harness) embed one observation at
+    a time via ``EmbeddingProvider.embed(text) -> tuple[float, ...]``, while the
+    Class-2 sweep models in ``sectum_ai.embeddings`` expose a batch
+    ``embed(texts) -> list[list[float]]``. This wraps the latter so a ``--embedder
+    st:<model>`` / ``openai:<model>`` resolves into the pipeline unchanged.
+    """
+
+    def __init__(self, model: EmbeddingModel) -> None:
+        self._model = model
+        self.name = model.name
+
+    def embed(self, text: str) -> tuple[float, ...]:
+        """Embed a single text by calling the batch model with a one-item list."""
+        return tuple(self._model.embed([text])[0])
+
+
+def _resolve_calibration_embedder(
+    spec: str | None, detection_embedder: EmbedderConfig
+) -> tuple[EmbeddingProvider, str]:
+    """Resolve the embedder to calibrate, returning ``(provider, canonical_name)``.
+
+    A ``--embedder`` overrides the config. The literal ``fake`` selects the
+    deterministic offline :class:`FakeEmbeddingProvider`; any other spec
+    (``st:<model>`` / ``openai:<model>`` / ``hash-<dim>``) is resolved through
+    ``sectum_ai.embeddings`` and adapted to the single-text protocol. When no
+    ``--embedder`` is given the config's ``detection.embedder`` is used: ``fake``
+    -> the offline fake, ``openai`` -> the live OpenAI provider (which needs an
+    API key). The canonical name is the key under which a calibrated threshold can
+    be added to ``MODEL_THRESHOLDS``.
+    """
+    if spec is not None:
+        if spec == "fake":
+            return FakeEmbeddingProvider(), "fake"
+        model = resolve_embedding_model(spec)
+        if model is None:
+            raise ConfigError(
+                f"--embedder {spec!r} does not name a real embedding model; "
+                "use fake, hash-<dim>, st:<model>, or openai:<model>"
+            )
+        return _BatchToSingleEmbedder(model), model.name
+    provider = build_embedder(detection_embedder)
+    if provider is None:  # kind: fake -> the offline deterministic embedder
+        return FakeEmbeddingProvider(), "fake"
+    name = embedder_model_name(detection_embedder) or detection_embedder.kind
+    return provider, name
+
+
+def _render_calibration_text(result: CalibrationResult) -> None:
+    """Print the calibration table, the recommendation, and the suggested config."""
+    typer.echo(f"calibrating semantic threshold for embedder: {result.model_name}")
+    typer.echo(
+        f"labeled set: {result.positives} positive (cross-tenant leak), "
+        f"{result.negatives} negative (same-tenant / unrelated)"
+    )
+    typer.echo("")
+    header = (
+        f"{'THRESHOLD':>10}  {'PREC':>6}  {'RECALL':>6}  {'F1':>6}  "
+        f"{'TP':>4} {'FP':>4} {'FN':>4}  ZERO-FP"
+    )
+    typer.echo(header)
+    for score in result.scores:
+        marker = " <- recommended" if score is result.recommended_score else ""
+        typer.echo(
+            f"{score.threshold:>10.4f}  {score.precision:>6.3f}  {score.recall:>6.3f}  "
+            f"{score.f1:>6.3f}  {score.true_positives:>4} {score.false_positives:>4} "
+            f"{score.false_negatives:>4}  {'yes' if score.zero_false_positive else 'no':>7}{marker}"
+        )
+    typer.echo("")
+    if result.recommended_score is None:
+        typer.echo(
+            f"no threshold separated the classes with zero false positives; "
+            f"recommending the conservative default {result.recommended_threshold:g} "
+            "(a stronger, real embedding model is expected to separate cleanly - "
+            "the offline fake embedder cannot)."
+        )
+    else:
+        typer.echo(
+            f"recommended semantic_threshold: {result.recommended_threshold:g} "
+            f"(max F1 = {result.recommended_score.f1:g} with zero false positives)"
+        )
+    typer.echo("")
+    typer.echo("apply it in sectum-ai.yaml:")
+    typer.echo("  detection:")
+    typer.echo(f"    semantic_threshold: {result.recommended_threshold:g}")
+
+
+def _render_calibration_json(result: CalibrationResult) -> None:
+    """Print the calibration result as one machine-parseable JSON object on stdout."""
+    payload = {
+        "model_name": result.model_name,
+        "recommended_threshold": result.recommended_threshold,
+        "zero_false_positive": result.recommended_score is not None,
+        "positives": result.positives,
+        "negatives": result.negatives,
+        "scores": [
+            {
+                "threshold": score.threshold,
+                "precision": score.precision,
+                "recall": score.recall,
+                "f1": score.f1,
+                "true_positives": score.true_positives,
+                "false_positives": score.false_positives,
+                "false_negatives": score.false_negatives,
+                "zero_false_positive": score.zero_false_positive,
+            }
+            for score in result.scores
+        ],
+    }
+    typer.echo(json.dumps(payload, indent=2))
+
+
+@app.command()
+@_handle_typed_errors
+def calibrate(
+    embedder: Annotated[
+        str | None,
+        typer.Option(
+            "--embedder",
+            help=(
+                "Embedder to calibrate as kind:model (e.g. st:all-mpnet-base-v2, "
+                "openai:text-embedding-3-small, hash-256, or fake). Defaults to the "
+                "config's detection.embedder."
+            ),
+        ),
+    ] = None,
+    scenario_seed: Annotated[
+        int | None, typer.Option("--seed", help="Scenario seed (deterministic).")
+    ] = None,
+    workdir: Annotated[
+        Path | None, typer.Option(help="Directory for run artifacts (sources config defaults).")
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
+    ] = None,
+    output: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--output",
+            help=(
+                "Render the calibration on stdout. `text` is human-readable (default); "
+                "`json` emits a single machine-parseable object."
+            ),
+            case_sensitive=False,
+        ),
+    ] = OutputFormat.TEXT,
+) -> None:
+    """Recommend a per-embedding-model semantic threshold from a labeled leak set.
+
+    Builds a deterministic labeled set from a seeded substrate - positives are a
+    foreign tenant's entity genuinely surfaced into another tenant's session,
+    negatives are same-tenant and unrelated text - scores each with the configured
+    embedder, and recommends the threshold that maximises F1 subject to zero false
+    positives among the negatives (the engineering spec, section 6.4). Set the
+    recommended value as ``detection.semantic_threshold`` (or use ``auto`` for the
+    built-in preset).
+    """
+    if output is OutputFormat.SARIF:
+        raise ConfigError("calibrate supports --output text or json, not sarif")
+    loaded = load_config(config) if config is not None else SectumConfig()
+    effective_seed = scenario_seed if scenario_seed is not None else loaded.scenario.seed
+    # workdir is accepted for parity with the other workflow commands and to source
+    # config defaults; calibration is a pure function of (seed, embedder) and the
+    # substrate it builds, so it writes nothing and needs no prior `seed` run.
+    _ = workdir if workdir is not None else loaded.workdir
+    provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
+    substrate = build_substrate(
+        default_scenario(seed=effective_seed, corpus_size=loaded.scenario.corpus_size)
+    )
+    result = calibrate_threshold(substrate, model_name=model_name, embedder=provider)
+    if output is OutputFormat.JSON:
+        _render_calibration_json(result)
+    else:
+        _render_calibration_text(result)
 
 
 def _delta_verdict(delta: MetricDelta) -> str:
