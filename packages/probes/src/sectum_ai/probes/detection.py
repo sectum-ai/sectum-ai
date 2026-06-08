@@ -46,15 +46,19 @@ _OWASP_MULTI_TENANT = "LLM08:2025"
 # engineering spec, section 6.4: "default conservative").
 DEFAULT_SEMANTIC_THRESHOLD = 0.62
 
-# Per-embedding-model calibrated semantic thresholds (the literal
-# ``semantic_threshold: auto`` resolves to one of these by the configured
-# embedder model). Each value is the F1-maximising, zero-false-positive gate that
-# ``sectum-ai calibrate`` recommends for that model on the default substrate; the
-# higher values for the OpenAI models reflect a real run where the gate had to be
-# raised to ~0.80 for ``text-embedding-3-small`` to avoid a flood of judge
-# candidates (a stronger model packs unrelated text closer together). The keys
-# match the canonical embedder names ``sectum_ai.embeddings`` produces
-# (``st:<model>`` / ``openai:<model>``).
+# Per-embedding-model semantic-threshold presets: sensible per-model STARTING
+# POINTS, not a substitute for calibration. ``semantic_threshold: auto`` resolves
+# to one of these by the configured embedder model. Today the config exposes the
+# ``fake`` and ``openai`` embedder kinds, so ``auto`` reaches the ``openai:*``
+# entries (and the fake's default); the ``st:*`` presets apply when those models
+# are calibrated or swept by name (``sectum-ai calibrate --embedder st:<model>``),
+# since ``EmbeddingModel`` produces the same ``st:<model>`` / ``openai:<model>``
+# canonical names. Only ``openai:text-embedding-3-small`` (~0.80) is grounded in a
+# real run, where the gate had to be raised from the 0.62 default to avoid
+# flooding the judge (a stronger model packs unrelated text closer together); the
+# others are conservative starting points. The exact F1-maximising, zero-FP gate
+# depends on your substrate and model, so run ``sectum-ai calibrate --embedder
+# <kind:model>`` to derive the right value rather than trusting the preset.
 MODEL_THRESHOLDS: dict[str, float] = {
     "st:all-MiniLM-L6-v2": 0.55,
     "st:all-mpnet-base-v2": 0.60,
