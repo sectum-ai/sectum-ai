@@ -273,8 +273,11 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     observation_uuids = [observation["uuid"] for observation in observations]
 
     findings: list[dict[str, Any]] = []
+    reviewed_control_ids: list[str] = []
     for mapping in control_mappings():
         for control_id in mapping.control_ids:
+            if control_id not in reviewed_control_ids:
+                reviewed_control_ids.append(control_id)
             findings.append(
                 _finding(
                     run,
@@ -306,6 +309,14 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         "description": result_description,
         "start": _oscal_timestamp(run.started_at),
         "end": _oscal_timestamp(run.finished_at),
+        # OSCAL requires reviewed-controls on every result: the controls this
+        # assessment spoke to (the union of the framework control ids from
+        # control_mappings, deduped in stable order).
+        "reviewed-controls": {
+            "control-selections": [
+                {"include-controls": [{"control-id": cid} for cid in reviewed_control_ids]}
+            ]
+        },
         "observations": observations,
         "findings": findings,
     }
@@ -315,6 +326,20 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         "assessment-results": {
             "uuid": str(document_uuid),
             "metadata": _metadata(run, tool_version),
+            # OSCAL AR requires import-ap (a reference to the assessment plan).
+            # Sectum emits assessment-results directly from a run with no separate
+            # OSCAL assessment-plan document, so the href is a stable, non-resolving
+            # placeholder; the real scope is the scenario + ground-truth manifest
+            # named in the metadata props (sectum-scenario-hash / -manifest-hash).
+            "import-ap": {
+                "href": "https://sectum.ai/oscal/no-assessment-plan",
+                "remarks": (
+                    "Sectum AI emits OSCAL assessment-results directly from a run; "
+                    "there is no separate OSCAL assessment-plan. The assessment "
+                    "scope is the scenario and ground-truth manifest referenced in "
+                    "the metadata props."
+                ),
+            },
             "results": [result],
         }
     }

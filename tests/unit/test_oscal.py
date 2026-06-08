@@ -66,18 +66,33 @@ def test_emits_a_valid_assessment_results_envelope() -> None:
     doc = run_to_oscal(_run(_finding("f-1")), tool_version="9.9.9")
     assert OSCAL_VERSION == "1.1.2"
     ar = doc["assessment-results"]
-    # Top-level required fields of an OSCAL assessment-results document.
+    # Top-level required fields of an OSCAL assessment-results document:
+    # uuid, metadata, import-ap, results are ALL required by the schema.
     assert UUID(ar["uuid"])  # parseable UUID
+    assert ar["import-ap"]["href"]  # import-ap is required, with an href
     metadata = ar["metadata"]
     assert metadata["oscal-version"] == "1.1.2"
     assert metadata["version"] == "9.9.9"
     assert metadata["last-modified"] == "2026-05-18T12:30:00+00:00"
     assert "run-1" in metadata["title"]
-    # Exactly one results entry, carrying the required result fields.
+    # Exactly one results entry, carrying the required result fields
+    # (reviewed-controls is required on every OSCAL result).
     (result,) = ar["results"]
-    for key in ("uuid", "title", "description", "start", "observations", "findings"):
+    for key in (
+        "uuid",
+        "title",
+        "description",
+        "start",
+        "reviewed-controls",
+        "observations",
+        "findings",
+    ):
         assert key in result, key
     assert result["start"] == "2026-05-18T12:30:00+00:00"
+    # reviewed-controls names the controls the assessment spoke to.
+    selections = result["reviewed-controls"]["control-selections"]
+    reviewed = {c["control-id"] for sel in selections for c in sel.get("include-controls", [])}
+    assert "CC6.1" in reviewed  # the controls from control_mappings() are listed
 
 
 def test_coverage_disclaimer_is_embedded_in_metadata_remarks() -> None:
