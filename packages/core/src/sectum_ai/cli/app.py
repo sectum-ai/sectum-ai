@@ -64,6 +64,7 @@ from sectum_ai.evidence import (
     control_mappings,
     rekor_keyring,
     render_audit_pack_and_hash,
+    run_to_sarif,
     to_in_toto_statement,
     verify_bundle,
     verify_dsse_envelope,
@@ -133,12 +134,14 @@ class OutputFormat(StrEnum):
 
     `text` is the default human-readable rendering. `json` emits a single
     machine-parseable JSON object so CI pipelines and scripts can read the
-    summary off stdout without scraping prose. Error messages stay on stderr
-    in either mode, and exit codes are unchanged.
+    summary off stdout without scraping prose. `sarif` emits a SARIF 2.1.0 log of
+    the findings so GitHub code scanning (and SAST dashboards) can ingest them.
+    Error messages stay on stderr in every mode, and exit codes are unchanged.
     """
 
     TEXT = "text"
     JSON = "json"
+    SARIF = "sarif"
 
 
 def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
@@ -735,6 +738,10 @@ def probe(
             "run_path": str(path),
         }
         typer.echo(json.dumps(summary, indent=2))
+    elif output is OutputFormat.SARIF:
+        # SARIF 2.1.0 log of the findings for GitHub code scanning / SAST
+        # dashboards; the signed evidence.json on disk stays the canonical record.
+        typer.echo(json.dumps(run_to_sarif(run, tool_version=__version__), indent=2))
     else:
         plural = "" if probe_count == 1 else "s"
         typer.echo(

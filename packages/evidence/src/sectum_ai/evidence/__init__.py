@@ -34,6 +34,7 @@ from sectum_ai.evidence.intoto import (
 )
 from sectum_ai.evidence.pdf import PdfEngine, render_audit_pack, render_audit_pack_and_hash
 from sectum_ai.evidence.rekor import RekorTransparencyLog, rekor_keyring, verify_rekor_proof
+from sectum_ai.evidence.sarif import SARIF_VERSION, run_to_sarif
 from sectum_ai.evidence.tsa import Rfc3161Timestamper, verify_rfc3161_token
 from sectum_ai.evidence.verify import Check, VerificationResult, verify_pack
 
@@ -43,6 +44,7 @@ __all__ = [
     "MANIFEST_MEMBER",
     "PAYLOAD_TYPE",
     "PREDICATE_TYPE",
+    "SARIF_VERSION",
     "STATEMENT_TYPE",
     "Check",
     "LocalTimestamper",
@@ -63,6 +65,7 @@ __all__ = [
     "render_audit_pack",
     "render_audit_pack_and_hash",
     "run_digest",
+    "run_to_sarif",
     "to_in_toto_statement",
     "verify_bundle",
     "verify_dsse_envelope",

@@ -52,6 +52,12 @@ that want to act on the headline metrics without scraping prose:
 uv run sectum-ai probe --workdir .sectum-ai --output json | jq '.retrieval_pivot_rate'
 ```
 
+For GitHub code scanning (or any SAST dashboard), pass `--output sarif` instead to
+emit a SARIF 2.1.0 log of the findings — one rule per probe, one result per
+finding. Upload it with `github/codeql-action/upload-sarif` and the cross-tenant
+findings surface in the repository's **Security** tab. An unverified candidate is
+capped at SARIF `note`, and the signed `evidence.json` stays the canonical record.
+
 The summary carries the `run_id`, the probe count, the confirmed-finding
 count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
 when Class 2 swept models), the per-probe finding counts, and a `run_path`
