@@ -87,7 +87,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.3.0/Scenario.schema.json",
+  "$id": "https://schemas.sectum.ai/0.4.0/Scenario.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A reproducible test scenario (the engineering spec, section 9).",
@@ -110,7 +110,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "0.3.0",
+      "default": "0.4.0",
       "title": "Schema Version",
       "type": "string"
     },

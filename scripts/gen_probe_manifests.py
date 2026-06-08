@@ -19,21 +19,16 @@ from typing import Any
 import yaml
 
 import sectum_ai.probes as probes
+from sectum_ai.probes import ERASURE_SURFACES
 
 # Probes that run as a standalone statistical/erasure workflow rather than the
 # plan/detect protocol, so they carry no class-level `surfaces`/`requires_adapters`.
 # Their surfaces are declared here for the manifest (informational, not class-bound).
+# The erasure surfaces are sourced from the probe's canonical ERASURE_SURFACES so
+# the manifest cannot drift from the set the probe actually scans.
 _WORKFLOW_SURFACES: dict[str, list[str]] = {
     "kv-cache-timing": ["kv_cache"],
-    "gdpr-erasure-verification": [
-        "vector_db",
-        "tracing",
-        "agent_memory",
-        "semantic_cache",
-        "model_adapter",
-        "search_index",
-        "eval_set",
-    ],
+    "gdpr-erasure-verification": [surface.value for surface in ERASURE_SURFACES],
 }
 _WORKFLOW_REQUIRES: dict[str, list[str]] = {
     "kv-cache-timing": ["model"],

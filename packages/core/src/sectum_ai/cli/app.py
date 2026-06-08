@@ -72,6 +72,7 @@ from sectum_ai.evidence import (
 )
 from sectum_ai.jobs import build_job_runner
 from sectum_ai.probes import (
+    ERASURE_SURFACES,
     AgentFrameworkHijackProbe,
     AgentToolHijackProbe,
     DetectionProviders,
@@ -101,6 +102,7 @@ from sectum_ai.spec import (
     RunResult,
     SectumError,
     Substrate,
+    Surface,
     canonical_hash,
     configure_logging,
 )
@@ -450,6 +452,42 @@ def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
     available = ", ".join(tenant.display_name for tenant in substrate.tenants)
     typer.echo(f"unknown tenant '{name}'; available: {available}", err=True)
     raise typer.Exit(code=3)
+
+
+def _resolve_erasure_scope(scope: str | None) -> tuple[Surface, ...] | None:
+    """Parse and validate a ``--scope`` surface list for the erasure command.
+
+    ``scope`` is a comma-separated list of erasure-surface names (for example
+    ``vector_db,tracing``). Returns the surfaces in canonical
+    :data:`~sectum_ai.probes.ERASURE_SURFACES` order, or ``None`` when no scope
+    was given (the full run). Every name must be a known erasure surface;
+    an unknown name raises :class:`~sectum_ai.spec.ConfigError` (exit 3) with the
+    valid set, so an engagement cannot silently scope to nothing.
+    """
+    if scope is None:
+        return None
+    requested = [name.strip() for name in scope.split(",") if name.strip()]
+    if not requested:
+        valid = ", ".join(surface.value for surface in ERASURE_SURFACES)
+        raise ConfigError(f"--scope is empty; name one or more erasure surfaces: {valid}")
+    known = {surface.value: surface for surface in ERASURE_SURFACES}
+    selected: set[Surface] = set()
+    unknown: list[str] = []
+    for name in requested:
+        surface = known.get(name)
+        if surface is None:
+            unknown.append(name)
+        else:
+            selected.add(surface)
+    if unknown:
+        valid = ", ".join(surface.value for surface in ERASURE_SURFACES)
+        raise ConfigError(
+            f"unknown erasure surface(s) in --scope: {', '.join(unknown)}; "
+            f"valid surfaces are: {valid}"
+        )
+    # Return in canonical order so the scoped run's output and coverage block read
+    # in the same stable sequence as a full run.
+    return tuple(surface for surface in ERASURE_SURFACES if surface in selected)
 
 
 @app.command()
@@ -1013,6 +1051,20 @@ def erasure(
             ),
         ),
     ] = False,
+    scope: Annotated[
+        str | None,
+        typer.Option(
+            "--scope",
+            help=(
+                "Comma-separated erasure surfaces to verify (a cheaper single-surface "
+                "'snapshot' engagement), e.g. 'vector_db' or 'vector_db,tracing'. "
+                "Surfaces outside the scope are reported NOT_COVERED, never ERASED. "
+                "Omit to verify every configured surface (the default). Valid surfaces: "
+                "vector_db, tracing, agent_memory, semantic_cache, model_adapter, "
+                "search_index, eval_set, backup."
+            ),
+        ),
+    ] = None,
     workdir: Annotated[
         Path | None, typer.Option(help="Directory holding the seeded substrate.")
     ] = None,
@@ -1022,6 +1074,7 @@ def erasure(
     ] = None,
 ) -> None:
     """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
+    erasure_scope = _resolve_erasure_scope(scope)
     if config is not None:
         loaded = load_config(config)
         fake_default = AdapterConfig(kind="fake")
@@ -1087,7 +1140,7 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(target)
+    ).run(target, scope=erasure_scope)
     finished = datetime.now(UTC)
 
     run = RunResult(
@@ -1130,6 +1183,14 @@ def erasure(
                 for surface in report.surfaces
                 if not surface.erasure_supported
             },
+            # Per-surface coverage for EVERY erasure surface, including the ones
+            # this run did not scan (out of scope, no adapter, or no baseline),
+            # which carry NOT_COVERED. Bound into the signed pack so the
+            # attestation can never imply more coverage than it verified - the
+            # anti-over-claim guarantee (the engineering spec, section 7, Class 11).
+            erasure_coverage={
+                surface.value: verdict.value for surface, verdict in report.coverage().items()
+            },
         ),
     )
     controls = control_mappings()
@@ -1156,6 +1217,13 @@ def erasure(
             f"{surface.surface.value}: {surface.markers_before} markers before, "
             f"{surface.residual_after} after -> {surface.verdict}"
         )
+    # Surfaces this run did not scan (out of scope, no adapter, or no baseline)
+    # are stated explicitly so the operator and the DPO can see exactly what the
+    # attestation does NOT cover - the attestation never implies more coverage
+    # than it verified (the engineering spec, section 7, Class 11).
+    if report.not_covered:
+        not_covered_names = ", ".join(surface.value for surface in report.not_covered)
+        typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
     # A genuine erasure failure (a surface that supports erasure but still
     # holds the marker) is the dominant signal and takes precedence.
@@ -1191,6 +1259,15 @@ def erasure(
     if report.erased:
         scanned = ", ".join(surface.surface.value for surface in report.surfaces)
         typer.echo(f"ERASURE VERIFIED: no residual marker on {scanned}.")
+        # An honest "verified" states its boundary: a scoped (snapshot) run, or
+        # one with surfaces that had no adapter, verified only what it scanned.
+        # Naming the NOT_COVERED surfaces keeps the pass from over-claiming.
+        if report.not_covered:
+            not_covered_names = ", ".join(surface.value for surface in report.not_covered)
+            typer.echo(
+                f"  scope: this attests {scanned} only; NOT_COVERED (not verified): "
+                f"{not_covered_names}.",
+            )
         return
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0

@@ -11,20 +11,76 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
 from sectum_ai.spec import (
     ControlMapping,
+    CoverageVerdict,
     EvidencePack,
     Finding,
     FindingStatus,
     RunResult,
     sha256_hex,
 )
+
+# Canonical erasure-surface order for the coverage matrix, kept here (rather than
+# importing from sectum_ai.probes) because the evidence package sits below probes
+# in the acyclic package graph (ADR-0004) and must not depend on it. It mirrors
+# ``sectum_ai.probes.ERASURE_SURFACES``; the erasure run writes a verdict for each
+# of these into ``RunMetrics.erasure_coverage``.
+_ERASURE_SURFACE_ORDER: tuple[str, ...] = (
+    "vector_db",
+    "tracing",
+    "agent_memory",
+    "semantic_cache",
+    "model_adapter",
+    "search_index",
+    "eval_set",
+    "backup",
+)
+
+# A short, DPO-facing gloss for each coverage verdict rendered in the matrix.
+_COVERAGE_VERDICT_GLOSS: dict[str, str] = {
+    CoverageVerdict.ERASED.value: "verified clean - no marker survived erasure",
+    CoverageVerdict.RESIDUAL.value: "erasure failed - a marker survived",
+    CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value: (
+        "no per-tenant erasure API - data presumed retained"
+    ),
+    CoverageVerdict.NOT_COVERED.value: "not verified by this attestation",
+}
+
+# The standing caveat for the coverage matrix: an honest attestation states what
+# it did NOT verify, so a NOT_COVERED surface is never read as erased.
+_COVERAGE_CAVEAT = (
+    "Coverage states what this attestation verified, surface by surface. A "
+    "NOT_COVERED surface was out of scope, had no configured adapter, or showed "
+    "no pre-erasure baseline - it is explicitly not evidence of erasure and must "
+    "not be read as erased. ATTESTABLE WITH CAVEAT means the backend exposes no "
+    "per-tenant erasure API, so the data is presumed retained until it ages out "
+    "of the backend's retention window (a backend limitation, not a flow failure)."
+)
+
+
+def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:
+    """Return ``(surface, verdict)`` coverage rows in canonical order, or ``[]``.
+
+    Reads ``RunResult.metrics.erasure_coverage`` (written only by a Class 11
+    erasure run). Surfaces are ordered by :data:`_ERASURE_SURFACE_ORDER`; any
+    extra surface key (forward-compatibility) is appended in sorted order so the
+    matrix is total and deterministic. Returns ``[]`` for a non-erasure run, so
+    the section is omitted entirely.
+    """
+    coverage = run.metrics.erasure_coverage
+    if not coverage:
+        return []
+    ordered = [s for s in _ERASURE_SURFACE_ORDER if s in coverage]
+    extra = sorted(s for s in coverage if s not in _ERASURE_SURFACE_ORDER)
+    return [(surface, coverage[surface]) for surface in (*ordered, *extra)]
 
 
 class PdfEngine(StrEnum):
@@ -204,6 +260,42 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
     flow += [Paragraph(line, body) for line in _finding_lines(run.findings)]
+
+    coverage_rows = _coverage_rows(run)
+    if coverage_rows:
+        flow += [Spacer(1, 12), Paragraph("Coverage &amp; caveats", heading)]
+        table_data: list[list[Any]] = [
+            [
+                Paragraph("<b>Surface</b>", body),
+                Paragraph("<b>Verdict</b>", body),
+                Paragraph("<b>Meaning</b>", body),
+            ]
+        ]
+        for surface, verdict in coverage_rows:
+            gloss = _COVERAGE_VERDICT_GLOSS.get(verdict, "")
+            table_data.append(
+                [
+                    Paragraph(escape(surface), body),
+                    Paragraph(f"<b>{escape(verdict)}</b>", body),
+                    Paragraph(escape(gloss), body),
+                ]
+            )
+        coverage_table = Table(table_data, colWidths=[110, 150, 230], hAlign="LEFT")
+        coverage_table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d8dee6")),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f5")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+        flow.append(coverage_table)
+        flow.append(Paragraph(f"<i>{escape(_COVERAGE_CAVEAT)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Compliance control coverage", heading)]
     flow += [Paragraph(line, body) for line in _control_lines(pack.control_mappings)]

@@ -11,8 +11,8 @@ from sectum_ai.adapters import (
     FakeVectorStore,
 )
 from sectum_ai.adapters.base import ObservabilityAdapter
-from sectum_ai.probes import ErasureProbe
-from sectum_ai.spec import MarkerType, Substrate, Surface
+from sectum_ai.probes import ERASURE_SURFACES, ErasureProbe
+from sectum_ai.spec import CoverageVerdict, MarkerType, Substrate, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -497,3 +497,147 @@ def test_onboarding_a_caveat_backend_is_not_a_diff_regression() -> None:
     # ...and do not appear as newly-confirmed in a finding-level diff.
     diff = diff_findings(clean.findings, with_caveat.findings)
     assert diff.newly_confirmed == ()
+
+
+# --- Snapshot scope + tri-state coverage (anti-over-claim) -------------------
+
+
+def test_coverage_reports_a_verdict_for_every_erasure_surface() -> None:
+    # The coverage block is total: a verdict for every surface in the canonical
+    # set, even on a default (vector-store-only) run, so the attestation states
+    # an explicit verdict for the surfaces it did not scan rather than omitting
+    # them. The eight surfaces are exactly ERASURE_SURFACES.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    report = ErasureProbe(substrate, vector=_seeded_store(substrate, soft_delete=False)).run(target)
+    coverage = report.coverage()
+    assert set(coverage) == set(ERASURE_SURFACES)
+    # The one scanned surface is ERASED; every other surface is NOT_COVERED.
+    assert coverage[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    for surface in ERASURE_SURFACES:
+        if surface is not Surface.VECTOR_DB:
+            assert coverage[surface] is CoverageVerdict.NOT_COVERED
+
+
+def test_a_scoped_run_only_scans_the_scoped_surfaces() -> None:
+    # Feature A1 part 1: --scope verifies a subset. A run scoped to the vector
+    # store scans ONLY that surface (its report.surfaces is exactly that one),
+    # and every other erasure surface is reported NOT_COVERED in coverage - even
+    # though adapters for them are configured and seeded.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    report = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_seeded_observability(substrate, soft_delete=False),
+        memory=_seeded_memory(substrate, soft_delete=False),
+        cache=_seeded_cache(substrate, soft_delete=False),
+    ).run(target, scope=[Surface.VECTOR_DB])
+    # Only the scoped surface was actually scanned.
+    assert tuple(s.surface for s in report.surfaces) == (Surface.VECTOR_DB,)
+    coverage = report.coverage()
+    assert coverage[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    # The configured-but-out-of-scope surfaces are NOT_COVERED, not scanned.
+    for surface in (Surface.TRACING, Surface.AGENT_MEMORY, Surface.SEMANTIC_CACHE):
+        assert coverage[surface] is CoverageVerdict.NOT_COVERED
+    assert set(report.not_covered) == set(ERASURE_SURFACES) - {Surface.VECTOR_DB}
+
+
+def test_a_scoped_run_can_select_multiple_surfaces() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    report = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_seeded_observability(substrate, soft_delete=False),
+    ).run(target, scope=[Surface.VECTOR_DB, Surface.TRACING])
+    assert {s.surface for s in report.surfaces} == {Surface.VECTOR_DB, Surface.TRACING}
+    coverage = report.coverage()
+    assert coverage[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    assert coverage[Surface.TRACING] is CoverageVerdict.ERASED
+    assert coverage[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
+
+
+def test_a_surface_in_scope_with_no_adapter_is_not_covered() -> None:
+    # Scoping to a surface that has no configured adapter does not scan it (only
+    # the vector store is wired here), so it reads NOT_COVERED - never ERASED.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    report = ErasureProbe(substrate, vector=_seeded_store(substrate, soft_delete=False)).run(
+        target, scope=[Surface.VECTOR_DB, Surface.TRACING]
+    )
+    assert tuple(s.surface for s in report.surfaces) == (Surface.VECTOR_DB,)
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.NOT_COVERED
+
+
+def test_an_unscanned_surface_can_never_be_erased() -> None:
+    # The anti-over-claim invariant (Feature A1 part 2): for EVERY scope a run
+    # could be given, a surface that was not scanned never carries the ERASED
+    # verdict in the coverage block. Sweep every single-surface scope and assert
+    # that every out-of-scope surface is NOT_COVERED (the only verdict an
+    # unscanned surface may hold), proving the pack cannot imply coverage it
+    # does not have. All surfaces are configured + seeded with hard-deleting
+    # backends, so absent the scope guard they WOULD read ERASED - that is what
+    # makes this a real guarantee rather than a vacuous one.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+
+    def _full_probe() -> ErasureProbe:
+        return ErasureProbe(
+            substrate,
+            vector=_seeded_store(substrate, soft_delete=False),
+            observability=_seeded_observability(substrate, soft_delete=False),
+            memory=_seeded_memory(substrate, soft_delete=False),
+            cache=_seeded_cache(substrate, soft_delete=False),
+            model=_seeded_model(substrate, soft_delete=False),
+            search_index=_seeded_search(substrate, soft_delete=False),
+            eval_set=_seeded_eval(substrate, soft_delete=False),
+            backup=_seeded_backup(substrate),
+        )
+
+    # Sanity: with no scope, every surface IS scanned and reads ERASED - so the
+    # ERASED verdict is reachable here and the invariant below is non-trivial.
+    full = _full_probe().run(target)
+    assert all(v is CoverageVerdict.ERASED for v in full.coverage().values())
+
+    for scoped_surface in ERASURE_SURFACES:
+        report = _full_probe().run(target, scope=[scoped_surface])
+        coverage = report.coverage()
+        for surface, verdict in coverage.items():
+            if surface is not scoped_surface:
+                # The crux: an unscanned surface is NOT_COVERED and, in
+                # particular, is NEVER ERASED.
+                assert verdict is not CoverageVerdict.ERASED
+                assert verdict is CoverageVerdict.NOT_COVERED
+
+
+def test_a_no_baseline_surface_is_not_covered_in_the_coverage_block() -> None:
+    # A scanned surface with no pre-erasure baseline cannot attest erasure, so it
+    # maps to NOT_COVERED in the coverage block (aligning the no-baseline case
+    # with the out-of-scope case) - never ERASED.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    empty_store = FakeVectorStore()  # never populated -> no baseline
+    report = ErasureProbe(substrate, vector=empty_store).run(target)
+    assert report.surfaces[0].markers_before == 0
+    assert report.surfaces[0].coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+
+
+def test_coverage_verdict_maps_residual_and_caveat() -> None:
+    # The coverage block distinguishes a genuine residual (RESIDUAL) from a
+    # no-per-tenant-erasure-API caveat (ATTESTABLE_WITH_CAVEAT) - the two are not
+    # conflated, mirroring the human verdict strings.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    residual = ErasureProbe(substrate, vector=_seeded_store(substrate, soft_delete=True)).run(
+        target
+    )
+    assert residual.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+
+    caveat = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_no_erasure_observability(substrate),
+    ).run(target)
+    assert caveat.coverage()[Surface.TRACING] is CoverageVerdict.ATTESTABLE_WITH_CAVEAT

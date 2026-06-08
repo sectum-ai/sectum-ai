@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Erasure "snapshot" scope (`sectum-ai erasure --scope`).** An engagement can
+  now verify a subset of erasure surfaces — for example `--scope vector_db` or
+  `--scope vector_db,tracing` — backing a cheaper single-surface snapshot
+  attestation. Omitting the flag verifies every configured surface (unchanged).
+  An unknown surface name is a clear `ConfigError` (exit 3). Valid surfaces:
+  `vector_db`, `tracing`, `agent_memory`, `semantic_cache`, `model_adapter`,
+  `search_index`, `eval_set`, `backup` (the canonical
+  `sectum_ai.probes.ERASURE_SURFACES`).
+- **Honest, anti-over-claim per-surface erasure coverage.** Every erasure
+  surface now carries an explicit verdict in the evidence pack
+  (`RunMetrics.erasure_coverage`, surface → `CoverageVerdict`): `ERASED`,
+  `RESIDUAL`, `ATTESTABLE_WITH_CAVEAT`, or `NOT_COVERED`. A surface that was out
+  of scope, had no configured adapter, or showed no pre-erasure baseline is
+  `NOT_COVERED` — it can **never** read as `ERASED`. This closes a real defect: a
+  recent live run reported the stack "ERASED" overall even though some surfaces
+  were never scanned; the pack must never imply more coverage than it verified.
+  The audit-pack PDF (both engines) renders a **Coverage & caveats** matrix so a
+  DPO/auditor can see, surface by surface, exactly what was and was not verified,
+  and the `erasure` command prints the `NOT_COVERED` surfaces.
+
+### Changed
+
+- **Schema bump `0.3.0` → `0.4.0`** for the new `RunMetrics.erasure_coverage`
+  block. The committed JSON Schemas, the default-scenario golden hashes, and the
+  shipped sample evidence packs under `docs/samples/` are regenerated to 0.4.0; a
+  pre-0.4.0 pack is refused by `sectum-ai verify` (major/minor mismatch), as
+  intended.
+
 ### Fixed
 
 - **The live Langfuse observability adapter works against current Langfuse

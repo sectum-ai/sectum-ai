@@ -25,12 +25,15 @@ A Data Protection Officer needs evidence, not assurances.
    `erasure-attestation.pdf` (for the DPO) and `erasure-evidence.json`.
 3. **`sectum-ai verify`** independently re-checks the attestation's integrity.
 
-The probe verifies erasure across **seven surfaces** — the vector store,
+The probe verifies erasure across **eight surfaces** — the vector store,
 observability / tracing, agent / long-term memory, semantic / application cache,
-model / fine-tune adapter, derived search index, and eval golden set — scanning
-each independently and reporting a per-surface verdict. Surfaces with no adapter
-configured are skipped; backup snapshots and third-party subprocessor residue
-remain on the roadmap. The attestation always states which surfaces it covers.
+model / fine-tune adapter, derived search index, eval golden set, and backup /
+snapshot store — scanning each independently and reporting a per-surface verdict
+plus a full coverage block. Surfaces with no adapter configured (or excluded via
+`--scope`) are reported `NOT_COVERED`, never `ERASED`; third-party subprocessor
+residue remains on the roadmap. The attestation always states which surfaces it
+covers. Pass `--scope vector_db` (or a comma-separated list) to verify just a
+subset — a cheaper single-surface "snapshot" engagement.
 
 ## Run it
 
@@ -53,8 +56,9 @@ semantic_cache: 2 markers before, 0 after -> ERASED
 model_adapter: 2 markers before, 0 after -> ERASED
 search_index: 2 markers before, 0 after -> ERASED
 eval_set: 2 markers before, 0 after -> ERASED
+backup: 2 markers before, 0 after -> ERASED
 ERASURE VERIFIED: no residual marker on vector_db, tracing, agent_memory,
-semantic_cache, model_adapter, search_index, eval_set.
+semantic_cache, model_adapter, search_index, eval_set, backup.
 ```
 
 `sectum-ai verify` then confirms the attestation pack is intact.

@@ -3,6 +3,7 @@
 from sectum_ai.spec._logging import configure_logging, get_logger, redact_sensitive
 from sectum_ai.spec.enums import (
     AccessOutcome,
+    CoverageVerdict,
     FindingStatus,
     MarkerType,
     PrincipalKind,
@@ -48,6 +49,7 @@ __all__ = [
     "ConfigError",
     "ControlMapping",
     "CorpusDocument",
+    "CoverageVerdict",
     "DetectionError",
     "ErasureUnsupported",
     "EvidenceError",

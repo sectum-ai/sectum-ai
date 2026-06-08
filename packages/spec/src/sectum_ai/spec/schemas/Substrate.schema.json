@@ -84,7 +84,7 @@
           "type": "string"
         },
         "schema_version": {
-          "default": "0.3.0",
+          "default": "0.4.0",
           "title": "Schema Version",
           "type": "string"
         }
@@ -213,7 +213,7 @@
           "type": "string"
         },
         "schema_version": {
-          "default": "0.3.0",
+          "default": "0.4.0",
           "title": "Schema Version",
           "type": "string"
         },
@@ -332,7 +332,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.3.0/Substrate.schema.json",
+  "$id": "https://schemas.sectum.ai/0.4.0/Substrate.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The seeded substrate: tenants, corpora, markers, and the manifest.",
@@ -351,7 +351,7 @@
       "$ref": "#/$defs/Scenario"
     },
     "schema_version": {
-      "default": "0.3.0",
+      "default": "0.4.0",
       "title": "Schema Version",
       "type": "string"
     },

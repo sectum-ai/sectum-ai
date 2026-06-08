@@ -46,8 +46,8 @@ def test_default_scenario_hashes_match_the_published_golden() -> None:
     # substrate change.
     substrate = build_substrate(default_scenario(seed=2026))
     assert substrate.manifest.scenario_hash == (
-        "af9da02efda26ece5756ff94e491922081446803f49399b1dea2468f54a0521e"
+        "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb"
     )
     assert canonical_hash(substrate.manifest) == (
-        "01621727cafdd8a1adab1acd505aa5161332b227c9eb4f900914dbff5e8ea4a6"
+        "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514"
     )
