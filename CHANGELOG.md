@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Qdrant vector adapter (`kind: qdrant`, `[qdrant]` extra).** A live
+  `VectorStoreAdapter` backed by a Qdrant server, one collection per tenant
+  (per-tenant isolation), with optional user-scoping via a payload filter +
+  post-fetch check (ADR-0006). Deterministic point ids (UUIDv5 of the `doc_id`)
+  make upserts idempotent. Ships a docker-compose service and a live integration
+  test that skips when the client/server is absent (the repo's standard live-
+  adapter pattern). More vector backends (Milvus / OpenSearch / Azure AI Search)
+  to follow.
 - **Deeper MCP coverage for Class 7 (`agent-tool-hijack`).** The MCP probe now
   runs four manifest-grounded sub-probes per foreign resource instead of two: the
   original confused-deputy and token-passthrough lookups, plus a **cross-server

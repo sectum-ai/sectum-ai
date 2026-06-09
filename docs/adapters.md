@@ -32,11 +32,13 @@ Live adapters implement the same family interface. This section is the narrative
 tour; for the full per-family reference — every `kind`, its fields, and how it
 scopes and erases a tenant — see [configuration.md](configuration.md).
 
-**Vector stores.** The pgvector, Chroma, and Weaviate stores are tenant-isolated
-and add a `fetch`-by-id primitive alongside similarity `query`; the Pinecone
-store gives each tenant its own namespace within one index and is verified by a
-mock-backed test plus an opt-in live test (it is a hosted service, so there is no
-local backend).
+**Vector stores.** The pgvector, Chroma, Weaviate, and Qdrant stores are
+tenant-isolated — each tenant gets its own table/collection — and add a
+`fetch`-by-id primitive alongside similarity `query`; the Pinecone store gives
+each tenant its own namespace within one index and is verified by a mock-backed
+test plus an opt-in live test (it is a hosted service, so there is no local
+backend). Qdrant is self-hosted (`kind: qdrant`, `[qdrant]` extra), so it ships a
+docker-compose service and a live integration test.
 
 **Cache.** The Redis cache prefixes its keys and tenant-scopes them by default;
 `tenant_scoped=False` models the shared key space Class 4 is built to catch.

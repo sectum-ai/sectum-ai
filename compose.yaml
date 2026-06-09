@@ -50,6 +50,14 @@ services:
       - "8082:8080"
       - "50052:50051"
 
+  # Qdrant serves HTTP on 6333 and gRPC on 6334; remapped to avoid local clashes.
+  # No healthcheck: the image ships no shell, so the test fixture retries instead.
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+
   # Phoenix serves its UI, query API, and OTLP-HTTP trace ingest on 6006.
   # No healthcheck: the integration-test fixture retries the connection instead.
   phoenix:
