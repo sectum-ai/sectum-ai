@@ -28,9 +28,11 @@ def test_erasure_fails_against_a_soft_deleting_store(tmp_path: Path) -> None:
 def test_erasure_attestation_verifies(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
-    result = _runner.invoke(app, ["verify", str(tmp_path / "erasure-evidence.json")])
+    result = _runner.invoke(
+        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+    )
     assert result.exit_code == 0
-    assert "VERIFIED" in result.output
+    assert "INTEGRITY OK - UNANCHORED" in result.output
 
 
 def test_erasure_rejects_an_unknown_tenant(tmp_path: Path) -> None:
@@ -312,6 +314,8 @@ def test_erasure_scoped_pack_still_verifies(tmp_path: Path) -> None:
     """A scoped (snapshot) attestation is a fully valid, tamper-evident pack."""
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
-    result = _runner.invoke(app, ["verify", str(tmp_path / "erasure-evidence.json")])
+    result = _runner.invoke(
+        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+    )
     assert result.exit_code == 0
-    assert "VERIFIED" in result.output
+    assert "INTEGRITY OK - UNANCHORED" in result.output

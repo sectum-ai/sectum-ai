@@ -289,9 +289,9 @@ def test_report_emits_an_in_toto_attestation(tmp_path: Path) -> None:
 def test_verify_passes_for_a_freshly_built_pack(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
-    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert result.exit_code == 0
-    assert "VERIFIED" in result.output
+    assert "INTEGRITY OK - UNANCHORED" in result.output
 
 
 def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
@@ -312,9 +312,9 @@ def test_report_bundle_round_trips_through_verify(tmp_path: Path) -> None:
     _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
     bundle_path = tmp_path / "evidence-bundle.zip"
     assert bundle_path.exists()
-    result = _runner.invoke(app, ["verify", str(bundle_path)])
+    result = _runner.invoke(app, ["verify", str(bundle_path), "--allow-unanchored"])
     assert result.exit_code == 0
-    assert "VERIFIED" in result.output
+    assert "INTEGRITY OK - UNANCHORED" in result.output
 
 
 def test_cli_version_is_the_installed_package_version_and_is_stamped(tmp_path: Path) -> None:
@@ -347,7 +347,7 @@ def test_verify_rechecks_the_in_toto_sidecar(tmp_path: Path) -> None:
     # it -- the one shipped artifact the verifier previously ignored.
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
-    ok = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    ok = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert ok.exit_code == 0
     assert "in-toto-attestation" in ok.output
     # a sidecar swapped to attest a different run digest fails verification (exit 4)
@@ -355,7 +355,7 @@ def test_verify_rechecks_the_in_toto_sidecar(tmp_path: Path) -> None:
     statement = json.loads(intoto.read_text())
     statement["subject"][0]["digest"]["sha256"] = "0" * 64
     intoto.write_text(json.dumps(statement))
-    bad = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    bad = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert bad.exit_code == 4
     assert "in-toto-attestation" in bad.output
 
@@ -366,7 +366,7 @@ def test_verify_fails_when_the_audit_pdf_is_swapped(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
     (tmp_path / "audit-pack.pdf").write_bytes(b"%PDF-1.4 forged audit pack")
-    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert result.exit_code == 4
 
 
@@ -615,3 +615,14 @@ def test_headline_rpr_counts_a_pipeline_bleed_only_leak() -> None:
     bleed_steps = [r for r in step_results if r[0].probe_id in BLEED_PROBE_IDS]
     # both probes counted -> 1 of 2 leaked -> 0.5; entity-only would read 0.0.
     assert retrieval_pivot_rate(bleed_steps) > 0
+
+
+def test_verify_requires_an_anchor_by_default(tmp_path: Path) -> None:
+    # A local-dev pack is integrity-only (its token is reproducible by anyone),
+    # so without --allow-unanchored the CLI refuses to call it verified: exit 4
+    # and a failing independent-anchor check naming the missing anchor.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
+    assert result.exit_code == 4
+    assert "independent-anchor" in result.output
