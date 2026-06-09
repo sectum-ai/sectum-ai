@@ -99,19 +99,44 @@ def build_bundle(members: Mapping[str, bytes]) -> bytes:
 
 
 def verify_bundle(
-    bundle: bytes, *, rekor_keyring: Mapping[str, bytes] | None = None
+    bundle: bytes,
+    *,
+    tsa_certificate: bytes | None = None,
+    tsa_root: bytes | None = None,
+    rekor_keyring: Mapping[str, bytes] | None = None,
+    require_anchored: bool = False,
 ) -> VerificationResult:
     """Verify a bundle end to end and return a PASS/FAIL verdict with per-check detail.
 
     Every member's SHA-256 must match the recorded manifest digest, the archive's
-    member set must equal the manifest's (no unlisted member may ride along), and
-    the contained evidence pack must pass :func:`verify_pack`. A missing, extra, or
-    mismatched member, or a failed pack verification, fails the result - so editing
-    a bundled artifact, smuggling an unlisted one in, or altering the pack is caught.
+    member set must equal the manifest's (no unlisted member may ride along, no
+    duplicate names), and the contained evidence pack must pass
+    :func:`verify_pack` - with ``tsa_certificate``/``tsa_root``/``rekor_keyring``
+    threaded through so a customer-pinned TSA or a private Rekor instance
+    verifies, and ``require_anchored`` enforced the same way as on a bare pack.
+    A missing, extra, or mismatched member, or a failed pack verification, fails
+    the result - so editing a bundled artifact, smuggling an unlisted one in, or
+    altering the pack is caught. The result's ``anchored`` reflects the contained
+    pack's anchoring.
     """
     try:
         with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
             names = archive.namelist()
+            if len(names) != len(set(names)):
+                # A hostile ZIP can carry two members with the same name; readers
+                # disagree on which wins, so a duplicate-name archive cannot
+                # attest "exactly the manifest's member set" - refuse it outright.
+                return VerificationResult(
+                    passed=False,
+                    checks=(
+                        Check(
+                            "bundle-members",
+                            False,
+                            "the archive contains duplicate member names; readers "
+                            "disagree on which copy wins, so the bundle is refused",
+                        ),
+                    ),
+                )
             if MANIFEST_MEMBER not in names:
                 return VerificationResult(
                     passed=False,
@@ -170,7 +195,15 @@ def verify_bundle(
     # sidecar attests a different run - would pass on the member-digest checks
     # alone, breaking the tamper-evidence guarantee (the spec, section 8.1; ADR-0016).
     pdf_bytes = _first_member(member_bytes, _PDF_MEMBERS)
-    checks.extend(verify_pack(pack, rekor_keyring=rekor_keyring, pdf_bytes=pdf_bytes).checks)
+    pack_result = verify_pack(
+        pack,
+        tsa_certificate=tsa_certificate,
+        tsa_root=tsa_root,
+        rekor_keyring=rekor_keyring,
+        pdf_bytes=pdf_bytes,
+        require_anchored=require_anchored,
+    )
+    checks.extend(pack_result.checks)
     if pack.pdf_ref is not None and pdf_bytes is None:
         checks.append(
             Check(
@@ -191,4 +224,8 @@ def verify_bundle(
         checks.append(
             _check_sidecar("dsse-envelope", dsse_raw, lambda obj: verify_dsse_envelope(obj, pack))
         )
-    return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
+    return VerificationResult(
+        passed=all(check.ok for check in checks),
+        checks=tuple(checks),
+        anchored=pack_result.anchored,
+    )

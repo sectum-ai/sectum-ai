@@ -96,7 +96,7 @@ Or drive the `sectum` CLI directly:
 uv run sectum-ai seed   --workdir .sectum-ai
 uv run sectum-ai probe  --workdir .sectum-ai
 uv run sectum-ai report --workdir .sectum-ai
-uv run sectum-ai verify .sectum-ai/evidence.json
+uv run sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
 ```
 
 For richer configuration (live vector store, real embedder/judge, Rekor

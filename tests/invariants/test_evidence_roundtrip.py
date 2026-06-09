@@ -474,3 +474,38 @@ def test_a_pack_built_in_a_non_utc_zone_still_verifies() -> None:
     )
     pack = build_evidence_pack(run, manifest)
     assert verify_pack(pack, manifest).passed
+
+
+def test_a_local_dev_pack_reports_unanchored() -> None:
+    # A pack timestamped only by the local-dev token verifies as internally
+    # consistent but unanchored; requiring an anchor refuses it.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    result = verify_pack(pack, manifest)
+    assert result.passed
+    assert not result.anchored
+    assert not verify_pack(pack, manifest, require_anchored=True).passed
+
+
+def test_a_restamped_tampered_pack_is_caught_only_by_the_anchor_requirement() -> None:
+    # THE downgrade attack the flag-based guards cannot stop: tamper the pack
+    # (anchor flags false) and re-stamp it with a fresh local-dev token over the
+    # recomputed digest - the token is reproducible by anyone, so every
+    # integrity check passes. That is precisely why `sectum-ai verify` requires
+    # an independent anchor by default: require_anchored=True refuses the pack
+    # with a failing independent-anchor check.
+    from sectum_ai.evidence import LocalTimestamper
+
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    tampered_run = pack.run_result.model_copy(update={"run_id": "run-tampered"})
+    tampered = pack.model_copy(update={"run_result": tampered_run})
+    restamped = tampered.model_copy(
+        update={"tsa_token": LocalTimestamper().timestamp(attested_digest(tampered))}
+    )
+    permissive = verify_pack(restamped, manifest)
+    assert permissive.passed, "a re-stamped local pack is integrity-consistent by construction"
+    assert not permissive.anchored
+    required = verify_pack(restamped, manifest, require_anchored=True)
+    assert not required.passed
+    assert any(check.name == "independent-anchor" and not check.ok for check in required.checks)

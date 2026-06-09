@@ -29,10 +29,14 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 ## Verifying these packs
 
-Every pack here verifies under the open-source `sectum-ai verify`:
+Every pack here verifies under the open-source `sectum-ai verify`. The samples
+are produced by the offline demo flow, so their timestamp is the local-dev
+token — pass `--allow-unanchored` to accept integrity-only verification (a
+production pack built with `report --tsa --rekor` verifies without the flag,
+as an independently anchored attestation):
 
 ```sh
-uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json
+uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json --allow-unanchored
 ```
 
 A `VERIFIED` outcome means the whole-pack attested digest matches the

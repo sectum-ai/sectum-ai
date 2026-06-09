@@ -31,7 +31,7 @@ sectum-ai report --workdir "$out"
 
 echo
 echo "==> 4/4  Independently verify the evidence pack"
-sectum-ai verify "$out/evidence.json"
+sectum-ai verify "$out/evidence.json" --allow-unanchored
 
 echo
 echo "Artifacts written to: $out"

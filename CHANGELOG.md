@@ -181,6 +181,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **`sectum-ai verify` now requires an independent anchor by default.** The
+  flag-based downgrade guards could not stop an attacker who edits a pack,
+  recomputes the digest with both anchor flags false, and re-stamps it with a
+  fresh local-dev token — the token is reproducible by anyone, so the tampered
+  pack verified PASS. `verify_pack`/`verify_bundle` gain `require_anchored` and
+  report `anchored` on the result; the CLI fails such a pack (exit 4, a failing
+  `independent-anchor` check) unless `--allow-unanchored` is passed, and an
+  accepted unanchored pack reads `INTEGRITY OK - UNANCHORED`, never `VERIFIED`.
+  Bundles also refuse duplicate ZIP member names and thread `--tsa-cert`/
+  `--tsa-root` through to the contained pack. The local-dev timestamper's
+  docstring no longer claims its token catches tampering.
+
 - **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
   by a real TSA could have its binary `tsa_token` swapped for a `local-dev` JSON
   token carrying the same digest and still verify (reported as "unanchored"),

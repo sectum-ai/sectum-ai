@@ -170,3 +170,28 @@ def test_a_non_zip_input_fails_cleanly() -> None:
     result = verify_bundle(b"not a zip archive")
     assert not result.passed
     assert any("unreadable" in check.detail for check in result.checks)
+
+
+def test_bundle_with_duplicate_member_names_is_refused() -> None:
+    # A hostile ZIP can carry two members with the same name; readers disagree on
+    # which copy wins, so the bundle cannot attest "exactly the manifest's member
+    # set" and must be refused outright.
+    bundle = build_bundle(_members())
+    buffer = io.BytesIO(bundle)
+    with zipfile.ZipFile(buffer, "a") as archive:
+        archive.writestr(EVIDENCE_MEMBER, b"duplicate copy of the evidence member")
+    result = verify_bundle(buffer.getvalue())
+    assert not result.passed
+    assert any(
+        check.name == "bundle-members" and "duplicate" in check.detail for check in result.checks
+    )
+
+
+def test_bundle_result_reports_unanchored_for_a_local_pack() -> None:
+    # The bundle verdict carries the contained pack's anchoring, and requiring an
+    # anchor refuses a local-dev-only bundle the same way it refuses a bare pack.
+    bundle = build_bundle(_members())
+    result = verify_bundle(bundle)
+    assert result.passed
+    assert not result.anchored
+    assert not verify_bundle(bundle, require_anchored=True).passed

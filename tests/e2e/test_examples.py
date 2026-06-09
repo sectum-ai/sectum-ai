@@ -97,7 +97,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     assert pack_path.exists(), f"sectum-ai report did not write {pack_path}"
 
     # Baseline: a freshly built pack verifies (exit 0).
-    verify = _sectum("verify", str(pack_path), cwd=tmp_path)
+    verify = _sectum("verify", str(pack_path), "--allow-unanchored", cwd=tmp_path)
     assert verify.returncode == 0, (verify.stdout + verify.stderr)[-2000:]
 
     # Mutate the pack: change a single field VALUE inside the canonical run

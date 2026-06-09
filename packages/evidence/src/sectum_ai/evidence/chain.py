@@ -56,11 +56,14 @@ class TransparencyLog(Protocol):
 class LocalTimestamper:
     """A deterministic, offline timestamper for development and tests.
 
-    It records the digest and a wall-clock time as a JSON token; it is not an
-    external anchor. ``sectum-ai verify`` treats a ``local-dev`` token as binding
-    the digest (so tampering is still caught) but marks it as *unanchored* - it
-    does not attest an independent time or authority. Production configures an
-    RFC 3161 TSA and Sigstore Rekor (the engineering spec, section 8.2).
+    It records the digest and a wall-clock time as a plain JSON token. The token
+    is unsigned and reproducible by anyone over any digest, so it provides NO
+    tamper evidence on its own: an attacker who edits a pack can simply re-stamp
+    it. It exists so the development workflow runs offline; ``sectum-ai verify``
+    reports such a pack as *unanchored* and, by default, refuses to call it
+    verified. Production configures an RFC 3161 TSA and Sigstore Rekor (the
+    engineering spec, section 8.2) - those anchors are what make a pack
+    independently tamper-evident.
     """
 
     tsa = "local-dev"

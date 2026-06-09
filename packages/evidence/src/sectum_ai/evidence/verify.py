@@ -4,6 +4,13 @@
 the run record, manifest hash, control mappings, PDF reference, and
 transparency-log flag - and checks it against the timestamp token; any edit to
 that content changes the digest and fails verification (ADR-0016).
+
+Integrity vs. anchoring: the digest checks above prove *internal consistency*,
+but they are only tamper-EVIDENT when the digest is bound by an independent
+anchor (a real RFC 3161 timestamp or a Rekor inclusion proof). A local-dev
+token is reproducible by anyone over any digest, so an attacker who edits a
+pack can simply re-stamp it; ``require_anchored=True`` refuses that downgrade
+by failing any pack whose digest no verified independent anchor binds.
 """
 
 import json
@@ -32,10 +39,18 @@ class Check:
 
 @dataclass(frozen=True)
 class VerificationResult:
-    """The outcome of verifying an ``EvidencePack``: a verdict plus per-check detail."""
+    """The outcome of verifying an ``EvidencePack``: a verdict plus per-check detail.
+
+    ``anchored`` is ``True`` only when a verified *independent* anchor binds the
+    pack digest - a real RFC 3161 timestamp token or a Rekor inclusion proof
+    that checked out. A pack whose only timestamp is a local-dev token verifies
+    as internally consistent but ``anchored=False``: that result is NOT
+    independent tamper evidence (the token is reproducible by anyone).
+    """
 
     passed: bool
     checks: tuple[Check, ...]
+    anchored: bool = False
 
 
 def verify_pack(
@@ -46,6 +61,7 @@ def verify_pack(
     tsa_root: bytes | None = None,
     rekor_keyring: Mapping[str, bytes] | None = None,
     pdf_bytes: bytes | None = None,
+    require_anchored: bool = False,
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
@@ -58,6 +74,14 @@ def verify_pack(
     downgrade and fails. When ``manifest`` is given, its canonical hash must also
     match the pack.
 
+    Those flag-based downgrade guards cannot stop an attacker who recomputes the
+    digest with both anchor flags false and re-stamps the tampered pack with a
+    fresh local-dev token (the token is reproducible by anyone). Set
+    ``require_anchored=True`` to refuse that: verification then fails unless a
+    verified independent anchor - a real RFC 3161 token or a Rekor inclusion
+    proof - binds the digest. The result's ``anchored`` field reports which case
+    held either way.
+
     For an RFC 3161 timestamp token, ``tsa_certificate``/``tsa_root`` override
     the built-in FreeTSA leaf/root to pin a customer's own TSA. When the pack
     carries a Rekor inclusion proof, it is verified too; ``rekor_keyring``
@@ -68,17 +92,19 @@ def verify_pack(
     against that bound digest, so a swapped audit PDF fails verification.
     """
     digest = attested_digest(pack)
+    token_check, token_anchored = _check_token(
+        pack.tsa_token,
+        digest,
+        tsa_certificate,
+        tsa_root,
+        require_rfc3161=pack.anchored_with_timestamp,
+    )
     checks = [
         _check_schema_version(pack),
-        _check_token(
-            pack.tsa_token,
-            digest,
-            tsa_certificate,
-            tsa_root,
-            require_rfc3161=pack.anchored_with_timestamp,
-        ),
+        token_check,
         _check_consistency(pack),
     ]
+    rekor_anchored = False
     if pack.anchored_in_log and pack.rekor_proof is None:
         checks.append(
             Check(
@@ -91,12 +117,31 @@ def verify_pack(
             )
         )
     elif pack.rekor_proof is not None:
-        checks.append(_check_rekor(pack.rekor_proof, digest, rekor_keyring))
+        rekor_check = _check_rekor(pack.rekor_proof, digest, rekor_keyring)
+        checks.append(rekor_check)
+        rekor_anchored = rekor_check.ok
     if manifest is not None:
         checks.append(_check_manifest(manifest, pack.manifest_hash))
     if pack.pdf_ref is not None and pdf_bytes is not None:
         checks.append(_check_pdf(pack.pdf_ref, pdf_bytes))
-    return VerificationResult(passed=all(check.ok for check in checks), checks=tuple(checks))
+    anchored = token_anchored or rekor_anchored
+    if require_anchored and not anchored:
+        checks.append(
+            Check(
+                "independent-anchor",
+                ok=False,
+                detail=(
+                    "no verified independent anchor binds the pack digest: the only "
+                    "timestamp is a local-dev token, which anyone can regenerate over "
+                    "an edited pack, so this verification is not tamper evidence. "
+                    "Re-create the pack with `report --tsa`/`--rekor`, or accept "
+                    "integrity-only verification explicitly"
+                ),
+            )
+        )
+    return VerificationResult(
+        passed=all(check.ok for check in checks), checks=tuple(checks), anchored=anchored
+    )
 
 
 def _check_pdf(pdf_ref: str, pdf_bytes: bytes) -> Check:
@@ -138,22 +183,29 @@ def _check_token(
     tsa_root: bytes | None = None,
     *,
     require_rfc3161: bool = False,
-) -> Check:
+) -> tuple[Check, bool]:
+    """Check the timestamp token; return ``(check, is_independent_anchor)``.
+
+    The second element is ``True`` only when a real RFC 3161 token verified OK -
+    a local-dev JSON token never anchors, even when its check passes, because
+    anyone can regenerate one over an edited pack's recomputed digest.
+    """
     name = "timestamp-token"
     if not token:
-        return Check(name, ok=False, detail="the pack carries no timestamp token")
+        return Check(name, ok=False, detail="the pack carries no timestamp token"), False
     try:
         parsed = json.loads(token)
     except json.JSONDecodeError:
         # Not JSON: a base64 RFC 3161 token from a real TSA. Verify its signature
         # and message imprint against an independently pinned root.
-        return _check_rfc3161_token(token, digest, tsa_certificate, tsa_root)
+        rfc3161_check = _check_rfc3161_token(token, digest, tsa_certificate, tsa_root)
+        return rfc3161_check, rfc3161_check.ok
     if not isinstance(parsed, dict) or parsed.get("digest") != digest:
         return Check(
             name,
             ok=False,
             detail="the timestamp token attests a different digest; the evidence pack was altered",
-        )
+        ), False
     tsa = parsed.get("tsa")
     if tsa != LocalTimestamper.tsa:
         # A real TSA returns a signed binary RFC 3161 token (handled above as a
@@ -166,7 +218,7 @@ def _check_token(
                 "unrecognized JSON timestamp token; a real RFC 3161 TSA returns a "
                 "signed binary token, not JSON, so this token is rejected"
             ),
-        )
+        ), False
     if require_rfc3161:
         # The pack declares it was anchored by a real RFC 3161 TSA
         # (``anchored_with_timestamp``, bound into the digest), yet it carries only
@@ -180,15 +232,15 @@ def _check_token(
                 "(anchored_with_timestamp) but carries only a local-dev token; the "
                 "independent timestamp anchor was stripped (a downgrade)"
             ),
-        )
+        ), False
     return Check(
         name,
         ok=True,
         detail=(
-            "pack digest bound by a local development timestamp (unanchored: not an "
-            "independent RFC 3161 / Rekor anchor)"
+            "pack digest bound by a local development timestamp (unanchored: "
+            "reproducible by anyone, NOT independent tamper evidence)"
         ),
-    )
+    ), False
 
 
 def _check_rfc3161_token(

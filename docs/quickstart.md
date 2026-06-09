@@ -21,8 +21,13 @@ pack, and verifies it.
 uv run sectum-ai seed   --workdir .sectum-ai
 uv run sectum-ai probe  --workdir .sectum-ai
 uv run sectum-ai report --workdir .sectum-ai
-uv run sectum-ai verify .sectum-ai/evidence.json
+uv run sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
 ```
+
+The quickstart pack is timestamped by the offline local-dev token, which anyone
+can regenerate — so `verify` requires `--allow-unanchored` to accept it as an
+integrity-only check. A production pack built with `report --tsa --rekor`
+verifies without the flag, as independently anchored tamper evidence.
 
 | Command | Purpose |
 |---|---|

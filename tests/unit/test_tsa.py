@@ -125,11 +125,12 @@ def test_a_decodable_but_internally_malformed_token_is_a_typed_error() -> None:
 
 def test_check_token_returns_a_failing_check_for_a_malformed_token() -> None:
     # The verify.py routing must turn a malformed RFC 3161 token into a failing
-    # check, never an uncaught exception.
+    # check, never an uncaught exception - and a malformed token is no anchor.
     from sectum_ai.evidence.verify import _check_token
 
-    check = _check_token(_DECODABLE_BUT_MALFORMED, _FIXTURE_DIGEST)
+    check, anchored = _check_token(_DECODABLE_BUT_MALFORMED, _FIXTURE_DIGEST)
     assert not check.ok
+    assert not anchored
 
 
 def test_a_token_verified_against_the_wrong_root_is_rejected() -> None:
