@@ -108,7 +108,13 @@ evidence pack leave it; raw retrieved content stays on-box.
   reachable endpoints.
 - **BYOC (bring-your-own-cloud).** The customer runs the CLI inside their own
   environment. Only the substrate's markers and the signed evidence pack cross
-  the boundary.
+  the boundary. Set `detection.mode: local` to **enforce** this posture:
+  detection is the only stage that embeds or judges tenant content, and in
+  `local` mode the config fails fast on any embedder or judge that would call a
+  default hosted AI API (`openai`/`anthropic` without a `base_url`) — so Sectum
+  makes no call to a third-party AI service. A `base_url` you configure is
+  trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
+  server); that target is your trust boundary, not Sectum's.
 
 ## What Sectum AI does not defend against
 

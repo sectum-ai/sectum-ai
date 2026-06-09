@@ -1186,3 +1186,60 @@ def test_build_embedder_rejects_an_unknown_kind() -> None:
 
     with pytest.raises(ValidationError, match=r"openai|fake"):
         EmbedderConfig(kind="not-a-real-kind")
+
+
+def test_local_detection_mode_rejects_a_hosted_openai_embedder() -> None:
+    # The "no data leaves the box" guarantee: local mode fails fast if the embedder
+    # would call the real OpenAI API (kind=openai with no local base_url).
+    from pydantic import ValidationError
+
+    from sectum_ai.config import DetectionConfig
+
+    with pytest.raises(ValidationError, match="forbids hosted"):
+        DetectionConfig(mode="local", embedder=EmbedderConfig(kind="openai"))
+
+
+def test_local_detection_mode_rejects_a_hosted_judge() -> None:
+    from pydantic import ValidationError
+
+    from sectum_ai.config import DetectionConfig
+
+    with pytest.raises(ValidationError, match="forbids hosted"):
+        DetectionConfig(mode="local", judge=JudgeConfig(kind="anthropic"))
+
+
+def test_local_detection_mode_allows_the_offline_fake_providers() -> None:
+    # The default fake embedder + judge make no network call, so local mode accepts
+    # them — the zero-egress path needs no extra config.
+    from sectum_ai.config import DetectionConfig
+
+    assert DetectionConfig(mode="local").mode == "local"
+
+
+def test_local_detection_mode_allows_a_local_base_url() -> None:
+    # An OpenAI-compatible provider pointed at an operator-controlled local server
+    # (e.g. Ollama) does not egress to a hosted API, so local mode accepts it.
+    from sectum_ai.config import DetectionConfig
+
+    config = DetectionConfig(
+        mode="local",
+        embedder=EmbedderConfig(kind="openai", base_url="http://localhost:11434/v1"),
+        judge=JudgeConfig(kind="openai", base_url="http://localhost:11434/v1"),
+    )
+    assert config.mode == "local"
+
+
+def test_hosted_detection_mode_is_the_default_and_allows_hosted_providers() -> None:
+    # Back-compat: the default mode is "hosted" with no egress restriction.
+    from sectum_ai.config import DetectionConfig
+
+    assert DetectionConfig(embedder=EmbedderConfig(kind="openai")).mode == "hosted"
+
+
+def test_load_config_local_mode_hosted_provider_raises_config_error(tmp_path: Path) -> None:
+    # Through the YAML loader, a local-mode violation surfaces as a ConfigError
+    # (CLI exit code 3), not a raw ValidationError.
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_text("detection:\n  mode: local\n  embedder:\n    kind: openai\n")
+    with pytest.raises(ConfigError, match="forbids hosted"):
+        load_config(path)

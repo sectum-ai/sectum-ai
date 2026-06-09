@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Offline / BYOC detection mode (`detection.mode: local`).** A "no data leaves
+  the box" guarantee for the privacy-sensitive deployment: detection is the only
+  stage that embeds or judges tenant content, so `local` mode makes the config
+  **fail fast** if any embedder or judge would call a default hosted AI API
+  (`openai`/`anthropic` without a `base_url`). Only the offline `fake` providers,
+  or providers pointed at an operator-controlled local/in-VPC `base_url` (e.g.
+  Ollama), are allowed — so Sectum itself makes no call to a third-party AI
+  service. `hosted` (the default) is unchanged. Documented in the threat model;
+  the `base_url` target is the operator's trust boundary, not Sectum's.
 - **More compliance control mappings (ISO/IEC 42001:2023, CCPA/CPRA).** The
   control-mapped evidence now also speaks to ISO/IEC 42001:2023 (the AI
   management-system standard — Annex A data-governance and operational-monitoring
