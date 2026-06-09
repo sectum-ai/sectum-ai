@@ -95,7 +95,7 @@ jobs:
         run: docker compose up -d --wait pgvector redis
 
       - name: Start HTTP backends
-        run: docker compose up -d chroma weaviate phoenix
+        run: docker compose up -d chroma weaviate phoenix qdrant
 
       - name: Wait for HTTP backends to be ready
         run: |
@@ -111,6 +111,7 @@ jobs:
           wait_for chroma   http://localhost:8001/api/v2/heartbeat
           wait_for weaviate http://localhost:8082/v1/.well-known/ready
           wait_for phoenix  http://localhost:6007/healthz
+          wait_for qdrant   http://localhost:6335/readyz
 
       - name: Integration tests
         run: uv run pytest -m integration -q

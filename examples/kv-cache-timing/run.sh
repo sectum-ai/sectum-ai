@@ -37,7 +37,11 @@ echo "==> 2/4  Probe the KV cache (paired primed-vs-control timing trials)"
 # exit. The statistical run gates each tenant pair on a Welch t-test; a
 # confirmed Class 5 finding is one whose gap is significant (p < 0.01),
 # large (Cohen's d >= 0.8), and directional (primed faster).
-sectum-ai probe --workdir "$out" --probe kv-cache-timing || true
+rc=0; sectum-ai probe --workdir "$out" --probe kv-cache-timing || rc=$?
+if [ "$rc" -ne 2 ]; then
+  echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
+  exit 1
+fi
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"

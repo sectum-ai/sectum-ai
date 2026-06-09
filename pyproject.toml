@@ -18,6 +18,7 @@ dev = [
     "psycopg[binary]>=3.3.4",
     "chromadb-client>=0.5",
     "weaviate-client>=4.9",
+    "qdrant-client>=1.12",
     "redis>=5",
     "arize-phoenix-client>=2",
     "mcp>=1",

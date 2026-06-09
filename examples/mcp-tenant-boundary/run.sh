@@ -24,7 +24,11 @@ echo
 echo "==> 2/4  Probe the MCP server (confused-deputy and token-passthrough)"
 # 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on the
 # leaky demo MCP server, so tolerate the non-zero exit.
-sectum-ai probe --workdir "$out" --probe agent-tool-hijack || true
+rc=0; sectum-ai probe --workdir "$out" --probe agent-tool-hijack || rc=$?
+if [ "$rc" -ne 2 ]; then
+  echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
+  exit 1
+fi
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"

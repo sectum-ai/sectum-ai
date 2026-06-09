@@ -27,7 +27,12 @@ from sectum_ai.probes import (
     OpenAIEmbeddingProvider,
     OpenAIJudge,
 )
-from sectum_ai.probes.providers import _JUDGE_SYSTEM, _judge_user_prompt, _verdict_from_json
+from sectum_ai.probes.providers import (
+    _JUDGE_SYSTEM,
+    _judge_user_prompt,
+    _post_json,
+    _verdict_from_json,
+)
 from sectum_ai.spec import (
     ConfigError,
     DetectionError,
@@ -43,6 +48,12 @@ _MARKER = Marker(
     owner_tenant_id=UUID(int=1),
     plaintext="Project Wintergreen",
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the provider retry backoff instantaneous so these tests never wait."""
+    monkeypatch.setattr("sectum_ai.probes.providers.time.sleep", lambda _seconds: None)
 
 
 class _FakeResponse:
@@ -135,11 +146,12 @@ def test_anthropic_judge_parses_a_structured_verdict(monkeypatch: pytest.MonkeyP
 
 
 def test_a_provider_http_error_becomes_a_detection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 403 is a non-retryable client error: it must raise immediately (no retry).
     def fail(request: Any, timeout: float) -> _FakeResponse:
-        raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)  # type: ignore[arg-type]
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)  # type: ignore[arg-type]
 
     monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", fail)
-    with pytest.raises(DetectionError, match="HTTP 429"):
+    with pytest.raises(DetectionError, match="HTTP 403"):
         OpenAIEmbeddingProvider("sk-test").embed("hello")
 
 
@@ -517,3 +529,41 @@ def test_verdict_parses_a_fenced_json_response() -> None:
 def test_verdict_still_rejects_a_braceless_response() -> None:
     with pytest.raises(DetectionError):
         _verdict_from_json("no json here at all")
+
+
+def test_post_json_retries_a_transient_failure_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"n": 0}
+
+    def flaky(request: Any, timeout: float) -> _FakeResponse:
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise urllib.error.HTTPError(request.full_url, 503, "Busy", {}, None)  # type: ignore[arg-type]
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", flaky)
+    slept: list[float] = []
+    result = _post_json("https://x.test/v1/e", {"a": 1}, {}, 5.0, _sleep=slept.append)
+
+    assert result == {"ok": True}
+    assert attempts["n"] == 3  # failed twice, succeeded on the third attempt
+    assert slept == [0.5, 1.0]  # two backoffs preceded the successful retry
+
+
+def test_post_json_does_not_retry_a_non_retryable_client_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"n": 0}
+
+    def forbidden(request: Any, timeout: float) -> _FakeResponse:
+        attempts["n"] += 1
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("sectum_ai.probes.providers.urllib.request.urlopen", forbidden)
+    slept: list[float] = []
+    with pytest.raises(DetectionError, match="HTTP 403"):
+        _post_json("https://x.test/v1/e", {"a": 1}, {}, 5.0, _sleep=slept.append)
+
+    assert attempts["n"] == 1  # raised at once
+    assert slept == []  # no backoff for a non-retryable error

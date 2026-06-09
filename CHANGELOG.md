@@ -140,6 +140,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   golden hashes, and the shipped sample evidence packs under `docs/samples/` are
   regenerated to 0.5.0; a pre-0.5.0 pack is refused by `sectum-ai verify`
   (major/minor mismatch), as intended.
+- **Real embedding/judge providers retry a transient failure.** A provider HTTP
+  call (`_post_json`) now retries a timeout, connection error, or HTTP
+  429/500/502/503/504 up to three times with a short bounded backoff; a
+  non-retryable client error (4xx other than 429) still raises at once, and the
+  final transient failure still raises - a run that cannot detect must fail
+  loudly, never yield a partial, falsely-clean attestation. A single rate-limit
+  blip no longer aborts a long run.
+- **The semantic detector caches window embeddings per observation.** When
+  scoring an observation against many foreign markers, each candidate window is
+  now embedded once and reused across markers (a per-observation cache) instead
+  of being re-embedded per marker, cutting embedding calls on a real provider
+  with no change to the result.
+- **The leaky example `run.sh` scripts assert the expected leak.** The thirteen
+  cross-tenant demo scripts now require `sectum-ai probe` to exit `2` (confirmed
+  leaks) and fail loudly otherwise, instead of swallowing the exit code with
+  `|| true` - so a regression that silenced a demo's findings can no longer pass
+  unnoticed.
 
 ### Fixed
 
