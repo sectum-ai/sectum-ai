@@ -60,8 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them and surface cross-tenant findings in a repository's Security tab — one rule
   per probe, one result per finding. The signed `evidence.json` stays the
   canonical record; the SARIF is a derived, unsigned projection. An unverified
-  candidate is capped at SARIF `note` so the manifest-grounded, zero-false-positive
-  headline is never overstated.
+  candidate is capped at SARIF `note` **and** floored in `security-severity` to the
+  informational bucket — GitHub badges a security alert by `security-severity`, not
+  `level`, so capping only the level would still render an unverified candidate as a
+  high-severity alert. A probe that produced only unverified candidates likewise
+  advertises a `note`/low-severity rule, so the manifest-grounded,
+  zero-false-positive headline is never overstated.
 - **OSCAL assessment-results output (`sectum-ai probe --output oscal`).** Emits a
   NIST OSCAL 1.1.x `assessment-results` JSON document so GRC platforms and auditors
   can ingest a run as a machine-readable, control-mapped assessment. It carries one

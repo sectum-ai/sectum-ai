@@ -55,6 +55,14 @@ _SEVERITY_ORDER: dict[Severity, int] = {
     Severity.INFO: 0,
 }
 
+# GitHub buckets a security alert by ``security-severity`` (numeric → Critical/
+# High/Medium/Low badge), independently of the SARIF ``level``. So capping an
+# unverified candidate's ``level`` at ``note`` is not enough on its own — its
+# ``security-severity`` must also be floored, or the candidate would still render
+# as a high-severity alert. An unverified candidate is informational until
+# confirmed, so it takes the lowest (INFO) bucket — the anti-over-claim cap.
+_UNVERIFIED_SECURITY_SEVERITY = _SECURITY_SEVERITY[Severity.INFO]
+
 
 def _result_level(finding: Finding) -> str:
     """SARIF level for a finding; unverified candidates never exceed ``note``."""
@@ -63,9 +71,37 @@ def _result_level(finding: Finding) -> str:
     return _LEVEL_BY_SEVERITY[finding.severity]
 
 
+def _security_severity(finding: Finding) -> str:
+    """GitHub ``security-severity`` for a finding; unverified candidates are floored.
+
+    A CONFIRMED finding reports its severity bucket. An UNVERIFIED candidate is
+    floored to the informational bucket so GitHub never renders it as a high-
+    severity alert — the same anti-over-claim cap :func:`_result_level` applies to
+    the ``level``, kept consistent because GitHub badges security alerts by
+    ``security-severity``, not ``level``.
+    """
+    if finding.status is not FindingStatus.CONFIRMED:
+        return _UNVERIFIED_SECURITY_SEVERITY
+    return _SECURITY_SEVERITY[finding.severity]
+
+
 def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
-    """Build the SARIF reporting descriptor (rule) for one probe id."""
-    worst = max(findings, key=lambda f: _SEVERITY_ORDER[f.severity])
+    """Build the SARIF reporting descriptor (rule) for one probe id.
+
+    The rule's ``security-severity`` and default ``level`` track the worst
+    *confirmed* finding the probe produced. A probe that produced only unverified
+    candidates advertises the informational bucket + ``note``, so an
+    unverified-only rule never renders as a high-severity GitHub alert (which is
+    badged by the rule's ``security-severity``, not its ``level``).
+    """
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    if confirmed:
+        worst = max(confirmed, key=lambda f: _SEVERITY_ORDER[f.severity])
+        level = _LEVEL_BY_SEVERITY[worst.severity]
+        security_severity = _SECURITY_SEVERITY[worst.severity]
+    else:
+        level = "note"
+        security_severity = _UNVERIFIED_SECURITY_SEVERITY
     owasp = next((f.owasp_llm for f in findings if f.owasp_llm), "")
     tags = ["security", "multi-tenant-isolation"]
     if owasp:
@@ -75,10 +111,10 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
         "name": probe_id.replace("-", "_"),
         "shortDescription": {"text": f"Cross-tenant finding from the {probe_id} probe"},
         "helpUri": _HELP_URI,
-        "defaultConfiguration": {"level": _LEVEL_BY_SEVERITY[worst.severity]},
+        "defaultConfiguration": {"level": level},
         "properties": {
             "tags": tags,
-            "security-severity": _SECURITY_SEVERITY[worst.severity],
+            "security-severity": security_severity,
         },
     }
 
@@ -110,7 +146,7 @@ def _result(finding: Finding) -> dict[str, Any]:
             "owaspLlm": finding.owasp_llm,
             "atlas": list(finding.atlas),
             "nist": list(finding.nist),
-            "security-severity": _SECURITY_SEVERITY[finding.severity],
+            "security-severity": _security_severity(finding),
         },
     }
 

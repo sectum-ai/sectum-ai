@@ -95,9 +95,13 @@ def test_unverified_candidate_never_exceeds_note() -> None:
     result = run["results"][0]
     assert result["level"] == "note"
     assert result["properties"]["status"] == "unverified"
+    # GitHub badges a security alert by security-severity (not level), so an
+    # unverified candidate's security-severity is ALSO floored to the Low band —
+    # otherwise a critical candidate would still render as a Critical alert.
+    assert float(result["properties"]["security-severity"]) < 4.0
 
 
-def test_rule_security_severity_tracks_the_worst_finding() -> None:
+def test_rule_security_severity_tracks_the_worst_confirmed_finding() -> None:
     findings = (
         _finding("f-1", probe_id="p", severity=Severity.LOW),
         _finding("f-2", probe_id="p", severity=Severity.CRITICAL),
@@ -105,6 +109,18 @@ def test_rule_security_severity_tracks_the_worst_finding() -> None:
     (run,) = run_to_sarif(_run(*findings))["runs"]
     (rule,) = run["tool"]["driver"]["rules"]
     assert rule["properties"]["security-severity"] == "9.5"  # critical, not low
+
+
+def test_rule_with_only_unverified_findings_is_floored_to_low() -> None:
+    # A probe that produced only unverified candidates must not advertise a
+    # high-severity rule: GitHub badges the alert by the rule's security-severity,
+    # so an unverified-only rule stays in the Low band with a `note` default.
+    finding = _finding(
+        "f-1", probe_id="p", severity=Severity.CRITICAL, status=FindingStatus.UNVERIFIED
+    )
+    (rule,) = run_to_sarif(_run(finding))["runs"][0]["tool"]["driver"]["rules"]
+    assert float(rule["properties"]["security-severity"]) < 4.0
+    assert rule["defaultConfiguration"]["level"] == "note"
 
 
 def test_empty_run_has_no_results_or_rules() -> None:
