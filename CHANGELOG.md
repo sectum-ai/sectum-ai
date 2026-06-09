@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **More compliance control mappings (ISO/IEC 42001:2023, CCPA/CPRA).** The
+  control-mapped evidence now also speaks to ISO/IEC 42001:2023 (the AI
+  management-system standard — Annex A data-governance and operational-monitoring
+  controls `A.6.2.6`, `A.7.2`, `A.7.5`) and CCPA/CPRA (the `§1798.105` deletion
+  right — the US parallel to the GDPR Art. 17 erasure wedge — plus `§1798.100`/
+  `§1798.150` security duties). The new mappings flow through the audit-pack PDF,
+  the OSCAL assessment-results export, and the JSON evidence automatically.
+  Mappings remain assertions of test coverage, not legal certification.
 - **Threshold calibration (`sectum-ai calibrate`) + per-embedding-model semantic
   thresholds.** The semantic-similarity gate was a single hand-picked float
   (0.62) that had to be retuned to ≈ 0.80 for `text-embedding-3-small` on a real
