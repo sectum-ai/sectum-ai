@@ -11,10 +11,13 @@ Mapping choices:
 - one SARIF *rule* per distinct probe id (the catalog class that produced it);
 - one SARIF *result* per :class:`~sectum_ai.spec.Finding`;
 - the SARIF ``level`` is severity-driven for ``CONFIRMED`` findings, but an
-  ``UNVERIFIED`` candidate is always ``note`` so the manifest-grounded,
-  zero-false-positive headline is never overstated in the Security tab;
-- ``properties["security-severity"]`` (GitHub's 0-10 alert bucket) is set on the
-  rule from the highest severity that probe produced.
+  ``UNVERIFIED`` candidate is always ``note``;
+- ``properties["security-severity"]`` (GitHub's 0-10 bucket, which badges the
+  alert *independently of* ``level``) tracks the highest ``CONFIRMED`` severity;
+  an ``UNVERIFIED`` candidate — and a probe that produced only candidates — is
+  floored to the informational bucket. Capping both ``level`` and
+  ``security-severity`` keeps the manifest-grounded, zero-false-positive headline
+  from being overstated in the Security tab.
 """
 
 from __future__ import annotations
