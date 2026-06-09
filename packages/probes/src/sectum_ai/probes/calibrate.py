@@ -223,7 +223,12 @@ def _score_at(threshold: float, examples: Sequence[CalibrationExample]) -> Thres
     recall = true_positives / actual_positive if actual_positive else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
     return ThresholdScore(
-        threshold=round(threshold, 4),
+        # The threshold is stored at FULL precision: this is the value the CLI
+        # publishes as the recommendation, and rounding it (e.g. to 4dp) could
+        # move the gate below a negative example's similarity that this very
+        # sweep certified as excluded - silently breaking the zero-FP promise.
+        # Rounding is a render-time concern (the text table formats %.4f).
+        threshold=threshold,
         precision=round(precision, 4),
         recall=round(recall, 4),
         f1=round(f1, 4),

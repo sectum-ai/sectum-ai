@@ -143,6 +143,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A judge "yes" no longer confirms a finding on its own.** The detection
+  pipeline now enforces the spec §6.4 false-positive control for every judge:
+  a semantic candidate is CONFIRMED only when the judge's cited evidence span
+  (or the marker itself, when no span is cited) is token-order traceable in
+  the observation. A real LLM judge is primed with the marker plaintext, so a
+  parroting or hallucinating verdict could previously place a fabricated
+  CONFIRMED finding - with a fabricated quoted span - into the signed audit
+  pack. Untraceable affirmations are downgraded to UNVERIFIED candidates with
+  the downgrade reason recorded. The deterministic fake judge's behavior is
+  unchanged (the backstop is the same test it already applied).
+- **`calibrate` publishes the full-precision threshold.** The recommended
+  threshold was rounded to 4 decimals for display, which could move the gate
+  below a negative example the sweep had certified as excluded - silently
+  breaking the zero-false-positive promise at deploy time. Scores now carry
+  full precision (rounding is render-only).
+- **The live HuggingFace model adapter no longer echoes its prompt.** HF
+  `generate` output includes the input tokens; the adapter returned them, so
+  the erasure probe - which prompts with the canary it scans for - read a
+  fabricated 'residual' on the model surface before AND after erasure. The
+  adapter now decodes only newly generated tokens, and the `ModelAdapter`
+  contract states completion-only explicitly.
+- **The Anthropic judge is deterministic and fence-tolerant.** It now pins
+  `temperature: 0` (matching the OpenAI judge) so identical runs judge
+  identically, and the verdict parser tolerates a fenced ```json response
+  instead of aborting the run.
+- **`hash-<dim>` embedding specs with a non-positive dimension are rejected at
+  config time** instead of failing later when the sweep instantiates the
+  embedder.
+
 - **The live Langfuse observability adapter works against current Langfuse
   (v3).** Two issues surfaced by a self-hosted Langfuse erasure run: (1) the
   adapter requested `trace.list(limit=1000)`, but current Langfuse caps the

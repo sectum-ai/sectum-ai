@@ -504,3 +504,16 @@ def test_detection_pipeline_falls_back_to_marker_when_judge_omits_span() -> None
     confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
     assert len(confirmed) == 1
     assert confirmed[0].evidence_span == entity.plaintext
+
+
+def test_verdict_parses_a_fenced_json_response() -> None:
+    # Claude-family models commonly fence JSON despite the system instruction;
+    # the parser must extract the object rather than abort the whole run.
+    fenced = '```json\n{"leak": true, "evidence_span": "x", "rationale": "r"}\n```'
+    verdict = _verdict_from_json(fenced)
+    assert verdict.leak and verdict.evidence_span == "x"
+
+
+def test_verdict_still_rejects_a_braceless_response() -> None:
+    with pytest.raises(DetectionError):
+        _verdict_from_json("no json here at all")

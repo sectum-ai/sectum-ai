@@ -137,7 +137,12 @@ class LivePeftBackend:
                 max_new_tokens=64,
                 pad_token_id=self._tokenizer.pad_token_id,
             )
-        decoded: str = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # HF generate output INCLUDES the prompt tokens. The adapter contract is
+        # "completion only": echoing the prompt back would hand the erasure probe
+        # its own canary prompt as a fabricated 'residual' (a CONFIRMED finding
+        # about data that was never stored), so decode only the new tokens.
+        prompt_length = inputs["input_ids"].shape[-1]
+        decoded: str = self._tokenizer.decode(outputs[0][prompt_length:], skip_special_tokens=True)
         return decoded
 
     def measure_latency_ms(self, scope: str | None, prompt: str) -> float:

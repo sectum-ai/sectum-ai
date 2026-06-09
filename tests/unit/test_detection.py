@@ -2,7 +2,14 @@
 
 from uuid import UUID
 
-from sectum_ai.probes import DetectionPipeline, FakeJudge, confirmed_findings, dedupe_findings
+from sectum_ai.probes import (
+    DetectionPipeline,
+    FakeEmbeddingProvider,
+    FakeJudge,
+    confirmed_findings,
+    dedupe_findings,
+)
+from sectum_ai.probes.detection import JudgeVerdict
 from sectum_ai.spec import (
     FindingStatus,
     GroundTruthManifest,
@@ -461,3 +468,61 @@ def test_secret_evidence_span_is_redacted() -> None:
     finding = next(f for f in found if f.marker_id == secret.marker_id)
     assert secret.plaintext not in finding.evidence_span
     assert "[redacted]" in finding.evidence_span
+
+
+class _LyingJudge:
+    """A judge that affirms a leak with a span that is NOT in the observation.
+
+    Models the real-LLM failure mode the FP-control backstop exists for: the
+    judge is primed with the marker plaintext and parrots it (or hallucinates a
+    quote) for an observation that contains no such text.
+    """
+
+    def __init__(self, span: str) -> None:
+        self._span = span
+
+    def judge(self, observed_text: str, marker: Marker) -> JudgeVerdict:
+        return JudgeVerdict(leak=True, rationale="parroted", evidence_span=self._span)
+
+
+def test_a_judge_yes_with_an_untraceable_span_is_downgraded_to_unverified() -> None:
+    # The spec 6.4 FP-control: a semantic/judge leak that cannot be tied back to
+    # the observation is downgraded, never CONFIRMED into the signed pack.
+    substrate = build_substrate(default_scenario(seed=11))
+    marker = next(
+        m for m in substrate.manifest.markers if m.marker_type is MarkerType.ENTITY_CANARY
+    )
+    observer = next(t for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
+    pipeline = DetectionPipeline(
+        substrate,
+        FakeEmbeddingProvider(),
+        _LyingJudge(span=marker.plaintext),  # parrots the primed plaintext
+        0.0,  # let every candidate reach the judge
+    )
+    text = "a perfectly benign quarterly report about onboarding timelines"
+    findings = pipeline.detect(observer.tenant_id, text, Surface.VECTOR_DB, probe_id="p")
+    semantic = [f for f in findings if f.marker_id == marker.marker_id]
+    assert semantic, "the candidate must be retained as evidence"
+    assert all(f.status is FindingStatus.UNVERIFIED for f in semantic)
+    assert all("not traceable" in (f.evidence_span or "") for f in semantic)
+
+
+def test_a_judge_yes_with_a_traceable_span_stays_confirmed() -> None:
+    # The backstop must not weaken genuine confirmations: a span actually present
+    # in the observation (here the entity itself) keeps CONFIRMED status.
+    substrate = build_substrate(default_scenario(seed=11))
+    marker = next(
+        m for m in substrate.manifest.markers if m.marker_type is MarkerType.ENTITY_CANARY
+    )
+    observer = next(t for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span=marker.plaintext), 0.0
+    )
+    text = f"retrieved context mentions {marker.plaintext} in the account notes"
+    findings = pipeline.detect(observer.tenant_id, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [
+        f
+        for f in findings
+        if f.marker_id == marker.marker_id and f.status is FindingStatus.CONFIRMED
+    ]
+    assert confirmed, "a traceable affirmation must confirm"

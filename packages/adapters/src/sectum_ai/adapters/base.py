@@ -297,6 +297,11 @@ class ModelAdapter(Adapter):
     def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
         """Run inference for the principal and return the completion.
 
+        The return value is the COMPLETION ONLY - never an echo of the prompt.
+        The erasure probe prompts with the canary it scans for, so an adapter
+        that echoed its prompt would fabricate a confirmed "residual" about data
+        that was never stored.
+
         With ``user`` set, a user-scoped model (reporting ``USER_SCOPED``) recalls
         only that user's own adapter within the tenant; a model that scopes by
         tenant alone ignores ``user`` and may surface a sibling user's memorized

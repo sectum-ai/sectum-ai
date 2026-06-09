@@ -153,13 +153,21 @@ class OpenAIEmbedding:
 
 
 def _hash_dim(spec: str) -> int:
-    """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension (both prefixes are 5 chars)."""
+    """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension (both prefixes are 5 chars).
+
+    Rejects a non-positive dimension here, at config-validation time - otherwise
+    ``hash-0`` / ``hash--3`` would pass ``validate_embedding_spec`` and fail only
+    when the sweep instantiates the embedder, defeating the early check.
+    """
     try:
-        return int(spec[len("hash-") :])
+        dim = int(spec[len("hash-") :])
     except ValueError as error:
         raise ConfigError(
             f"malformed hashing-embedding spec {spec!r}; expected hash-<dim>"
         ) from error
+    if dim <= 0:
+        raise ConfigError(f"hashing-embedding dimension must be positive, got {spec!r}")
+    return dim
 
 
 def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
