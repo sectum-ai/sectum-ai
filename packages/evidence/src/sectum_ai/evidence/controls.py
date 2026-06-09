@@ -29,9 +29,21 @@ _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "Cross-tenant information leakage tested; residual leakage itemized.",
     ),
     (
+        "ISO/IEC 42001:2023",
+        ("A.6.2.6", "A.7.2", "A.7.5"),
+        "Per-tenant data management and provenance in the AI system tested; "
+        "isolation verified under AI system operation and monitoring.",
+    ),
+    (
         "GDPR",
         ("Article 17", "Article 25", "Article 32"),
         "Erasure across the AI surfaces verified; tenant isolation tested.",
+    ),
+    (
+        "CCPA/CPRA",
+        ("1798.105", "1798.100", "1798.150"),
+        "Deletion of a consumer's personal information across the AI surfaces "
+        "verified; segregation of consumer data tested.",
     ),
     (
         "EU AI Act",
