@@ -175,12 +175,21 @@ deterministic offline fakes; configure real providers for production detection.
 | `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
 | `judge.base_url` | str | provider API | OpenAI-/Anthropic-compatible base URL; `kind: openai` + a local Ollama runs the judge with no account. |
 | `semantic_threshold` | float \| `auto` | `0.62` | The similarity gate before the judge. A number is used verbatim. `auto` resolves to the calibrated per-model preset for the embedder above (see below), falling back to `0.62` with a logged warning for an unknown model. Raise it (or use `auto`) once a real embedding model is configured — a stronger model surfaces more (the engineering spec, section 7). |
+| `mode` | `hosted` \| `local` | `hosted` | `local` is the BYOC "no data leaves the box" guarantee: the config **fails fast** if any embedder or judge would call a default hosted AI API. Only `fake` providers, or providers with a `base_url` pointed at an operator-controlled local/in-VPC endpoint, are allowed. `hosted` (the default) places no egress restriction. |
 
 Real providers reach their HTTP APIs with the standard library only; the API key
 is read from the environment, never inlined. A local OpenAI-compatible server —
 **Ollama** (`http://localhost:11434/v1`), vLLM, or LM Studio — is a fully offline,
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
+
+Set `detection.mode: local` to **enforce** that offline posture. Detection is the
+only stage that embeds or judges tenant content, so in `local` mode Sectum
+fails fast on any embedder or judge that would reach a default hosted API
+(`openai`/`anthropic` without a `base_url`) — guaranteeing it makes no call to a
+third-party AI service. A `base_url` you set is trusted to point at an endpoint
+inside your own boundary; that target is your trust boundary, not Sectum's (see
+the [threat model](threat-model.md)).
 
 ### Calibrating the semantic threshold
 

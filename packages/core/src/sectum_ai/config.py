@@ -173,6 +173,43 @@ class DetectionConfig(BaseModel):
     # default suits the fake embedder; raise it (or set "auto") once a real
     # embedding model is configured - a stronger model surfaces more (the spec §7).
     semantic_threshold: float | Literal["auto"] = 0.62
+    # Detection deployment mode. "hosted" (default) permits hosted embedder/judge
+    # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC / "no data
+    # leaves the box" guarantee: it fails fast if any configured embedder or judge
+    # would call a default third-party AI API. Only the offline `fake` providers,
+    # and providers explicitly pointed at an operator-controlled `base_url` (a local
+    # or in-VPC endpoint), are allowed — so Sectum itself makes no call to a hosted
+    # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
+    # the threat model documents this. Detection is the only stage that embeds or
+    # judges tenant content, so gating it is what makes the zero-egress claim real.
+    mode: Literal["hosted", "local"] = "hosted"
+
+    @model_validator(mode="after")
+    def _enforce_local_mode(self) -> "DetectionConfig":
+        """In ``local`` mode, reject any provider that would egress to a hosted AI API.
+
+        A ``fake`` provider is offline; an ``openai``/``anthropic`` provider calls
+        its vendor API unless ``base_url`` points it at an operator-controlled local
+        or in-VPC endpoint. So ``local`` mode requires every non-``fake`` embedder
+        and judge to set ``base_url`` — otherwise the detector would leave the box,
+        breaking the zero-egress guarantee. Raises ``ValueError`` (surfaced as a
+        ``ConfigError`` by :func:`load_config`) naming each offending provider.
+        """
+        if self.mode != "local":
+            return self
+        offenders: list[str] = []
+        if self.embedder.kind != "fake" and self.embedder.base_url is None:
+            offenders.append(f"embedder (kind={self.embedder.kind!r})")
+        if self.judge.kind != "fake" and self.judge.base_url is None:
+            offenders.append(f"judge (kind={self.judge.kind!r})")
+        if offenders:
+            joined = ", ".join(offenders)
+            raise ValueError(
+                f"detection.mode 'local' forbids hosted providers, but {joined} "
+                "would call a hosted AI API. Use kind 'fake', or set base_url to a "
+                "local/in-VPC endpoint (e.g. http://localhost:11434/v1)."
+            )
+        return self
 
 
 class SectumConfig(BaseModel):

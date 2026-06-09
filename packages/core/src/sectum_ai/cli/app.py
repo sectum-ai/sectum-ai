@@ -272,6 +272,10 @@ detection:
   # per-model preset for the embedder above (run `sectum-ai calibrate` to derive
   # one for your model). Raise it once a real embedding model is configured.
   semantic_threshold: 0.62  # 0.62 | <float> | auto
+  # Deployment mode. "local" is the BYOC "no data leaves the box" guarantee: it
+  # fails fast if any embedder/judge above would call a hosted AI API (use `fake`,
+  # or set a local `base_url`). "hosted" (default) places no egress restriction.
+  mode: hosted             # hosted | local
 """
 
 app = typer.Typer(
