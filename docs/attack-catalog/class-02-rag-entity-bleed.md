@@ -24,6 +24,18 @@ metric is the **Retrieval-Pivot Rate** — the fraction of benign queries that
 surfaced a foreign marker. The rate is a property of the stack under test: 100%
 on a shared index with no isolation, 0% on a per-tenant-namespace store.
 
+The rate is a binomial proportion (`k` of `n` benign cross-tenant queries
+surfaced a foreign marker), so a bare point estimate over-claims precision when
+`n` is small. Every run therefore reports a **95% Wilson score confidence
+interval** alongside the rate — for example `81.2% (95% CI 68.1%-89.8%, n=48)` —
+so the headline is never read as a precise number without its sample size and
+uncertainty. The binomial counts (`retrieval_pivot_n`, `retrieval_pivot_k`) and
+the interval (`retrieval_pivot_rate_ci`) are recorded in the run's metrics and
+signed evidence, so the interval is reproducible by a third party rather than
+trusting a rounded figure. The Wilson interval is the right tool here: unlike the
+normal (Wald) approximation it stays inside [0, 100%] and keeps near-nominal
+coverage at small `n` or an extreme rate (0% or 100%).
+
 ## Embedding-model sweep
 
 Stronger retrieval embeddings surface more cross-tenant content, so the

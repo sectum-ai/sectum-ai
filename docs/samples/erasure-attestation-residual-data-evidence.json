@@ -1,10 +1,10 @@
 {
   "run_result": {
     "run_id": "erasure-7cd276c8",
-    "scenario_hash": "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb",
-    "manifest_hash": "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514",
-    "started_at": "2026-06-08T06:57:25.411230+00:00",
-    "finished_at": "2026-06-08T06:57:25.412112+00:00",
+    "scenario_hash": "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65",
+    "manifest_hash": "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409",
+    "started_at": "2026-06-08T20:13:59.422435+00:00",
+    "finished_at": "2026-06-08T20:13:59.423305+00:00",
     "adapter_versions": {
       "fake-vector": "0.1.0",
       "fake-observability": "0.1.0",
@@ -392,6 +392,9 @@
       "per_probe_findings": {},
       "confirmed_findings": 16,
       "retrieval_pivot_rate": null,
+      "retrieval_pivot_n": 0,
+      "retrieval_pivot_k": 0,
+      "retrieval_pivot_rate_ci": null,
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {
         "vector_db": 2,
@@ -419,10 +422,10 @@
       "inversion_reconstruction_rate": null,
       "extraction_efficiency": null
     },
-    "schema_version": "0.4.0"
+    "schema_version": "0.5.0"
   },
-  "manifest_hash": "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514",
-  "tsa_token": "{\"digest\":\"8aa7c4b4bacc552db34037f6382d3d0f76753e28a40faa53c2f1473d7cf9d3e1\",\"timestamped_at\":\"2026-06-08T06:57:25.426034+00:00\",\"tsa\":\"local-dev\"}",
+  "manifest_hash": "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409",
+  "tsa_token": "{\"digest\":\"94734ff8d47c11959b20e0446639d8777780201cfd498c3aa232c496bc7aaa8a\",\"timestamped_at\":\"2026-06-08T20:13:59.436428+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -484,8 +487,8 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "4fabcf124410e82c1a72d396e7b5277f51f2c47f11bdf8d389d9371b07f72976",
+  "pdf_ref": "3cc148326cf4ce8ea8e637d5c0f61bb4d945a5bd706f533bf7589f1cefbbb2ec",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
-  "schema_version": "0.4.0"
+  "schema_version": "0.5.0"
 }

@@ -100,7 +100,12 @@ from sectum_ai.probes import (
     confirmed_findings,
     dedupe_findings,
 )
-from sectum_ai.runner import Runner, StepResult, confirmed_finding_rate, retrieval_pivot_rate
+from sectum_ai.runner import (
+    Runner,
+    StepResult,
+    confirmed_finding_rate,
+    retrieval_pivot_counts,
+)
 from sectum_ai.spec import (
     ConfigError,
     EvidenceError,
@@ -114,6 +119,7 @@ from sectum_ai.spec import (
     Surface,
     canonical_hash,
     configure_logging,
+    wilson_interval,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
 from sectum_ai.suites import SUITES
@@ -460,6 +466,29 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
     return {}
 
 
+def _format_rpr(metrics: RunMetrics) -> str:
+    """Render the Retrieval-Pivot Rate with its Wilson interval and sample size.
+
+    Shows the point estimate, the 95% confidence interval, and ``n`` - for
+    example ``95.4% (95% CI 92.1-97.3%, n=350)`` - so the headline rate is never
+    presented as a precise number without its uncertainty (the spec's "avoid
+    over-claiming"). Falls back to a bare percentage if the interval is absent
+    (an older record), so the line is always safe to print.
+
+    Args:
+        metrics: The run metrics; the caller has checked the rate is not ``None``.
+
+    Returns:
+        The formatted rate string.
+    """
+    assert metrics.retrieval_pivot_rate is not None
+    rate = f"{metrics.retrieval_pivot_rate:.1%}"
+    if metrics.retrieval_pivot_rate_ci is None:
+        return rate
+    low, high = metrics.retrieval_pivot_rate_ci
+    return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+
+
 def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
     """Resolve a target tenant by display name, defaulting to the first tenant."""
     if name is None:
@@ -682,6 +711,13 @@ def probe(
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
     bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
+    # The Retrieval-Pivot Rate is a binomial proportion (k of n benign cross-tenant
+    # query steps surfaced a foreign canary). Record k and n so the rate's Wilson
+    # confidence interval is reproducible from the signed evidence, and compute the
+    # interval here so the headline rate is never shown without its uncertainty.
+    rpr_k, rpr_n = retrieval_pivot_counts(bleed_steps)
+    rpr_rate = rpr_k / rpr_n if rpr_n else None
+    rpr_ci = wilson_interval(rpr_k, rpr_n) if rpr_n else None
     # Class 3/6/10 headline rates over each probe's benign query steps. Poisoning
     # excludes its own vector.upsert (plant) steps, which never produce findings.
     poison_query_steps = [
@@ -718,7 +754,10 @@ def probe(
         findings=findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
-            retrieval_pivot_rate=retrieval_pivot_rate(bleed_steps) if bleed_steps else None,
+            retrieval_pivot_rate=rpr_rate,
+            retrieval_pivot_n=rpr_n,
+            retrieval_pivot_k=rpr_k,
+            retrieval_pivot_rate_ci=rpr_ci,
             # Real embedding providers (st:/openai:/hash-) record a genuine
             # per-model gradient for any stack; legacy fake names fall back to the
             # in-memory recall illustration. See _per_model_rpr.
@@ -747,6 +786,15 @@ def probe(
             "probe_count": probe_count,
             "confirmed_findings": len(confirmed),
             "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
+            # The binomial counts and Wilson 95% CI travel with the rate so a CI
+            # dashboard can show the rate's uncertainty, not a bare point estimate.
+            "retrieval_pivot_n": run.metrics.retrieval_pivot_n,
+            "retrieval_pivot_k": run.metrics.retrieval_pivot_k,
+            "retrieval_pivot_rate_ci": (
+                list(run.metrics.retrieval_pivot_rate_ci)
+                if run.metrics.retrieval_pivot_rate_ci is not None
+                else None
+            ),
             "retrieval_pivot_rate_by_model": run.metrics.retrieval_pivot_rate_by_model,
             "poisoning_bleed_delta": run.metrics.poisoning_bleed_delta,
             "inversion_reconstruction_rate": run.metrics.inversion_reconstruction_rate,
@@ -770,7 +818,7 @@ def probe(
             f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings"
         )
         if run.metrics.retrieval_pivot_rate is not None:
-            typer.echo(f"retrieval-pivot rate: {run.metrics.retrieval_pivot_rate:.0%}")
+            typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
             typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
         for label, class_rate in (
