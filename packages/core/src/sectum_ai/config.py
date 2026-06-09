@@ -431,6 +431,25 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             host=_optional_str(extras, "host"),
             user_scoped=_bool(extras, "user_scoped", False),
         )
+    if config.kind == "qdrant":
+        from sectum_ai.adapters.vector.qdrant import QdrantVectorStore
+
+        # api_key is optional: a local/self-hosted Qdrant typically has no auth.
+        # (distinct variable name so mypy doesn't narrow it against pinecone's str)
+        qdrant_api_key = (
+            _resolve_secret(extras, "api_key", "api_key_env")
+            if "api_key" in extras or "api_key_env" in extras
+            else None
+        )
+        return QdrantVectorStore(
+            _hashing_embed,
+            dim=_EMBED_DIM,
+            host=_str(extras, "host", "localhost"),
+            port=_int(extras, "port", 6333),
+            grpc_port=_int(extras, "grpc_port", 6334),
+            api_key=qdrant_api_key,
+            user_scoped=_bool(extras, "user_scoped", False),
+        )
     raise _unsupported("vector_store", config.kind)
 
 
