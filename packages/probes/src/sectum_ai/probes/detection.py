@@ -610,29 +610,61 @@ class DetectionPipeline:
             if similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
-            # The judge may quote a verbatim span from the observation - the
-            # audit pack renders that span (the engineering spec, section 6.4
-            # and the PDF renderer). Fall back to the marker plaintext when the
-            # judge declines, so a confirmed leak always shows the foreign
-            # entity to the auditor and an unverified candidate carries the
-            # judge's rationale instead.
-            evidence = (leak.evidence_span or marker.plaintext) if leak.leak else leak.rationale
+            # FP-control backstop (the engineering spec, section 6.4): a judge
+            # "yes" alone never confirms. The cited evidence span (or, when the
+            # judge cites none, the marker plaintext) must be token-order
+            # traceable in the observation - the same anti-fabrication test the
+            # fake judge applies, enforced here for EVERY judge. A real LLM
+            # judge is primed with the marker plaintext, so a parroting or
+            # hallucinating verdict would otherwise put a fabricated CONFIRMED
+            # finding (and a fabricated quoted span) into the signed audit pack.
+            confirmed = leak.leak and self._span_traceable(text, leak.evidence_span, marker)
+            if confirmed:
+                # The audit pack renders the span (the PDF renderer); fall back
+                # to the marker plaintext when the judge cited none, so a
+                # confirmed leak always shows the foreign entity to the auditor.
+                evidence = leak.evidence_span or marker.plaintext
+            elif leak.leak:
+                evidence = (
+                    "judge affirmed a leak but its cited evidence is not traceable "
+                    f"in the observation; downgraded to a candidate: {leak.rationale}"
+                )
+            else:
+                evidence = leak.rationale
             findings.append(
                 self._finding(
                     marker,
                     observer,
                     surface,
                     probe_id,
-                    severity=Severity.HIGH if leak.leak else Severity.INFO,
+                    severity=Severity.HIGH if confirmed else Severity.INFO,
                     # Clamp defensively: a true cosine is already <= 1.0, but float
                     # rounding can nudge it just past 1.0, which would violate
                     # Finding.confidence's 0..1 bound.
                     confidence=round(min(1.0, similarity), 4),
-                    status=FindingStatus.CONFIRMED if leak.leak else FindingStatus.UNVERIFIED,
+                    status=FindingStatus.CONFIRMED if confirmed else FindingStatus.UNVERIFIED,
                     evidence=evidence,
                 )
             )
         return findings
+
+    @staticmethod
+    def _span_traceable(text: str, evidence_span: str, marker: Marker) -> bool:
+        """Whether the judge's cited evidence is actually present in the observation.
+
+        The needle is the judge's ``evidence_span``, or the marker plaintext when
+        the judge cited none (the claimed leaked entity itself must then be
+        evidenced). Presence uses the same in-order-within-a-short-span token test
+        the fake judge confirms on, so a verbatim quote, a re-cased/NFKC-mangled
+        leak, and a lightly paraphrased entity all trace - but a span whose tokens
+        do not appear in order in the observation (a hallucinated or parroted
+        quote) does not, and the finding stays UNVERIFIED.
+        """
+        needle = evidence_span or marker.plaintext
+        needle_tokens = _tokenize(needle)
+        if not needle_tokens:
+            return False
+        return _ordered_within_span(_tokenize(text), needle_tokens, _MAX_INTERPOSED_TOKENS)
 
     def _best_window_similarity(self, observation_tokens: list[str], marker: Marker) -> float:
         """Return the max cosine between ``marker`` and any observation window.

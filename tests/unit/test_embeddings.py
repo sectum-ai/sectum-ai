@@ -97,3 +97,14 @@ def test_embedding_provider_sweep_reflects_real_cosine_retrieval() -> None:
         substrate, [HashingEmbedding("hash-32", dim=32), HashingEmbedding("hash-256", dim=256)]
     )
     assert rates["hash-32"] < rates["hash-256"]
+
+
+def test_validate_embedding_spec_rejects_a_non_positive_hash_dim() -> None:
+    # hash-0 / hash--3 passed config-time validation and failed only at sweep
+    # time (HashingEmbedding's own constructor), defeating the early check.
+    from sectum_ai.embeddings import validate_embedding_spec
+    from sectum_ai.spec import ConfigError
+
+    for bad in ("hash-0", "hash--3"):
+        with pytest.raises(ConfigError):
+            validate_embedding_spec(bad)

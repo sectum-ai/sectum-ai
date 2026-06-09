@@ -81,8 +81,17 @@ def _verdict_from_json(text: str) -> JudgeVerdict:
     """
     try:
         data = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from error
+    except json.JSONDecodeError:
+        # Tolerate a fenced response (```json ... ```) or light narration around
+        # the object: models commonly wrap JSON despite the system instruction.
+        # Extract the outermost {...} and retry; anything else is a typed error.
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from None
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError as error:
+            raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from error
     if not isinstance(data, dict) or "leak" not in data:
         raise DetectionError(f"the judge response is missing a 'leak' field: {text[:80]!r}")
     return JudgeVerdict(
@@ -197,6 +206,10 @@ class AnthropicJudge:
             {
                 "model": self._model,
                 "max_tokens": self._max_tokens,
+                # Pinned for determinism: the verdicts feed the headline confirmed
+                # count, so identical runs must judge identically (the OpenAI judge
+                # pins temperature 0 the same way).
+                "temperature": 0,
                 "system": _JUDGE_SYSTEM,
                 "messages": [
                     {"role": "user", "content": _judge_user_prompt(observed_text, marker)}

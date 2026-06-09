@@ -328,3 +328,27 @@ def test_calibration_result_counts() -> None:
     assert result.positives + result.negatives == len(result.examples)
     assert result.positives > 0
     assert result.negatives > 0
+
+
+def test_published_threshold_is_full_precision_and_admits_no_negative() -> None:
+    # Regression for the rounding break: with a negative at 0.730004 and a
+    # positive at 0.730012, the midpoint recommendation rounded to 4dp (0.7300)
+    # would re-admit the negative the sweep certified as excluded. The published
+    # threshold must be the full-precision scored value.
+    from sectum_ai.probes.calibrate import (
+        CalibrationExample,
+        _candidate_thresholds,
+        _recommend,
+        _score_at,
+    )
+
+    examples = [
+        CalibrationExample(is_positive=False, similarity=0.730004, label="neg"),
+        CalibrationExample(is_positive=True, similarity=0.730012, label="pos"),
+    ]
+    scores = [_score_at(t, examples) for t in _candidate_thresholds(examples)]
+    recommended = _recommend(scores)
+    assert recommended is not None
+    assert recommended.false_positives == 0
+    # The published gate (>= comparison, as in detection) must exclude the negative.
+    assert 0.730004 < recommended.threshold <= 0.730012
