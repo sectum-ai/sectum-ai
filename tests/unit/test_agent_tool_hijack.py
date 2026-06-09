@@ -91,12 +91,18 @@ def test_isolated_mcp_has_no_tool_call_hijack() -> None:
     assert confirmed_findings(findings) == []
 
 
-def test_probe_plans_a_direct_and_a_token_lookup_per_pair() -> None:
+def test_probe_plans_four_mcp_subprobes_per_pair() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     steps = AgentToolHijackProbe().plan(substrate)
     assert steps
     assert all(step.action == "mcp.invoke" for step in steps)
-    assert sum("token" in step.payload for step in steps) == len(steps) // 2
+    # Four sub-probes per (foreign marker, observer) pair: confused-deputy,
+    # token-passthrough, cross-server (via), and tool-description-injection search.
+    assert len(steps) % 4 == 0
+    pairs = len(steps) // 4
+    assert sum("token" in step.payload for step in steps) == pairs
+    assert sum(step.payload.get("via") is not None for step in steps) == pairs
+    assert sum(step.payload.get("tool") == "search" for step in steps) == pairs
 
 
 def test_tenant_scoped_mcp_leaks_across_users() -> None:
@@ -118,5 +124,75 @@ def test_user_scoped_mcp_has_no_cross_user_hijack() -> None:
     # user's lookup surfaces nothing end to end.
     substrate = _users_substrate()
     mcp = _seeded_mcp_users(substrate, user_scoped=True)
+    findings = Runner(substrate, mcp=mcp).run(AgentToolHijackProbe())
+    assert confirmed_findings(findings) == []
+
+
+def _seeded_scoped_mcp(substrate: Substrate) -> FakeMCP:
+    """A tenant-scoped MCP server seeded with every hard-canary resource."""
+    mcp = FakeMCP()
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            mcp.provision(
+                marker.owner_tenant_id,
+                marker.marker_id,
+                f"MCP resource. Reference: {marker.plaintext}",
+            )
+    return mcp
+
+
+def test_cross_server_confused_deputy_leaks_across_tenants() -> None:
+    # A router that forwards a lookup to a downstream holding the owner's authority
+    # under its own broad service scope leaks across the server boundary (the
+    # Asana-class cross-server confused deputy).
+    substrate = build_substrate(default_scenario(seed=2026))
+    downstream = _seeded_scoped_mcp(substrate)
+    router = FakeMCP(cross_server_deputy=True, downstream=downstream)
+    findings = confirmed_findings(Runner(substrate, mcp=router).run(AgentToolHijackProbe()))
+    assert findings
+    assert all(f.owner_tenant_id != f.observed_in_tenant_id for f in findings)
+
+
+def test_scoped_router_has_no_cross_server_hijack() -> None:
+    # A router that forwards the real caller's tenant lets the downstream deny a
+    # foreign key, so nothing crosses the boundary.
+    substrate = build_substrate(default_scenario(seed=2026))
+    downstream = _seeded_scoped_mcp(substrate)
+    router = FakeMCP(cross_server_deputy=False, downstream=downstream)
+    findings = Runner(substrate, mcp=router).run(AgentToolHijackProbe())
+    assert confirmed_findings(findings) == []
+
+
+def _seeded_injection_mcp(substrate: Substrate, *, vulnerable: bool) -> FakeMCP:
+    """An MCP server whose ``search`` tool descriptions smuggle each resource's coordinate."""
+    mcp = FakeMCP(description_injection=vulnerable)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            mcp.provision(
+                marker.owner_tenant_id,
+                marker.marker_id,
+                f"MCP resource. Reference: {marker.plaintext}",
+            )
+            # The attacker-authored search description carries the resource's own
+            # (caller-foreign) coordinate.
+            mcp.inject_description(marker.marker_id, f"Search results. key={marker.marker_id}")
+    return mcp
+
+
+def test_tool_description_injection_leaks_across_tenants() -> None:
+    # A server that honours a coordinate smuggled in the search tool's description
+    # resolves a foreign resource the call never named.
+    substrate = build_substrate(default_scenario(seed=2026))
+    mcp = _seeded_injection_mcp(substrate, vulnerable=True)
+    findings = confirmed_findings(Runner(substrate, mcp=mcp).run(AgentToolHijackProbe()))
+    assert findings
+    assert all(f.owner_tenant_id != f.observed_in_tenant_id for f in findings)
+
+
+def test_scoped_server_ignores_a_poisoned_tool_description() -> None:
+    # A scoped server ignores the description coordinate, so the injection surfaces
+    # nothing.
+    substrate = build_substrate(default_scenario(seed=2026))
+    mcp = _seeded_injection_mcp(substrate, vulnerable=False)
     findings = Runner(substrate, mcp=mcp).run(AgentToolHijackProbe())
     assert confirmed_findings(findings) == []

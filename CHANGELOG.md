@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Deeper MCP coverage for Class 7 (`agent-tool-hijack`).** The MCP probe now
+  runs four manifest-grounded sub-probes per foreign resource instead of two: the
+  original confused-deputy and token-passthrough lookups, plus a **cross-server
+  confused deputy** (a lookup routed `via` a second MCP server that holds the
+  owner's authority — the Asana-class cross-server pattern) and a
+  **tool-description injection** (a `search` whose attacker-authored tool
+  description smuggles a foreign coordinate the call never named). A foreign
+  canary in any tool result is a leak; the detection is unchanged and remains
+  zero-FP. The tool-description-injection sub-probe models server-side scope
+  enforcement under tool-metadata-supplied coordinates (a simplification of the
+  LLM-agent-level description-poisoning attack), documented as such.
 - **Offline / BYOC detection mode (`detection.mode: local`).** A "no data leaves
   the box" guarantee for the privacy-sensitive deployment: detection is the only
   stage that embeds or judges tenant content, so `local` mode makes the config

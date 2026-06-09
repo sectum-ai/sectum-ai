@@ -1,13 +1,24 @@
 """Class 7 - cross-tenant agent tool-call hijacking via MCP (the engineering spec, section 7).
 
-Verify that an MCP server preserves tenant scope when a tool is invoked. From
-one tenant's session the probe invokes a lookup for another tenant's resource -
-both directly (the confused-deputy pattern) and with the other tenant's token
-attached (the Asana-class token-passthrough pattern). A foreign canary in a tool
-result means the server acted with the wrong tenant's authority.
+Verify that an MCP server preserves tenant scope when a tool is invoked. From a
+foreign principal's session the probe runs four sub-probes against each foreign
+resource:
 
-This is the v1 of Class 7: the MCP confused-deputy and token-passthrough
-sub-probes. Broader agent-framework coverage follows in a later phase.
+- **confused deputy** - a direct lookup of the foreign resource key;
+- **token passthrough** - the same lookup carrying the owner's token (the
+  Asana-class pattern);
+- **cross-server confused deputy** - a lookup routed (``via``) through a second
+  MCP server that holds the owner's authority, so a router that forwards under
+  the downstream's broad authority leaks across the server boundary;
+- **tool-description injection** - a ``search`` whose attacker-authored tool
+  description smuggles a foreign coordinate the call never named.
+
+A foreign canary in any tool result means the server (or the router) acted with
+the wrong tenant's authority. Detection is manifest-grounded and identical for
+every sub-probe: the result is scanned for a canary owned by a principal the
+caller is foreign to. The tool-description-injection sub-probe models server-side
+scope enforcement when tool metadata supplies an out-of-band coordinate (a
+simplification of the LLM-agent-level description-poisoning attack).
 """
 
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
@@ -29,14 +40,15 @@ class AgentToolHijackProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ("mcp",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan, per hard canary, a direct and a token-bearing MCP lookup from foreign principals.
+        """Plan, per hard canary, the four MCP sub-probes from every foreign principal.
 
-        The lookups are issued from every principal to which the marker is
-        foreign - another tenant, or another user within the tenant (ADR-0006) -
-        so tool-call scope is verified at both granularities. A plain lookup from
-        a sibling user surfaces the owner's resource on a server that scopes by
-        tenant alone. With no users declared the principals are the tenants and
-        this is the original per-tenant plan.
+        The sub-probes (confused deputy, token passthrough, cross-server deputy,
+        tool-description injection) are issued from every principal to which the
+        marker is foreign - another tenant, or another user within the tenant
+        (ADR-0006) - so tool-call scope is verified at both granularities. A plain
+        lookup from a sibling user surfaces the owner's resource on a server that
+        scopes by tenant alone. With no users declared the principals are the
+        tenants and this is the original per-tenant plan.
         """
         principals = substrate.principals()
         steps: list[ProbeStep] = []
@@ -70,6 +82,35 @@ class AgentToolHijackProbe(DetectingProbe):
                             "key": marker.marker_id,
                             "token": str(marker.owner_tenant_id),
                         },
+                    )
+                )
+                # Cross-server confused deputy: route the lookup (``via``) through
+                # a downstream server that holds the owner's authority. A router
+                # that forwards under the downstream's broad authority leaks the
+                # foreign resource across the server boundary (the Asana-class
+                # cross-server pattern); a scoped router forwards the real caller.
+                steps.append(
+                    ProbeStep(
+                        step_id=f"{self.id}-{len(steps):04d}",
+                        probe_id=self.id,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
+                        action="mcp.invoke",
+                        payload={"tool": "lookup", "key": marker.marker_id, "via": "downstream"},
+                    )
+                )
+                # Tool-description injection: invoke ``search`` whose attacker-
+                # authored description smuggles the foreign coordinate. A server
+                # that honours the description's coordinate (instead of the
+                # caller's scope) returns the foreign resource the call never named.
+                steps.append(
+                    ProbeStep(
+                        step_id=f"{self.id}-{len(steps):04d}",
+                        probe_id=self.id,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
+                        action="mcp.invoke",
+                        payload={"tool": "search", "desc_key": marker.marker_id},
                     )
                 )
         return steps

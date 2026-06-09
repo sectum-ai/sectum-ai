@@ -13,11 +13,19 @@ Two probes exercise the same attack pattern from opposite ends.
 
 **MCP end (`agent-tool-hijack`)** — verifies the *server* the agent calls.
 Each tenant's hard canary is provisioned as an MCP resource. From every other
-tenant's session the probe issues the same lookup twice:
+tenant's session the probe issues four sub-probes:
 
 - a **direct lookup** of the foreign resource key — the confused-deputy pattern;
 - the same lookup **carrying the owner's token** — the Asana-class
-  token-passthrough pattern.
+  token-passthrough pattern;
+- a **cross-server lookup** routed (`via`) through a second MCP server that holds
+  the owner's authority — a router that forwards under the downstream's broad
+  service authority leaks across the server boundary;
+- a **tool-description-injection `search`** whose attacker-authored tool
+  description smuggles a foreign coordinate the call never named. This models
+  server-side scope enforcement when tool metadata supplies an out-of-band
+  coordinate — a deliberate simplification of the LLM-agent-level
+  description-poisoning attack.
 
 **Agent end (`agent-framework-hijack`)** — verifies the *agent caller* itself.
 Each tenant's hard canary is provisioned as a resolvable resource the agent's
@@ -38,7 +46,7 @@ scope before reaching the resource.
 
 ## Status
 
-Implemented across two probes: the v1 MCP confused-deputy and
-token-passthrough sub-probes (Phase 4), plus the direct agent-framework
-hijack probe that drives the full v1 agent family without needing an MCP
-server in the loop.
+Implemented across two probes. The MCP probe (`agent-tool-hijack`) now ships
+four sub-probes — confused deputy, token passthrough, cross-server confused
+deputy, and tool-description injection — and the direct agent-framework hijack
+probe drives the full v1 agent family without needing an MCP server in the loop.

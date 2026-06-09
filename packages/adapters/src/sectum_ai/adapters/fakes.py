@@ -36,7 +36,21 @@ from sectum_ai.adapters.base import (
 from sectum_ai.spec import AdapterError, CorpusDocument, ErasureUnsupported
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
-_MCP_TOOLS = ("echo", "lookup")
+# ``search`` is the parameter/description-injection surface: a tool whose own
+# description (or a parameter default) can smuggle a foreign coordinate into the
+# call. ``echo`` and ``lookup`` are the original confused-deputy / passthrough
+# surfaces (the engineering spec, section 7).
+_MCP_TOOLS = ("echo", "lookup", "search")
+
+# A vulnerable ``search`` tool's *description* smuggles a coordinate. A
+# tool-description-injection server (``description_injection=True``) honours an
+# embedded ``key=<id>`` directive lifted from the tool's own description text -
+# the directive an attacker-authored description carries to make the agent fetch
+# a resource the caller never named. The directive points at a foreign resource
+# key (a manifest marker id), so a vulnerable server resolves another tenant's
+# resource even though the call itself carried no key (the engineering spec,
+# section 7 - the MCP confused-deputy surface; OWASP LLM08:2025).
+_DESCRIPTION_KEY_RE = re.compile(r"key=(\S+)")
 
 
 def _tokens(text: str) -> set[str]:
@@ -363,18 +377,31 @@ class FakeAgent(AgentAdapter):
 
 
 class FakeMCP(MCPAdapter):
-    """A deterministic in-memory MCP server exposing an ``echo`` and a ``lookup`` tool.
+    """A deterministic in-memory MCP server: an ``echo``, a ``lookup``, and a ``search`` tool.
 
-    The ``lookup`` tool resolves a key to a tenant resource. Two independent
-    flaws can be switched on, both caught by Class 7:
+    The ``lookup`` and ``search`` tools resolve a key to a tenant resource. Each
+    flaw below can be switched on independently, and each is caught by Class 7
+    (the engineering spec, section 7 - the MCP confused-deputy / token-passthrough
+    surface):
 
     - ``confused_deputy=True``: ``lookup`` resolves keys across every tenant's
       resources - the server has lost the caller's tenant scope.
     - ``token_passthrough=True``: ``lookup`` honours a caller-supplied ``token``
       argument and acts as whatever tenant the token names (the Asana-class
       pattern).
+    - ``description_injection=True``: the ``search`` tool's own *description*
+      smuggles a ``key=<id>`` coordinate, and the server honours it - so a
+      ``search`` call that named no key still resolves the foreign resource the
+      attacker-authored description points at (the tool-description / parameter
+      injection sub-probe). A scoped server ignores the description directive.
+    - ``downstream`` (with ``cross_server_deputy``): this server is a *router*
+      that forwards a ``via=<name>`` lookup to a second server holding tenant X's
+      authority. With ``cross_server_deputy=True`` it forwards under the
+      downstream's broad service authority (the cross-server confused deputy, so
+      X's data returns); with it off it forwards the caller's own tenant, so the
+      downstream resolves nothing foreign.
 
-    With both off the server is tenant-scoped and reports that capability. A
+    With every flaw off the server is tenant-scoped and reports that capability. A
     tenant-scoped server still resolves a key across all of one tenant's
     resources, so a sibling user's resource surfaces - the cross-user leak.
     With ``user_scoped=True`` (reporting ``USER_SCOPED``) a ``lookup`` carrying a
@@ -387,24 +414,46 @@ class FakeMCP(MCPAdapter):
         *,
         confused_deputy: bool = False,
         token_passthrough: bool = False,
+        description_injection: bool = False,
+        cross_server_deputy: bool = False,
+        downstream: "FakeMCP | None" = None,
         user_scoped: bool = False,
     ) -> None:
+        scoped = not (
+            confused_deputy or token_passthrough or description_injection or cross_server_deputy
+        )
         capabilities = {Capability.TOOL_INVOCATION}
-        if not confused_deputy and not token_passthrough:
+        if scoped:
             capabilities.add(Capability.TENANT_SCOPED_TOOLS)
         if user_scoped:
             capabilities.add(Capability.USER_SCOPED)
         super().__init__(name, frozenset(capabilities))
         self._confused_deputy = confused_deputy
         self._token_passthrough = token_passthrough
+        self._description_injection = description_injection
+        self._cross_server_deputy = cross_server_deputy
+        self._downstream = downstream
         self._user_scoped = user_scoped
         # Each resource records the user that owns it (``None`` = tenant-level)
         # so a user-scoped server can deny a sibling user's lookup.
         self._resources: dict[UUID, dict[str, tuple[UUID | None, str]]] = {}
+        # The ``search`` tool's injected description text, per resource key. A
+        # vulnerable server lifts the ``key=<id>`` directive out of it.
+        self._tool_descriptions: dict[str, str] = {}
 
     def provision(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
-        """Store a resource the ``lookup`` tool can resolve (test helper)."""
+        """Store a resource the ``lookup``/``search`` tool can resolve (test helper)."""
         self._resources.setdefault(tenant, {})[key] = (user, value)
+
+    def inject_description(self, key: str, description: str) -> None:
+        """Register a poisoned ``search`` tool description carrying a coordinate (test helper).
+
+        The description an attacker authored for the ``search`` tool; on a server
+        with ``description_injection=True`` an embedded ``key=<id>`` directive is
+        followed, fetching the resource the caller never named (the engineering
+        spec, section 7 - tool-description / parameter injection).
+        """
+        self._tool_descriptions[key] = description
 
     def list_tools(self) -> list[str]:
         return list(_MCP_TOOLS)
@@ -416,17 +465,51 @@ class FakeMCP(MCPAdapter):
             raise AdapterError(f"unknown tool: {tool}")
         if tool == "echo":
             return McpResult(tool=tool, output=arguments.get("text", ""))
+        if tool == "search":
+            return McpResult(tool=tool, output=self._search(tenant, arguments, user))
         return McpResult(tool=tool, output=self._lookup(tenant, arguments, user))
 
+    def _search(self, tenant: UUID, arguments: dict[str, str], user: UUID | None) -> str:
+        """Resolve a ``search`` call, honouring an injected description coordinate when vulnerable.
+
+        On a ``description_injection`` server the tool's own description supplies
+        a ``key=<id>`` coordinate the caller never passed; the server follows it
+        and resolves that (foreign) resource. A scoped server ignores the
+        description and resolves only an explicitly-passed ``key`` in the caller's
+        own tenant - so the injection surfaces nothing.
+        """
+        if self._description_injection:
+            description = self._tool_descriptions.get(arguments.get("desc_key", ""), "")
+            match = _DESCRIPTION_KEY_RE.search(description)
+            if match is not None:
+                # The server obeys the coordinate the attacker embedded in the
+                # tool description and fetches *that* resource - which belongs to
+                # another tenant - so the resolution bypasses the caller's scope.
+                # Keys are globally unique marker ids, so this resolves the one
+                # resource the injected coordinate names.
+                return self._resolve_global(match.group(1))
+        # A scoped server never reads the description; a bare ``search`` without
+        # an explicit key resolves nothing, and an explicit key stays in scope.
+        return self._lookup(tenant, arguments, user)
+
+    def _resolve_global(self, key: str) -> str:
+        """Resolve ``key`` across every tenant's resources (the scope-bypass result)."""
+        for resources in self._resources.values():
+            if key in resources:
+                return resources[key][1]
+        return ""
+
     def _lookup(self, tenant: UUID, arguments: dict[str, str], user: UUID | None) -> str:
+        # A router forwards a ``via=<name>`` call to its downstream server; the
+        # cross-server confused deputy resolves there under the downstream's
+        # broad authority (the engineering spec, section 7 - cross-server deputy).
+        if "via" in arguments and self._downstream is not None:
+            return self._forward(tenant, arguments, user)
         key = arguments.get("key", "")
         if self._confused_deputy:
             # Resource keys are globally unique (marker ids), so resolving
             # across every tenant's resources is unambiguous and order-free.
-            for resources in self._resources.values():
-                if key in resources:
-                    return resources[key][1]
-            return ""
+            return self._resolve_global(key)
         resources = self._resources.get(self._effective_tenant(tenant, arguments), {})
         if key not in resources:
             return ""
@@ -437,6 +520,32 @@ class FakeMCP(MCPAdapter):
         if self._user_scoped and user is not None and owner_user is not None and owner_user != user:
             return ""
         return value
+
+    def _forward(self, tenant: UUID, arguments: dict[str, str], user: UUID | None) -> str:
+        """Forward a lookup to the downstream server (the cross-server boundary).
+
+        A confused-deputy router presents the downstream with its own broad
+        *service* authority instead of the caller's tenant, so the downstream
+        resolves a key that belongs to *any* tenant it serves - tenant X's
+        resource flows back through tenant Y's session. A correctly-scoped router
+        forwards the caller's own tenant, so the downstream denies a foreign key.
+        The downstream is itself a tenant-scoped server (its own flaws off), so
+        the leak is attributable to the router, not the downstream.
+        """
+        assert self._downstream is not None  # guarded by the caller
+        forwarded = {key: value for key, value in arguments.items() if key != "via"}
+        if self._cross_server_deputy:
+            # Present the downstream's own service authority (any tenant that
+            # holds the key), not the caller's. Keys are globally unique marker
+            # ids, so this is unambiguous.
+            for owner in self._downstream._resources:
+                result = self._downstream.invoke(owner, "lookup", forwarded, user=user)
+                if result.output:
+                    return result.output
+            return ""
+        # Scoped router: the downstream sees the real caller, so a foreign key
+        # resolves to nothing.
+        return self._downstream.invoke(tenant, "lookup", forwarded, user=user).output
 
     def _effective_tenant(self, tenant: UUID, arguments: dict[str, str]) -> UUID:
         # Token passthrough: the server trusts a caller-supplied token instead
