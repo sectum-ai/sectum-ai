@@ -173,3 +173,38 @@ def test_canonicalizing_a_model_with_a_non_finite_float_is_refused() -> None:
     metrics = RunMetrics(retrieval_pivot_rate=float("inf"))
     with pytest.raises(ValueError, match="non-finite float"):
         canonical_hash(metrics)
+
+
+def test_run_metrics_records_the_rpr_counts_and_interval() -> None:
+    # The Retrieval-Pivot Rate carries its binomial counts and Wilson interval so
+    # the interval is reproducible from the signed evidence, not just the rounded
+    # rate. The interval is a 2-tuple that round-trips through the canonical form.
+    metrics = RunMetrics(
+        retrieval_pivot_rate=334 / 350,
+        retrieval_pivot_n=350,
+        retrieval_pivot_k=334,
+        retrieval_pivot_rate_ci=(0.927, 0.9717),
+    )
+    assert metrics.retrieval_pivot_rate_ci == (0.927, 0.9717)
+    dumped = metrics.model_dump(mode="json")
+    # A tuple serializes to a JSON array; the counts make k / n recover the rate.
+    assert dumped["retrieval_pivot_rate_ci"] == [0.927, 0.9717]
+    assert dumped["retrieval_pivot_k"] / dumped["retrieval_pivot_n"] == metrics.retrieval_pivot_rate
+
+
+def test_run_metrics_rpr_interval_is_part_of_the_canonical_form() -> None:
+    # Changing only the confidence interval changes the digest, so the interval is
+    # bound into the tamper-evident canonical hash (not silently dropped).
+    base = RunMetrics(retrieval_pivot_rate=0.5, retrieval_pivot_n=4, retrieval_pivot_k=2)
+    with_ci = base.model_copy(update={"retrieval_pivot_rate_ci": (0.15, 0.85)})
+    assert canonical_hash(base) != canonical_hash(with_ci)
+    assert canonical_hash(with_ci) == canonical_hash(with_ci)
+
+
+def test_run_metrics_rejects_negative_rpr_counts() -> None:
+    # The counts are Field(ge=0): a negative numerator or denominator cannot be
+    # constructed into a signed artifact.
+    with pytest.raises(ValidationError):
+        RunMetrics(retrieval_pivot_n=-1)
+    with pytest.raises(ValidationError):
+        RunMetrics(retrieval_pivot_k=-1)

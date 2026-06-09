@@ -13,6 +13,7 @@ from sectum_ai.evidence.pdf import (
     _finding_controls,
     _finding_lines,
     _remediation_line,
+    _retrieval_pivot_summary,
 )
 from sectum_ai.evidence.pdf_weasyprint import build_audit_html
 from sectum_ai.spec import (
@@ -205,6 +206,61 @@ def test_scope_methodology_states_limits() -> None:
     text = " ".join(_SCOPE_METHODOLOGY)
     assert "does not remediate" in text
     assert "test coverage, not legal certification" in text
+
+
+# --- Retrieval-Pivot Rate confidence interval (Class 2 headline metric) -------
+
+
+def _rpr_run(metrics: RunMetrics) -> RunResult:
+    moment = datetime(2026, 5, 18, tzinfo=UTC)
+    manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+    return RunResult(
+        run_id="rpr-1",
+        scenario_hash="scenario-hash",
+        manifest_hash=canonical_hash(manifest),
+        started_at=moment,
+        finished_at=moment,
+        metrics=metrics,
+    )
+
+
+def test_retrieval_pivot_summary_renders_rate_interval_and_sample_size() -> None:
+    # The flagship metric is shown with its 95% Wilson interval and n, so an
+    # auditor reads the rate's precision rather than a bare point estimate.
+    line = _retrieval_pivot_summary(
+        _rpr_run(
+            RunMetrics(
+                retrieval_pivot_rate=334 / 350,
+                retrieval_pivot_n=350,
+                retrieval_pivot_k=334,
+                retrieval_pivot_rate_ci=(0.9270, 0.9717),
+            )
+        )
+    )
+    assert line is not None
+    assert line.startswith("95.4%")
+    assert "95% CI" in line
+    assert "n=350" in line
+
+
+def test_retrieval_pivot_summary_absent_for_a_non_class2_run() -> None:
+    # A run with no Class 2 steps records no rate, so the summary row is omitted.
+    assert _retrieval_pivot_summary(_rpr_run(RunMetrics())) is None
+
+
+def test_audit_pack_includes_the_retrieval_pivot_rate(tmp_path: Path) -> None:
+    # End to end: a pack carrying the rate renders the labelled row into the PDF.
+    manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+    metrics = RunMetrics(
+        retrieval_pivot_rate=0.5,
+        retrieval_pivot_n=4,
+        retrieval_pivot_k=2,
+        retrieval_pivot_rate_ci=(0.15, 0.85),
+    )
+    pack = build_evidence_pack(_rpr_run(metrics), manifest, control_mappings=control_mappings())
+    output = tmp_path / "rpr.pdf"
+    render_audit_pack(pack, output)
+    assert output.read_bytes().startswith(b"%PDF")
 
 
 # --- Coverage & caveats matrix (erasure attestations) ------------------------

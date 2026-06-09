@@ -238,6 +238,18 @@
           "default": null,
           "title": "Poisoning Bleed Delta"
         },
+        "retrieval_pivot_k": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retrieval Pivot K",
+          "type": "integer"
+        },
+        "retrieval_pivot_n": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retrieval Pivot N",
+          "type": "integer"
+        },
         "retrieval_pivot_rate": {
           "anyOf": [
             {
@@ -256,6 +268,28 @@
           },
           "title": "Retrieval Pivot Rate By Model",
           "type": "object"
+        },
+        "retrieval_pivot_rate_ci": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Pivot Rate Ci"
         },
         "side_channel_effect_sizes": {
           "additionalProperties": {
@@ -315,7 +349,7 @@
           "type": "string"
         },
         "schema_version": {
-          "default": "0.4.0",
+          "default": "0.5.0",
           "title": "Schema Version",
           "type": "string"
         },
@@ -369,7 +403,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.4.0/EvidencePack.schema.json",
+  "$id": "https://schemas.sectum.ai/0.5.0/EvidencePack.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A signed, control-mapped evidence bundle (the engineering spec, section 8).",
@@ -424,7 +458,7 @@
       "$ref": "#/$defs/RunResult"
     },
     "schema_version": {
-      "default": "0.4.0",
+      "default": "0.5.0",
       "title": "Schema Version",
       "type": "string"
     },

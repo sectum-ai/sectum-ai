@@ -72,6 +72,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The audit-pack PDF (both engines) renders a **Coverage & caveats** matrix so a
   DPO/auditor can see, surface by surface, exactly what was and was not verified,
   and the `erasure` command prints the `NOT_COVERED` surfaces.
+- **A confidence interval on the headline Retrieval-Pivot Rate.** The flagship
+  Class 2 metric is a binomial proportion (`k` of `n` benign cross-tenant queries
+  surfaced a foreign marker), so a bare point estimate over-claims precision when
+  `n` is small. Every run now reports a **95% Wilson score interval** with the
+  sample size next to the rate — `retrieval-pivot rate: 81.2% (95% CI
+  68.1%-89.8%, n=48)` in `--output text`, the `retrieval_pivot_rate_ci` array plus
+  the `retrieval_pivot_n`/`retrieval_pivot_k` counts in `--output json`, and a
+  labelled row in the audit-pack PDF. The counts are recorded in `RunMetrics` and
+  the signed evidence so the interval is reproducible by a third party, not just a
+  rounded figure. The Wilson interval (chosen over the normal/Wald approximation)
+  stays inside [0, 100%] and keeps near-nominal coverage at small `n` or an extreme
+  rate. The math is a small, tested, pure-stdlib helper (`sectum_ai.spec.stats`,
+  no SciPy/NumPy), mirroring the Class 5 timing channel's statistics; the
+  point-estimate definition is unchanged.
 
 ### Changed
 
@@ -80,6 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shipped sample evidence packs under `docs/samples/` are regenerated to 0.4.0; a
   pre-0.4.0 pack is refused by `sectum-ai verify` (major/minor mismatch), as
   intended.
+- **Schema bump `0.4.0` → `0.5.0`** for the new Retrieval-Pivot Rate counts and
+  confidence interval on `RunMetrics` (`retrieval_pivot_n`, `retrieval_pivot_k`,
+  `retrieval_pivot_rate_ci`). The committed JSON Schemas, the default-scenario
+  golden hashes, and the shipped sample evidence packs under `docs/samples/` are
+  regenerated to 0.5.0; a pre-0.5.0 pack is refused by `sectum-ai verify`
+  (major/minor mismatch), as intended.
 
 ### Fixed
 

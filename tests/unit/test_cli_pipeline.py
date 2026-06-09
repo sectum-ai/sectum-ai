@@ -104,8 +104,42 @@ def test_probe_records_a_run_and_exits_two_on_confirmed_leaks(tmp_path: Path) ->
     # the built-in demo stack is intentionally leaky: confirmed findings -> exit 2
     assert result.exit_code == 2
     run = json.loads((tmp_path / "run.json").read_text())
-    assert run["metrics"]["confirmed_findings"] > 0
-    assert run["metrics"]["retrieval_pivot_rate"] is not None
+    metrics = run["metrics"]
+    assert metrics["confirmed_findings"] > 0
+    assert metrics["retrieval_pivot_rate"] is not None
+    # The binomial counts behind the rate are recorded so the confidence interval
+    # is reproducible from the evidence: rate == k / n, and the Wilson interval
+    # brackets the point estimate and stays in [0, 1].
+    n, k = metrics["retrieval_pivot_n"], metrics["retrieval_pivot_k"]
+    assert n > 0
+    assert 0 <= k <= n
+    assert metrics["retrieval_pivot_rate"] == k / n
+    low, high = metrics["retrieval_pivot_rate_ci"]
+    assert 0.0 <= low <= metrics["retrieval_pivot_rate"] <= high <= 1.0
+
+
+def test_probe_text_output_shows_the_rpr_confidence_interval(tmp_path: Path) -> None:
+    # The human-readable summary presents the headline rate with its 95% interval
+    # and sample size, never as a bare point estimate (the spec's anti-over-claim).
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "text"])
+    assert result.exit_code == 2
+    assert "retrieval-pivot rate:" in result.stdout
+    assert "95% CI" in result.stdout
+    assert "n=" in result.stdout
+
+
+def test_probe_json_output_carries_the_rpr_counts_and_interval(tmp_path: Path) -> None:
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    assert result.exit_code == 2
+    summary = json.loads(result.stdout)
+    assert summary["retrieval_pivot_n"] > 0
+    assert summary["retrieval_pivot_rate"] == (
+        summary["retrieval_pivot_k"] / summary["retrieval_pivot_n"]
+    )
+    low, high = summary["retrieval_pivot_rate_ci"]
+    assert 0.0 <= low <= summary["retrieval_pivot_rate"] <= high <= 1.0
 
 
 def test_probe_with_an_isolated_config_yields_no_findings(tmp_path: Path) -> None:

@@ -5,8 +5,15 @@ from uuid import UUID
 import pytest
 
 from sectum_ai.adapters import FakeVectorStore
-from sectum_ai.runner import Runner, retrieval_pivot_rate
-from sectum_ai.spec import AdapterError, ProbeStep
+from sectum_ai.runner import Runner, StepResult, retrieval_pivot_counts, retrieval_pivot_rate
+from sectum_ai.spec import (
+    AdapterError,
+    Finding,
+    FindingStatus,
+    ProbeStep,
+    Severity,
+    Surface,
+)
 from sectum_ai.substrate import build_substrate, default_scenario
 
 _ACTIONS = (
@@ -49,6 +56,33 @@ def test_runner_rejects_an_unknown_action() -> None:
 
 def test_retrieval_pivot_rate_is_zero_without_steps() -> None:
     assert retrieval_pivot_rate([]) == 0.0
+
+
+def test_retrieval_pivot_counts_are_zero_without_steps() -> None:
+    assert retrieval_pivot_counts([]) == (0, 0)
+
+
+def test_retrieval_pivot_counts_match_the_rate() -> None:
+    # The counts (k of n benign steps) reproduce the point estimate exactly, so
+    # the recorded confidence interval is derivable from them: k / n == the rate.
+    def _confirmed() -> Finding:
+        return Finding(
+            finding_id="f",
+            probe_id="rag-entity-bleed",
+            severity=Severity.HIGH,
+            confidence=0.9,
+            status=FindingStatus.CONFIRMED,
+            owner_tenant_id=UUID(int=0xB),
+            observed_in_tenant_id=UUID(int=0xA),
+            surface=Surface.VECTOR_DB,
+        )
+
+    hit: StepResult = (_step("vector.query"), [_confirmed()])
+    miss: StepResult = (_step("vector.query"), [])
+    steps = [hit, hit, miss, miss]
+    k, n = retrieval_pivot_counts(steps)
+    assert (k, n) == (2, 4)
+    assert k / n == retrieval_pivot_rate(steps)
 
 
 def test_non_numeric_k_payload_raises_adapter_error() -> None:

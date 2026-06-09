@@ -1,5 +1,5 @@
 {
-  "$id": "https://schemas.sectum.ai/0.4.0/RunMetrics.schema.json",
+  "$id": "https://schemas.sectum.ai/0.5.0/RunMetrics.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Aggregate metrics for a run (the engineering spec, section 9).",
@@ -73,6 +73,18 @@
       "default": null,
       "title": "Poisoning Bleed Delta"
     },
+    "retrieval_pivot_k": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Retrieval Pivot K",
+      "type": "integer"
+    },
+    "retrieval_pivot_n": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Retrieval Pivot N",
+      "type": "integer"
+    },
     "retrieval_pivot_rate": {
       "anyOf": [
         {
@@ -91,6 +103,28 @@
       },
       "title": "Retrieval Pivot Rate By Model",
       "type": "object"
+    },
+    "retrieval_pivot_rate_ci": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Pivot Rate Ci"
     },
     "side_channel_effect_sizes": {
       "additionalProperties": {

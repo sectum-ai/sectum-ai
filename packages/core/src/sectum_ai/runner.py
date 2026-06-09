@@ -336,3 +336,24 @@ def retrieval_pivot_rate(step_results: list[StepResult]) -> float:
     clarity at the flagship probe.
     """
     return confirmed_finding_rate(step_results)
+
+
+def retrieval_pivot_counts(step_results: list[StepResult]) -> tuple[int, int]:
+    """Return the binomial counts ``(k, n)`` behind the Retrieval-Pivot Rate.
+
+    ``n`` is the number of benign cross-tenant query steps and ``k`` is how many
+    surfaced at least one confirmed foreign canary, so ``k / n`` is exactly the
+    rate :func:`retrieval_pivot_rate` reports (for ``n > 0``). The counts are
+    recorded in :class:`~sectum_ai.spec.RunMetrics` so the rate's Wilson
+    confidence interval is reproducible from the signed evidence rather than only
+    from a rounded point estimate.
+
+    Args:
+        step_results: The Class 2 bleed steps with their detected findings.
+
+    Returns:
+        A ``(k, n)`` pair; ``(0, 0)`` for an empty input.
+    """
+    n = len(step_results)
+    k = sum(1 for _, findings in step_results if confirmed_findings(findings))
+    return k, n

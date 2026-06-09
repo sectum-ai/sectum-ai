@@ -28,9 +28,14 @@ without running Sectum.
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
-schema it does not understand. The current `SCHEMA_VERSION` is **0.4.0** — it
-added the per-surface erasure `coverage` block to `RunMetrics` (see the
-[erasure attack catalog page](attack-catalog/class-11-erasure.md)).
+schema it does not understand. The current `SCHEMA_VERSION` is **0.5.0** — it
+added the Retrieval-Pivot Rate's binomial counts (`retrieval_pivot_n`,
+`retrieval_pivot_k`) and a Wilson confidence interval (`retrieval_pivot_rate_ci`)
+to `RunMetrics`, so the headline rate's uncertainty is reproducible from the
+signed evidence (see the
+[Class 2 attack catalog page](attack-catalog/class-02-rag-entity-bleed.md)). The
+prior **0.4.0** added the per-surface erasure `coverage` block to `RunMetrics`
+(see the [erasure attack catalog page](attack-catalog/class-11-erasure.md)).
 
 ## Published JSON Schema
 

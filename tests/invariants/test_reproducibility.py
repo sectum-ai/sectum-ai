@@ -43,11 +43,13 @@ def test_default_scenario_hashes_match_the_published_golden() -> None:
     # tests above only catch run-to-run drift, not a shift in the output itself.
     # The reproducibility contract (spec section 6.5) makes these stable across
     # machines and Python versions. Update these literals only with a deliberate
-    # substrate change.
+    # substrate change - or, as here, a deliberate SCHEMA_VERSION bump, which both
+    # models stamp into ``schema_version`` and so flows into the canonical form
+    # (last bumped 0.4.0 -> 0.5.0 for the Retrieval-Pivot Rate confidence interval).
     substrate = build_substrate(default_scenario(seed=2026))
     assert substrate.manifest.scenario_hash == (
-        "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb"
+        "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65"
     )
     assert canonical_hash(substrate.manifest) == (
-        "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514"
+        "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409"
     )

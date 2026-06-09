@@ -225,6 +225,33 @@ def _control_lines(mappings: tuple[ControlMapping, ...]) -> list[str]:
     ]
 
 
+def _retrieval_pivot_summary(run: RunResult) -> str | None:
+    """Render the Retrieval-Pivot Rate row for the summary, or ``None`` if absent.
+
+    The flagship Class-2 metric is a binomial proportion, so it is presented with
+    its 95% Wilson confidence interval and sample size - for example
+    ``95.4% (95% CI 92.1-97.3%, n=350)`` - so an auditor reads the rate's
+    precision, not a bare point estimate (the spec's "avoid over-claiming").
+    Returns ``None`` for a run with no Class-2 steps (the rate is ``None``), so the
+    row is omitted rather than shown empty.
+
+    Args:
+        run: The run result whose metrics carry the rate, its counts, and the
+            confidence interval.
+
+    Returns:
+        The formatted rate string, or ``None`` when the run recorded no rate.
+    """
+    metrics = run.metrics
+    if metrics.retrieval_pivot_rate is None:
+        return None
+    rate = f"{metrics.retrieval_pivot_rate:.1%}"
+    if metrics.retrieval_pivot_rate_ci is None:
+        return rate
+    low, high = metrics.retrieval_pivot_rate_ci
+    return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+
+
 def _render_reportlab(pack: EvidencePack) -> bytes:
     """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
 
@@ -245,12 +272,15 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         Spacer(1, 16),
         Paragraph("Verification summary", heading),
     ]
-    summary = (
+    summary: list[tuple[str, str]] = [
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed cross-tenant findings", str(confirmed)),
-    )
+    ]
+    rpr_line = _retrieval_pivot_summary(run)
+    if rpr_line is not None:
+        summary.append(("Retrieval-Pivot Rate", rpr_line))
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in summary
     ]

@@ -41,6 +41,7 @@ from sectum_ai.spec.models import (
     SyntheticUserSpec,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
+from sectum_ai.spec.stats import normal_quantile, wilson_interval
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -79,8 +80,10 @@ __all__ = [
     "configure_logging",
     "get_logger",
     "json_schemas",
+    "normal_quantile",
     "redact_sensitive",
     "sha256_hex",
     "to_canonical_json",
+    "wilson_interval",
     "write_json_schemas",
 ]

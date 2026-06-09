@@ -4,21 +4,24 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "6b25da1773d18b8a512e0fc580e27929ede6a3a1c58357b163e536dbda300a3a"
+        "sha256": "3256237dce0e0169d105b45b5bf2b768227a1eab4b9bbfc5fd8fe8cfa460922a"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.4.0",
-    "scenario_hash": "de5b86972c796fb767c0d2c558773becb2f0fb59b82331115159eba63b020afb",
-    "manifest_hash": "d8668caa922956db77189ce1c0a1386620bfcc25eda767ae5f9188a1853fa514",
-    "started_at": "2026-06-08T06:57:13.159911+00:00",
-    "finished_at": "2026-06-08T06:57:13.160426+00:00",
+    "schema_version": "0.5.0",
+    "scenario_hash": "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65",
+    "manifest_hash": "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409",
+    "started_at": "2026-06-08T20:13:52.449371+00:00",
+    "finished_at": "2026-06-08T20:13:52.449904+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,
       "retrieval_pivot_rate": null,
+      "retrieval_pivot_n": 0,
+      "retrieval_pivot_k": 0,
+      "retrieval_pivot_rate_ci": null,
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {
         "vector_db": 0,

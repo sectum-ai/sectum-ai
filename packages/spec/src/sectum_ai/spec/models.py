@@ -20,7 +20,7 @@ from sectum_ai.spec.enums import (
     Surface,
 )
 
-SCHEMA_VERSION = "0.4.0"
+SCHEMA_VERSION = "0.5.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
@@ -33,6 +33,13 @@ reproducible regardless of the producer's local timezone.
 an explicit verdict for *every* erasure surface, including the ones it did not
 scan (``NOT_COVERED``). The block is the anti-over-claim guarantee: an unscanned
 surface can never read as ``ERASED``.
+
+0.5.0 — :class:`RunMetrics` records the Retrieval-Pivot Rate's binomial counts
+(``retrieval_pivot_n`` benign cross-tenant query steps, ``retrieval_pivot_k`` of
+which surfaced a foreign marker) and a Wilson score interval on the rate
+(``retrieval_pivot_rate_ci``). The counts make the interval reproducible from the
+signed evidence, and the interval is the anti-over-claim guarantee for the
+flagship metric: a small-``n`` rate can never read as a precise point estimate.
 """
 
 
@@ -288,6 +295,17 @@ class RunMetrics(SectumModel):
     per_probe_findings: dict[str, int] = Field(default_factory=dict)
     confirmed_findings: int = 0
     retrieval_pivot_rate: float | None = None
+    # The binomial counts behind the Retrieval-Pivot Rate: ``n`` benign
+    # cross-tenant query steps, ``k`` of which surfaced a confirmed foreign
+    # canary. Stored so the confidence interval is reproducible from the signed
+    # evidence (rate == k / n when n > 0). Both 0 for a run with no Class 2 steps.
+    retrieval_pivot_n: int = Field(default=0, ge=0)
+    retrieval_pivot_k: int = Field(default=0, ge=0)
+    # Wilson score interval (low, high) on the Retrieval-Pivot Rate at the 95%
+    # level - the honest companion to the point estimate, since a bare rate
+    # over-claims precision at small ``n``. ``None`` exactly when the rate is
+    # ``None`` (no Class 2 steps ran). The Wilson bounds always lie in [0, 1].
+    retrieval_pivot_rate_ci: tuple[float, float] | None = None
     retrieval_pivot_rate_by_model: dict[str, float] = Field(default_factory=dict)
     # Genuine residual: markers still present on a surface that *was* erased (an
     # erasure failure). Caveat counts are tracked separately so a backend with

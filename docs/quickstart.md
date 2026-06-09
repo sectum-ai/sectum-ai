@@ -81,3 +81,16 @@ count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
 when Class 2 swept models), the per-probe finding counts, and a `run_path`
 pointer to the full `run.json` on disk. Errors still print to stderr and
 exit codes are unchanged.
+
+The Retrieval-Pivot Rate is reported with a **95% Wilson confidence interval**
+and its sample size, so a small-`n` rate is never presented as a precise number:
+
+```text
+retrieval-pivot rate: 81.2% (95% CI 68.1%-89.8%, n=48)
+```
+
+The JSON summary carries the same uncertainty as machine-readable fields —
+`retrieval_pivot_n` and `retrieval_pivot_k` (the binomial counts behind the rate)
+and `retrieval_pivot_rate_ci` (the `[low, high]` interval) — so a CI dashboard can
+act on the rate's precision, not a bare point estimate. Because the counts are in
+the signed `evidence.json`, the interval is reproducible by a third party.
