@@ -225,7 +225,7 @@ adapters:
     adapter_bleed: true      # demo leak: one tenant's adapter influences others
     prefix_cache: true       # demo leak: a shared KV prefix cache leaks via timing
   mcp:
-    kind: fake               # fake | stdio
+    kind: fake               # fake | stdio | http
     confused_deputy: true    # demo leak: the MCP server lost tenant scope
     token_passthrough: true  # demo leak: the server trusts a caller-supplied token
   memory:

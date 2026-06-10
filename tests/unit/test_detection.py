@@ -627,3 +627,41 @@ def test_pipeline_is_silent_when_embedder_matches_the_manifest_model(
     substrate = build_substrate(default_scenario(seed=7))
     DetectionPipeline(substrate, FakeEmbeddingProvider(), FakeJudge(), 0.0)
     assert "detect.embedding_ref.model_mismatch" not in spy.events
+
+
+def test_pipeline_is_silent_on_a_canonical_openai_manifest_and_matching_embedder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression for the inverted check: a real run stamps the canonical
+    # "openai:<model>" form into embedding_ref (from embedding_models[0]), so an
+    # OpenAI embedder reporting that same canonical model_id must NOT warn - the
+    # bare model name previously false-alarmed on this correctly-matched case.
+    marker = Marker(
+        marker_id="e-canonical",
+        marker_type=MarkerType.ENTITY_CANARY,
+        owner_tenant_id=_TB,
+        plaintext="Project Wintergreen",
+        embedding_ref="openai:text-embedding-3-small/0123456789abcdef",
+    )
+    scenario = Scenario(
+        scenario_id="custom",
+        seed=1,
+        tenants=(
+            SyntheticTenantSpec(tenant_id=_TA, display_name="A", industry="x", corpus_size=1),
+        ),
+    )
+    manifest = GroundTruthManifest(manifest_id="m", scenario_hash="h", markers=(marker,))
+    substrate = Substrate(
+        scenario=scenario, tenants=scenario.tenants, documents=(), manifest=manifest
+    )
+
+    matched = _SpyLog()
+    monkeypatch.setattr("sectum_ai.probes.detection._log", matched)
+    DetectionPipeline(substrate, _NamedEmbedder("openai:text-embedding-3-small"), FakeJudge(), 0.0)
+    assert "detect.embedding_ref.model_mismatch" not in matched.events
+
+    # A genuinely different canonical model still warns.
+    differ = _SpyLog()
+    monkeypatch.setattr("sectum_ai.probes.detection._log", differ)
+    DetectionPipeline(substrate, _NamedEmbedder("openai:text-embedding-3-large"), FakeJudge(), 0.0)
+    assert "detect.embedding_ref.model_mismatch" in differ.events
