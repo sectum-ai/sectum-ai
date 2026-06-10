@@ -118,15 +118,25 @@ def _verdict_from_json(text: str) -> JudgeVerdict:
         data = json.loads(text)
     except json.JSONDecodeError:
         # Tolerate a fenced response (```json ... ```) or light narration around
-        # the object: models commonly wrap JSON despite the system instruction.
-        # Extract the outermost {...} and retry; anything else is a typed error.
-        start, end = text.find("{"), text.rfind("}")
-        if start == -1 or end <= start:
+        # the object: models commonly wrap JSON despite the system instruction (the
+        # Anthropic judge has no response_format guarantee). A greedy
+        # outermost-{...} slice breaks on any stray brace before/after/around the
+        # verdict, so scan for the first *balanced* object carrying a "leak" key.
+        decoder = json.JSONDecoder()
+        data = None
+        index = text.find("{")
+        while index != -1:
+            try:
+                candidate, _ = decoder.raw_decode(text, index)
+            except json.JSONDecodeError:
+                index = text.find("{", index + 1)
+                continue
+            if isinstance(candidate, dict) and "leak" in candidate:
+                data = candidate
+                break
+            index = text.find("{", index + 1)
+        if data is None:
             raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from None
-        try:
-            data = json.loads(text[start : end + 1])
-        except json.JSONDecodeError as error:
-            raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from error
     if not isinstance(data, dict) or "leak" not in data:
         raise DetectionError(f"the judge response is missing a 'leak' field: {text[:80]!r}")
     return JudgeVerdict(

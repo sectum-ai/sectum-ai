@@ -447,22 +447,27 @@ class DetectionPipeline:
         # condition (which model embedded the entity) to the detector.
         self._stored_vectors: dict[str, tuple[float, ...]] = {}
         entity_token_counts: dict[str, int] = {}
+        entity_marker_count = 0
         for marker in self._markers:
             if marker.marker_type is MarkerType.ENTITY_CANARY:
+                entity_marker_count += 1
                 vector = self._embedder.embed(marker.plaintext)
                 self._entity_vectors[marker.marker_id] = vector
                 if marker.embedding_ref is not None:
                     self._stored_vectors[marker.embedding_ref] = vector
                 for token in set(_tokenize(marker.plaintext)):
                     entity_token_counts[token] = entity_token_counts.get(token, 0) + 1
-        # Tokens shared by 2+ entity-canary plaintexts are template boilerplate
-        # (every canary is "Project <codename>-<serial>", so "project" recurs) and
-        # are NOT distinctive evidence of any one marker. A judge-cited span that
-        # overlaps a marker only on such a token does not tie the leak to that
-        # marker (see _span_traceable) - self-calibrated from the manifest, so no
-        # hardcoded stoplist and no coupling to the substrate's entity template.
+        # A token is template boilerplate only when it recurs across a MAJORITY of
+        # the entity canaries (every canary is "Project <codename>-<serial>", so
+        # "project" is in all of them) - NOT distinctive evidence of any one marker.
+        # The majority test (rather than a bare >=2) is deliberate: two markers can
+        # randomly draw the same codename, and demoting that codename would drop a
+        # genuine leak of it. Self-calibrated from the manifest, so no hardcoded
+        # stoplist and no coupling to the substrate's entity template.
         self._entity_boilerplate: frozenset[str] = frozenset(
-            token for token, count in entity_token_counts.items() if count >= 2
+            token
+            for token, count in entity_token_counts.items()
+            if count >= 2 and 2 * count > entity_marker_count
         )
         self._warn_on_embedding_model_mismatch()
 
@@ -752,7 +757,15 @@ class DetectionPipeline:
         if marker_present:
             return True
         span_tokens = _tokenize(evidence_span)
-        distinctive_overlap = (set(span_tokens) & set(marker_tokens)) - boilerplate
+        # A pure-digit token (the canary's serial, e.g. "00002") is low-entropy and
+        # collides with everyday numbers (invoice / ticket / lot), so it can never
+        # on its own tie a span to a marker - drop it from the distinctive set. The
+        # alphabetic codename remains the load-bearing distinctive evidence.
+        distinctive_overlap = {
+            token
+            for token in (set(span_tokens) & set(marker_tokens)) - boilerplate
+            if not token.isdigit()
+        }
         if span_tokens and distinctive_overlap:
             return _ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
         return False
