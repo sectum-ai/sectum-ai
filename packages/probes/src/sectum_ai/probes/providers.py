@@ -164,8 +164,14 @@ class OpenAIEmbeddingProvider:
 
     @property
     def model_id(self) -> str:
-        """The embedding model name, for the pipeline's manifest-model check (the spec, 6.3)."""
-        return self._model
+        """The canonical embedding-model id, for the pipeline's manifest-model check (spec 6.3).
+
+        Returns the ``openai:<model>`` form the substrate stamps into a marker's
+        ``embedding_ref`` (``embedding_models[0]`` is a canonical ``kind:model``
+        spec, mirrored by ``embedder_model_name``), not the bare API model name -
+        otherwise the mismatch check would fire on a correctly-matched run.
+        """
+        return f"openai:{self._model}"
 
     def embed(self, text: str) -> tuple[float, ...]:
         """Return the embedding vector for ``text`` from the OpenAI API."""

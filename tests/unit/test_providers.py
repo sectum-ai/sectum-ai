@@ -567,3 +567,13 @@ def test_post_json_does_not_retry_a_non_retryable_client_error(
 
     assert attempts["n"] == 1  # raised at once
     assert slept == []  # no backoff for a non-retryable error
+
+
+def test_openai_embedder_model_id_is_canonical() -> None:
+    # The pipeline's manifest-model check compares model_id against the canonical
+    # "openai:<model>" form the substrate stamps into embedding_ref; a bare model
+    # name would false-alarm on a correctly-matched run.
+    assert OpenAIEmbeddingProvider("sk-test").model_id == "openai:text-embedding-3-small"
+    assert OpenAIEmbeddingProvider("sk-test", model="text-embedding-3-large").model_id == (
+        "openai:text-embedding-3-large"
+    )
