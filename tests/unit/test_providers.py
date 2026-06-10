@@ -589,6 +589,10 @@ def test_verdict_from_json_tolerates_stray_braces_in_narration() -> None:
         ('{"leak": false, "rationale": "no entity"} (confidence: high {note})', False),
         ('Analysis {step 1}: {"leak": true, "evidence_span": "x"}', True),
         ('```\n{"leak": false}\n```\nAlso: {"note": "x"}', False),
+        # A wrapper object holding a NESTED "leak" example before the real verdict:
+        # the scan must skip past the wrapper (not descend into its nested brace and
+        # latch the example), then take the real verdict.
+        ('e.g. {"result": {"leak": true}}\nverdict: {"leak": false}', False),
     ]
     for text, expected in cases:
         assert _verdict_from_json(text).leak is expected, text
