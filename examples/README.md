@@ -21,11 +21,11 @@ example is a self-contained directory with a `run.sh` script and a `README.md`.
 | [`open-webui-run/`](open-webui-run/) | Class 2 (flagship), 1, 11 | Sectum against a **self-hosted Open WebUI** (real product): seeds the substrate, uploads each tenant's corpus into Open WebUI Knowledge via its API, and measures the Retrieval-Pivot Rate through Open WebUI's chat-with-knowledge endpoint. Requires Docker; not part of the offline `SECTUM_RUN_E2E` suite. |
 | [`byoc-runner/`](byoc-runner/) | — | A BYOC operator workflow: a Sectum CLI install reads a Cloud snapshot subscription. |
 
-Each `run.sh` invokes the `sectum` CLI from this repository through `uv` and
+Each `run.sh` invokes the `sectum-ai` CLI from this repository through `uv` and
 writes its artifacts to an `out/` directory inside the example. Those `out/`
 directories are git-ignored.
 
-**Prerequisites:** [`uv`](https://docs.astral.sh/uv/). The scripts run `sectum`
+**Prerequisites:** [`uv`](https://docs.astral.sh/uv/). The scripts run `sectum-ai`
 via `uv run`, so no separate install step is needed.
 
 ```sh

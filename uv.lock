@@ -4428,7 +4428,7 @@ requires-dist = [
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.4" },
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.45" },
-    { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.21.3" },
+    { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
 ]
 provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "qdrant", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants", "anthropic-tooluse", "rag-langchain"]
 

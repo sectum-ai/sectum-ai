@@ -537,9 +537,9 @@ def test_a_judge_yes_with_a_traceable_span_stays_confirmed() -> None:
     assert confirmed, "a traceable affirmation must confirm"
 
 
-def _solo_entity_substrate(plaintext: str) -> Substrate:
-    """A minimal substrate carrying one foreign ENTITY_CANARY (owner _TB)."""
-    marker = _entity(plaintext)
+def _entity_substrate(*plaintexts: str) -> Substrate:
+    """A minimal substrate carrying foreign ENTITY_CANARY markers (owner _TB)."""
+    markers = tuple(_entity(plaintext) for plaintext in plaintexts)
     scenario = Scenario(
         scenario_id="custom",
         seed=1,
@@ -547,7 +547,7 @@ def _solo_entity_substrate(plaintext: str) -> Substrate:
             SyntheticTenantSpec(tenant_id=_TA, display_name="A", industry="x", corpus_size=1),
         ),
     )
-    manifest = GroundTruthManifest(manifest_id="m", scenario_hash="h", markers=(marker,))
+    manifest = GroundTruthManifest(manifest_id="m", scenario_hash="h", markers=markers)
     return Substrate(scenario=scenario, tenants=scenario.tenants, documents=(), manifest=manifest)
 
 
@@ -557,7 +557,7 @@ def test_a_judge_yes_with_an_in_text_but_marker_unrelated_span_is_not_confirmed(
     # irrelevant quote, or a primed/hallucinating verdict). With the marker itself
     # absent, that must NOT confirm - the cited evidence has to tie back to THIS
     # marker, not to any phrase the judge happened to quote.
-    substrate = _solo_entity_substrate("Project Pinnacle 00002")
+    substrate = _entity_substrate("Project Pinnacle 00002")
     pipeline = DetectionPipeline(
         substrate, FakeEmbeddingProvider(), _LyingJudge(span="quarterly onboarding report"), 0.0
     )
@@ -572,7 +572,7 @@ def test_a_judge_yes_with_a_paraphrase_span_sharing_a_marker_token_confirms() ->
     # The backstop must not over-reject: a paraphrase whose cited span is in the
     # observation AND shares a distinctive token with the marker ("Pinnacle")
     # confirms, even though the full marker plaintext is not verbatim present.
-    substrate = _solo_entity_substrate("Project Pinnacle 00002")
+    substrate = _entity_substrate("Project Pinnacle 00002")
     pipeline = DetectionPipeline(
         substrate, FakeEmbeddingProvider(), _LyingJudge(span="the Pinnacle initiative"), 0.0
     )
@@ -584,6 +584,44 @@ def test_a_judge_yes_with_a_paraphrase_span_sharing_a_marker_token_confirms() ->
         if f.marker_id == "e-Project Pinnacle 00002" and f.status is FindingStatus.CONFIRMED
     ]
     assert confirmed, "a paraphrase span tied to the marker by a shared token must confirm"
+
+
+def test_a_judge_yes_sharing_only_template_boilerplate_is_not_confirmed() -> None:
+    # Zero-FP: every entity canary is "Project <codename>-<serial>", so "project"
+    # is shared template boilerplate (in >=2 markers) - NOT distinctive evidence.
+    # A judge that cites a "project ..." span absent the distinctive codename/serial
+    # must stay UNVERIFIED, even though the span is present in the observation.
+    substrate = _entity_substrate("Project Zephyr 00002", "Project Lodestar 00003")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="the project is on schedule"), 0.0
+    )
+    text = "a benign note: the project is on schedule and the budget was approved"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    entity = [
+        f for f in findings if f.marker_id is not None and f.marker_id.startswith("e-Project")
+    ]
+    assert entity, "candidates must be retained as UNVERIFIED evidence"
+    assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
+
+
+def test_a_judge_yes_sharing_a_distinctive_token_still_confirms_in_a_multi_marker_manifest() -> (
+    None
+):
+    # The boilerplate filter must not over-reject: a span sharing the distinctive
+    # codename ("Zephyr"), present in the observation, still CONFIRMS its marker
+    # even though "project" is boilerplate across the manifest.
+    substrate = _entity_substrate("Project Zephyr 00002", "Project Lodestar 00003")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="the Zephyr rollout"), 0.0
+    )
+    text = "the Zephyr rollout came up in the retrieved account notes"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [
+        f
+        for f in findings
+        if f.marker_id == "e-Project Zephyr 00002" and f.status is FindingStatus.CONFIRMED
+    ]
+    assert confirmed, "a span sharing the distinctive codename must still confirm"
 
 
 class _CountingEmbedder:

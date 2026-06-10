@@ -1,7 +1,7 @@
 # sectum-ai
 
 **Multi-tenant AI verification.** This is the core distribution of [Sectum AI](https://github.com/sectum-ai/sectum-ai):
-the marker-substrate runner and the `sectum` command-line interface.
+the marker-substrate runner and the `sectum-ai` command-line interface.
 
 Sectum AI provisions synthetic tenants on an AI stack, seeds them with
 cryptographic canary markers, runs benign and adversarial probes from each
