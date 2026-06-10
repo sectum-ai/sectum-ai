@@ -52,7 +52,7 @@ Sectum AI deliberately does not:
 
 A verification run crosses these boundaries:
 
-1. **Operator → Sectum AI.** The operator runs the `sectum` CLI. The CLI is
+1. **Operator → Sectum AI.** The operator runs the `sectum-ai` CLI. The CLI is
    trusted to generate the substrate and execute probes deterministically.
 2. **Sectum AI → the system under test.** Sectum AI connects through adapters.
    Adapters resolve credentials from the environment or a secret manager — never

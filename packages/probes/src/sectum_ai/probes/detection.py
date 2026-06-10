@@ -705,23 +705,35 @@ class DetectionPipeline:
 
     @staticmethod
     def _span_traceable(text: str, evidence_span: str, marker: Marker) -> bool:
-        """Whether the judge's cited evidence is actually present in the observation.
+        """Whether a judge "yes" is tied back to *this* marker in the observation.
 
-        The needle is the judge's ``evidence_span``, or the marker plaintext when
-        the judge cited none (the claimed leaked entity itself must then be
-        evidenced). A span with no usable tokens (empty, or whitespace/punctuation
-        only) counts as "cited none" and falls back to the marker - otherwise a
-        real leak whose judge happened to quote junk would be lost. Presence uses
-        the same in-order-within-a-short-span token test the fake judge confirms
-        on, so a verbatim quote, a re-cased/NFKC-mangled leak, and a lightly
-        paraphrased entity all trace - but a span whose tokens do not appear in
-        order in the observation (a hallucinated or parroted quote) does not, and
-        the finding stays UNVERIFIED.
+        The spec 6.4 FP-control requires the leak to trace to the manifest marker -
+        not merely to some phrase the judge happened to quote. A judge "yes"
+        confirms only when one of two holds:
+
+        1. the marker plaintext itself is token-order-traceable in the observation
+           (a verbatim / re-cased / NFKC-mangled leak of the entity); or
+        2. the judge's cited ``evidence_span`` is traceable in the observation AND
+           shares a token with the marker - a genuine paraphrase of a distinctive
+           entity canary reproduces a distinctive token (the codename, the id),
+           which ties the cited evidence back to this marker.
+
+        So a judge that affirms a leak but cites an in-observation phrase unrelated
+        to the marker (a primed or hallucinating verdict, or a real-but-irrelevant
+        quote) does NOT confirm - the finding stays UNVERIFIED. The deterministic
+        fake judge cites the marker plaintext, so it always confirms via (1).
         """
-        needle_tokens = _tokenize(evidence_span) or _tokenize(marker.plaintext)
-        if not needle_tokens:
-            return False
-        return _ordered_within_span(_tokenize(text), needle_tokens, _MAX_INTERPOSED_TOKENS)
+        text_tokens = _tokenize(text)
+        marker_tokens = _tokenize(marker.plaintext)
+        marker_present = bool(marker_tokens) and _ordered_within_span(
+            text_tokens, marker_tokens, _MAX_INTERPOSED_TOKENS
+        )
+        if marker_present:
+            return True
+        span_tokens = _tokenize(evidence_span)
+        if span_tokens and set(span_tokens) & set(marker_tokens):
+            return _ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
+        return False
 
     def _best_window_similarity(
         self,

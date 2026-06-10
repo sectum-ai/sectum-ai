@@ -16,7 +16,7 @@ Prices are not listed here (they change independently of the code) — see
 | **Erasure Attestation** (the wedge) | A churned tenant's data has actually left every configured AI surface after a GDPR Article 17 request | `sectum-ai erasure --target-tenant …` (Class 11) → DPO-facing PDF + signed `evidence.json` | OSS CLI; Cloud hosts + schedules |
 | **SOC 2 Tenant Isolation Evidence Pack** | Logical separation, boundary, and segregation between tenants hold across the AI surfaces | `sectum-ai probe --suite soc2-tenant-isolation` → control-mapped pack | OSS CLI; Cloud + auditor channel |
 | **Continuous Multi-Tenant Verification** | Isolation still holds release over release (no regression) | `sectum-ai probe` (full) + `sectum-ai baseline` / `sectum-ai diff`, scheduled | Cloud (scheduled runs + dashboard); OSS runs it one-shot |
-| **Open Sectum** | — (the substrate, attack catalog, adapters, and `verify`) | the `sectum` CLI | OSS, free (Apache-2.0) |
+| **Open Sectum** | — (the substrate, attack catalog, adapters, and `verify`) | the `sectum-ai` CLI | OSS, free (Apache-2.0) |
 
 The first three are revenue SKUs; **Open Sectum** is the free core that makes the
 evidence independently verifiable and serves as category authority and lead-gen.

@@ -858,16 +858,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `urlopen` now uses a 30s timeout and wraps a `URLError`/timeout in `AdapterError`,
   so a hung or unreachable backend fails the run cleanly instead of blocking it or
   surfacing a raw urllib error.
-- **A judge "yes" no longer confirms a finding on its own.** The detection
-  pipeline now enforces the spec §6.4 false-positive control for every judge:
-  a semantic candidate is CONFIRMED only when the judge's cited evidence span
-  (or the marker itself, when no span is cited) is token-order traceable in
-  the observation. A real LLM judge is primed with the marker plaintext, so a
-  parroting or hallucinating verdict could previously place a fabricated
-  CONFIRMED finding - with a fabricated quoted span - into the signed audit
-  pack. Untraceable affirmations are downgraded to UNVERIFIED candidates with
-  the downgrade reason recorded. The deterministic fake judge's behavior is
-  unchanged (the backstop is the same test it already applied).
+- **A judge "yes" no longer confirms a finding on its own; it must tie back to the
+  marker.** The detection pipeline enforces the spec §6.4 false-positive control
+  for every judge: a semantic candidate is CONFIRMED only when the marker
+  plaintext itself is token-order traceable in the observation, or the judge's
+  cited evidence span is traceable AND shares a token with the marker (a genuine
+  paraphrase of a distinctive canary reproduces a distinctive token). A real LLM
+  judge is primed with the marker plaintext, so a parroting or hallucinating
+  verdict - or one that cites a real but marker-unrelated phrase - could otherwise
+  place a fabricated CONFIRMED finding into the signed audit pack. Such
+  affirmations are downgraded to UNVERIFIED candidates with the downgrade reason
+  recorded. The deterministic fake judge's behavior is unchanged (it cites the
+  marker plaintext, which confirms via the marker-presence path).
 - **`calibrate` publishes the full-precision threshold.** The recommended
   threshold was rounded to 4 decimals for display, which could move the gate
   below a negative example the sweep had certified as excluded - silently
