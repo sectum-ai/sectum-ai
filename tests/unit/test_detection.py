@@ -597,7 +597,9 @@ def test_a_judge_yes_sharing_only_template_boilerplate_is_not_confirmed() -> Non
     )
     text = "a benign note: the project is on schedule and the budget was approved"
     findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
-    entity = [f for f in findings if f.marker_id.startswith("e-Project")]
+    entity = [
+        f for f in findings if f.marker_id is not None and f.marker_id.startswith("e-Project")
+    ]
     assert entity, "candidates must be retained as UNVERIFIED evidence"
     assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
 
