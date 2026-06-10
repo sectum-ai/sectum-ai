@@ -415,6 +415,17 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
     return [best[finding_id] for finding_id in order]
 
 
+def _canonical_embedding_model(model: str) -> str:
+    """Collapse a manifest/embedder model name to its embedding-space identity.
+
+    Every ``fake-*`` name (``fake-deterministic``, and the ``fake-mini`` /
+    ``fake-base`` / ``fake-strong`` sweep labels) maps to the one offline
+    ``FakeEmbeddingProvider`` space - it is name-agnostic - so they compare equal.
+    Any other name is its own space and is returned unchanged.
+    """
+    return "fake" if model.startswith("fake-") else model
+
+
 class DetectionPipeline:
     """Applies exact then semantic then judge detection against a substrate."""
 
@@ -453,7 +464,11 @@ class DetectionPipeline:
         space than the manifest records and any calibrated threshold may not
         apply. The check is best-effort: it stays silent unless the embedder
         exposes a ``model_id`` and the manifest declares a model (so it never
-        warns spuriously on an embedder that cannot name itself).
+        warns spuriously on an embedder that cannot name itself). Every ``fake-*``
+        name collapses to one bucket first: the offline ``FakeEmbeddingProvider``
+        ignores the model label (it is name-agnostic), so a ``fake-mini`` /
+        ``fake-base`` / ``fake-strong`` sweep manifest shares the fake's single
+        embedding space and must not warn.
         """
         embedder_model = getattr(self._embedder, "model_id", None)
         if embedder_model is None:
@@ -463,7 +478,9 @@ class DetectionPipeline:
             for marker in self._markers
             if marker.marker_type is MarkerType.ENTITY_CANARY and marker.embedding_ref is not None
         }
-        if manifest_models and embedder_model not in manifest_models:
+        if manifest_models and _canonical_embedding_model(embedder_model) not in {
+            _canonical_embedding_model(model) for model in manifest_models
+        }:
             _log.warning(
                 "detect.embedding_ref.model_mismatch",
                 embedder_model=embedder_model,
@@ -692,14 +709,16 @@ class DetectionPipeline:
 
         The needle is the judge's ``evidence_span``, or the marker plaintext when
         the judge cited none (the claimed leaked entity itself must then be
-        evidenced). Presence uses the same in-order-within-a-short-span token test
-        the fake judge confirms on, so a verbatim quote, a re-cased/NFKC-mangled
-        leak, and a lightly paraphrased entity all trace - but a span whose tokens
-        do not appear in order in the observation (a hallucinated or parroted
-        quote) does not, and the finding stays UNVERIFIED.
+        evidenced). A span with no usable tokens (empty, or whitespace/punctuation
+        only) counts as "cited none" and falls back to the marker - otherwise a
+        real leak whose judge happened to quote junk would be lost. Presence uses
+        the same in-order-within-a-short-span token test the fake judge confirms
+        on, so a verbatim quote, a re-cased/NFKC-mangled leak, and a lightly
+        paraphrased entity all trace - but a span whose tokens do not appear in
+        order in the observation (a hallucinated or parroted quote) does not, and
+        the finding stays UNVERIFIED.
         """
-        needle = evidence_span or marker.plaintext
-        needle_tokens = _tokenize(needle)
+        needle_tokens = _tokenize(evidence_span) or _tokenize(marker.plaintext)
         if not needle_tokens:
             return False
         return _ordered_within_span(_tokenize(text), needle_tokens, _MAX_INTERPOSED_TOKENS)

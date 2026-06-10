@@ -88,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OSCAL *observation* per finding (the marker-grounded evidence, with the Sectum
   finding id/status/surface in `props` for traceability back to the signed record)
   and one OSCAL *finding* per mapped framework control from `control_mappings()`
-  (SOC 2, ISO 27001, GDPR, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM Top 10), each
+  (SOC 2, ISO 27001, ISO/IEC 42001, GDPR, CCPA/CPRA, EU AI Act, HIPAA, NIST AI
+  RMF, OWASP LLM Top 10), each
   linking to the observations via `related-observations`. Status is honest:
   `target.status.state` is `not-satisfied` only when a **confirmed**
   (manifest-grounded) cross-tenant leak exists; an UNVERIFIED candidate is recorded
