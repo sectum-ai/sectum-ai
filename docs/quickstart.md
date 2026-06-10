@@ -1,6 +1,6 @@
 # Quickstart
 
-Sectum AI ships a `uv` workspace and a `sectum` CLI.
+Sectum AI ships a `uv` workspace and a `sectum-ai` CLI.
 [`uv`](https://docs.astral.sh/uv/) is the only prerequisite.
 
 ## Run the flagship demo
