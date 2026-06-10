@@ -32,7 +32,11 @@ echo
 echo "==> 2/4  Probe the LoRA stack (per-tenant train + cross-tenant inference)"
 # 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on the
 # leaky-bleed fake model in the demo config, so tolerate the non-zero exit.
-sectum-ai probe --workdir "$out" --probe lora-cross-tenant || true
+rc=0; sectum-ai probe --workdir "$out" --probe lora-cross-tenant || rc=$?
+if [ "$rc" -ne 2 ]; then
+  echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
+  exit 1
+fi
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"

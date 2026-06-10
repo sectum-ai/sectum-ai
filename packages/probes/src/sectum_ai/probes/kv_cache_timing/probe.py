@@ -232,7 +232,14 @@ class KvCacheTimingProbe:
         self._model = model
 
     def run(self) -> KvCacheTimingReport:
-        """Warm the cache per tenant, then time prefix-sharing prompts from every other."""
+        """Warm the cache per tenant, then time prefix-sharing prompts from every other.
+
+        Warm-up primes the owner's prefix via ``ModelAdapter.infer`` while the
+        measurement reads latency via ``measure_latency``; this assumes the
+        adapter contract that both touch the *same* prefix cache (the fake and the
+        HuggingFace adapter comply - HF's ``measure_latency_ms`` calls ``infer``).
+        An adapter whose two paths use independent caches would show no signal.
+        """
         tenants = [tenant.tenant_id for tenant in self._substrate.tenants]
         signals: list[TimingSignal] = []
         findings: list[Finding] = []

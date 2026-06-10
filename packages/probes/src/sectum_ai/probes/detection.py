@@ -515,9 +515,10 @@ class DetectionPipeline:
         """
         observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
         observation_tokens = _tokenize(observation_text)
+        window_cache: dict[str, tuple[float, ...]] = {}
         best = 0.0
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
-            best = max(best, self._best_window_similarity(observation_tokens, marker))
+            best = max(best, self._best_window_similarity(observation_tokens, marker, window_cache))
         # Clamp defensively: a true cosine is already <= 1.0, but float rounding
         # can nudge it just past 1.0 (the same clamp _semantic applies before it
         # writes Finding.confidence), which would break a calibration's [0, 1] bound.
@@ -601,8 +602,13 @@ class DetectionPipeline:
     ) -> list[Finding]:
         findings: list[Finding] = []
         observation_tokens = _tokenize(text)
+        # One window->vector cache for the whole observation: every entity marker
+        # tokenizes to the same window size, so without this each distinct window
+        # is re-embedded once per foreign marker (~Nx the HTTP calls on a real
+        # embedder). The cache makes each window embed exactly once per observation.
+        window_cache: dict[str, tuple[float, ...]] = {}
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
-            similarity = self._best_window_similarity(observation_tokens, marker)
+            similarity = self._best_window_similarity(observation_tokens, marker, window_cache)
             # The threshold gates which candidates reach the judge. With the
             # deterministic fake providers the judge (a full marker-phrase
             # match) is the binding test; the threshold becomes the real
@@ -666,12 +672,22 @@ class DetectionPipeline:
             return False
         return _ordered_within_span(_tokenize(text), needle_tokens, _MAX_INTERPOSED_TOKENS)
 
-    def _best_window_similarity(self, observation_tokens: list[str], marker: Marker) -> float:
+    def _best_window_similarity(
+        self,
+        observation_tokens: list[str],
+        marker: Marker,
+        window_cache: dict[str, tuple[float, ...]] | None = None,
+    ) -> float:
         """Return the max cosine between ``marker`` and any observation window.
 
         Comparing against windows the size of the marker keeps the score robust
         to observation length: a marker surfaced anywhere in a long response
         still scores highly, where a whole-text cosine would be diluted.
+
+        ``window_cache`` (optional) memoizes window-text -> embedding across the
+        markers of one observation, so each distinct window embeds at most once
+        per observation rather than once per marker (a real embedder makes one
+        HTTP call per embed).
         """
         # Read the marker's vector from the store keyed by its manifest
         # embedding_ref (the spec, section 6.3) when present, else fall back to
@@ -683,7 +699,14 @@ class DetectionPipeline:
         window_size = len(_tokenize(marker.plaintext))
         best = 0.0
         for window in _token_windows(observation_tokens, window_size):
-            best = max(best, _cosine(self._embedder.embed(" ".join(window)), marker_vector))
+            window_text = " ".join(window)
+            if window_cache is not None and window_text in window_cache:
+                window_vector = window_cache[window_text]
+            else:
+                window_vector = self._embedder.embed(window_text)
+                if window_cache is not None:
+                    window_cache[window_text] = window_vector
+            best = max(best, _cosine(window_vector, marker_vector))
         return best
 
     def _finding(

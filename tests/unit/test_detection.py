@@ -9,12 +9,18 @@ from sectum_ai.probes import (
     confirmed_findings,
     dedupe_findings,
 )
-from sectum_ai.probes.detection import JudgeVerdict
+from sectum_ai.probes.detection import (
+    JudgeVerdict,
+    _token_windows,
+    _tokenize,
+    is_cross_principal,
+)
 from sectum_ai.spec import (
     FindingStatus,
     GroundTruthManifest,
     Marker,
     MarkerType,
+    Principal,
     Scenario,
     Severity,
     Substrate,
@@ -526,3 +532,47 @@ def test_a_judge_yes_with_a_traceable_span_stays_confirmed() -> None:
         if f.marker_id == marker.marker_id and f.status is FindingStatus.CONFIRMED
     ]
     assert confirmed, "a traceable affirmation must confirm"
+
+
+class _CountingEmbedder:
+    """Wraps the fake embedder and counts embed() calls (to prove the window cache)."""
+
+    def __init__(self) -> None:
+        self._inner = FakeEmbeddingProvider()
+        self.calls = 0
+
+    def embed(self, text: str) -> tuple[float, ...]:
+        self.calls += 1
+        return self._inner.embed(text)
+
+
+def test_window_embeddings_are_cached_across_markers_in_one_observation() -> None:
+    # With several foreign entity markers, every distinct candidate window must be
+    # embedded exactly once per observation - the per-observation cache dedupes
+    # windows shared across markers (without it the count would be summed per
+    # marker, re-embedding the same window text repeatedly).
+    substrate = build_substrate(default_scenario(seed=7))
+    counting = _CountingEmbedder()
+    pipeline = DetectionPipeline(substrate, counting, FakeJudge(), 0.0)
+    observer = Principal(tenant_id=substrate.tenants[1].tenant_id)
+
+    text = "a quarterly report mentioning several projects and onboarding timelines"
+    observation_tokens = _tokenize(text)
+    foreign_entities = [
+        marker
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.ENTITY_CANARY and is_cross_principal(marker, observer)
+    ]
+    assert len(foreign_entities) >= 2, "need >=2 foreign markers to exercise cross-marker caching"
+    # The exact set of distinct window texts the semantic stage embeds, derived
+    # with the pipeline's own window sizing (one window per marker plaintext len).
+    distinct_windows = {
+        " ".join(window)
+        for marker in foreign_entities
+        for window in _token_windows(observation_tokens, len(_tokenize(marker.plaintext)))
+    }
+
+    counting.calls = 0  # ignore the construction-time marker-vector embeddings
+    pipeline.detect(observer.tenant_id, text, Surface.VECTOR_DB, probe_id="p")
+
+    assert counting.calls == len(distinct_windows)

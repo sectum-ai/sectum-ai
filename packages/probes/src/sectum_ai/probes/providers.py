@@ -19,8 +19,10 @@ observed text, as the engineering spec section 6.4 requires (to avoid priming).
 """
 
 import json
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Any
 
 from sectum_ai.probes.detection import JudgeVerdict
@@ -29,6 +31,15 @@ from sectum_ai.spec import DetectionError, Marker
 _OPENAI_BASE = "https://api.openai.com/v1"
 _ANTHROPIC_BASE = "https://api.anthropic.com/v1"
 _ANTHROPIC_VERSION = "2023-06-01"
+
+# Bounded retry for transient provider failures (timeouts, connection resets,
+# HTTP 429/5xx). A real run issues many judge/embed calls; without this a single
+# blip aborts the whole run. The retry is bounded and the FINAL failure still
+# raises - a run that cannot detect must fail loudly, never yield a partial,
+# falsely-clean attestation. A non-retryable client error (4xx other than 429)
+# raises immediately. Sleeps are short and deterministic in length.
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+_RETRY_BACKOFF_S: tuple[float, ...] = (0.5, 1.0, 2.0)
 
 _JUDGE_SYSTEM = (
     "You are a strict data-isolation auditor for a multi-tenant AI system. You "
@@ -45,22 +56,46 @@ _JUDGE_SYSTEM = (
 
 
 def _post_json(
-    url: str, payload: dict[str, Any], headers: dict[str, str], timeout: float
+    url: str,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    timeout: float,
+    *,
+    _sleep: "Callable[[float], None]" = time.sleep,
 ) -> dict[str, Any]:
-    """POST ``payload`` as JSON; return the parsed JSON object or raise DetectionError."""
+    """POST ``payload`` as JSON; return the parsed JSON object or raise DetectionError.
+
+    Retries a transient failure (timeout / connection error / HTTP 429 / 5xx) up
+    to ``len(_RETRY_BACKOFF_S)`` times with a short backoff; a non-retryable HTTP
+    client error (4xx other than 429) raises at once, and the final transient
+    failure raises too - the caller must fail loudly rather than detect partially.
+    (``_sleep`` is injectable so tests need not wait.)
+    """
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
         headers={"Content-Type": "application/json", **headers},
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read()
-    except urllib.error.HTTPError as error:
-        raise DetectionError(f"the provider at {url} returned HTTP {error.code}") from error
-    except OSError as error:
-        raise DetectionError(f"the provider request to {url} failed: {error}") from error
+    last_error: Exception | None = None
+    for attempt in range(len(_RETRY_BACKOFF_S) + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read()
+            break
+        except urllib.error.HTTPError as error:
+            if error.code not in _RETRYABLE_STATUS:
+                raise DetectionError(f"the provider at {url} returned HTTP {error.code}") from error
+            last_error = error
+        except OSError as error:  # timeouts, connection resets, DNS, etc.
+            last_error = error
+        if attempt < len(_RETRY_BACKOFF_S):
+            _sleep(_RETRY_BACKOFF_S[attempt])
+        else:
+            raise DetectionError(
+                f"the provider request to {url} failed after "
+                f"{len(_RETRY_BACKOFF_S) + 1} attempts: {last_error}"
+            ) from last_error
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError as error:

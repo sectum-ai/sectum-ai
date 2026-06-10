@@ -23,7 +23,11 @@ sectum-ai seed --workdir "$out"
 
 echo
 echo "==> 2/4  Probe the semantic cache (cross-tenant hit on a primed canary)"
-sectum-ai probe --workdir "$out" --probe semantic-cache-contamination || true
+rc=0; sectum-ai probe --workdir "$out" --probe semantic-cache-contamination || rc=$?
+if [ "$rc" -ne 2 ]; then
+  echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
+  exit 1
+fi
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"

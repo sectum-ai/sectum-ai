@@ -23,7 +23,11 @@ sectum-ai seed --workdir "$out"
 
 echo
 echo "==> 2/4  Probe embedding inversion (cross-tenant ANN reconstruction)"
-sectum-ai probe --workdir "$out" --probe embedding-inversion || true
+rc=0; sectum-ai probe --workdir "$out" --probe embedding-inversion || rc=$?
+if [ "$rc" -ne 2 ]; then
+  echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
+  exit 1
+fi
 
 echo
 echo "==> 3/4  Assemble the tamper-evident evidence pack (JSON + PDF)"
