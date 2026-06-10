@@ -282,6 +282,10 @@ class FakeEmbeddingProvider:
     """
 
     dim = 96
+    # Mirrors the substrate's _DEFAULT_EMBEDDING_MODEL: a manifest seeded offline
+    # records this model in each entity marker's embedding_ref, so a default fake
+    # run matches and the pipeline's embedding-model check stays silent.
+    model_id = "fake-deterministic"
 
     def embed(self, text: str) -> tuple[float, ...]:
         """Return a unit-normalized hashing-trick vector for ``text``."""
@@ -437,6 +441,34 @@ class DetectionPipeline:
                 self._entity_vectors[marker.marker_id] = vector
                 if marker.embedding_ref is not None:
                     self._stored_vectors[marker.embedding_ref] = vector
+        self._warn_on_embedding_model_mismatch()
+
+    def _warn_on_embedding_model_mismatch(self) -> None:
+        """Warn when the detection embedder differs from the manifest's declared model.
+
+        Each entity marker's ``embedding_ref`` is ``{model}/{digest}`` (the spec,
+        section 6.3): it records *which* embedding model the manifest's semantic
+        test condition assumes. The detector re-embeds with its own embedder, so a
+        mismatch means semantic similarity is computed in a different embedding
+        space than the manifest records and any calibrated threshold may not
+        apply. The check is best-effort: it stays silent unless the embedder
+        exposes a ``model_id`` and the manifest declares a model (so it never
+        warns spuriously on an embedder that cannot name itself).
+        """
+        embedder_model = getattr(self._embedder, "model_id", None)
+        if embedder_model is None:
+            return
+        manifest_models = {
+            marker.embedding_ref.rsplit("/", 1)[0]
+            for marker in self._markers
+            if marker.marker_type is MarkerType.ENTITY_CANARY and marker.embedding_ref is not None
+        }
+        if manifest_models and embedder_model not in manifest_models:
+            _log.warning(
+                "detect.embedding_ref.model_mismatch",
+                embedder_model=embedder_model,
+                manifest_models=sorted(manifest_models),
+            )
 
     def detect(
         self,

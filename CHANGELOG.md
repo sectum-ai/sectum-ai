@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The detection pipeline warns on an embedding-model mismatch.** At
+  construction it compares the embedder's `model_id` against the model the
+  manifest records in each entity marker's `embedding_ref` (the spec, section
+  6.3) and logs `detect.embedding_ref.model_mismatch` when they differ - so a run
+  whose detection embedder is not the model the manifest's semantic test
+  condition assumes (a different embedding space, where a calibrated threshold may
+  not apply) is flagged rather than silently trusted. Best-effort: silent unless
+  the embedder names itself.
 - **Qdrant vector adapter (`kind: qdrant`, `[qdrant]` extra).** A live
   `VectorStoreAdapter` backed by a Qdrant server, one collection per tenant
   (per-tenant isolation), with optional user-scoping via a payload filter +
@@ -741,6 +749,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **KV-cache timing applies a Bonferroni correction across tenant pairs.** A run
+  performs one Welch's t-test per ordered tenant pair, so judging each at the
+  per-pair `_ALPHA` inflated the family-wise false-positive rate. The run now
+  divides the significance level by the number of comparisons, so the run-wide
+  rate stays at `_ALPHA` - a conservative guard against reporting timing noise as
+  a side channel. Each finding's evidence span records the corrected level.
+- **The KV-cache timing probe runs on a freshly built model adapter.** It
+  previously shared the suite's model instance, which the Class 9 LoRA probe
+  trains/mutates - a contaminated adapter state could confound the prefix-cache
+  timing. The CLI now builds a fresh model for the timing run (also giving it the
+  cold cache its measurement warms).
 - **Schema bump `0.3.0` → `0.4.0`** for the new `RunMetrics.erasure_coverage`
   block. The committed JSON Schemas, the default-scenario golden hashes, and the
   shipped sample evidence packs under `docs/samples/` are regenerated to 0.4.0; a

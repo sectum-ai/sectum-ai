@@ -9,10 +9,13 @@ second tenant can tell what the first tenant recently asked.
 Class 5 is a statistical workflow rather than a plan/detect probe, so - like the
 Class 11 erasure probe - it exposes its own ``run`` entry point. Per the spec's
 "avoid over-claiming" requirement, a finding is reported only when the timing gap
-is *both* statistically significant (a two-sided Welch's t-test below ``_ALPHA``)
-*and* practically large (Cohen's d above ``_EFFECT_THRESHOLD``), in the expected
-direction (the primed prompt is faster). Each finding carries the p-value and a
-confidence interval on the gap so an auditor can judge the strength of evidence.
+is *both* statistically significant (a two-sided Welch's t-test below a
+Bonferroni-corrected level - ``_ALPHA`` divided by the number of tenant-pair
+comparisons, so the family-wise false-positive rate across all pairs stays at
+``_ALPHA``) *and* practically large (Cohen's d above ``_EFFECT_THRESHOLD``), in
+the expected direction (the primed prompt is faster). Each finding carries the
+p-value, the corrected level, and a confidence interval on the gap so an auditor
+can judge the strength of evidence.
 
 The statistics are pure standard library: the Student's t survival function is
 the regularized incomplete beta function (a Numerical Recipes continued
@@ -65,19 +68,30 @@ class TimingSignal:
     ci_low_ms: float
     ci_high_ms: float
 
-    @property
-    def significant(self) -> bool:
-        """Whether the gap is statistically significant, practically large, and directional.
+    def is_significant_at(self, alpha: float) -> bool:
+        """Whether the gap clears ``alpha`` and is practically large and directional.
 
         All three must hold to report a finding (the spec's "avoid over-claiming"):
-        a significant p-value, a large effect size, and the primed prompt being
-        the faster one (a positive gap).
+        a p-value below ``alpha``, a large effect size, and the primed prompt
+        being the faster one (a positive gap). ``run`` passes a Bonferroni-
+        corrected ``alpha`` (the per-pair level divided by the number of tenant-
+        pair comparisons) so the *family-wise* false-positive rate across every
+        pair stays at ``_ALPHA``, rather than ``_ALPHA`` leaking once per pair.
         """
         return (
-            self.p_value < _ALPHA
+            self.p_value < alpha
             and self.effect_size >= _EFFECT_THRESHOLD
             and self.mean_gap_ms > 0.0
         )
+
+    @property
+    def significant(self) -> bool:
+        """Per-pair significance at the uncorrected ``_ALPHA`` (no multiplicity correction).
+
+        This judges a single pair in isolation; the run as a whole applies a
+        Bonferroni correction across all pairs (see :meth:`is_significant_at`).
+        """
+        return self.is_significant_at(_ALPHA)
 
 
 @dataclass(frozen=True)
@@ -250,9 +264,16 @@ class KvCacheTimingProbe:
                 if observer == owner:
                     continue
                 signals.append(self._measure(owner, observer, prefix))
+        # Bonferroni correction: a run performs one Welch's t-test per ordered
+        # tenant pair, so judging each at _ALPHA would inflate the family-wise
+        # false-positive rate (roughly comparisons * _ALPHA). Dividing the level
+        # by the number of comparisons holds the run-wide rate at _ALPHA - a
+        # conservative guard against reporting noise as a side channel.
+        comparisons = max(1, len(tenants) * (len(tenants) - 1))
+        alpha = _ALPHA / comparisons
         for signal in signals:
-            if signal.significant:
-                findings.append(self._finding(signal))
+            if signal.is_significant_at(alpha):
+                findings.append(self._finding(signal, alpha))
         return KvCacheTimingReport(signals=tuple(signals), findings=tuple(findings))
 
     def _measure(self, owner: UUID, observer: UUID, prefix: str) -> TimingSignal:
@@ -284,7 +305,7 @@ class KvCacheTimingProbe:
             ci_high_ms=round(mean_gap + margin, 2),
         )
 
-    def _finding(self, signal: TimingSignal) -> Finding:
+    def _finding(self, signal: TimingSignal, alpha: float) -> Finding:
         severity = Severity.HIGH if signal.effect_size >= _LARGE_EFFECT else Severity.MEDIUM
         p_text = "<0.0001" if signal.p_value < 0.0001 else f"{signal.p_value:.4g}"
         return Finding(
@@ -306,7 +327,7 @@ class KvCacheTimingProbe:
                 f"control {signal.control_mean_ms}ms (gap {signal.mean_gap_ms}ms, "
                 f"{int(_CI_LEVEL * 100)}% CI [{signal.ci_low_ms}, {signal.ci_high_ms}]ms); "
                 f"Welch t={signal.t_statistic}, df={signal.degrees_of_freedom}, p={p_text}, "
-                f"Cohen's d={signal.effect_size}"
+                f"Cohen's d={signal.effect_size}; significant at Bonferroni alpha={alpha:.2g}"
             ),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,

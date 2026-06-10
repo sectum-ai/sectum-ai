@@ -2,6 +2,8 @@
 
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.probes import (
     DetectionPipeline,
     FakeEmbeddingProvider,
@@ -576,3 +578,52 @@ def test_window_embeddings_are_cached_across_markers_in_one_observation() -> Non
     pipeline.detect(observer.tenant_id, text, Surface.VECTOR_DB, probe_id="p")
 
     assert counting.calls == len(distinct_windows)
+
+
+class _NamedEmbedder:
+    """A fake embedder that reports a model_id, to exercise the manifest-model check."""
+
+    def __init__(self, model_id: str) -> None:
+        self.model_id = model_id
+        self._inner = FakeEmbeddingProvider()
+
+    def embed(self, text: str) -> tuple[float, ...]:
+        return self._inner.embed(text)
+
+
+class _SpyLog:
+    """Records the structlog event names a pipeline emits (config-independent)."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    def warning(self, event: str, **_kw: object) -> None:
+        self.events.append(event)
+
+    def __getattr__(self, _name: str) -> object:
+        return lambda *_a, **_k: None
+
+
+def test_pipeline_warns_when_embedder_differs_from_the_manifest_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The default offline manifest declares "fake-deterministic" in its entity
+    # embedding_refs; an embedder naming a different model must warn that the
+    # semantic space (and any calibrated threshold) no longer matches.
+    spy = _SpyLog()
+    monkeypatch.setattr("sectum_ai.probes.detection._log", spy)
+    substrate = build_substrate(default_scenario(seed=7))
+    DetectionPipeline(substrate, _NamedEmbedder("text-embedding-3-small"), FakeJudge(), 0.0)
+    assert "detect.embedding_ref.model_mismatch" in spy.events
+
+
+def test_pipeline_is_silent_when_embedder_matches_the_manifest_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The default FakeEmbeddingProvider reports model_id "fake-deterministic", which
+    # matches the offline manifest, so construction must not warn.
+    spy = _SpyLog()
+    monkeypatch.setattr("sectum_ai.probes.detection._log", spy)
+    substrate = build_substrate(default_scenario(seed=7))
+    DetectionPipeline(substrate, FakeEmbeddingProvider(), FakeJudge(), 0.0)
+    assert "detect.embedding_ref.model_mismatch" not in spy.events

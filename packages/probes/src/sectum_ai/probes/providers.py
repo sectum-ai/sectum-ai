@@ -162,6 +162,11 @@ class OpenAIEmbeddingProvider:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
 
+    @property
+    def model_id(self) -> str:
+        """The embedding model name, for the pipeline's manifest-model check (the spec, 6.3)."""
+        return self._model
+
     def embed(self, text: str) -> tuple[float, ...]:
         """Return the embedding vector for ``text`` from the OpenAI API."""
         body = _post_json(

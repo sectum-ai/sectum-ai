@@ -197,10 +197,19 @@ def test_finding_severity_scales_with_effect_size() -> None:
     probe = KvCacheTimingProbe(
         build_substrate(default_scenario(seed=2026)), model=FakeModel(prefix_cache=True)
     )
-    medium = probe._finding(_signal(p_value=0.001, effect_size=4.9, mean_gap_ms=5.0))
-    high = probe._finding(_signal(p_value=0.001, effect_size=5.1, mean_gap_ms=5.0))
+    medium = probe._finding(_signal(p_value=0.001, effect_size=4.9, mean_gap_ms=5.0), 0.001)
+    high = probe._finding(_signal(p_value=0.001, effect_size=5.1, mean_gap_ms=5.0), 0.001)
     assert medium.severity is Severity.MEDIUM
     assert high.severity is Severity.HIGH
+
+
+def test_bonferroni_corrected_level_is_stricter_than_the_per_pair_alpha() -> None:
+    # A gap below the per-pair _ALPHA (0.01) but above a Bonferroni-corrected
+    # level is per-pair significant yet must fail the run-wide multiplicity test,
+    # so a run over many tenant pairs does not report borderline noise.
+    signal = _signal(p_value=0.005, effect_size=9.0, mean_gap_ms=5.0)
+    assert signal.significant  # judged alone, at _ALPHA
+    assert not signal.is_significant_at(0.001)  # judged run-wide, corrected
 
 
 def test_welch_handles_zero_variance_samples() -> None:
