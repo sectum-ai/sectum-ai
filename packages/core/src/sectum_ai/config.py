@@ -8,7 +8,8 @@ built-in defaults would otherwise use (the engineering spec, section 10).
 ``build_adapters`` turns the config's ``adapters`` block into concrete
 adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
-adapters (for example ``pgvector``/``chroma``/``weaviate``/``pinecone`` for the
+adapters (for example
+``pgvector``/``chroma``/``weaviate``/``pinecone``/``qdrant`` for the
 vector store, ``redis`` for the cache,
 ``phoenix``/``langfuse``/``langsmith``/``otel``/``helicone``/``datadog``
 for observability, ``http``/``langchain`` for RAG,

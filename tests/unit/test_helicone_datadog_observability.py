@@ -187,3 +187,35 @@ def test_erasure_unsupported_is_an_adapter_error() -> None:
     from sectum_ai.spec import AdapterError
 
     assert issubclass(ErasureUnsupported, AdapterError)
+
+
+def test_helicone_http_client_wraps_a_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A URLError/timeout from the HTTP layer must surface as a typed AdapterError,
+    # not a raw urllib error, so a hung/unreachable backend fails the run cleanly.
+    import urllib.error
+
+    from sectum_ai.adapters.observability.helicone import _HttpHeliconeClient
+    from sectum_ai.spec import AdapterError
+
+    def boom(request: Any, timeout: float) -> Any:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr("sectum_ai.adapters.observability.helicone.urllib.request.urlopen", boom)
+    client = _HttpHeliconeClient("k", base_url="http://x", tenant_property="tenant")
+    with pytest.raises(AdapterError, match="helicone request"):
+        client.query_requests("tenant-a")
+
+
+def test_datadog_http_client_wraps_a_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    from sectum_ai.adapters.observability.datadog import _HttpDatadogClient
+    from sectum_ai.spec import AdapterError
+
+    def boom(request: Any, timeout: float) -> Any:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr("sectum_ai.adapters.observability.datadog.urllib.request.urlopen", boom)
+    client = _HttpDatadogClient("k", "app", base_url="http://x", tenant_tag="tenant")
+    with pytest.raises(AdapterError, match="datadog request"):
+        client._post("@tenant:tenant-a")

@@ -28,12 +28,12 @@ uv run pre-commit install   # enable git hooks
 | Format | `uv run ruff format .` |
 | Type-check | `uv run mypy` |
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
-| Run the CLI | `uv run sectum --help` |
+| Run the CLI | `uv run sectum-ai --help` |
 
 The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the
 local backends up with `docker compose up -d --wait` (pgvector, Chroma, Weaviate,
-Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against the live
+Qdrant, Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against the live
 adapters. CI runs them too, in the dedicated **Integration** job.
 
 ## Conventions

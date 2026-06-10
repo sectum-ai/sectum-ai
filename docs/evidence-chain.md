@@ -23,7 +23,7 @@ verifies independently.
 ## Trusted timestamping (RFC 3161)
 
 `sectum-ai report --tsa <url>` (or `evidence.timestamper: rfc3161` in `sectum-ai.yaml`)
-submits the run digest to an RFC 3161 Time-Stamp Authority and stores the
+submits the attested digest to an RFC 3161 Time-Stamp Authority and stores the
 returned token in the pack. The token proves the digest existed at the TSA's
 attested time, signed by an authority independent of Sectum AI.
 
@@ -40,7 +40,7 @@ RFC 3161 support is an optional extra, `sectum-ai-evidence[rfc3161]` (the
 ## Transparency log (Sigstore Rekor)
 
 `sectum-ai report --rekor` (or `evidence.rekor: true` in `sectum-ai.yaml`) also records
-the run digest in the [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/)
+the attested digest in the [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/)
 transparency log — a public, append-only Merkle log. The log returns an
 *inclusion proof*: the entry's position, the Merkle audit path to the tree root,
 and a checkpoint (the signed tree head) committing to that root. The proof is
@@ -101,3 +101,17 @@ test condition cryptographically.
   manifest hashes, metrics, control mappings, and which integrity anchors are
   present). It is a derived view of the pack — it adds an interoperable format,
   not new trust — and can be DSSE-signed and logged to Rekor for distribution.
+- `evidence.dsse.json` — the in-toto statement wrapped in a
+  [DSSE](https://github.com/secure-systems-lab/dsse) envelope (PAE-encoded),
+  the signable form for distribution.
+
+`sectum-ai report` flags that shape these outputs:
+
+- `--pdf-engine {reportlab,weasyprint}` — selects the audit-pack PDF renderer
+  (`reportlab` is the default; `weasyprint` needs the optional `weasyprint` extra).
+- `--bundle` — writes a single `evidence-bundle.zip` gathering all of the above,
+  the artifact `sectum-ai verify <bundle.zip>` checks end to end.
+- `--include-manifest` — adds the ground-truth manifest to the bundle, sealed
+  AES-256-GCM under the configured `security.manifest_key_env`. Off by default:
+  the manifest holds canary plaintexts (the pack otherwise carries only its
+  hash — see [the threat model](threat-model.md)).

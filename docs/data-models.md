@@ -11,7 +11,7 @@ without running Sectum.
 | Model | Purpose |
 |---|---|
 | `Scenario` | The run definition: `scenario_id`, `seed`, `tenants`, `corpus_profile`, `shared_entities`, `embedding_models`. |
-| `SyntheticTenantSpec` | One synthetic tenant: `tenant_id`, `display_name`, `industry`, `corpus_size`, and optional `users`. |
+| `SyntheticTenantSpec` | One synthetic tenant: `tenant_id`, `display_name`, `locale`, `industry`, `corpus_size`, and optional `users`. |
 | `Principal` | An isolation boundary Sectum verifies — a tenant, or a user within one (ADR-0006). |
 | `Marker` | A planted canary: `marker_id`, `marker_type`, `owner_tenant_id`, `owner_user_id?`, `plaintext`, `embedding_ref?`, `planted_locations[]`. |
 | `PlantedLocation` | Where a marker was planted in a document — `doc_id` plus the field (`body`, `title`, `metadata`). |

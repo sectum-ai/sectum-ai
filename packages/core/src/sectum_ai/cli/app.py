@@ -1,7 +1,7 @@
-"""Entry point for the ``sectum`` command-line interface (the engineering spec, section 10).
+"""Entry point for the ``sectum-ai`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, ``init``, ``baseline``, and ``diff``.
+``verify``, ``erasure``, ``init``, ``baseline``, ``calibrate``, and ``diff``.
 """
 
 import functools
@@ -205,7 +205,7 @@ scenario:
   corpus_profile: demo
 
 # Where run artifacts are written (substrate, run, evidence pack, audit pack).
-workdir: .sectum
+workdir: .sectum-ai
 
 # Adapters connecting Sectum AI to the stack under test. The defaults are the
 # in-memory fakes with their leak knobs turned on - so `sectum-ai probe` reproduces
@@ -214,14 +214,14 @@ workdir: .sectum
 # credentials - reference them from the environment.
 adapters:
   vector_store:
-    kind: fake               # fake | pgvector | chroma | weaviate
+    kind: fake               # fake | pgvector | chroma | weaviate | pinecone | qdrant
     shared_index: true       # demo leak: one index serves every tenant
     # dsn_env: SECTUM_PGVECTOR_DSN
   cache:
     kind: fake               # fake | redis
     tenant_scoped: false     # demo leak: a shared key space across tenants
   model:
-    kind: fake
+    kind: fake               # fake | huggingface
     adapter_bleed: true      # demo leak: one tenant's adapter influences others
     prefix_cache: true       # demo leak: a shared KV prefix cache leaks via timing
   mcp:
@@ -232,13 +232,14 @@ adapters:
     kind: fake
     shared_memory: true      # demo leak: long-term memory crosses tenants
   rag:
-    kind: fake               # fake | http
+    kind: fake               # fake | http | langchain
     # url: http://localhost:8080/rag
   observability:
-    kind: fake               # fake | phoenix
+    kind: fake               # fake | phoenix | langfuse | langsmith | otel | helicone | datadog
     # base_url: http://localhost:6007  # compose.yaml publishes Phoenix on 6007
   agent:
-    kind: fake               # fake | http
+    # kinds: fake | http | langgraph | autogen | crewai | openai-assistants | anthropic-tooluse
+    kind: fake
     # url: http://localhost:8080/agent
 
 # Evidence-chain anchoring. The local timestamper is the development default;
@@ -1233,7 +1234,7 @@ def erasure(
         if isinstance(obs, FakeObservability):
             obs.record(
                 marker.owner_tenant_id,
-                "sectum-erasure",
+                "sectum-ai-erasure",
                 f"trace recording marker {marker.plaintext}",
             )
         if isinstance(memory, FakeMemory):
@@ -1606,6 +1607,7 @@ def _delta_verdict(delta: MetricDelta) -> str:
 
 
 @app.command()
+@_handle_typed_errors
 def baseline(
     workdir: Annotated[
         Path | None, typer.Option(help="Directory holding the recorded run.")

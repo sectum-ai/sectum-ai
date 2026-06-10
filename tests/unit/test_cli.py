@@ -123,6 +123,15 @@ def test_baseline_compare_rejects_a_corrupt_baseline_file(tmp_path: Path) -> Non
     assert result.exit_code == 3
 
 
+def test_baseline_maps_a_config_error_to_exit_3(tmp_path: Path) -> None:
+    # A malformed --config must exit 3 (config error) via the shared typed-error
+    # handler, not exit 1: the command was missing @_handle_typed_errors, so a
+    # ConfigError from load_config surfaced as a generic crash.
+    (tmp_path / "bad.yaml").write_text("unknown_top_level_key: true\n")
+    result = _runner.invoke(app, ["baseline", "--config", str(tmp_path / "bad.yaml"), "--compare"])
+    assert result.exit_code == 3
+
+
 def _run_with(findings: tuple[Finding, ...]) -> RunResult:
     moment = datetime(2026, 1, 1, tzinfo=UTC)
     return RunResult(

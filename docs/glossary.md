@@ -20,7 +20,7 @@ user-level isolation depending on how the substrate is seeded.
 ## Marker / canary
 A planted, ground-truth-known artifact whose appearance in the wrong
 principal's session proves a leak. Three types
-([§6.3](https://github.com/sectum-ai/sectum-ai/blob/main/CLAUDE.md)):
+(see [the marker substrate](substrate.md)):
 
 - **HARD_CANARY** — high-entropy unique token (`SECTUM-CANARY-{base32(16 bytes)}`).
   Exact substring or regex match; zero false positives.
@@ -71,13 +71,14 @@ manifest marker.
 The deliverable of a Sectum AI run: a tamper-evident bundle that an auditor
 or DPO accepts. Contains the canonicalized run, the hashed ground-truth
 manifest, an RFC 3161 timestamp token, a Sigstore Rekor inclusion proof
-(when enabled), control mappings (SOC 2 / ISO 27001 / GDPR / EU AI Act /
-HIPAA / NIST AI RMF / OWASP), a machine-readable `evidence.json`, and a
+(when enabled), control mappings (SOC 2 / ISO 27001 / ISO/IEC 42001 / GDPR /
+CCPA/CPRA / EU AI Act / HIPAA / NIST AI RMF / OWASP), a machine-readable
+`evidence.json`, and a
 human-readable [audit-pack PDF](https://github.com/sectum-ai/sectum-ai/tree/main/docs/samples). The pack is
 independently verifiable by `sectum-ai verify`.
 
 ## BYOC (bring-your-own-cloud)
-A deployment mode where the `sectum` CLI runs inside the customer's
+A deployment mode where the `sectum-ai` CLI runs inside the customer's
 environment and only the markers, the configuration, and the signed
 evidence leave the box. The alternative is *hosted* mode, where Sectum
 runs the synthetic tenants against the customer's reachable endpoints.
