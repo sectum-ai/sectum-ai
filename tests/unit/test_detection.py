@@ -624,6 +624,48 @@ def test_a_judge_yes_sharing_a_distinctive_token_still_confirms_in_a_multi_marke
     assert confirmed, "a span sharing the distinctive codename must still confirm"
 
 
+def test_a_judge_yes_sharing_only_the_serial_number_is_not_confirmed() -> None:
+    # Zero-FP: the 5-digit serial is low-entropy and collides with everyday numbers.
+    # A benign observation carrying that number + a judge "yes" must NOT confirm -
+    # a bare serial can never tie a span to a marker on its own.
+    substrate = _entity_substrate("Project Zephyr 00002", "Project Lodestar 00003")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="project status 00002"), 0.0
+    )
+    text = "filing the quarterly project status 00002 for the finance team review"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    entity = [
+        f for f in findings if f.marker_id is not None and f.marker_id.startswith("e-Project")
+    ]
+    assert entity, "candidates must be retained as UNVERIFIED evidence"
+    assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
+
+
+def test_a_collided_codename_stays_distinctive_and_a_genuine_leak_confirms() -> None:
+    # Zero-FN guard: a codename two markers happen to share is a MINORITY token, not
+    # template boilerplate (which recurs across a majority). A genuine leak of that
+    # codename - serial paraphrased away - must still CONFIRM.
+    substrate = _entity_substrate(
+        "Project Halcyon 00001",
+        "Project Halcyon 00002",
+        "Project Zephyr 00003",
+        "Project Lodestar 00004",
+        "Project Onyx 00005",
+    )
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project Halcyon"), 0.0
+    )
+    text = "the retrieved competitor record names Project Halcyon as the account owner"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [
+        f
+        for f in findings
+        if f.marker_id in {"e-Project Halcyon 00001", "e-Project Halcyon 00002"}
+        and f.status is FindingStatus.CONFIRMED
+    ]
+    assert confirmed, "a genuine leak of a collided codename must still confirm"
+
+
 class _CountingEmbedder:
     """Wraps the fake embedder and counts embed() calls (to prove the window cache)."""
 

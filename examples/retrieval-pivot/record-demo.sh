@@ -47,7 +47,7 @@ done
 
 # Sanity-check deps.
 command -v asciinema >/dev/null || { echo "asciinema not on PATH; pip install asciinema" >&2; exit 1; }
-command -v sectum    >/dev/null || { echo "sectum not on PATH; pip install sectum-ai" >&2; exit 1; }
+command -v sectum-ai >/dev/null || { echo "sectum-ai not on PATH; pip install sectum-ai" >&2; exit 1; }
 
 cd "$(dirname "$0")"
 

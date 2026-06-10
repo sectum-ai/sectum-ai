@@ -577,3 +577,18 @@ def test_openai_embedder_model_id_is_canonical() -> None:
     assert OpenAIEmbeddingProvider("sk-test", model="text-embedding-3-large").model_id == (
         "openai:text-embedding-3-large"
     )
+
+
+def test_verdict_from_json_tolerates_stray_braces_in_narration() -> None:
+    # The Anthropic judge has no response_format guarantee and routinely wraps or
+    # narrates around the verdict. A greedy outermost-{...} slice broke on a stray
+    # brace before/after/around the object; the scan finds the first balanced object
+    # carrying a "leak" key.
+    cases = [
+        ('note: use {} as default. {"leak": true, "rationale": "real"}', True),
+        ('{"leak": false, "rationale": "no entity"} (confidence: high {note})', False),
+        ('Analysis {step 1}: {"leak": true, "evidence_span": "x"}', True),
+        ('```\n{"leak": false}\n```\nAlso: {"note": "x"}', False),
+    ]
+    for text, expected in cases:
+        assert _verdict_from_json(text).leak is expected, text
