@@ -8,7 +8,7 @@ override the values the config supplies.
 
 ## Top-level shape
 
-A `sectum-ai.yaml` is a single YAML mapping with four top-level sections, all
+A `sectum-ai.yaml` is a single YAML mapping with six top-level sections, all
 optional. Any omitted section uses its built-in defaults.
 
 ```yaml
@@ -27,6 +27,13 @@ adapters:
   agent: ...
 evidence:
   timestamper: local
+security:
+  manifest_key_env: SECTUM_MANIFEST_KEY   # optional: seal the substrate at rest
+detection:
+  embedder: { kind: fake }
+  judge: { kind: fake }
+  semantic_threshold: 0.62                 # 0.62 | <float> | auto
+  mode: hosted                             # hosted | local
 ```
 
 Unknown top-level keys, unknown `evidence.timestamper` values, and malformed
@@ -68,6 +75,7 @@ consumed by the CLI.
 | `chroma` | `host: str = "localhost"`, `port: int = 8000` | ChromaDB server. Each tenant maps to its own collection. |
 | `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051` | Weaviate server. Each tenant maps to its own collection. |
 | `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)* | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
+| `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
 
 ### `cache`
 

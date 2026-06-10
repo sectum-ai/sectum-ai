@@ -11,7 +11,7 @@ auditor accepts.
 > Class 1–11 attack catalog, the tamper-evident evidence chain (Class 12), the
 > adapter SDK (live adapters for vector stores, caches, observability, RAG,
 > agents, and MCP, exercised by a docker-compose integration-CI job), the probe
-> interface, the regression-baseline engine, the `sectum` CLI, a mkdocs
+> interface, the regression-baseline engine, the `sectum-ai` CLI, a mkdocs
 > documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
 > authoritative, per-phase gate record (with the test/example that enforces each
 > criterion). Pre-alpha reflects API maturity, not missing phases.
@@ -52,7 +52,7 @@ verify a Sectum AI evidence pack without the project. See
 | License | Apache-2.0 | Commercial |
 | Marker substrate, attack catalog, adapters | ✓ | ✓ |
 | Evidence chain + independent `sectum-ai verify` | ✓ | ✓ |
-| `sectum` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `baseline` / `diff` / `adapters`) | ✓ | ✓ |
+| `sectum-ai` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `baseline` / `calibrate` / `diff` / `adapters`) | ✓ | ✓ |
 | Continuous scheduled runs against a customer stack | — | ✓ |
 | Attestation hosting and managed audit-pack delivery | — | ✓ |
 | Dashboard, alerting, and regression baselines across runs | — | ✓ |
@@ -68,7 +68,7 @@ A `uv` workspace of five publishable packages:
 
 | Package (PyPI) | Import | Purpose |
 |---|---|---|
-| `sectum-ai` | `sectum` (+ `sectum_ai.cli`) | Core substrate runner and the `sectum` CLI |
+| `sectum-ai` | `sectum_ai` (+ `sectum_ai.cli`) | Core substrate runner and the `sectum-ai` CLI |
 | `sectum-ai-spec` | `sectum_ai.spec` | Pydantic data models and JSON Schema |
 | `sectum-ai-probes` | `sectum_ai.probes` | The multi-tenant leakage attack catalog |
 | `sectum-ai-adapters` | `sectum_ai.adapters` | Connectors to real systems |
@@ -90,7 +90,7 @@ vector index, assembles a tamper-evident evidence pack, and independently
 verifies it. See [`examples/`](examples/) for this and the GDPR Article 17
 erasure-attestation walkthrough.
 
-Or drive the `sectum` CLI directly:
+Or drive the `sectum-ai` CLI directly:
 
 ```sh
 uv run sectum-ai seed   --workdir .sectum-ai

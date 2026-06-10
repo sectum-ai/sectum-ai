@@ -127,142 +127,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no SciPy/NumPy), mirroring the Class 5 timing channel's statistics; the
   point-estimate definition is unchanged.
 
-### Changed
-
-- **Schema bump `0.3.0` → `0.4.0`** for the new `RunMetrics.erasure_coverage`
-  block. The committed JSON Schemas, the default-scenario golden hashes, and the
-  shipped sample evidence packs under `docs/samples/` are regenerated to 0.4.0; a
-  pre-0.4.0 pack is refused by `sectum-ai verify` (major/minor mismatch), as
-  intended.
-- **Schema bump `0.4.0` → `0.5.0`** for the new Retrieval-Pivot Rate counts and
-  confidence interval on `RunMetrics` (`retrieval_pivot_n`, `retrieval_pivot_k`,
-  `retrieval_pivot_rate_ci`). The committed JSON Schemas, the default-scenario
-  golden hashes, and the shipped sample evidence packs under `docs/samples/` are
-  regenerated to 0.5.0; a pre-0.5.0 pack is refused by `sectum-ai verify`
-  (major/minor mismatch), as intended.
-- **Real embedding/judge providers retry a transient failure.** A provider HTTP
-  call (`_post_json`) now retries a timeout, connection error, or HTTP
-  429/500/502/503/504 up to three times with a short bounded backoff; a
-  non-retryable client error (4xx other than 429) still raises at once, and the
-  final transient failure still raises - a run that cannot detect must fail
-  loudly, never yield a partial, falsely-clean attestation. A single rate-limit
-  blip no longer aborts a long run.
-- **The semantic detector caches window embeddings per observation.** When
-  scoring an observation against many foreign markers, each candidate window is
-  now embedded once and reused across markers (a per-observation cache) instead
-  of being re-embedded per marker, cutting embedding calls on a real provider
-  with no change to the result.
-- **The leaky example `run.sh` scripts assert the expected leak.** The thirteen
-  cross-tenant demo scripts now require `sectum-ai probe` to exit `2` (confirmed
-  leaks) and fail loudly otherwise, instead of swallowing the exit code with
-  `|| true` - so a regression that silenced a demo's findings can no longer pass
-  unnoticed.
-
-### Fixed
-
-- **A judge "yes" no longer confirms a finding on its own.** The detection
-  pipeline now enforces the spec §6.4 false-positive control for every judge:
-  a semantic candidate is CONFIRMED only when the judge's cited evidence span
-  (or the marker itself, when no span is cited) is token-order traceable in
-  the observation. A real LLM judge is primed with the marker plaintext, so a
-  parroting or hallucinating verdict could previously place a fabricated
-  CONFIRMED finding - with a fabricated quoted span - into the signed audit
-  pack. Untraceable affirmations are downgraded to UNVERIFIED candidates with
-  the downgrade reason recorded. The deterministic fake judge's behavior is
-  unchanged (the backstop is the same test it already applied).
-- **`calibrate` publishes the full-precision threshold.** The recommended
-  threshold was rounded to 4 decimals for display, which could move the gate
-  below a negative example the sweep had certified as excluded - silently
-  breaking the zero-false-positive promise at deploy time. Scores now carry
-  full precision (rounding is render-only).
-- **The live HuggingFace model adapter no longer echoes its prompt.** HF
-  `generate` output includes the input tokens; the adapter returned them, so
-  the erasure probe - which prompts with the canary it scans for - read a
-  fabricated 'residual' on the model surface before AND after erasure. The
-  adapter now decodes only newly generated tokens, and the `ModelAdapter`
-  contract states completion-only explicitly.
-- **The Anthropic judge is deterministic and fence-tolerant.** It now pins
-  `temperature: 0` (matching the OpenAI judge) so identical runs judge
-  identically, and the verdict parser tolerates a fenced ```json response
-  instead of aborting the run.
-- **`hash-<dim>` embedding specs with a non-positive dimension are rejected at
-  config time** instead of failing later when the sweep instantiates the
-  embedder.
-
-- **The live Langfuse observability adapter works against current Langfuse
-  (v3).** Two issues surfaced by a self-hosted Langfuse erasure run: (1) the
-  adapter requested `trace.list(limit=1000)`, but current Langfuse caps the
-  public trace-list page size at 100 and rejects larger limits with HTTP 400 — it
-  now pages at the API maximum up to the same scan budget; (2) Langfuse processes
-  trace deletion asynchronously, so the erasure probe's immediate post-delete
-  re-scan reported a **false RESIDUAL** for a backend that does fully erase —
-  `delete()` now waits (bounded) for the tenant's traces to disappear before
-  returning, so the erasure verdict is accurate. The adapter's erasure **scope**
-  is now documented in `delete()`: it covers the project's traces (nested
-  observations + scores cascade), not project-level prompts/datasets — full
-  Article 17 erasure of a Langfuse tenant (a project) requires project deletion,
-  so the erasure report attests the tracing surface, not project-level objects.
-
-- **Open WebUI example: the provisioner now uploads every marker type, and the
-  flagship's exact-vs-semantic distinction is stated honestly.** `provision_owui.py`
-  filtered uploads to `HARD_CANARY` docs, silently dropping the `ENTITY_CANARY` and
-  `SECRET_CANARY` pivot documents the substrate generates — so the run only ever
-  exercised exact-substring matching, and the headline Retrieval-Pivot Rate was an
-  *exact-match* figure, not the organic semantic entity-bleed the flagship is named
-  for. The filter is removed (all pivot docs upload), and the README + configs now
-  state that the default `fake` embedder measures the exact (HARD) + credential-format
-  (SECRET) paths, while the semantic `ENTITY_CANARY` gradient requires a real
-  embedder (`detection.embedder.kind: openai`). Surfaced by the first-run coverage analysis.
-
-- **A `--rekor`-anchored evidence pack now verifies out of the box.** `verify`
-  rejected a valid Sigstore Rekor inclusion proof with *"the Rekor log id … is not
-  in the trusted keyring"* even though the correct public-good key ships: the
-  keyring was keyed by the **base64** SHA-256 of the log key, but Rekor's API
-  `logID` (stored verbatim as the proof's `log_id`) is the **hex** SHA-256, so a
-  real proof's log id never matched. `_log_id` now uses hex (Rekor's own
-  convention), so the shipped public-good key (`c0d23d6…`) is matched and a
-  `report --rekor` → `verify` round-trip passes with no `--rekor-key`. (Surfaced by
-  the first live Open WebUI run; the TSA anchor was unaffected.) Regression test
-  pins the hex keying and that the public-good log id is trusted.
-
-### Security
-
-- **`sectum-ai verify` now requires an independent anchor by default.** The
-  flag-based downgrade guards could not stop an attacker who edits a pack,
-  recomputes the digest with both anchor flags false, and re-stamps it with a
-  fresh local-dev token — the token is reproducible by anyone, so the tampered
-  pack verified PASS. `verify_pack`/`verify_bundle` gain `require_anchored` and
-  report `anchored` on the result; the CLI fails such a pack (exit 4, a failing
-  `independent-anchor` check) unless `--allow-unanchored` is passed, and an
-  accepted unanchored pack reads `INTEGRITY OK - UNANCHORED`, never `VERIFIED`.
-  Bundles also refuse duplicate ZIP member names and thread `--tsa-cert`/
-  `--tsa-root` through to the contained pack. The local-dev timestamper's
-  docstring no longer claims its token catches tampering.
-
-- **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
-  by a real TSA could have its binary `tsa_token` swapped for a `local-dev` JSON
-  token carrying the same digest and still verify (reported as "unanchored"),
-  silently dropping the one independent proof of *when* the evidence existed —
-  load-bearing for the GDPR Art. 17 erasure timeline. A new `anchored_with_timestamp`
-  flag, bound into the attested digest (mirroring `anchored_in_log`), makes
-  `sectum-ai verify` demand a real RFC 3161 token whenever a pack claims one, so the
-  swap fails. This bumps `SCHEMA_VERSION` `0.2.0` → `0.3.0`; the committed JSON
-  schemas, the reproducibility golden hashes, and the `docs/samples/` packs are
-  regenerated, and pre-`0.3.0` packs are refused by the schema gate with a clear
-  version-mismatch message (ADR-0016).
-
-- **`verify_bundle` now reconciles a bundle's ZIP members against its digest
-  manifest, closing a tamper-evidence hole.** The integrity loop only iterated
-  manifest-*listed* members, so a file physically present in the archive but absent
-  from `bundle-manifest.json` was covered by no digest check — and because the
-  audit-PDF / sidecar selection reads the raw ZIP, an unlisted forged member (e.g.
-  a fake `erasure-attestation.pdf` claiming "zero residue") could ride inside a
-  bundle that `sectum-ai verify` reported as PASSING, and could even be the member
-  delivered. Verification now fails on any archive member not covered by the
-  manifest, so a bundle attests exactly its manifest's member set (the engineering
-  spec §8.1). Regression test added for the smuggled-unlisted-member attack.
-
-### Added
 
 - **The detection embedder + judge accept an OpenAI-compatible `base_url`, so the
   semantic pipeline can run against a local Ollama (or vLLM / LM Studio) with no
@@ -292,353 +156,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   can no longer pass for enforced negative authorization. This consumes the
   Class 1 `access_outcome` signal the runner already recorded but nothing read.
 
-### Changed
-
-- **Rename tail: tooling config, CLI name, and resource-prefix defaults.** The
-  default resource-namespace `prefix` for the Redis / Phoenix / LangSmith / Chroma
-  adapters changes from `sectum` to `sectum-ai` (it only affects deployments that
-  rely on the default key/collection/project prefix; set `prefix:` explicitly to
-  pin a value). The `--version` banner now prints `sectum-ai <version>`, the Typer
-  app name is `sectum-ai`, and the packaging config that the earlier passes missed
-  is corrected — `[tool.coverage] source` and ruff's `known-first-party` now point
-  at `sectum_ai` (the coverage gate measured the renamed package correctly only
-  after this). A stray, accidentally-committed `examples/retrieval-pivot/.sectum/`
-  workdir (matched `.gitignore` but was tracked) is removed.
-
-- **The remaining `sectum` data slugs are renamed too (completes the rename).** The
-  default workdir `.sectum` → `.sectum-ai`, the default config filename
-  `sectum.yaml` → `sectum-ai.yaml` (and the example configs / `sectum.yaml.example`
-  / `sectum.yaml.production`), and the demo `scenario_id` `sectum-demo-{seed}` →
-  `sectum-ai-demo-{seed}` (so the run id is `run-sectum-ai-demo-{seed}`). The
-  reproducibility golden hashes and every committed sample pack were regenerated
-  accordingly. The `sectum.ai` domain is unchanged; the deployed
-  `/sectum/platform/...` AWS SSM parameter paths are left to a separate infra
-  redeploy.
-
-- **BREAKING — the Python import is renamed `sectum` → `sectum_ai`, and the CLI
-  binary `sectum` → `sectum-ai`.** Bare `sectum` is gone as a standalone name; the
-  product is **Sectum AI** (prose), `sectum-ai` (distribution / repo / CLI), and
-  `sectum_ai` (the valid-identifier import of that distribution). The PyPI
-  distribution names are unchanged (`sectum-ai`, `sectum-ai-spec`, `-probes`,
-  `-adapters`, `-evidence`); only the imported package and the console script
-  change — so `pip install sectum-ai` still works, but code now does `import
-  sectum_ai` and the command is `sectum-ai …`. Every package `src/sectum/`
-  directory is now `src/sectum_ai/`, all imports/docs/examples are updated, and the
-  committed JSON Schemas were regenerated (the change is the docstring reference in
-  two `description`s; the `$id` is domain-based and unchanged). The `sectum.ai`
-  domain, the `.sectum-ai` workdir, the `sectum-ai.yaml` config filename, and the
-  `sectum-demo` scenario id are retained (renaming the latter would churn the
-  reproducibility golden hashes and every sample pack). This supersedes the
-  original §3 "resolved" import/CLI names by operator decision.
-
-### Fixed
-
-- **The audit-pack PDF now renders each finding's secondary OWASP classes.** The
-  spec §18 maps a primary OWASP class plus secondary ones (e.g. `LLM02:2025` /
-  `LLM06:2025`); they were recorded in `evidence.json` but the PDF's per-finding
-  control line dropped them. Both PDF engines (`reportlab` and `weasyprint`) share
-  the fix. The committed `docs/samples/` retrieval-pivot and residual-data erasure
-  packs are regenerated so the public artifacts show the secondary classes (the
-  all-erased happy-path pack has no findings and is unchanged).
-
-- **Documentation accuracy sweep.** The glossary's `SECRET_CANARY` entry now
-  describes the shipped form (an `sk-`/`AKIA`/`9xx`-SSN shape matched by an exact
-  **and** credential-format pass, then redacted) instead of the removed
-  `SECTUM-SECRET-<base32>` token; `compliance-mappings.md` no longer claims a
-  per-pack "mapping revision" (the identifiers come from `sectum-ai-evidence` and
-  the `ControlMapping` model is versioned by the shared `SCHEMA_VERSION`);
-  `data-models.md` drops `SyntheticTenantSpec` from the committed-schema list (it
-  is embedded inline in `Scenario` and has no standalone schema); and
-  `threat-model.md` attributes timestamping/verification to the pack's
-  `attested_digest` rather than `run_digest`.
-- **Stale `src/sectum/` code-path references left by the rename are corrected.**
-  The slash-delimited package path escaped the earlier rename passes, leaving
-  broken links in the ADRs, several READMEs, `docs/`, and a `gen_schemas.py`
-  docstring (now `src/sectum_ai/`), and — functionally — the `[tool.coverage]`
-  omit globs (`*/sectum/adapters/*` → `*/sectum_ai/adapters/*`), which had stopped
-  matching the moved adapter modules. The BYOC example deployment paths move to
-  `/etc/sectum-ai/` for brand consistency.
-- **`sectum-ai init` now generates a `sectum-ai.yaml` that every `--config` command can
-  load.** The template's `security:` section had only a commented-out body, so
-  YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
-  rejected — `sectum-ai seed --config <generated>` exited `3`, breaking the documented
-  `init` → `--config` onboarding for every workflow command. The template now
-  comments out the section *header* too (so the default applies), and
-  `SectumConfig` defensively drops any section commented down to `null` so the
-  field default is used. A regression test round-trips the generated template
-  through `load_config`.
-
-- **`sectum-ai-probes` now declares the `sectum-ai-adapters` dependency it imports
-  — the published wheel was un-importable on its own.** `erasure/probe.py` and
-  `kv_cache_timing/probe.py` import `sectum_ai.adapters` at module load (eagerly via
-  `probes/__init__`), but `sectum-ai-probes` declared only `sectum-ai-spec` +
-  `pyyaml`, so a clean `pip install sectum-ai-probes` followed by `import
-  sectum_ai.probes` raised `ModuleNotFoundError: No module named 'sectum_ai.adapters'`
-  (the dev uv workspace installs every package, which masked the missing edge). The
-  dependency (and uv source) are now declared; the edge is acyclic since
-  `sectum-ai-adapters` imports only `sectum_ai.spec`, and ADR-0004 is corrected (its
-  "probes depends on `sectum-ai-spec` only" claim was stale). A new
-  `tests/unit/test_packaging.py` guards this and the related direct-dependency
-  declarations.
-
-- **`sectum-ai` (core) now declares the `pydantic` it imports directly** rather
-  than relying on the transitive edge via `sectum-ai-spec` (`config.py` /
-  `cli/app.py` import pydantic), mirroring the adapters package and the §13
-  declare-what-you-import discipline.
-
-- **The `Probe` protocol now declares `owasp_secondary`**, the fourth
-  control-classification attribute every probe already carries (§18 LLM02/LLM06
-  secondary mapping) — so a `Probe`-typed consumer can read it without a type
-  error. The public `payload_int` helper (formerly the private `_payload_int`) is
-  no longer imported across a module boundary by `sweep.py`.
-
-- **`scenario.embedding_models` is now wired end to end, so the per-model
-  Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
-  `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
-  `sectum-ai.yaml` that set the documented key was rejected — and `sectum-ai seed` built
-  the scenario from the seed alone, so `retrieval_pivot_rate_by_model` was always
-  `{}` off a real `seed`→`probe` run (the flagship "stronger embeddings leak more"
-  gradient only ever appeared in unit tests). `ScenarioConfig` now carries both
-  fields, `seed` threads them through `default_scenario`, and a repeatable
-  `sectum-ai seed --embedding-model <spec>` overrides them; an unknown spec is
-  rejected with a config error (exit `3`) at load/parse time rather than silently
-  becoming an empty sweep. A full-CLI E2E seeds two embedding models and asserts
-  the per-model rate is recorded with the expected gradient.
-
-- **The embedded tool version now comes from the installed package, not a
-  hard-coded `0.0.0`.** `cli/app.py` defined `__version__ = "0.0.0"`, and that
-  literal was stamped into every `RunResult`'s `adapter_versions` /
-  `probe_versions` — so every signed, timestamped evidence pack and audit PDF
-  attested tool version `0.0.0` on the shipped `0.1.0` release (and `sectum
-  --version` printed it), corrupting the tamper-evident artifact and making
-  `baseline` / `diff` version-blind. It now resolves via
-  `importlib.metadata.version("sectum-ai")` (with a `0.0.0+unknown` fallback for an
-  uninstalled tree); the committed `docs/samples/` packs were regenerated so the
-  published samples attest `0.1.0`.
-- **`sectum-ai verify` now re-checks the in-toto attestation sidecar.** `report` /
-  `erasure` write `attestation.intoto.json` beside the pack, but `verify` never
-  re-verified it, so a swapped sidecar handed to an in-toto-aware pipeline got no
-  protection from the OSS verifier. `verify` now re-runs `verify_in_toto_statement`
-  against any sibling sidecar (itemized as an `in-toto-attestation` check; a
-  statement that no longer binds the pack's run digest fails with exit `4`), and
-  the command is wrapped in the typed-error decorator so an escaping `SectumError`
-  maps to the documented exit code rather than an opaque `1`.
-- **A confirmed leak can no longer be dropped from the headline count by an
-  earlier unverified duplicate.** `dedupe_findings` collapsed findings that share
-  a `finding_id` by keeping the *first* one seen, status-blind — and the
-  `finding_id` does not encode status. So when the same marker surfaced on the
-  same surface across multiple steps of one probe as both a semantic-only
-  `UNVERIFIED` candidate and a judge-`CONFIRMED` leak, whichever came first won;
-  an `UNVERIFIED`-first ordering silently discarded the `CONFIRMED` finding and
-  undercounted the cross-tenant-leak headline. Dedupe is now status-aware —
-  `CONFIRMED` outranks `UNVERIFIED`, then higher severity, then higher confidence
-  — so a real leak is always retained regardless of detection order.
-- **The CLI config resolver now threads `user_scoped` into the model, memory, and
-  MCP fakes.** Only the vector-store and cache fake branches passed the
-  `user_scoped` knob through; the `model`, `memory`, and `mcp` fakes dropped it,
-  so a `sectum-ai.yaml` requesting per-user (ADR-0006) isolation on those families
-  silently built a tenant-only fake and verified the wrong boundary. All three
-  fake branches now thread `user_scoped`, with resolver parity tests.
-- **The stdlib HTTP adapters now wrap transport and JSON errors in
-  `AdapterError`.** The generic HTTP agent (`agent/http.py`), HTTP RAG pipeline
-  (`rag/http.py`), and the OpenTelemetry trace store's `query`/`tenant_values`
-  (`observability/otel.py`) let a raw `urllib` error (connection refused,
-  timeout, HTTP error) or a `json.JSONDecodeError` from a non-JSON response
-  escape, bypassing the CLI's typed-error exit code (`3`) and surfacing as an
-  opaque traceback. Each now raises `AdapterError` (matching the OTel `purge`
-  path), so an unreachable or misbehaving backend fails cleanly.
-- **A present-but-corrupt `substrate.json` / `run.json` / `baseline.json` now
-  exits `3` (config error) instead of crashing.** The CLI's `_load_substrate`,
-  `_load_run`, and `sectum-ai baseline --compare` called `model_validate_json`
-  unguarded, so a malformed artifact raised an unhandled `ValidationError` that
-  Typer reported as an opaque exit `1` rather than the documented config-error
-  exit `3`. Each load now catches the error and exits `3` with a message naming
-  the bad file.
-- **`sectum-ai baseline --compare` now gates on the full run diff, not metrics
-  alone.** It compared only the headline metric counts, so a leak that newly
-  *confirmed* (an `UNVERIFIED`→`CONFIRMED` upgrade or a fresh confirmed id) or a
-  confirmed leak that *escalated in severity* (e.g. low→critical) between the
-  baseline and the current run was reported as "no regression" whenever the
-  counts happened to stay level. `--save` now persists the full `RunResult` (not
-  just `RunMetrics`) and `--compare` runs `diff_runs` — the same gate as `sectum
-  diff` — so a newly confirmed or escalated leak exits `2`. **Breaking:** a
-  baseline saved by an earlier version holds only metrics; re-run `sectum
-  baseline --save` to refresh it.
-- **Semantic detection uses a true cosine, so a real embedder can't crash finding
-  construction.** `_cosine` was a bare dot product (no normalization); a live
-  embedding provider that returns non-unit vectors could yield a similarity above
-  `1.0`, which overflows `Finding.confidence`'s `0..1` bound and aborts the scan
-  with a `ValidationError`. It now normalizes by the product of L2 norms (a
-  zero-norm vector scores `0.0`), and the semantic confidence is clamped to `1.0`
-  defensively. The fake embedder already returns unit vectors, so offline scores
-  are unchanged.
-- **Erasure attestable-with-caveat findings no longer trigger a false
-  regression.** A surface whose backend exposes no per-tenant erasure API
-  (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
-  backend limitation, not a confirmed cross-tenant leak. These findings are now
-  `UNVERIFIED` (not `CONFIRMED`), and the erasure run's confirmed-findings count
-  excludes them, so onboarding such a backend no longer makes `sectum-ai diff` /
-  `sectum-ai baseline --compare` report a regression (exit 2) on the GDPR
-  Article 17 wedge path. Completes the "caveats never regress" contract on the
-  finding paths, not just the `erasure_caveats` metric. Regenerated sample packs
-  in `docs/samples/` also now verify under the post-ADR-0016 whole-pack digest.
-- **Example walkthroughs now describe the probes they actually run.** The
-  `rag-poisoning` and `ikea-extraction` example READMEs and `run.sh` headers
-  documented detection mechanisms the probes do not implement: a
-  "baseline-vs-post-poisoning marker-bleed delta" with a `poison_pivot` document
-  (Class 3), and a "cumulative-recall / efficiency-threshold" detector running
-  against a `FakeRAGPipeline` on a `RAG_PIPELINE` surface (Class 10). Both are
-  rewritten to match the shipped single-pass `vector.query` / `VECTOR_DB` probes:
-  Class 3 plants one poison document per hard canary under a fixed lure phrase
-  and flags any principal whose query retrieves a *foreign* principal's canary;
-  Class 10 runs a fixed three-turn benign sequence per shared entity and flags
-  any turn whose retrieved context surfaces a foreign canary.
-- **A generic OpenTelemetry trace store with no delete API is now
-  attestable-with-caveat, not a false erasure success.** When `DELETE` against
-  the OTLP-JSON query endpoint returns `405` (Method Not Allowed) or `501` (Not
-  Implemented) — the store exposes no programmatic per-tenant delete — the
-  adapter now raises `ErasureUnsupported`, so Class 11 itemizes the surface as
-  *attestable-with-caveat* (data presumed retained), exactly like the Helicone
-  and Datadog adapters. Previously these codes were swallowed as a no-op, so the
-  post-erasure re-scan reported the un-deletable spans as a `CONFIRMED` residual
-  (gating `sectum-ai diff` / `baseline --compare`) — inconsistent with the other
-  observability backends for the same real condition. A `404` still means the
-  spans are already absent and remains an idempotent erasure success.
-- **`sectum-ai erasure` now itemizes an attestable-with-caveat surface even when a
-  genuine residual co-exists.** When a soft-deleting surface (a real erasure
-  failure) and a no-erasure-API surface (a caveat) were both present, the
-  dominant `ERASURE FAILED` message returned early and the caveat surface was
-  never printed, so a DPO reading the CLI summary could miss that a second
-  surface still held data. Both are now reported before the exit `2`.
-- **In-toto attestations no longer over-claim a timestamp anchor for a local
-  development token.** The predicate's `anchors.timestamp` was `true` whenever a
-  token was present, but `sectum-ai verify` treats the `local-dev` JSON token as
-  *unanchored* (it binds the digest but is not an independent RFC 3161 / Rekor
-  anchor). The flag now matches `verify_pack` — only a real (non-JSON, binary)
-  TSA token counts as an external timestamp anchor.
-- **Canonical hashing raises a clear, typed error for a non-JSON-native value.**
-  `to_canonical_json` already refused non-finite floats (`NaN`/`Infinity`); a raw
-  `dict`/`list` carrying a `UUID`, `datetime`, `bytes`, or non-`str` key still
-  leaked `json`'s bare `TypeError`. It now raises a `TypeError` naming the cause
-  ("cannot canonicalize a non-JSON-native value"), so a caller sees why the
-  digest could not be computed. Models are unaffected — they normalize via
-  `model_dump(mode="json")` first.
-- **The KV-cache timing Welch's t-test no longer divides by zero on a
-  single-sample group.** `_welch` computed each group's
-  `(variance²)/(n-1)` Welch–Satterthwaite term unconditionally; an asymmetric
-  `(n=1, n>1)` input raised `ZeroDivisionError`. A group with `n < 2` (no
-  variance estimate) now contributes nothing to the denominator. The probe
-  collects symmetric trial counts, so this hardens the helper without changing
-  any run.
-
-### Documentation
-
-- **`configuration.md` now documents the fake RAG/agent leak knobs and corrects
-  the adapter-field-validation wording.** The `rag.fake` and `agent.fake` rows said
-  "needs no fields", but both carry load-bearing leak knobs (`shared_index` for
-  Class 2 at the pipeline end; `confused_deputy` / `tool_call_passthrough` for
-  Class 7) — a `--config` user who omitted them silently got zero such findings.
-  The page also no longer claims the `build_*` resolvers "validate" extra fields:
-  `AdapterConfig` is `extra="allow"`, so a misspelled knob is accepted and silently
-  ignored (it type-checks only the keys it consumes).
-
-- **Two reference pages document the shipped substrate and data models, and a new
-  example walks the RAG-pipeline variant of the flagship probe.**
-  [`docs/substrate.md`](docs/substrate.md) covers the marker substrate end to end
-  (§6) — synthetic tenants and shared entities, corpus generation, the three
-  canary types with their distinct detection paths, multi-field planting,
-  model-scoped embedding references, secret redaction, the four-step detection
-  pipeline with its zero-FP/zero-FN guarantees, and the reproducibility contract.
-  [`docs/data-models.md`](docs/data-models.md) documents the `sectum_ai.spec` models
-  (§9), links the committed Draft 2020-12 JSON Schemas (generated by
-  `scripts/gen_schemas.py`, parity-tested), and records `SCHEMA_VERSION` and the
-  canonical-hashing rules. Both are added to the docs nav. A new
-  [`examples/rag-pipeline-bleed/`](examples/rag-pipeline-bleed/) walkthrough runs
-  the `rag-pipeline-bleed` probe (Class 2 at the customer-facing RAG endpoint, the
-  companion to `retrieval-pivot`) end to end and is wired into the e2e example
-  suite.
-
-- **ADR-0019 records the job-runner decision; the adapters package declares its
-  direct dependencies.** [ADR-0019](docs/adr/0019-job-runner-abstraction.md)
-  resolves the spec §21 open decision — the engine binds to the `JobRunner`
-  protocol with local serial/thread runners and a distributed backend (Temporal /
-  Prefect) stays swappable — and reads the §13 "Async" wording as a thread pool
-  (a swap-ability test covers a custom runner dropping in). `sectum-ai-adapters`
-  now declares `pydantic` directly (used by `base.py`) and `httpx` in the
-  `phoenix` extra (used by the Phoenix adapter), rather than relying on transitive
-  resolution (§13 dependency discipline).
-- **All six build-plan phases now record ✅ Met.** With the `embedding_models`
-  CLI wiring shipped, `PHASES.md` Phase 5 moves to Met (cited to the new full-CLI
-  sweep E2E `test_full_cli_sweep_records_per_model_rpr` and the existing baseline
-  regression tests), and its follow-on note marks P5 shipped. The README status
-  note drops the "one criterion still being closed" caveat — pre-alpha now
-  reflects API maturity, not missing phases — and still points to `PHASES.md` as
-  the authoritative gate record.
-- **`docs/adapters.md` live-adapter narrative refreshed to the current set.** The
-  prose documented only the early adapters; it now covers the observability
-  adapters (Helicone, Datadog, generic OpenTelemetry) and their
-  attestable-with-caveat erasure behaviour for Class 11, the LangChain RAG
-  pipeline, the framework-native agents (LangGraph, CrewAI, AutoGen, OpenAI
-  Assistants, Anthropic tool-use), the HuggingFace LoRA model, and the HTTP MCP
-  client — as prose, cross-linked to `docs/configuration.md` for the full field
-  reference.
-- **Honest build status + repo trust fixes.** The README status note no longer
-  overclaims "all six phases complete" — it mirrors `PHASES.md`, which is the
-  authoritative gate record and is now published on the docs site
-  (`docs/phases.md`, embedded via a snippet). `PHASES.md` Phase 2 moved to **Met**
-  (the docker-compose integration CI shipped); Phase 5's full-CLI
-  embedding-model-swap path is the one criterion still being closed. Added
-  `.github/FUNDING.yml`, and `SECURITY.md` now leads with GitHub private
-  vulnerability reporting instead of an all-zeros placeholder PGP fingerprint.
-- **Trust-artifact accuracy pass.** The flagship *Retrieval Pivot Attacks in
-  Hybrid RAG* result is now cited with its canonical identifier
-  [arXiv:2602.08668](https://arxiv.org/abs/2602.08668) (README, glossary) rather
-  than a bare "(arXiv, 2026)"; `docs/configuration.md` no longer
-  lists `verify` among the commands that accept `--config` (it has none);
-  `docs/samples/README.md` reports the retrieval-pivot pack's real size and
-  finding count (~33 KB, 321 findings); and ADR-0016's consequences now reflect
-  that `pdf_ref` is bound *and populated* end-to-end (it previously stated the CLI
-  did not populate it).
-- **`sectum-ai.yaml.example` used the wrong vector adapter key.** The example
-  config keyed the vector store under `vector:`, but the CLI resolver reads
-  `vector_store:` (matching `docs/configuration.md`), so a user who copied the
-  example and pointed it at a live vector store had that block silently ignored
-  and fell back to the in-memory fake. Renamed the block to `vector_store:`; a new
-  resolver-parity test asserts every adapter key in the example is one of the
-  eight families the resolver actually reads. Pre-existing since v0.1.0.
-- **Docs and example walkthroughs corrected to match shipped behavior.**
-  - The Class 2 flagship example (`examples/retrieval-pivot`) no longer claims
-    *every* benign cross-tenant query pivots at 100%; it reports the measured
-    retrieval-pivot rate from a real run and frames RPR as the fraction of the
-    flagship benign queries that surface a foreign marker.
-  - The erasure example (`examples/erasure-attestation`) and the Class 11 catalog
-    page now state the seven surfaces the probe actually scans (vector store,
-    tracing, agent memory, semantic cache, model adapter, search index, eval set)
-    with the full per-surface verdict, instead of describing only the vector store
-    as wired.
-  - `SECURITY.md` lists v0.1.0 as the first supported release instead of "no
-    stable release exists"; `glossary.md` describes `SECRET_CANARY` as the branded
-    `SECTUM-SECRET-<base32>` token matched exactly (not an "API-key/SSN-shaped"
-    string); the core-package quickstart verifies `.sectum-ai/evidence.json` and the
-    BYOC example validates with a scratch-workdir seed instead of a nonexistent
-    `--dry-run` flag.
-  - ADR-0008 carries a dated note that the `rag-pipeline-bleed` probe now issues a
-    per-principal `rag.ask` step, so the RAG family's user dimension is
-    *unverified* rather than *unneeded* — correcting the original "no probe issues
-    a `rag.ask` step" rationale.
-  - Doc-tail accuracy nits: `docs/quickstart.md` exit code `2` now spans
-    confirmed leaks (`probe`), a regression (`diff` / `baseline --compare`), and
-    residual / attestable-with-caveat data (`erasure`), not only "confirmed
-    leaks present"; ADR-0002 states the control-mapping table lives in
-    `evidence/controls.py` (not `sectum-ai-spec`); the `agent-tool-hijack`
-    example README and `run.sh` adapter counts are corrected to the seven shipped
-    kinds; the `tenant-boundary-fetch` README drops the `API` surface its probe
-    never emits; the Class-5 (KV-cache) page documents that a backend with no
-    shared prefix cache yields no signal by construction (absence ≠ isolation);
-    `configuration.md` clarifies `corpus_profile` is accepted but not yet
-    applied.
-
-### Added
 
 - **The marker substrate is deepened to the full section-6.3 design: embedding
   references, multi-field planting, and a real secret-format detector (ADR-0022).**
@@ -884,133 +401,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   severity escalation of a finding confirmed in both runs. Takes a `run.json` or
   an `evidence.json` on either side, plus `--output json`.
 
-### Security
-
-- **`sectum-ai verify <bundle.zip>` now binds the bundled audit PDF and attestation
-  sidecars to the pack — closing a verification-bypass in the bundle path.**
-  `verify_bundle` recomputed each member's digest against `bundle-manifest.json`
-  but called `verify_pack` without the audit PDF or the in-toto/DSSE sidecars, so a
-  delivered `report --bundle` archive could be **rebuilt** with a forged "zero
-  leakage" `audit-pack.pdf` (its digest re-recorded in the in-archive manifest) —
-  or with sidecars attesting a different run — and still pass `sectum-ai verify`,
-  breaking the §8.1 tamper-evidence guarantee (the standalone `sectum-ai verify
-  evidence.json` path already enforced this via the on-disk siblings; only the
-  bundle path was blind). `verify_bundle` now passes the bundled PDF to
-  `verify_pack` (enforcing the bound `pdf_ref`), fails when a pack binds a
-  `pdf_ref` but the bundle carries no PDF member, and re-runs
-  `verify_in_toto_statement` / `verify_dsse_envelope` against the bundled sidecars.
-  Regression tests rebuild a bundle with a forged PDF and with a different-run
-  sidecar and assert verification fails (the previous test mutated a member without
-  rebuilding the manifest, so it only exercised the member-digest check).
-
-- **The audit-pack PDF is now bound into the tamper-evident digest.** The
-  DPO/auditor-facing PDF was never covered by the attested digest, so it could be
-  silently swapped while `sectum-ai verify` still reported PASS. `sectum-ai report` /
-  `sectum-ai erasure` now render the PDF first, hash its bytes, and bind that SHA-256
-  as the pack's `pdf_ref` (which `attested_digest` already covers), so the signed
-  digest commits to the exact PDF. `sectum-ai verify` re-hashes the audit PDF when it
-  sits beside the pack (`audit-pack.pdf` / `erasure-attestation.pdf`) and fails on
-  a mismatch, while still verifying from `evidence.json` alone when the PDF is
-  absent. To make the PDF a pure function of pre-signature content (so it hashes
-  deterministically before signing), the raw timestamp-token row was dropped from
-  the rendered PDF — the token remains in `evidence.json`, and the PDF still
-  directs the reader to run `sectum-ai verify`. Both PDF engines render the same
-  digest-stable content.
-- **Detection hardening (zero false-positive / zero false-negative).** Four
-  fixes to the leak-detection pipeline, the technical moat:
-  - The judge now confirms a semantic candidate only when the marker's tokens
-    appear *in order within a short span* (light paraphrase such as a single
-    interposed token is tolerated), not when the observation merely *covers* the
-    marker's tokens in any order — a benign sentence reusing an entity's words
-    could previously be reported as a confirmed cross-tenant leak.
-  - The exact canary scan is case-, Unicode- (NFKC), and zero-width-insensitive,
-    so a leaked `HARD_CANARY`/`SECRET_CANARY` that a surface re-cased, folded, or
-    split with a zero-width character is no longer missed.
-  - `Marker.plaintext` must be non-empty (`min_length=1`); an empty canary would
-    otherwise substring-match every observation and confirm a critical leak.
-  - `finding_id` carries the surface, so the same marker leaking on two surfaces
-    (e.g. a vector store and a model adapter) is two findings rather than one
-    silently de-duplicated away.
-
-### Changed
-
-- **Regression comparison reports per-surface erasure _caveats_** as
-  informational metric deltas (in `sectum-ai diff` and `sectum-ai baseline --compare`).
-  A caveat is a backend coverage limitation (Class 11 hiding place #8), not an
-  isolation failure, so it is surfaced for visibility but never counts as a
-  regression — kept distinct from erasure _residue_, which does.
-- **Class 5 (KV-cache timing) now runs a real statistical test.** The
-  side-channel probe performs a two-sided Welch's t-test on the primed-vs-control
-  latencies and reports the t-statistic, degrees of freedom, p-value, a 95%
-  confidence interval on the timing gap, and Cohen's d. A finding is confirmed
-  only when the gap is statistically significant (p < 0.01), practically large
-  (d ≥ 0.8), and directional (primed faster) — the spec §7 "avoid over-claiming"
-  requirement. Pure standard library (no SciPy/NumPy); the evidence span now
-  cites the full test result for the auditor.
-- **Evidence schema `0.1.0` → `0.2.0`.** `EvidencePack` gains an
-  `anchored_in_log` field, and the cryptographic anchors now bind the whole pack
-  (`attested_digest`) rather than only the run record. Packs produced under the
-  old scheme do not verify under the new verifier (pre-release; no packs in the
-  wild). See [ADR-0016](docs/adr/0016-anchor-the-whole-pack.md).
-
-### Security
-
-- **Evidence packs are tamper-evident across their whole attested surface.** The
-  timestamp and Rekor anchors now bind the control mappings, the recorded PDF
-  reference, and the manifest hash — not just the run record — so forging the
-  compliance claims or altering the recorded PDF reference makes `sectum-ai verify`
-  fail.
-- **Transparency-log anchoring cannot be silently downgraded.** A pack that was
-  Rekor-anchored fails verification if its inclusion proof is stripped
-  (`anchored_in_log` is bound into the digest).
-- **Forged local timestamp tokens are rejected.** A `local-dev` token is reported
-  as *unanchored* (it binds the digest but is not an independent anchor); a JSON
-  token impersonating a real RFC 3161 TSA is refused.
-- Canonical hashing rejects non-finite floats (`NaN`/`Infinity`, which are
-  invalid JSON and non-injective) and normalizes timestamps to UTC, so the digest
-  is reproducible by any third-party verifier. See
-  [ADR-0007](docs/adr/0007-canonical-hashing-serializes-every-field.md).
-
-### Fixed
-
-- **Regression baselines now catch per-model and per-probe regressions.**
-  `compare_metrics` compared only the aggregate Retrieval-Pivot Rate and total
-  confirmed count, so the canonical Phase-5 check — swap one embedding model,
-  spike that model's RPR while the aggregate holds — was silently missed. It now
-  also diffs `retrieval_pivot_rate_by_model` and `per_probe_findings` key by key.
-- **The headline Retrieval-Pivot Rate counts both Class-2 probes.** The `sectum
-  probe` RPR was computed from the vector-store entity-bleed probe only, reading
-  0% when a leak manifested solely at the RAG-pipeline-end surface; it now counts
-  steps from both bleed probes (`BLEED_PROBE_IDS`).
-- **Malformed probe-step payloads raise a typed error.** The runner's `k` int
-  coercion and required-key lookups raised bare `ValueError`/`KeyError`, escaping
-  the `SectumError` → exit-code-3 mapping; they now raise `AdapterError` (shared
-  `_payload_int`/`_payload_required` helpers, also used by the sweep).
-- Baseline metric comparison uses a small float tolerance so JSON round-trip
-  noise never reads as a regression.
-- The Class 11 *attestable-with-caveat* distinction is now carried end to end,
-  not just on the finding. A review pass found that when an observability
-  backend raised `ErasureUnsupported` (Helicone / Datadog), the
-  `SurfaceErasure` verdict still read `RESIDUAL DATA`, the `sectum-ai erasure`
-  CLI printed `ERASURE FAILED`, and it exited 2 — indistinguishable from a
-  genuine erasure failure, undercutting the caveat the finding documented.
-  `SurfaceErasure` now carries an `erasure_supported` flag; its verdict reads
-  `ATTESTABLE WITH CAVEAT`, the CLI prints a distinct caveat message
-  (still exit 2, since the data genuinely remains — never a false PASS), and
-  `ErasureReport` gains `genuine_residual` / `caveats` so a real failure
-  (soft-delete residual) is never blurred with a backend that has no per-tenant
-  erasure API.
-- The erasure probe's per-surface delete is now uniformly caveat-tolerant: the
-  six near-identical surface blocks collapse into one `_erase_surface` helper,
-  so `ErasureUnsupported` is handled on *every* surface rather than only
-  observability (previously the other five surface deletes were unguarded and
-  would crash the run if a future retention-governed adapter raised it).
-- `FakeObservability` gains a `no_erasure` knob (parallel to `soft_delete`)
-  that raises `ErasureUnsupported` from `delete`, so the caveat path is
-  reachable from `sectum-ai.yaml` (`observability: {kind: fake, no_erasure: true}`)
-  and covered by a CLI-level test.
-
-### Added
 
 - A per-package `README.md` for all five distributions (`sectum-ai`,
   `sectum-ai-spec`, `sectum-ai-probes`, `sectum-ai-adapters`,
@@ -1348,6 +738,627 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under `agent` (via a `factory: module.path:callable` returning
   `(assistant, user_proxy)`); `docs/configuration.md` and
   `sectum-ai.yaml.example` are updated to match.
+
+### Changed
+
+- **Schema bump `0.3.0` → `0.4.0`** for the new `RunMetrics.erasure_coverage`
+  block. The committed JSON Schemas, the default-scenario golden hashes, and the
+  shipped sample evidence packs under `docs/samples/` are regenerated to 0.4.0; a
+  pre-0.4.0 pack is refused by `sectum-ai verify` (major/minor mismatch), as
+  intended.
+- **Schema bump `0.4.0` → `0.5.0`** for the new Retrieval-Pivot Rate counts and
+  confidence interval on `RunMetrics` (`retrieval_pivot_n`, `retrieval_pivot_k`,
+  `retrieval_pivot_rate_ci`). The committed JSON Schemas, the default-scenario
+  golden hashes, and the shipped sample evidence packs under `docs/samples/` are
+  regenerated to 0.5.0; a pre-0.5.0 pack is refused by `sectum-ai verify`
+  (major/minor mismatch), as intended.
+- **Real embedding/judge providers retry a transient failure.** A provider HTTP
+  call (`_post_json`) now retries a timeout, connection error, or HTTP
+  429/500/502/503/504 up to three times with a short bounded backoff; a
+  non-retryable client error (4xx other than 429) still raises at once, and the
+  final transient failure still raises - a run that cannot detect must fail
+  loudly, never yield a partial, falsely-clean attestation. A single rate-limit
+  blip no longer aborts a long run.
+- **The semantic detector caches window embeddings per observation.** When
+  scoring an observation against many foreign markers, each candidate window is
+  now embedded once and reused across markers (a per-observation cache) instead
+  of being re-embedded per marker, cutting embedding calls on a real provider
+  with no change to the result.
+- **The leaky example `run.sh` scripts assert the expected leak.** The thirteen
+  cross-tenant demo scripts now require `sectum-ai probe` to exit `2` (confirmed
+  leaks) and fail loudly otherwise, instead of swallowing the exit code with
+  `|| true` - so a regression that silenced a demo's findings can no longer pass
+  unnoticed.
+
+
+- **Rename tail: tooling config, CLI name, and resource-prefix defaults.** The
+  default resource-namespace `prefix` for the Redis / Phoenix / LangSmith / Chroma
+  adapters changes from `sectum` to `sectum-ai` (it only affects deployments that
+  rely on the default key/collection/project prefix; set `prefix:` explicitly to
+  pin a value). The `--version` banner now prints `sectum-ai <version>`, the Typer
+  app name is `sectum-ai`, and the packaging config that the earlier passes missed
+  is corrected — `[tool.coverage] source` and ruff's `known-first-party` now point
+  at `sectum_ai` (the coverage gate measured the renamed package correctly only
+  after this). A stray, accidentally-committed `examples/retrieval-pivot/.sectum/`
+  workdir (matched `.gitignore` but was tracked) is removed.
+
+- **The remaining `sectum` data slugs are renamed too (completes the rename).** The
+  default workdir `.sectum` → `.sectum-ai`, the default config filename
+  `sectum.yaml` → `sectum-ai.yaml` (and the example configs / `sectum.yaml.example`
+  / `sectum.yaml.production`), and the demo `scenario_id` `sectum-demo-{seed}` →
+  `sectum-ai-demo-{seed}` (so the run id is `run-sectum-ai-demo-{seed}`). The
+  reproducibility golden hashes and every committed sample pack were regenerated
+  accordingly. The `sectum.ai` domain is unchanged; the deployed
+  `/sectum/platform/...` AWS SSM parameter paths are left to a separate infra
+  redeploy.
+
+- **BREAKING — the Python import is renamed `sectum` → `sectum_ai`, and the CLI
+  binary `sectum` → `sectum-ai`.** Bare `sectum` is gone as a standalone name; the
+  product is **Sectum AI** (prose), `sectum-ai` (distribution / repo / CLI), and
+  `sectum_ai` (the valid-identifier import of that distribution). The PyPI
+  distribution names are unchanged (`sectum-ai`, `sectum-ai-spec`, `-probes`,
+  `-adapters`, `-evidence`); only the imported package and the console script
+  change — so `pip install sectum-ai` still works, but code now does `import
+  sectum_ai` and the command is `sectum-ai …`. Every package `src/sectum/`
+  directory is now `src/sectum_ai/`, all imports/docs/examples are updated, and the
+  committed JSON Schemas were regenerated (the change is the docstring reference in
+  two `description`s; the `$id` is domain-based and unchanged). The `sectum.ai`
+  domain, the `.sectum-ai` workdir, the `sectum-ai.yaml` config filename, and the
+  `sectum-demo` scenario id are retained (renaming the latter would churn the
+  reproducibility golden hashes and every sample pack). This supersedes the
+  original §3 "resolved" import/CLI names by operator decision.
+
+
+- **Regression comparison reports per-surface erasure _caveats_** as
+  informational metric deltas (in `sectum-ai diff` and `sectum-ai baseline --compare`).
+  A caveat is a backend coverage limitation (Class 11 hiding place #8), not an
+  isolation failure, so it is surfaced for visibility but never counts as a
+  regression — kept distinct from erasure _residue_, which does.
+- **Class 5 (KV-cache timing) now runs a real statistical test.** The
+  side-channel probe performs a two-sided Welch's t-test on the primed-vs-control
+  latencies and reports the t-statistic, degrees of freedom, p-value, a 95%
+  confidence interval on the timing gap, and Cohen's d. A finding is confirmed
+  only when the gap is statistically significant (p < 0.01), practically large
+  (d ≥ 0.8), and directional (primed faster) — the spec §7 "avoid over-claiming"
+  requirement. Pure standard library (no SciPy/NumPy); the evidence span now
+  cites the full test result for the auditor.
+- **Evidence schema `0.1.0` → `0.2.0`.** `EvidencePack` gains an
+  `anchored_in_log` field, and the cryptographic anchors now bind the whole pack
+  (`attested_digest`) rather than only the run record. Packs produced under the
+  old scheme do not verify under the new verifier (pre-release; no packs in the
+  wild). See [ADR-0016](docs/adr/0016-anchor-the-whole-pack.md).
+
+### Fixed
+
+- **`sectum-ai baseline` maps a config error to exit 3, not exit 1.** The command
+  was missing the shared typed-error handler the other commands use, so a
+  `ConfigError` surfaced as a generic crash (exit 1) instead of the documented
+  config/adapter exit code (3). It now decodes typed errors like its siblings.
+- **The Helicone and Datadog observability adapters bound their HTTP calls.** Each
+  `urlopen` now uses a 30s timeout and wraps a `URLError`/timeout in `AdapterError`,
+  so a hung or unreachable backend fails the run cleanly instead of blocking it or
+  surfacing a raw urllib error.
+- **A judge "yes" no longer confirms a finding on its own.** The detection
+  pipeline now enforces the spec §6.4 false-positive control for every judge:
+  a semantic candidate is CONFIRMED only when the judge's cited evidence span
+  (or the marker itself, when no span is cited) is token-order traceable in
+  the observation. A real LLM judge is primed with the marker plaintext, so a
+  parroting or hallucinating verdict could previously place a fabricated
+  CONFIRMED finding - with a fabricated quoted span - into the signed audit
+  pack. Untraceable affirmations are downgraded to UNVERIFIED candidates with
+  the downgrade reason recorded. The deterministic fake judge's behavior is
+  unchanged (the backstop is the same test it already applied).
+- **`calibrate` publishes the full-precision threshold.** The recommended
+  threshold was rounded to 4 decimals for display, which could move the gate
+  below a negative example the sweep had certified as excluded - silently
+  breaking the zero-false-positive promise at deploy time. Scores now carry
+  full precision (rounding is render-only).
+- **The live HuggingFace model adapter no longer echoes its prompt.** HF
+  `generate` output includes the input tokens; the adapter returned them, so
+  the erasure probe - which prompts with the canary it scans for - read a
+  fabricated 'residual' on the model surface before AND after erasure. The
+  adapter now decodes only newly generated tokens, and the `ModelAdapter`
+  contract states completion-only explicitly.
+- **The Anthropic judge is deterministic and fence-tolerant.** It now pins
+  `temperature: 0` (matching the OpenAI judge) so identical runs judge
+  identically, and the verdict parser tolerates a fenced ```json response
+  instead of aborting the run.
+- **`hash-<dim>` embedding specs with a non-positive dimension are rejected at
+  config time** instead of failing later when the sweep instantiates the
+  embedder.
+
+- **The live Langfuse observability adapter works against current Langfuse
+  (v3).** Two issues surfaced by a self-hosted Langfuse erasure run: (1) the
+  adapter requested `trace.list(limit=1000)`, but current Langfuse caps the
+  public trace-list page size at 100 and rejects larger limits with HTTP 400 — it
+  now pages at the API maximum up to the same scan budget; (2) Langfuse processes
+  trace deletion asynchronously, so the erasure probe's immediate post-delete
+  re-scan reported a **false RESIDUAL** for a backend that does fully erase —
+  `delete()` now waits (bounded) for the tenant's traces to disappear before
+  returning, so the erasure verdict is accurate. The adapter's erasure **scope**
+  is now documented in `delete()`: it covers the project's traces (nested
+  observations + scores cascade), not project-level prompts/datasets — full
+  Article 17 erasure of a Langfuse tenant (a project) requires project deletion,
+  so the erasure report attests the tracing surface, not project-level objects.
+
+- **Open WebUI example: the provisioner now uploads every marker type, and the
+  flagship's exact-vs-semantic distinction is stated honestly.** `provision_owui.py`
+  filtered uploads to `HARD_CANARY` docs, silently dropping the `ENTITY_CANARY` and
+  `SECRET_CANARY` pivot documents the substrate generates — so the run only ever
+  exercised exact-substring matching, and the headline Retrieval-Pivot Rate was an
+  *exact-match* figure, not the organic semantic entity-bleed the flagship is named
+  for. The filter is removed (all pivot docs upload), and the README + configs now
+  state that the default `fake` embedder measures the exact (HARD) + credential-format
+  (SECRET) paths, while the semantic `ENTITY_CANARY` gradient requires a real
+  embedder (`detection.embedder.kind: openai`). Surfaced by the first-run coverage analysis.
+
+- **A `--rekor`-anchored evidence pack now verifies out of the box.** `verify`
+  rejected a valid Sigstore Rekor inclusion proof with *"the Rekor log id … is not
+  in the trusted keyring"* even though the correct public-good key ships: the
+  keyring was keyed by the **base64** SHA-256 of the log key, but Rekor's API
+  `logID` (stored verbatim as the proof's `log_id`) is the **hex** SHA-256, so a
+  real proof's log id never matched. `_log_id` now uses hex (Rekor's own
+  convention), so the shipped public-good key (`c0d23d6…`) is matched and a
+  `report --rekor` → `verify` round-trip passes with no `--rekor-key`. (Surfaced by
+  the first live Open WebUI run; the TSA anchor was unaffected.) Regression test
+  pins the hex keying and that the public-good log id is trusted.
+
+
+- **The audit-pack PDF now renders each finding's secondary OWASP classes.** The
+  spec §18 maps a primary OWASP class plus secondary ones (e.g. `LLM02:2025` /
+  `LLM06:2025`); they were recorded in `evidence.json` but the PDF's per-finding
+  control line dropped them. Both PDF engines (`reportlab` and `weasyprint`) share
+  the fix. The committed `docs/samples/` retrieval-pivot and residual-data erasure
+  packs are regenerated so the public artifacts show the secondary classes (the
+  all-erased happy-path pack has no findings and is unchanged).
+
+- **Documentation accuracy sweep.** The glossary's `SECRET_CANARY` entry now
+  describes the shipped form (an `sk-`/`AKIA`/`9xx`-SSN shape matched by an exact
+  **and** credential-format pass, then redacted) instead of the removed
+  `SECTUM-SECRET-<base32>` token; `compliance-mappings.md` no longer claims a
+  per-pack "mapping revision" (the identifiers come from `sectum-ai-evidence` and
+  the `ControlMapping` model is versioned by the shared `SCHEMA_VERSION`);
+  `data-models.md` drops `SyntheticTenantSpec` from the committed-schema list (it
+  is embedded inline in `Scenario` and has no standalone schema); and
+  `threat-model.md` attributes timestamping/verification to the pack's
+  `attested_digest` rather than `run_digest`.
+- **Stale `src/sectum/` code-path references left by the rename are corrected.**
+  The slash-delimited package path escaped the earlier rename passes, leaving
+  broken links in the ADRs, several READMEs, `docs/`, and a `gen_schemas.py`
+  docstring (now `src/sectum_ai/`), and — functionally — the `[tool.coverage]`
+  omit globs (`*/sectum/adapters/*` → `*/sectum_ai/adapters/*`), which had stopped
+  matching the moved adapter modules. The BYOC example deployment paths move to
+  `/etc/sectum-ai/` for brand consistency.
+- **`sectum-ai init` now generates a `sectum-ai.yaml` that every `--config` command can
+  load.** The template's `security:` section had only a commented-out body, so
+  YAML parsed it to `None`, which the non-optional `SectumConfig.security` field
+  rejected — `sectum-ai seed --config <generated>` exited `3`, breaking the documented
+  `init` → `--config` onboarding for every workflow command. The template now
+  comments out the section *header* too (so the default applies), and
+  `SectumConfig` defensively drops any section commented down to `null` so the
+  field default is used. A regression test round-trips the generated template
+  through `load_config`.
+
+- **`sectum-ai-probes` now declares the `sectum-ai-adapters` dependency it imports
+  — the published wheel was un-importable on its own.** `erasure/probe.py` and
+  `kv_cache_timing/probe.py` import `sectum_ai.adapters` at module load (eagerly via
+  `probes/__init__`), but `sectum-ai-probes` declared only `sectum-ai-spec` +
+  `pyyaml`, so a clean `pip install sectum-ai-probes` followed by `import
+  sectum_ai.probes` raised `ModuleNotFoundError: No module named 'sectum_ai.adapters'`
+  (the dev uv workspace installs every package, which masked the missing edge). The
+  dependency (and uv source) are now declared; the edge is acyclic since
+  `sectum-ai-adapters` imports only `sectum_ai.spec`, and ADR-0004 is corrected (its
+  "probes depends on `sectum-ai-spec` only" claim was stale). A new
+  `tests/unit/test_packaging.py` guards this and the related direct-dependency
+  declarations.
+
+- **`sectum-ai` (core) now declares the `pydantic` it imports directly** rather
+  than relying on the transitive edge via `sectum-ai-spec` (`config.py` /
+  `cli/app.py` import pydantic), mirroring the adapters package and the §13
+  declare-what-you-import discipline.
+
+- **The `Probe` protocol now declares `owasp_secondary`**, the fourth
+  control-classification attribute every probe already carries (§18 LLM02/LLM06
+  secondary mapping) — so a `Probe`-typed consumer can read it without a type
+  error. The public `payload_int` helper (formerly the private `_payload_int`) is
+  no longer imported across a module boundary by `sweep.py`.
+
+- **`scenario.embedding_models` is now wired end to end, so the per-model
+  Retrieval-Pivot Rate is recorded on real CLI runs.** `ScenarioConfig` had no
+  `embedding_models` (or `corpus_size`) field — with `extra="forbid"` a
+  `sectum-ai.yaml` that set the documented key was rejected — and `sectum-ai seed` built
+  the scenario from the seed alone, so `retrieval_pivot_rate_by_model` was always
+  `{}` off a real `seed`→`probe` run (the flagship "stronger embeddings leak more"
+  gradient only ever appeared in unit tests). `ScenarioConfig` now carries both
+  fields, `seed` threads them through `default_scenario`, and a repeatable
+  `sectum-ai seed --embedding-model <spec>` overrides them; an unknown spec is
+  rejected with a config error (exit `3`) at load/parse time rather than silently
+  becoming an empty sweep. A full-CLI E2E seeds two embedding models and asserts
+  the per-model rate is recorded with the expected gradient.
+
+- **The embedded tool version now comes from the installed package, not a
+  hard-coded `0.0.0`.** `cli/app.py` defined `__version__ = "0.0.0"`, and that
+  literal was stamped into every `RunResult`'s `adapter_versions` /
+  `probe_versions` — so every signed, timestamped evidence pack and audit PDF
+  attested tool version `0.0.0` on the shipped `0.1.0` release (and `sectum
+  --version` printed it), corrupting the tamper-evident artifact and making
+  `baseline` / `diff` version-blind. It now resolves via
+  `importlib.metadata.version("sectum-ai")` (with a `0.0.0+unknown` fallback for an
+  uninstalled tree); the committed `docs/samples/` packs were regenerated so the
+  published samples attest `0.1.0`.
+- **`sectum-ai verify` now re-checks the in-toto attestation sidecar.** `report` /
+  `erasure` write `attestation.intoto.json` beside the pack, but `verify` never
+  re-verified it, so a swapped sidecar handed to an in-toto-aware pipeline got no
+  protection from the OSS verifier. `verify` now re-runs `verify_in_toto_statement`
+  against any sibling sidecar (itemized as an `in-toto-attestation` check; a
+  statement that no longer binds the pack's run digest fails with exit `4`), and
+  the command is wrapped in the typed-error decorator so an escaping `SectumError`
+  maps to the documented exit code rather than an opaque `1`.
+- **A confirmed leak can no longer be dropped from the headline count by an
+  earlier unverified duplicate.** `dedupe_findings` collapsed findings that share
+  a `finding_id` by keeping the *first* one seen, status-blind — and the
+  `finding_id` does not encode status. So when the same marker surfaced on the
+  same surface across multiple steps of one probe as both a semantic-only
+  `UNVERIFIED` candidate and a judge-`CONFIRMED` leak, whichever came first won;
+  an `UNVERIFIED`-first ordering silently discarded the `CONFIRMED` finding and
+  undercounted the cross-tenant-leak headline. Dedupe is now status-aware —
+  `CONFIRMED` outranks `UNVERIFIED`, then higher severity, then higher confidence
+  — so a real leak is always retained regardless of detection order.
+- **The CLI config resolver now threads `user_scoped` into the model, memory, and
+  MCP fakes.** Only the vector-store and cache fake branches passed the
+  `user_scoped` knob through; the `model`, `memory`, and `mcp` fakes dropped it,
+  so a `sectum-ai.yaml` requesting per-user (ADR-0006) isolation on those families
+  silently built a tenant-only fake and verified the wrong boundary. All three
+  fake branches now thread `user_scoped`, with resolver parity tests.
+- **The stdlib HTTP adapters now wrap transport and JSON errors in
+  `AdapterError`.** The generic HTTP agent (`agent/http.py`), HTTP RAG pipeline
+  (`rag/http.py`), and the OpenTelemetry trace store's `query`/`tenant_values`
+  (`observability/otel.py`) let a raw `urllib` error (connection refused,
+  timeout, HTTP error) or a `json.JSONDecodeError` from a non-JSON response
+  escape, bypassing the CLI's typed-error exit code (`3`) and surfacing as an
+  opaque traceback. Each now raises `AdapterError` (matching the OTel `purge`
+  path), so an unreachable or misbehaving backend fails cleanly.
+- **A present-but-corrupt `substrate.json` / `run.json` / `baseline.json` now
+  exits `3` (config error) instead of crashing.** The CLI's `_load_substrate`,
+  `_load_run`, and `sectum-ai baseline --compare` called `model_validate_json`
+  unguarded, so a malformed artifact raised an unhandled `ValidationError` that
+  Typer reported as an opaque exit `1` rather than the documented config-error
+  exit `3`. Each load now catches the error and exits `3` with a message naming
+  the bad file.
+- **`sectum-ai baseline --compare` now gates on the full run diff, not metrics
+  alone.** It compared only the headline metric counts, so a leak that newly
+  *confirmed* (an `UNVERIFIED`→`CONFIRMED` upgrade or a fresh confirmed id) or a
+  confirmed leak that *escalated in severity* (e.g. low→critical) between the
+  baseline and the current run was reported as "no regression" whenever the
+  counts happened to stay level. `--save` now persists the full `RunResult` (not
+  just `RunMetrics`) and `--compare` runs `diff_runs` — the same gate as `sectum
+  diff` — so a newly confirmed or escalated leak exits `2`. **Breaking:** a
+  baseline saved by an earlier version holds only metrics; re-run `sectum
+  baseline --save` to refresh it.
+- **Semantic detection uses a true cosine, so a real embedder can't crash finding
+  construction.** `_cosine` was a bare dot product (no normalization); a live
+  embedding provider that returns non-unit vectors could yield a similarity above
+  `1.0`, which overflows `Finding.confidence`'s `0..1` bound and aborts the scan
+  with a `ValidationError`. It now normalizes by the product of L2 norms (a
+  zero-norm vector scores `0.0`), and the semantic confidence is clamped to `1.0`
+  defensively. The fake embedder already returns unit vectors, so offline scores
+  are unchanged.
+- **Erasure attestable-with-caveat findings no longer trigger a false
+  regression.** A surface whose backend exposes no per-tenant erasure API
+  (Helicone, Datadog) is recorded as *attestable-with-caveat* — a same-tenant
+  backend limitation, not a confirmed cross-tenant leak. These findings are now
+  `UNVERIFIED` (not `CONFIRMED`), and the erasure run's confirmed-findings count
+  excludes them, so onboarding such a backend no longer makes `sectum-ai diff` /
+  `sectum-ai baseline --compare` report a regression (exit 2) on the GDPR
+  Article 17 wedge path. Completes the "caveats never regress" contract on the
+  finding paths, not just the `erasure_caveats` metric. Regenerated sample packs
+  in `docs/samples/` also now verify under the post-ADR-0016 whole-pack digest.
+- **Example walkthroughs now describe the probes they actually run.** The
+  `rag-poisoning` and `ikea-extraction` example READMEs and `run.sh` headers
+  documented detection mechanisms the probes do not implement: a
+  "baseline-vs-post-poisoning marker-bleed delta" with a `poison_pivot` document
+  (Class 3), and a "cumulative-recall / efficiency-threshold" detector running
+  against a `FakeRAGPipeline` on a `RAG_PIPELINE` surface (Class 10). Both are
+  rewritten to match the shipped single-pass `vector.query` / `VECTOR_DB` probes:
+  Class 3 plants one poison document per hard canary under a fixed lure phrase
+  and flags any principal whose query retrieves a *foreign* principal's canary;
+  Class 10 runs a fixed three-turn benign sequence per shared entity and flags
+  any turn whose retrieved context surfaces a foreign canary.
+- **A generic OpenTelemetry trace store with no delete API is now
+  attestable-with-caveat, not a false erasure success.** When `DELETE` against
+  the OTLP-JSON query endpoint returns `405` (Method Not Allowed) or `501` (Not
+  Implemented) — the store exposes no programmatic per-tenant delete — the
+  adapter now raises `ErasureUnsupported`, so Class 11 itemizes the surface as
+  *attestable-with-caveat* (data presumed retained), exactly like the Helicone
+  and Datadog adapters. Previously these codes were swallowed as a no-op, so the
+  post-erasure re-scan reported the un-deletable spans as a `CONFIRMED` residual
+  (gating `sectum-ai diff` / `baseline --compare`) — inconsistent with the other
+  observability backends for the same real condition. A `404` still means the
+  spans are already absent and remains an idempotent erasure success.
+- **`sectum-ai erasure` now itemizes an attestable-with-caveat surface even when a
+  genuine residual co-exists.** When a soft-deleting surface (a real erasure
+  failure) and a no-erasure-API surface (a caveat) were both present, the
+  dominant `ERASURE FAILED` message returned early and the caveat surface was
+  never printed, so a DPO reading the CLI summary could miss that a second
+  surface still held data. Both are now reported before the exit `2`.
+- **In-toto attestations no longer over-claim a timestamp anchor for a local
+  development token.** The predicate's `anchors.timestamp` was `true` whenever a
+  token was present, but `sectum-ai verify` treats the `local-dev` JSON token as
+  *unanchored* (it binds the digest but is not an independent RFC 3161 / Rekor
+  anchor). The flag now matches `verify_pack` — only a real (non-JSON, binary)
+  TSA token counts as an external timestamp anchor.
+- **Canonical hashing raises a clear, typed error for a non-JSON-native value.**
+  `to_canonical_json` already refused non-finite floats (`NaN`/`Infinity`); a raw
+  `dict`/`list` carrying a `UUID`, `datetime`, `bytes`, or non-`str` key still
+  leaked `json`'s bare `TypeError`. It now raises a `TypeError` naming the cause
+  ("cannot canonicalize a non-JSON-native value"), so a caller sees why the
+  digest could not be computed. Models are unaffected — they normalize via
+  `model_dump(mode="json")` first.
+- **The KV-cache timing Welch's t-test no longer divides by zero on a
+  single-sample group.** `_welch` computed each group's
+  `(variance²)/(n-1)` Welch–Satterthwaite term unconditionally; an asymmetric
+  `(n=1, n>1)` input raised `ZeroDivisionError`. A group with `n < 2` (no
+  variance estimate) now contributes nothing to the denominator. The probe
+  collects symmetric trial counts, so this hardens the helper without changing
+  any run.
+
+
+- **Regression baselines now catch per-model and per-probe regressions.**
+  `compare_metrics` compared only the aggregate Retrieval-Pivot Rate and total
+  confirmed count, so the canonical Phase-5 check — swap one embedding model,
+  spike that model's RPR while the aggregate holds — was silently missed. It now
+  also diffs `retrieval_pivot_rate_by_model` and `per_probe_findings` key by key.
+- **The headline Retrieval-Pivot Rate counts both Class-2 probes.** The `sectum
+  probe` RPR was computed from the vector-store entity-bleed probe only, reading
+  0% when a leak manifested solely at the RAG-pipeline-end surface; it now counts
+  steps from both bleed probes (`BLEED_PROBE_IDS`).
+- **Malformed probe-step payloads raise a typed error.** The runner's `k` int
+  coercion and required-key lookups raised bare `ValueError`/`KeyError`, escaping
+  the `SectumError` → exit-code-3 mapping; they now raise `AdapterError` (shared
+  `_payload_int`/`_payload_required` helpers, also used by the sweep).
+- Baseline metric comparison uses a small float tolerance so JSON round-trip
+  noise never reads as a regression.
+- The Class 11 *attestable-with-caveat* distinction is now carried end to end,
+  not just on the finding. A review pass found that when an observability
+  backend raised `ErasureUnsupported` (Helicone / Datadog), the
+  `SurfaceErasure` verdict still read `RESIDUAL DATA`, the `sectum-ai erasure`
+  CLI printed `ERASURE FAILED`, and it exited 2 — indistinguishable from a
+  genuine erasure failure, undercutting the caveat the finding documented.
+  `SurfaceErasure` now carries an `erasure_supported` flag; its verdict reads
+  `ATTESTABLE WITH CAVEAT`, the CLI prints a distinct caveat message
+  (still exit 2, since the data genuinely remains — never a false PASS), and
+  `ErasureReport` gains `genuine_residual` / `caveats` so a real failure
+  (soft-delete residual) is never blurred with a backend that has no per-tenant
+  erasure API.
+- The erasure probe's per-surface delete is now uniformly caveat-tolerant: the
+  six near-identical surface blocks collapse into one `_erase_surface` helper,
+  so `ErasureUnsupported` is handled on *every* surface rather than only
+  observability (previously the other five surface deletes were unguarded and
+  would crash the run if a future retention-governed adapter raised it).
+- `FakeObservability` gains a `no_erasure` knob (parallel to `soft_delete`)
+  that raises `ErasureUnsupported` from `delete`, so the caveat path is
+  reachable from `sectum-ai.yaml` (`observability: {kind: fake, no_erasure: true}`)
+  and covered by a CLI-level test.
+
+### Security
+
+- **`sectum-ai verify` now requires an independent anchor by default.** The
+  flag-based downgrade guards could not stop an attacker who edits a pack,
+  recomputes the digest with both anchor flags false, and re-stamps it with a
+  fresh local-dev token — the token is reproducible by anyone, so the tampered
+  pack verified PASS. `verify_pack`/`verify_bundle` gain `require_anchored` and
+  report `anchored` on the result; the CLI fails such a pack (exit 4, a failing
+  `independent-anchor` check) unless `--allow-unanchored` is passed, and an
+  accepted unanchored pack reads `INTEGRITY OK - UNANCHORED`, never `VERIFIED`.
+  Bundles also refuse duplicate ZIP member names and thread `--tsa-cert`/
+  `--tsa-root` through to the contained pack. The local-dev timestamper's
+  docstring no longer claims its token catches tampering.
+
+- **The RFC 3161 timestamp anchor is now downgrade-resistant.** A pack timestamped
+  by a real TSA could have its binary `tsa_token` swapped for a `local-dev` JSON
+  token carrying the same digest and still verify (reported as "unanchored"),
+  silently dropping the one independent proof of *when* the evidence existed —
+  load-bearing for the GDPR Art. 17 erasure timeline. A new `anchored_with_timestamp`
+  flag, bound into the attested digest (mirroring `anchored_in_log`), makes
+  `sectum-ai verify` demand a real RFC 3161 token whenever a pack claims one, so the
+  swap fails. This bumps `SCHEMA_VERSION` `0.2.0` → `0.3.0`; the committed JSON
+  schemas, the reproducibility golden hashes, and the `docs/samples/` packs are
+  regenerated, and pre-`0.3.0` packs are refused by the schema gate with a clear
+  version-mismatch message (ADR-0016).
+
+- **`verify_bundle` now reconciles a bundle's ZIP members against its digest
+  manifest, closing a tamper-evidence hole.** The integrity loop only iterated
+  manifest-*listed* members, so a file physically present in the archive but absent
+  from `bundle-manifest.json` was covered by no digest check — and because the
+  audit-PDF / sidecar selection reads the raw ZIP, an unlisted forged member (e.g.
+  a fake `erasure-attestation.pdf` claiming "zero residue") could ride inside a
+  bundle that `sectum-ai verify` reported as PASSING, and could even be the member
+  delivered. Verification now fails on any archive member not covered by the
+  manifest, so a bundle attests exactly its manifest's member set (the engineering
+  spec §8.1). Regression test added for the smuggled-unlisted-member attack.
+
+
+- **`sectum-ai verify <bundle.zip>` now binds the bundled audit PDF and attestation
+  sidecars to the pack — closing a verification-bypass in the bundle path.**
+  `verify_bundle` recomputed each member's digest against `bundle-manifest.json`
+  but called `verify_pack` without the audit PDF or the in-toto/DSSE sidecars, so a
+  delivered `report --bundle` archive could be **rebuilt** with a forged "zero
+  leakage" `audit-pack.pdf` (its digest re-recorded in the in-archive manifest) —
+  or with sidecars attesting a different run — and still pass `sectum-ai verify`,
+  breaking the §8.1 tamper-evidence guarantee (the standalone `sectum-ai verify
+  evidence.json` path already enforced this via the on-disk siblings; only the
+  bundle path was blind). `verify_bundle` now passes the bundled PDF to
+  `verify_pack` (enforcing the bound `pdf_ref`), fails when a pack binds a
+  `pdf_ref` but the bundle carries no PDF member, and re-runs
+  `verify_in_toto_statement` / `verify_dsse_envelope` against the bundled sidecars.
+  Regression tests rebuild a bundle with a forged PDF and with a different-run
+  sidecar and assert verification fails (the previous test mutated a member without
+  rebuilding the manifest, so it only exercised the member-digest check).
+
+- **The audit-pack PDF is now bound into the tamper-evident digest.** The
+  DPO/auditor-facing PDF was never covered by the attested digest, so it could be
+  silently swapped while `sectum-ai verify` still reported PASS. `sectum-ai report` /
+  `sectum-ai erasure` now render the PDF first, hash its bytes, and bind that SHA-256
+  as the pack's `pdf_ref` (which `attested_digest` already covers), so the signed
+  digest commits to the exact PDF. `sectum-ai verify` re-hashes the audit PDF when it
+  sits beside the pack (`audit-pack.pdf` / `erasure-attestation.pdf`) and fails on
+  a mismatch, while still verifying from `evidence.json` alone when the PDF is
+  absent. To make the PDF a pure function of pre-signature content (so it hashes
+  deterministically before signing), the raw timestamp-token row was dropped from
+  the rendered PDF — the token remains in `evidence.json`, and the PDF still
+  directs the reader to run `sectum-ai verify`. Both PDF engines render the same
+  digest-stable content.
+- **Detection hardening (zero false-positive / zero false-negative).** Four
+  fixes to the leak-detection pipeline, the technical moat:
+  - The judge now confirms a semantic candidate only when the marker's tokens
+    appear *in order within a short span* (light paraphrase such as a single
+    interposed token is tolerated), not when the observation merely *covers* the
+    marker's tokens in any order — a benign sentence reusing an entity's words
+    could previously be reported as a confirmed cross-tenant leak.
+  - The exact canary scan is case-, Unicode- (NFKC), and zero-width-insensitive,
+    so a leaked `HARD_CANARY`/`SECRET_CANARY` that a surface re-cased, folded, or
+    split with a zero-width character is no longer missed.
+  - `Marker.plaintext` must be non-empty (`min_length=1`); an empty canary would
+    otherwise substring-match every observation and confirm a critical leak.
+  - `finding_id` carries the surface, so the same marker leaking on two surfaces
+    (e.g. a vector store and a model adapter) is two findings rather than one
+    silently de-duplicated away.
+
+
+- **Evidence packs are tamper-evident across their whole attested surface.** The
+  timestamp and Rekor anchors now bind the control mappings, the recorded PDF
+  reference, and the manifest hash — not just the run record — so forging the
+  compliance claims or altering the recorded PDF reference makes `sectum-ai verify`
+  fail.
+- **Transparency-log anchoring cannot be silently downgraded.** A pack that was
+  Rekor-anchored fails verification if its inclusion proof is stripped
+  (`anchored_in_log` is bound into the digest).
+- **Forged local timestamp tokens are rejected.** A `local-dev` token is reported
+  as *unanchored* (it binds the digest but is not an independent anchor); a JSON
+  token impersonating a real RFC 3161 TSA is refused.
+- Canonical hashing rejects non-finite floats (`NaN`/`Infinity`, which are
+  invalid JSON and non-injective) and normalizes timestamps to UTC, so the digest
+  is reproducible by any third-party verifier. See
+  [ADR-0007](docs/adr/0007-canonical-hashing-serializes-every-field.md).
+
+### Documentation
+
+- **Doc-accuracy sweep across the CLI/config surface.** `configuration.md` gains
+  the `qdrant` vector row, the `security`/`detection` sections (the mapping is six
+  top-level keys, not four), and the per-adapter `user_scoped` field; the `init`
+  config template and the module docstrings list every resolvable adapter `kind`
+  (pinecone/qdrant, langchain, the observability and agent kinds) plus `calibrate`;
+  the README package table, CONTRIBUTING, the glossary, `evidence-chain.md` (the
+  *attested* digest is anchored, not the run digest; the Outputs section now lists
+  `evidence.dsse.json` and the `--bundle`/`--pdf-engine`/`--include-manifest`
+  flags), `data-models.md` (tenant `locale`), and the vs-DeepTeam framework list
+  (ISO/IEC 42001 + CCPA) are corrected, and the residual bare `sectum` references
+  become `sectum-ai`. The duplicate `[Unreleased]` type headings are consolidated
+  to one each.
+- **`configuration.md` now documents the fake RAG/agent leak knobs and corrects
+  the adapter-field-validation wording.** The `rag.fake` and `agent.fake` rows said
+  "needs no fields", but both carry load-bearing leak knobs (`shared_index` for
+  Class 2 at the pipeline end; `confused_deputy` / `tool_call_passthrough` for
+  Class 7) — a `--config` user who omitted them silently got zero such findings.
+  The page also no longer claims the `build_*` resolvers "validate" extra fields:
+  `AdapterConfig` is `extra="allow"`, so a misspelled knob is accepted and silently
+  ignored (it type-checks only the keys it consumes).
+
+- **Two reference pages document the shipped substrate and data models, and a new
+  example walks the RAG-pipeline variant of the flagship probe.**
+  [`docs/substrate.md`](docs/substrate.md) covers the marker substrate end to end
+  (§6) — synthetic tenants and shared entities, corpus generation, the three
+  canary types with their distinct detection paths, multi-field planting,
+  model-scoped embedding references, secret redaction, the four-step detection
+  pipeline with its zero-FP/zero-FN guarantees, and the reproducibility contract.
+  [`docs/data-models.md`](docs/data-models.md) documents the `sectum_ai.spec` models
+  (§9), links the committed Draft 2020-12 JSON Schemas (generated by
+  `scripts/gen_schemas.py`, parity-tested), and records `SCHEMA_VERSION` and the
+  canonical-hashing rules. Both are added to the docs nav. A new
+  [`examples/rag-pipeline-bleed/`](examples/rag-pipeline-bleed/) walkthrough runs
+  the `rag-pipeline-bleed` probe (Class 2 at the customer-facing RAG endpoint, the
+  companion to `retrieval-pivot`) end to end and is wired into the e2e example
+  suite.
+
+- **ADR-0019 records the job-runner decision; the adapters package declares its
+  direct dependencies.** [ADR-0019](docs/adr/0019-job-runner-abstraction.md)
+  resolves the spec §21 open decision — the engine binds to the `JobRunner`
+  protocol with local serial/thread runners and a distributed backend (Temporal /
+  Prefect) stays swappable — and reads the §13 "Async" wording as a thread pool
+  (a swap-ability test covers a custom runner dropping in). `sectum-ai-adapters`
+  now declares `pydantic` directly (used by `base.py`) and `httpx` in the
+  `phoenix` extra (used by the Phoenix adapter), rather than relying on transitive
+  resolution (§13 dependency discipline).
+- **All six build-plan phases now record ✅ Met.** With the `embedding_models`
+  CLI wiring shipped, `PHASES.md` Phase 5 moves to Met (cited to the new full-CLI
+  sweep E2E `test_full_cli_sweep_records_per_model_rpr` and the existing baseline
+  regression tests), and its follow-on note marks P5 shipped. The README status
+  note drops the "one criterion still being closed" caveat — pre-alpha now
+  reflects API maturity, not missing phases — and still points to `PHASES.md` as
+  the authoritative gate record.
+- **`docs/adapters.md` live-adapter narrative refreshed to the current set.** The
+  prose documented only the early adapters; it now covers the observability
+  adapters (Helicone, Datadog, generic OpenTelemetry) and their
+  attestable-with-caveat erasure behaviour for Class 11, the LangChain RAG
+  pipeline, the framework-native agents (LangGraph, CrewAI, AutoGen, OpenAI
+  Assistants, Anthropic tool-use), the HuggingFace LoRA model, and the HTTP MCP
+  client — as prose, cross-linked to `docs/configuration.md` for the full field
+  reference.
+- **Honest build status + repo trust fixes.** The README status note no longer
+  overclaims "all six phases complete" — it mirrors `PHASES.md`, which is the
+  authoritative gate record and is now published on the docs site
+  (`docs/phases.md`, embedded via a snippet). `PHASES.md` Phase 2 moved to **Met**
+  (the docker-compose integration CI shipped); Phase 5's full-CLI
+  embedding-model-swap path is the one criterion still being closed. Added
+  `.github/FUNDING.yml`, and `SECURITY.md` now leads with GitHub private
+  vulnerability reporting instead of an all-zeros placeholder PGP fingerprint.
+- **Trust-artifact accuracy pass.** The flagship *Retrieval Pivot Attacks in
+  Hybrid RAG* result is now cited with its canonical identifier
+  [arXiv:2602.08668](https://arxiv.org/abs/2602.08668) (README, glossary) rather
+  than a bare "(arXiv, 2026)"; `docs/configuration.md` no longer
+  lists `verify` among the commands that accept `--config` (it has none);
+  `docs/samples/README.md` reports the retrieval-pivot pack's real size and
+  finding count (~33 KB, 321 findings); and ADR-0016's consequences now reflect
+  that `pdf_ref` is bound *and populated* end-to-end (it previously stated the CLI
+  did not populate it).
+- **`sectum-ai.yaml.example` used the wrong vector adapter key.** The example
+  config keyed the vector store under `vector:`, but the CLI resolver reads
+  `vector_store:` (matching `docs/configuration.md`), so a user who copied the
+  example and pointed it at a live vector store had that block silently ignored
+  and fell back to the in-memory fake. Renamed the block to `vector_store:`; a new
+  resolver-parity test asserts every adapter key in the example is one of the
+  eight families the resolver actually reads. Pre-existing since v0.1.0.
+- **Docs and example walkthroughs corrected to match shipped behavior.**
+  - The Class 2 flagship example (`examples/retrieval-pivot`) no longer claims
+    *every* benign cross-tenant query pivots at 100%; it reports the measured
+    retrieval-pivot rate from a real run and frames RPR as the fraction of the
+    flagship benign queries that surface a foreign marker.
+  - The erasure example (`examples/erasure-attestation`) and the Class 11 catalog
+    page now state the seven surfaces the probe actually scans (vector store,
+    tracing, agent memory, semantic cache, model adapter, search index, eval set)
+    with the full per-surface verdict, instead of describing only the vector store
+    as wired.
+  - `SECURITY.md` lists v0.1.0 as the first supported release instead of "no
+    stable release exists"; `glossary.md` describes `SECRET_CANARY` as the branded
+    `SECTUM-SECRET-<base32>` token matched exactly (not an "API-key/SSN-shaped"
+    string); the core-package quickstart verifies `.sectum-ai/evidence.json` and the
+    BYOC example validates with a scratch-workdir seed instead of a nonexistent
+    `--dry-run` flag.
+  - ADR-0008 carries a dated note that the `rag-pipeline-bleed` probe now issues a
+    per-principal `rag.ask` step, so the RAG family's user dimension is
+    *unverified* rather than *unneeded* — correcting the original "no probe issues
+    a `rag.ask` step" rationale.
+  - Doc-tail accuracy nits: `docs/quickstart.md` exit code `2` now spans
+    confirmed leaks (`probe`), a regression (`diff` / `baseline --compare`), and
+    residual / attestable-with-caveat data (`erasure`), not only "confirmed
+    leaks present"; ADR-0002 states the control-mapping table lives in
+    `evidence/controls.py` (not `sectum-ai-spec`); the `agent-tool-hijack`
+    example README and `run.sh` adapter counts are corrected to the seven shipped
+    kinds; the `tenant-boundary-fetch` README drops the `API` surface its probe
+    never emits; the Class-5 (KV-cache) page documents that a backend with no
+    shared prefix cache yields no signal by construction (absence ≠ isolation);
+    `configuration.md` clarifies `corpus_profile` is accepted but not yet
+    applied.
 
 ## [0.1.0] - 2026-05-26
 

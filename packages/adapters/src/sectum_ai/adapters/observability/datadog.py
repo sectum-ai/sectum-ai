@@ -26,6 +26,7 @@ mock-backed unit tests need no optional extra; the injectable
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from typing import Any, Protocol, Self
 from uuid import UUID
@@ -35,6 +36,9 @@ from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _SPAN_LIMIT = 1000
 """How many of a tenant's most recent spans to scan when searching for a marker."""
+
+_HTTP_TIMEOUT_S = 30.0
+"""Socket timeout for a Datadog HTTP call - without it a hung server blocks the run."""
 
 
 class _DatadogClient(Protocol):
@@ -155,8 +159,11 @@ class _HttpDatadogClient:
             method="POST",
             headers=self._headers,
         )
-        with urllib.request.urlopen(request) as response:
-            payload = json.loads(response.read())
+        try:
+            with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_S) as response:
+                payload = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise AdapterError(f"datadog request to {self._url} failed: {error}") from error
         data = payload.get("data") if isinstance(payload, dict) else None
         return (
             [event for event in data if isinstance(event, dict)] if isinstance(data, list) else []
