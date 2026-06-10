@@ -66,6 +66,14 @@ The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
 of them through the runner. Other family names parse successfully but are not
 consumed by the CLI.
 
+Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
+that support them), beyond the per-family fields the tables below highlight:
+`user_scoped: bool = false` switches isolation from tenant-level to per-user
+within a tenant (ADR-0006), and `soft_delete: bool = false` makes an erasure a
+no-op that the surface still acknowledges — the Class 11 residue. The tables list
+them on the rows where they are the load-bearing knob; both are accepted on the
+fakes generally.
+
 ### `vector_store`
 
 | `kind` | Fields | Notes |

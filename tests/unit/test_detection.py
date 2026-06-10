@@ -13,6 +13,7 @@ from sectum_ai.probes import (
 )
 from sectum_ai.probes.detection import (
     JudgeVerdict,
+    _canonical_embedding_model,
     _token_windows,
     _tokenize,
     is_cross_principal,
@@ -665,3 +666,53 @@ def test_pipeline_is_silent_on_a_canonical_openai_manifest_and_matching_embedder
     monkeypatch.setattr("sectum_ai.probes.detection._log", differ)
     DetectionPipeline(substrate, _NamedEmbedder("openai:text-embedding-3-large"), FakeJudge(), 0.0)
     assert "detect.embedding_ref.model_mismatch" in differ.events
+
+
+def test_pipeline_is_silent_on_a_fake_sweep_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The documented offline sweep seeds embedding_models=("fake-mini",...); every
+    # fake-* name is the SAME name-agnostic FakeEmbeddingProvider space, so the
+    # default fake detector (model_id "fake-deterministic") must NOT warn.
+    marker = Marker(
+        marker_id="e-fakesweep",
+        marker_type=MarkerType.ENTITY_CANARY,
+        owner_tenant_id=_TB,
+        plaintext="Project Wintergreen",
+        embedding_ref="fake-mini/0123456789abcdef",
+    )
+    scenario = Scenario(
+        scenario_id="custom",
+        seed=1,
+        tenants=(
+            SyntheticTenantSpec(tenant_id=_TA, display_name="A", industry="x", corpus_size=1),
+        ),
+    )
+    manifest = GroundTruthManifest(manifest_id="m", scenario_hash="h", markers=(marker,))
+    substrate = Substrate(
+        scenario=scenario, tenants=scenario.tenants, documents=(), manifest=manifest
+    )
+    spy = _SpyLog()
+    monkeypatch.setattr("sectum_ai.probes.detection._log", spy)
+    DetectionPipeline(substrate, FakeEmbeddingProvider(), FakeJudge(), 0.0)
+    assert "detect.embedding_ref.model_mismatch" not in spy.events
+
+
+def test_canonical_embedding_model_buckets_only_the_fakes() -> None:
+    assert _canonical_embedding_model("fake-mini") == "fake"
+    assert _canonical_embedding_model("fake-deterministic") == "fake"
+    assert _canonical_embedding_model("openai:text-embedding-3-small") == (
+        "openai:text-embedding-3-small"
+    )
+    assert _canonical_embedding_model("st:all-MiniLM-L6-v2") == "st:all-MiniLM-L6-v2"
+
+
+def test_span_traceable_falls_back_to_the_marker_for_a_tokenless_span() -> None:
+    # A real judge may affirm a leak but cite a whitespace/punctuation-only span;
+    # that has no usable tokens and must fall back to the marker, so a genuine leak
+    # present in the text is not lost to UNVERIFIED.
+    marker = _entity("Project Wintergreen")
+    text = "the retrieved chunk mentions Project Wintergreen in passing"
+    assert DetectionPipeline._span_traceable(text, "   ", marker) is True
+    assert DetectionPipeline._span_traceable(text, "...", marker) is True
+    assert DetectionPipeline._span_traceable(text, "", marker) is True
+    # But a marker genuinely absent from the text still does not trace.
+    assert DetectionPipeline._span_traceable("unrelated text", "   ", marker) is False

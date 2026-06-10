@@ -6,7 +6,7 @@
 #   sectum-ai seed   --workdir .sectum-ai --config sectum-ai.yaml
 #   sectum-ai probe  --workdir .sectum-ai --config sectum-ai.yaml --output json
 #   sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml
-#   sectum-ai verify .sectum-ai/evidence.json
+#   sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
 #
 # Wrapped with `asciinema rec`, the run produces a deterministic
 # `demo.cast` file that's embeddable on the website and linkable from
@@ -77,7 +77,10 @@ asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --co
   sectum-ai report --workdir .sectum-ai
   echo
   # === 4. Independently verify the pack with no Sectum installation trust.
-  sectum-ai verify .sectum-ai/evidence.json
+  # The demo report uses the local-dev timestamper (no RFC 3161 TSA / Rekor), so
+  # pass --allow-unanchored: verify reports INTEGRITY OK - UNANCHORED rather than
+  # failing on the missing independent anchor (the default since the verify change).
+  sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
   echo
   # === 5. Inspect what landed on disk.
   ls -lh .sectum-ai/*.json .sectum-ai/*.pdf
