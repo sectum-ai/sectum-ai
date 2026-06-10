@@ -1,6 +1,6 @@
 # BYOC runner — Snapshot subscription wrapper
 
-The minimum wrapper that turns the OSS `sectum` CLI into a Snapshot
+The minimum wrapper that turns the OSS `sectum-ai` CLI into a Snapshot
 subscription: a monthly cron job that runs the probe suite against the
 customer's stack, builds a tamper-evident evidence pack, and uploads it
 to Sectum Cloud. Sectum Cloud emails the customer + the operator a

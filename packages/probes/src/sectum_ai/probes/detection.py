@@ -446,12 +446,24 @@ class DetectionPipeline:
         # vector from the address the manifest records - binding the attested test
         # condition (which model embedded the entity) to the detector.
         self._stored_vectors: dict[str, tuple[float, ...]] = {}
+        entity_token_counts: dict[str, int] = {}
         for marker in self._markers:
             if marker.marker_type is MarkerType.ENTITY_CANARY:
                 vector = self._embedder.embed(marker.plaintext)
                 self._entity_vectors[marker.marker_id] = vector
                 if marker.embedding_ref is not None:
                     self._stored_vectors[marker.embedding_ref] = vector
+                for token in set(_tokenize(marker.plaintext)):
+                    entity_token_counts[token] = entity_token_counts.get(token, 0) + 1
+        # Tokens shared by 2+ entity-canary plaintexts are template boilerplate
+        # (every canary is "Project <codename>-<serial>", so "project" recurs) and
+        # are NOT distinctive evidence of any one marker. A judge-cited span that
+        # overlaps a marker only on such a token does not tie the leak to that
+        # marker (see _span_traceable) - self-calibrated from the manifest, so no
+        # hardcoded stoplist and no coupling to the substrate's entity template.
+        self._entity_boilerplate: frozenset[str] = frozenset(
+            token for token, count in entity_token_counts.items() if count >= 2
+        )
         self._warn_on_embedding_model_mismatch()
 
     def _warn_on_embedding_model_mismatch(self) -> None:
@@ -673,7 +685,9 @@ class DetectionPipeline:
             # judge is primed with the marker plaintext, so a parroting or
             # hallucinating verdict would otherwise put a fabricated CONFIRMED
             # finding (and a fabricated quoted span) into the signed audit pack.
-            confirmed = leak.leak and self._span_traceable(text, leak.evidence_span, marker)
+            confirmed = leak.leak and self._span_traceable(
+                text, leak.evidence_span, marker, self._entity_boilerplate
+            )
             if confirmed:
                 # The audit pack renders the span (the PDF renderer); fall back
                 # to the marker plaintext when the judge cited none, so a
@@ -704,7 +718,12 @@ class DetectionPipeline:
         return findings
 
     @staticmethod
-    def _span_traceable(text: str, evidence_span: str, marker: Marker) -> bool:
+    def _span_traceable(
+        text: str,
+        evidence_span: str,
+        marker: Marker,
+        boilerplate: frozenset[str] = frozenset(),
+    ) -> bool:
         """Whether a judge "yes" is tied back to *this* marker in the observation.
 
         The spec 6.4 FP-control requires the leak to trace to the manifest marker -
@@ -714,14 +733,16 @@ class DetectionPipeline:
         1. the marker plaintext itself is token-order-traceable in the observation
            (a verbatim / re-cased / NFKC-mangled leak of the entity); or
         2. the judge's cited ``evidence_span`` is traceable in the observation AND
-           shares a token with the marker - a genuine paraphrase of a distinctive
-           entity canary reproduces a distinctive token (the codename, the id),
-           which ties the cited evidence back to this marker.
+           shares a *distinctive* token with the marker - one not in ``boilerplate``
+           (the template words like "project" that every entity canary repeats).
+           A genuine paraphrase of a distinctive canary reproduces a distinctive
+           token (the codename, the id), which ties the cited evidence to this
+           marker; a span overlapping only on boilerplate does not.
 
         So a judge that affirms a leak but cites an in-observation phrase unrelated
-        to the marker (a primed or hallucinating verdict, or a real-but-irrelevant
-        quote) does NOT confirm - the finding stays UNVERIFIED. The deterministic
-        fake judge cites the marker plaintext, so it always confirms via (1).
+        to the marker - or related only via the shared template word - does NOT
+        confirm; the finding stays UNVERIFIED. The deterministic fake judge cites
+        the marker plaintext, so it always confirms via (1).
         """
         text_tokens = _tokenize(text)
         marker_tokens = _tokenize(marker.plaintext)
@@ -731,7 +752,8 @@ class DetectionPipeline:
         if marker_present:
             return True
         span_tokens = _tokenize(evidence_span)
-        if span_tokens and set(span_tokens) & set(marker_tokens):
+        distinctive_overlap = (set(span_tokens) & set(marker_tokens)) - boilerplate
+        if span_tokens and distinctive_overlap:
             return _ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
         return False
 

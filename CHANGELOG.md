@@ -862,11 +862,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marker.** The detection pipeline enforces the spec §6.4 false-positive control
   for every judge: a semantic candidate is CONFIRMED only when the marker
   plaintext itself is token-order traceable in the observation, or the judge's
-  cited evidence span is traceable AND shares a token with the marker (a genuine
-  paraphrase of a distinctive canary reproduces a distinctive token). A real LLM
-  judge is primed with the marker plaintext, so a parroting or hallucinating
-  verdict - or one that cites a real but marker-unrelated phrase - could otherwise
-  place a fabricated CONFIRMED finding into the signed audit pack. Such
+  cited evidence span is traceable AND shares a *distinctive* token with the
+  marker - one not in the entity-canary template boilerplate (e.g. "project",
+  shared by every canary), self-calibrated from the manifest. A genuine paraphrase
+  of a distinctive canary reproduces a distinctive token (the codename, the id). A
+  real LLM judge is primed with the marker plaintext, so a parroting or
+  hallucinating verdict - or one that cites a real but marker-unrelated phrase,
+  even one sharing only the template word - could otherwise place a fabricated
+  CONFIRMED finding into the signed audit pack. Such
   affirmations are downgraded to UNVERIFIED candidates with the downgrade reason
   recorded. The deterministic fake judge's behavior is unchanged (it cites the
   marker plaintext, which confirms via the marker-presence path).

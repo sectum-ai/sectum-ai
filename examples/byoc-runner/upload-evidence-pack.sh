@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Upload a probe-run evidence pack to Sectum Cloud's /evidence/upload.
 #
-# The Snapshot tier ships the OSS `sectum` CLI as the probe runner; this
+# The Snapshot tier ships the OSS `sectum-ai` CLI as the probe runner; this
 # script is the missing piece: it takes a completed run's evidence pack
 # (the three files produced by `sectum-ai report`) and POSTs them to the
 # Sectum Cloud delivery API. Sectum Cloud then writes the pack to its
