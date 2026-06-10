@@ -708,7 +708,14 @@ def probe(
     job_runner = build_job_runner(max_concurrency if len(suite) > 1 else 1)
     for group in job_runner.map(runner.run_per_step, suite):
         step_results.extend(group)
-    kv_report = KvCacheTimingProbe(substrate, model=model).run() if run_kv_timing else None
+    # Build a FRESH model adapter for the KV-timing probe rather than reusing the
+    # suite's `model`: the Class 9 LoRA probe trains/mutates that shared instance,
+    # and a contaminated adapter state would confound the prefix-cache timing. A
+    # fresh instance also gives the probe the cold cache its measurement warms.
+    kv_report = None
+    if run_kv_timing:
+        kv_model = build_model(loaded.adapters.get("model", AdapterConfig(kind="fake")))
+        kv_report = KvCacheTimingProbe(substrate, model=kv_model).run()
     finished = datetime.now(UTC)
 
     suite_findings = [finding for _, group in step_results for finding in group]

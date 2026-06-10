@@ -160,6 +160,17 @@ def test_vector_store_delete_removes_a_tenant() -> None:
     assert store.query(_TENANT_A, "alpha", k=10) == []
 
 
+def test_soft_delete_vector_store_retains_after_delete_and_is_capability_honest() -> None:
+    # A soft-delete store acknowledges the delete but keeps the vectors - the
+    # residue Class 11 erasure verification is built to catch - and must advertise
+    # the SOFT_DELETE capability so the verdict can record it.
+    store = FakeVectorStore(soft_delete=True)
+    assert store.supports(Capability.SOFT_DELETE)
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    store.delete(_TENANT_A)  # acknowledged, but retained
+    assert store.query(_TENANT_A, "alpha", k=10) != []
+
+
 def test_vector_store_fetch_returns_one_document_by_id() -> None:
     store = FakeVectorStore()
     store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
@@ -593,3 +604,31 @@ def test_soft_delete_eval_set_retains_fixtures() -> None:
     eval_set.delete(_TENANT_A)
     # the soft-delete fake acknowledges but leaves fixtures - the Class 11 residue
     assert eval_set.search(_TENANT_A, "CANARY-X")
+
+
+# --- Backup family contract (the spec's seventh hiding place) ----------------
+
+
+def test_backup_search_is_scoped_to_a_tenant() -> None:
+    backup = FakeBackup()
+    backup.add(_TENANT_A, "alpha snapshot row")
+    backup.add(_TENANT_B, "beta snapshot row")
+    assert backup.search(_TENANT_A, "alpha") == ["alpha snapshot row"]
+    # A's query must not reach B's snapshot, even on an overlapping token.
+    assert backup.search(_TENANT_B, "alpha") == []
+
+
+def test_backup_hard_delete_clears_a_tenants_snapshots() -> None:
+    backup = FakeBackup()
+    backup.add(_TENANT_A, "alpha snapshot row")
+    backup.delete(_TENANT_A)
+    assert backup.search(_TENANT_A, "alpha") == []
+
+
+def test_soft_delete_backup_retains_after_delete_and_is_capability_honest() -> None:
+    backup = FakeBackup(soft_delete=True)
+    assert backup.supports(Capability.SOFT_DELETE)
+    backup.add(_TENANT_A, "alpha snapshot row")
+    backup.delete(_TENANT_A)
+    # the soft-delete fake acknowledges but leaves the snapshot - the Class 11 residue
+    assert backup.search(_TENANT_A, "alpha") == ["alpha snapshot row"]
