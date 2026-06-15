@@ -322,11 +322,11 @@ class FakeJudge:
         """Confirm only when the marker's tokens appear in order, close together.
 
         Token *coverage* is not enough: a benign sentence that reuses the marker's
-        words in another order (``the project board, item 00002, by Onyx``) covers
-        every token of ``Project Onyx-00002`` without containing the entity, so a
-        set-overlap test would fabricate a leak. But a strict contiguous run is
-        too strict the other way - a real leak that paraphrases (``Project
-        (internal) Onyx-00002``) would be missed. The tokens must therefore appear
+        words in another order (``the project board, item 00002, by Onyx7K2QF``)
+        covers every token of ``Project Onyx7K2QF-00002`` without containing the
+        entity, so a set-overlap test would fabricate a leak. But a strict
+        contiguous run is too strict the other way - a real leak that paraphrases
+        (``Project (internal) Onyx7K2QF-00002``) would be missed. The tokens must therefore appear
         in order within a short span (a few interposed words allowed), which keeps
         the zero-false-positive invariant while not missing light paraphrase, and
         stays robust to spacing, casing, and punctuation.

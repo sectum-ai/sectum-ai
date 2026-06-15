@@ -865,6 +865,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Demo metrics in the docs match the current code.** The retrieval-pivot
+  example showed a stale confirmed-finding count (321 → 325) and an imprecise
+  rate, and several places claimed a "100%" Retrieval-Pivot Rate on the
+  shared-index demo where the showcase config actually measures **81.2%** (95% CI
+  68.1%-89.8%, n=48). Corrected the example READMEs, the showcase config comment,
+  the Class 2 attack-catalog page, and ADR-0005 to the measured rate (the product
+  is built on honest measurement, so an overstated headline number is a
+  credibility bug). Also fixed ADR-0001's residual pre-rename `sectum`
+  console-script/namespace references to `sectum-ai` / `sectum_ai`.
 - **The zero-false-positive backstop holds for a single-entity-marker manifest.**
   The FP-control demotes the entity template word "project" (shared scaffolding,
   not distinctive evidence) before deciding whether a judge's cited span ties back

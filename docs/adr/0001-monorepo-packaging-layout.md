@@ -7,7 +7,7 @@ Accepted (2026-05-16).
 ## Context
 
 The engineering spec, section 3 mandates that Sectum AI ships as five PyPI distributions that
-share a single `sectum` import namespace. Section 12 sketches a package tree that
+share a single `sectum_ai` import namespace. Section 12 sketches a package tree that
 includes a separate `packages/cli/` directory and an `__init__.py` directly under
 `core`'s `src/sectum_ai/`.
 
@@ -19,7 +19,7 @@ scaffolded:
    "five PyPI packages") or an unpublished member folded into the `sectum-ai`
    distribution by build-time tricks that reach across directories.
 2. Multiple distributions cannot each ship an `__init__.py` for the same
-   top-level `sectum` package without colliding on install.
+   top-level `sectum_ai` package without colliding on install.
 
 ## Decision
 
@@ -28,12 +28,12 @@ scaffolded:
   `sectum-ai-evidence`.
 - **The CLI is part of `core`.** It lives at `sectum_ai/cli/` inside the
   `packages/core` source tree, and `core`'s `pyproject.toml` declares the console
-  script `sectum = "sectum_ai.cli.app:app"`. There is no `packages/cli/`.
+  script `sectum-ai = "sectum_ai.cli.app:app"`. There is no `packages/cli/`.
 - **PEP 420 native namespace packages.** No package ships
   `src/sectum_ai/__init__.py`. Each distribution owns a distinct subtree under the
-  shared `sectum` namespace.
+  shared `sectum_ai` namespace.
 - **Build backend: `hatchling`,** configured per package with
-  `[tool.hatch.build.targets.wheel]` `only-include = ["src/sectum"]` and
+  `[tool.hatch.build.targets.wheel]` `only-include = ["src/sectum_ai"]` and
   `sources = ["src"]`.
 - **`uv` virtual workspace root.** The root `pyproject.toml` has a
   `[tool.uv.workspace]` table and shared tooling config but no `[project]` table;
@@ -44,7 +44,7 @@ scaffolded:
 - This deviates from the file tree drawn in the engineering spec, section 12 (no `cli/`
   directory; no top-level `sectum_ai/__init__.py`). This ADR records that deviation
   per the engineering spec, section 1.2.
-- `import sectum` resolves to an empty namespace; all code lives under a
+- `import sectum_ai` resolves to an empty namespace; all code lives under a
   subpackage (`sectum_ai.cli`, `sectum_ai.spec`, and so on).
 - `core` and the CLI version and release together, which matches their intended
   cadence.

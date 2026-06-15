@@ -46,7 +46,7 @@ surface foreign canaries through the answer:
 
 ```
 ran 1 probe: 15 confirmed cross-tenant findings
-retrieval-pivot rate: 62%
+retrieval-pivot rate: 62.5% (95% CI 42.7%-78.8%, n=24)
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
