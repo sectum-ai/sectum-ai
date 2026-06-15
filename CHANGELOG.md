@@ -750,6 +750,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Entity-canary codenames fuse a high-entropy segment, so the detection
+  backstop is sound at the source.** A canary was `Project <codename>-<serial>`
+  with a dictionary codeword (e.g. "Zephyr"); the spec §6.4 FP-control ties a
+  semantic leak to its marker by a *distinctive* shared token, but a bare
+  codeword collides with ordinary text, so a benign mention plus an over-eager
+  judge could fabricate a CONFIRMED leak (the only residual bypass the detection-
+  side filter could not close, because a human-meaningful codeword is inherently
+  collidable). Codenames are now `Project <codeword><base32>-<serial>` — the
+  entropy is fused onto the word without a separator, so `_tokenize` sees one
+  globally unique token that no benign text can echo. The codeword stays legible
+  for demos; Class 2 semantic bleed is unaffected (it rides the shared *organic*
+  corpus entities, not the unique canary). This moves the default-scenario
+  manifest golden hash (the `scenario_hash` is unchanged — it hashes the Scenario
+  inputs, not the generated marker plaintexts) and regenerates the committed
+  sample evidence packs; hard- and secret-canary generation is untouched.
 - **KV-cache timing applies a Bonferroni correction across tenant pairs.** A run
   performs one Welch's t-test per ordered tenant pair, so judging each at the
   per-pair `_ALPHA` inflated the family-wise false-positive rate. The run now

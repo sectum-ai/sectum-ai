@@ -75,7 +75,19 @@ _SECRET_SHAPES: tuple[Callable[[random.Random], str], ...] = (
 
 
 def _entity_plaintext(rng: random.Random, sequence: int) -> str:
-    return f"Project {rng.choice(_MARKER_CODENAMES)}-{sequence:05d}"
+    """A distinctive entity-canary name: a legible codeword fused with high entropy.
+
+    The codeword stays readable for demo output, but a short base32 segment is
+    appended *without a separator* so the whole codename is a single, globally
+    unique token (``_TOKEN_RE`` is ``[a-z0-9]+``). This matters for the detection
+    backstop (the spec, section 6.4): a bare dictionary codeword like "Zephyr"
+    collides with ordinary text, so a benign mention of the word plus an
+    over-eager judge could confirm a non-leak; a distinctive token like
+    "ZephyrK3F7A" cannot collide, so it genuinely ties a leak to this marker.
+    Class 2 semantic bleed is unaffected - it rides the shared *organic* entities
+    in the corpus, not the unique canary codename.
+    """
+    return f"Project {rng.choice(_MARKER_CODENAMES)}{_b32(rng, 3)}-{sequence:05d}"
 
 
 def generate_markers(

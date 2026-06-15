@@ -43,13 +43,15 @@ def test_default_scenario_hashes_match_the_published_golden() -> None:
     # tests above only catch run-to-run drift, not a shift in the output itself.
     # The reproducibility contract (spec section 6.5) makes these stable across
     # machines and Python versions. Update these literals only with a deliberate
-    # substrate change - or, as here, a deliberate SCHEMA_VERSION bump, which both
-    # models stamp into ``schema_version`` and so flows into the canonical form
-    # (last bumped 0.4.0 -> 0.5.0 for the Retrieval-Pivot Rate confidence interval).
+    # substrate change - e.g. a SCHEMA_VERSION bump (0.4.0 -> 0.5.0 for the
+    # Retrieval-Pivot Rate CI), or the entity-canary codename gaining a high-entropy
+    # segment so it is a distinctive single token (the detection backstop, spec
+    # 6.4). The scenario_hash is unchanged by the latter (it hashes the Scenario
+    # inputs, not the generated marker plaintexts); the manifest canonical hash moves.
     substrate = build_substrate(default_scenario(seed=2026))
     assert substrate.manifest.scenario_hash == (
         "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65"
     )
     assert canonical_hash(substrate.manifest) == (
-        "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409"
+        "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27"
     )
