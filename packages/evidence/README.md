@@ -5,8 +5,9 @@ The tamper-evident **evidence chain** for [Sectum AI](https://github.com/sectum-
 This distribution turns a verification run into an auditor-acceptable evidence
 pack and verifies it independently:
 
-- canonicalize the run and hash it (SHA-256) into a `run_digest`;
-- timestamp the digest with an RFC 3161 Time-Stamp Authority;
+- canonicalize the run and hash it (SHA-256) into a `run_digest`, then hash the
+  whole pack into the `attested_digest` that the anchors bind;
+- timestamp the `attested_digest` with an RFC 3161 Time-Stamp Authority;
 - record it in a Sigstore Rekor transparency log;
 - bundle the canonical run, the hashed ground-truth manifest, the TSA token,
   the Rekor proof, and control mappings into an `in-toto` attestation + a

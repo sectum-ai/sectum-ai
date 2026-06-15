@@ -151,9 +151,9 @@ No live memory adapter is wired into the CLI resolver yet.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `timestamper` | `local` \| `rfc3161` | `local` | `local` records a wall-clock time with no external anchor. `rfc3161` submits the run digest to a Time-Stamp Authority (requires the `sectum-ai-evidence[rfc3161]` extra). |
+| `timestamper` | `local` \| `rfc3161` | `local` | `local` records a wall-clock time with no external anchor. `rfc3161` submits the attested (whole-pack) digest to a Time-Stamp Authority (requires the `sectum-ai-evidence[rfc3161]` extra). |
 | `tsa_url` | str | — | (`rfc3161` only) URL of the Time-Stamp Authority; defaults to FreeTSA when unset. `sectum-ai report --tsa <url>` overrides it. |
-| `rekor` | bool | `false` | Also record the run digest in a Sigstore Rekor transparency log (requires the `sectum-ai-evidence[rekor]` extra). `sectum-ai report --rekor` enables it for one run. |
+| `rekor` | bool | `false` | Also record the attested digest in a Sigstore Rekor transparency log (requires the `sectum-ai-evidence[rekor]` extra). `sectum-ai report --rekor` enables it for one run. |
 | `rekor_url` | str | — | URL of the Sigstore Rekor instance; defaults to the public-good instance when unset. |
 
 `sectum-ai verify` checks an RFC 3161 token against a root pinned independently of

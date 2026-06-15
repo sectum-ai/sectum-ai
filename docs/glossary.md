@@ -23,7 +23,7 @@ principal's session proves a leak. Three types
 (see [the marker substrate](substrate.md)):
 
 - **HARD_CANARY** — high-entropy unique token (`SECTUM-CANARY-{base32(16 bytes)}`).
-  Exact substring or regex match; zero false positives.
+  Exact substring match (case-, width-, and zero-width-insensitive); zero false positives.
 - **ENTITY_CANARY** — a unique synthetic entity (fabricated person,
   codename, account number) owned by exactly one principal. Tested by
   semantic similarity plus exact match.
@@ -50,8 +50,8 @@ queries leaked across tenants on a shared vector index).
 ## Surface
 A place tenant data can live or leak. The catalog covers: API, vector DB,
 RAG pipeline, prompt/completion logs, semantic cache, KV cache, agent
-memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
-indexes, tracing pipelines.
+memory, MCP tool calls, agent frameworks, fine-tunes / adapters, eval sets,
+backups, search indexes, tracing pipelines.
 
 ## Probe
 A pluggable attack class implementing the `Probe` protocol (a deterministic
