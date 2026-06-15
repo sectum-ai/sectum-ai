@@ -11,7 +11,7 @@ body:
     id: version
     attributes:
       label: Version or commit
-      description: Output of `uv run sectum --version`, or the commit SHA.
+      description: Output of `uv run sectum-ai --version`, or the commit SHA.
     validations:
       required: true
   - type: dropdown

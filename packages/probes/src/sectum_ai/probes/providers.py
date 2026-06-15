@@ -127,14 +127,18 @@ def _verdict_from_json(text: str) -> JudgeVerdict:
         index = text.find("{")
         while index != -1:
             try:
-                candidate, _ = decoder.raw_decode(text, index)
+                candidate, end = decoder.raw_decode(text, index)
             except json.JSONDecodeError:
+                # Not a JSON object start (e.g. "{step 1}") - advance one char.
                 index = text.find("{", index + 1)
                 continue
             if isinstance(candidate, dict) and "leak" in candidate:
                 data = candidate
                 break
-            index = text.find("{", index + 1)
+            # A valid but non-matching object (e.g. "{}" or a wrapper holding a
+            # nested verdict): skip PAST it via the decode end offset, so the scan
+            # does not descend into its inner braces and latch a nested fragment.
+            index = text.find("{", end)
         if data is None:
             raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from None
     if not isinstance(data, dict) or "leak" not in data:
