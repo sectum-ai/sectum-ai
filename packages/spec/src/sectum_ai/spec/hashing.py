@@ -6,11 +6,13 @@ the foundation of the reproducibility contract (the engineering spec, section 6.
 evidence chain (the engineering spec, section 8).
 
 Finite floats need no rounding: ``json.dumps`` emits CPython's shortest
-round-tripping ``repr``, which is deterministic, so a value reached by different
-arithmetic but equal in IEEE-754 canonicalizes identically across machines.
-Rounding would only risk colliding genuinely distinct metrics, so it is
-deliberately not done (ADR-0021). Non-finite floats (NaN/Infinity) have no valid,
-injective JSON form and are refused below.
+round-tripping ``repr``, which is deterministic, so the same float value
+canonicalizes identically across machines and Python versions. Canonicalization
+is by ``repr``, which distinguishes ``-0.0`` from ``0.0`` (the one case where two
+IEEE-754-equal values serialize differently); no metric carries a signed zero
+whose sign is meaningful, so this is harmless. Rounding would only risk colliding
+genuinely distinct metrics, so it is deliberately not done (ADR-0021). Non-finite
+floats (NaN/Infinity) have no valid, injective JSON form and are refused below.
 """
 
 import hashlib
