@@ -2,9 +2,9 @@
   "run_result": {
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65",
-    "manifest_hash": "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409",
-    "started_at": "2026-06-08T20:13:59.422435+00:00",
-    "finished_at": "2026-06-08T20:13:59.423305+00:00",
+    "manifest_hash": "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27",
+    "started_at": "2026-06-15T16:59:26.891040+00:00",
+    "finished_at": "2026-06-15T16:59:26.892022+00:00",
     "adapter_versions": {
       "fake-vector": "0.1.0",
       "fake-observability": "0.1.0",
@@ -424,8 +424,8 @@
     },
     "schema_version": "0.5.0"
   },
-  "manifest_hash": "e2230f0c2311f827441e297c593d2ef3cebafcaa18edc1149fce66069ce3d409",
-  "tsa_token": "{\"digest\":\"94734ff8d47c11959b20e0446639d8777780201cfd498c3aa232c496bc7aaa8a\",\"timestamped_at\":\"2026-06-08T20:13:59.436428+00:00\",\"tsa\":\"local-dev\"}",
+  "manifest_hash": "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27",
+  "tsa_token": "{\"digest\":\"80ff1619ac1b217116caabdb30a59f254069eeeaad0a62fde3e87af52dbdca0a\",\"timestamped_at\":\"2026-06-15T16:59:26.914456+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -447,6 +447,15 @@
       "assertion": "Cross-tenant information leakage tested; residual leakage itemized."
     },
     {
+      "framework": "ISO/IEC 42001:2023",
+      "control_ids": [
+        "A.6.2.6",
+        "A.7.2",
+        "A.7.5"
+      ],
+      "assertion": "Per-tenant data management and provenance in the AI system tested; isolation verified under AI system operation and monitoring."
+    },
+    {
       "framework": "GDPR",
       "control_ids": [
         "Article 17",
@@ -454,6 +463,15 @@
         "Article 32"
       ],
       "assertion": "Erasure across the AI surfaces verified; tenant isolation tested."
+    },
+    {
+      "framework": "CCPA/CPRA",
+      "control_ids": [
+        "1798.105",
+        "1798.100",
+        "1798.150"
+      ],
+      "assertion": "Deletion of a consumer's personal information across the AI surfaces verified; segregation of consumer data tested."
     },
     {
       "framework": "EU AI Act",
@@ -487,7 +505,7 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "3cc148326cf4ce8ea8e637d5c0f61bb4d945a5bd706f533bf7589f1cefbbb2ec",
+  "pdf_ref": "bf662d1af0677286aeb842094c46027d5538b22bdb4f4b16d85d2afce49f992c",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.5.0"

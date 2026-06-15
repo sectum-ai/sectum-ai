@@ -31,6 +31,7 @@ from sectum_ai.spec import (
     SyntheticTenantSpec,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
+from sectum_ai.substrate.markers import _MARKER_CODENAMES
 
 
 def _substrate() -> Substrate:
@@ -664,6 +665,37 @@ def test_a_collided_codename_stays_distinctive_and_a_genuine_leak_confirms() -> 
         and f.status is FindingStatus.CONFIRMED
     ]
     assert confirmed, "a genuine leak of a collided codename must still confirm"
+
+
+def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() -> None:
+    # Root-fix regression (review round 7): the FP-control backstop ties a leak to
+    # its marker by a distinctive shared token. When the entity codename was a bare
+    # dictionary word ("Project Zephyr-00002"), a benign observation echoing that
+    # word - plus "project" boilerplate and a serial-shaped number - shared the
+    # *distinctive* token "zephyr" with the marker, so an over-eager (lying) judge
+    # fabricated a CONFIRMED leak. Codenames now fuse high entropy onto the word
+    # ("Project Zephyr5BL7G-00002"), so the bare word no longer matches a marker
+    # token: the benign mention must stay UNVERIFIED. This drives the *real*
+    # generated substrate, not a hand-written plaintext, so the substrate and
+    # detection layers are proven sound together.
+    substrate = build_substrate(default_scenario(seed=11))
+    bare = {name.lower() for name in _MARKER_CODENAMES}
+    marker = next(
+        m for m in substrate.manifest.markers if m.marker_type is MarkerType.ENTITY_CANARY
+    )
+    codeword = next(b for t in _tokenize(marker.plaintext) for b in bare if t.startswith(b))
+    observer = next(t for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
+    # The round-7 attack shape: the bare codeword + "project" + a 5-digit number,
+    # none of which is a distinctive token of the (now entropic) marker.
+    benign_span = f"the {codeword} project briefing 00002"
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span=benign_span), 0.0
+    )
+    text = f"a benign note: {benign_span} was filed with the finance team for review"
+    findings = pipeline.detect(observer.tenant_id, text, Surface.VECTOR_DB, probe_id="p")
+    entity = [f for f in findings if f.marker_id == marker.marker_id]
+    assert entity, "the candidate must be retained as UNVERIFIED evidence"
+    assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
 
 
 class _CountingEmbedder:

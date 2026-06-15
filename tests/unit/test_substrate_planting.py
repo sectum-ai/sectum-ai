@@ -3,8 +3,10 @@
 import hashlib
 
 from sectum_ai.adapters.fakes import FakeVectorStore
+from sectum_ai.probes.detection import _tokenize
 from sectum_ai.spec import MarkerType, Substrate
 from sectum_ai.substrate import build_substrate, default_scenario
+from sectum_ai.substrate.markers import _MARKER_CODENAMES
 
 
 def _substrate(
@@ -83,3 +85,34 @@ def test_metadata_is_searched_by_the_vector_store() -> None:
     hits = store.query(substrate.tenants[1].tenant_id, acme.display_name, k=10)
     assert hits, "a metadata-only term returned no hits"
     assert all(hit.tenant_id == acme.tenant_id for hit in hits)
+
+
+def test_entity_codename_is_a_distinctive_single_token() -> None:
+    # The detection FP-control backstop (spec section 6.4) ties a semantic leak to
+    # its marker by a *distinctive* shared token. A bare dictionary codeword like
+    # "Zephyr" is not distinctive - it collides with ordinary text, so a benign
+    # mention plus an over-eager judge could fabricate a CONFIRMED leak. Every
+    # entity canary therefore fuses a high-entropy base32 segment onto the codeword
+    # *without a separator*, so `_tokenize` (`[a-z0-9]+`) sees one globally unique
+    # token, never the bare codeword.
+    bare = {name.lower() for name in _MARKER_CODENAMES}
+    substrate = _substrate()
+    codename_tokens: list[str] = []
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is not MarkerType.ENTITY_CANARY:
+            continue
+        tokens = _tokenize(marker.plaintext)
+        # The fused codename is the one token that begins with a base codeword.
+        fused = [t for t in tokens for b in bare if t.startswith(b)]
+        assert len(fused) == 1, f"{marker.marker_id} codename token not isolated: {tokens}"
+        token = fused[0]
+        # Legible (still starts with the codeword) but strictly longer - the entropy
+        # is fused on, so the token is never the bare collidable codeword itself.
+        assert token not in bare, f"{marker.marker_id} codename is a bare codeword: {token}"
+        assert any(token != b and token.startswith(b) for b in bare)
+        codename_tokens.append(token)
+        # No token anywhere in the plaintext is a bare codeword a benign text could echo.
+        assert not (set(tokens) & bare), f"{marker.marker_id} leaks a bare codeword: {tokens}"
+    assert codename_tokens, "the default scenario must plant entity canaries"
+    # Distinctive => globally unique, even when rng.choice repeats a base codeword.
+    assert len(set(codename_tokens)) == len(codename_tokens), "codename tokens collided"
