@@ -12,6 +12,7 @@ from sectum_ai.probes import (
     dedupe_findings,
 )
 from sectum_ai.probes.detection import (
+    _ENTITY_TEMPLATE_TOKENS,
     JudgeVerdict,
     _canonical_embedding_model,
     _token_windows,
@@ -696,6 +697,40 @@ def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() 
     entity = [f for f in findings if f.marker_id == marker.marker_id]
     assert entity, "the candidate must be retained as UNVERIFIED evidence"
     assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
+
+
+def test_a_single_entity_marker_manifest_does_not_confirm_on_the_template_word() -> None:
+    # Zero-FP holds for ANY manifest size (review round 8). The statistical
+    # boilerplate test cannot calibrate from one entity marker - a single sample
+    # makes every token look equally (non-)recurring - so the entity template word
+    # "project" is demoted unconditionally via `_ENTITY_TEMPLATE_TOKENS`. Without
+    # that, a lying judge citing the bare template word would fabricate a CONFIRMED
+    # leak of the lone marker even though its distinctive codename never appears.
+    substrate = _entity_substrate("Project Zephyr5BL7G-00002")  # exactly ONE entity canary
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="the project plan"), 0.0
+    )
+    text = "a benign note: the project plan was approved by finance last quarter"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    entity = [f for f in findings if f.marker_id == "e-Project Zephyr5BL7G-00002"]
+    assert entity, "the candidate must be retained as UNVERIFIED evidence"
+    assert all(f.status is FindingStatus.UNVERIFIED for f in entity)
+
+
+def test_template_tokens_stay_in_sync_with_the_generator() -> None:
+    # `_ENTITY_TEMPLATE_TOKENS` is a hand-maintained mirror of the substrate entity
+    # template's fixed scaffolding (held in detection to avoid a probes->core import
+    # cycle). It must equal the tokens EVERY generated entity canary shares - the
+    # template minus the per-marker codename and serial. If the template prefix in
+    # `_entity_plaintext` ever changes, this fails, forcing the mirror to update.
+    substrate = build_substrate(default_scenario(seed=2026))
+    token_sets = [
+        set(_tokenize(m.plaintext))
+        for m in substrate.manifest.markers
+        if m.marker_type is MarkerType.ENTITY_CANARY
+    ]
+    assert len(token_sets) >= 2, "default scenario must plant multiple entity canaries"
+    assert set.intersection(*token_sets) == set(_ENTITY_TEMPLATE_TOKENS)
 
 
 class _CountingEmbedder:

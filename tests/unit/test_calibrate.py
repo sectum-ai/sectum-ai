@@ -111,8 +111,8 @@ def test_calibration_is_deterministic_from_seed() -> None:
 
 def test_recommendation_separates_the_classes_on_the_fake_embedder() -> None:
     # The synthetic positives (the full entity in a window) score above the
-    # negatives (same-tenant 0.0; unrelated codename-only overlap), so the fake
-    # embedder yields a clean zero-FP recommendation rather than the fallback.
+    # negatives (same-tenant 0.0; unrelated text sharing only the entity prefix),
+    # so the fake embedder yields a clean zero-FP recommendation, not the fallback.
     result = calibrate_threshold(_substrate(), model_name="fake", embedder=FakeEmbeddingProvider())
     assert result.recommended_score is not None
     assert result.recommended_score.recall == 1.0
