@@ -13,8 +13,8 @@ RAG study.
 
 The Retrieval-Pivot Rate, however, is a property of the *stack under test*, not
 a fixed number. Sectum AI's demo stack is a single shared vector index with no
-tenant scoping — the worst case — and honestly reports a 100% rate; an isolated
-per-tenant store reports 0%. Encoding one stack's measured percentage into an
+tenant scoping — the worst case — and honestly reports a high rate (81.2% in the
+bundled showcase); an isolated per-tenant store reports 0%. Encoding one stack's measured percentage into an
 artifact name would misrepresent a stack-dependent metric and sits poorly with
 the spec's positioning rules (section 20: precise, anti-hype).
 

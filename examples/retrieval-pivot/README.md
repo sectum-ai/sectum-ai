@@ -48,8 +48,8 @@ isolation. Most benign cross-tenant queries retrieve a foreign canary, so the
 headline **Retrieval-Pivot Rate is high**:
 
 ```
-ran 12 probes: 321 confirmed cross-tenant findings
-retrieval-pivot rate: 81%
+ran 12 probes: 325 confirmed cross-tenant findings
+retrieval-pivot rate: 81.2% (95% CI 68.1%-89.8%, n=48)
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and

@@ -21,8 +21,9 @@ probe issues one benign query per shared entity from each tenant's session.
 
 A foreign canary in the retrieved context is a confirmed leak. The headline
 metric is the **Retrieval-Pivot Rate** — the fraction of benign queries that
-surfaced a foreign marker. The rate is a property of the stack under test: 100%
-on a shared index with no isolation, 0% on a per-tenant-namespace store.
+surfaced a foreign marker. The rate is a property of the stack under test: high
+on a shared index with no isolation (81.2% in the bundled showcase), 0% on a
+per-tenant-namespace store.
 
 The rate is a binomial proportion (`k` of `n` benign cross-tenant queries
 surfaced a foreign marker), so a bare point estimate over-claims precision when
