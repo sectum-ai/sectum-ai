@@ -18,7 +18,7 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 | File | Source example | Size | What it is |
 |---|---|---|---|
-| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | 33 KB | The auditor-facing PDF: executive summary, scope / methodology, all 348 findings (with per-finding OWASP / ATLAS / NIST IDs and remediation pointers), compliance-control coverage, and the integrity / verification block. |
+| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | 33 KB | The auditor-facing PDF: executive summary, scope / methodology, all 343 findings (with per-finding OWASP / ATLAS / NIST IDs and remediation pointers), compliance-control coverage, and the integrity / verification block. |
 | [`retrieval-pivot-attestation.intoto.json`](retrieval-pivot-attestation.intoto.json) | `examples/retrieval-pivot` | 4 KB | The [in-toto](https://in-toto.io/) attestation envelope: the run digest, the timestamp token, and the manifest hash that pin the test condition. |
 | [`erasure-attestation-audit-pack.pdf`](erasure-attestation-audit-pack.pdf) | `examples/erasure-attestation` | 4 KB | The DPO-facing GDPR Article 17 erasure attestation, **happy path**: per-surface verdicts ERASED across all eight configured surfaces, with the Coverage & caveats matrix. |
 | [`erasure-attestation-evidence.json`](erasure-attestation-evidence.json) | `examples/erasure-attestation` | 3 KB | The machine-readable evidence pack for the happy-path erasure run (the JSON sibling of the PDF, schema-versioned). |
@@ -76,7 +76,7 @@ cp examples/erasure-attestation/out-residual/erasure-attestation.intoto.json doc
 ```
 
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
-(~296 KB with 348 findings); run the example locally to inspect the JSON
+(~293 KB with 343 findings); run the example locally to inspect the JSON
 structure, or read the
 [`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum_ai/spec/models.py)
 schema.

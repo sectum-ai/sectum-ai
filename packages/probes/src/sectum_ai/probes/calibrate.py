@@ -189,11 +189,12 @@ def build_calibration_set(
             )
         )
         for template in _UNRELATED_TEMPLATES:
-            # The unrelated text borrows the entity's *codename* as a near miss
-            # without the full entity (e.g. "Quasar engagement"), so the negative
-            # is adversarial, not trivially dissimilar.
-            codename = marker.plaintext.split("-")[0]
-            text = template.format(entity=codename)
+            # The unrelated text borrows the entity's distinctive prefix - codename
+            # plus its fused entropy, minus the serial - as a near miss without the
+            # full entity (e.g. "Project Quasar7K2Q engagement"), so the negative is
+            # adversarial, not trivially dissimilar.
+            entity_prefix = marker.plaintext.split("-")[0]
+            text = template.format(entity=entity_prefix)
             examples.append(
                 CalibrationExample(
                     is_positive=False,

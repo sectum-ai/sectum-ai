@@ -52,7 +52,7 @@ Three marker types, each with a distinct detection path:
 | Marker type | Form | Detection path |
 |---|---|---|
 | `HARD_CANARY` | A high-entropy branded token, `SECTUM-CANARY-{base32(16 bytes)}` | Exact substring match (case-, width-, and zero-width-insensitive). Zero false positives. |
-| `ENTITY_CANARY` | A fabricated, single-tenant-unique entity (a project codename + serial) | Semantic similarity → calibrated judge. Tests organic bleed (Class 2). |
+| `ENTITY_CANARY` | A fabricated, single-tenant-unique entity (`Project <codename + fused entropy>-<serial>`, e.g. `Project Zephyr5BL7G-00002`) | Semantic similarity → calibrated judge. Tests organic bleed (Class 2). |
 | `SECRET_CANARY` | A fake but plausibly shaped secret — an OpenAI-style `sk-` key, an AWS `AKIA` id, or a non-issuable `9xx` US SSN | Exact **+ credential-format** detector. Tests PII/secret surfacing and redaction. |
 
 Every marker is recorded in the ground-truth manifest as

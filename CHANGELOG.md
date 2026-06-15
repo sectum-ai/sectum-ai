@@ -865,6 +865,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The zero-false-positive backstop holds for a single-entity-marker manifest.**
+  The FP-control demotes the entity template word "project" (shared scaffolding,
+  not distinctive evidence) before deciding whether a judge's cited span ties back
+  to a marker. That demotion was *statistical* — a token recurring across a
+  majority of entity canaries — which a manifest with only one entity marker
+  cannot calibrate (a single sample makes every token look equally non-recurring),
+  so "project" read as distinctive and a parroting/lying judge could confirm a
+  fabricated leak on the bare template word. The template tokens are now demoted
+  unconditionally (a constant, kept in sync with the generator by a unit test),
+  independent of manifest size. Not reachable through the shipped pipeline (the
+  substrate plants ≥2 entity canaries per tenant), but `DetectionPipeline` is
+  public and the zero-FP property is contractual. Regression test added.
 - **`sectum-ai baseline` maps a config error to exit 3, not exit 1.** The command
   was missing the shared typed-error handler the other commands use, so a
   `ConfigError` surfaced as a generic crash (exit 1) instead of the documented

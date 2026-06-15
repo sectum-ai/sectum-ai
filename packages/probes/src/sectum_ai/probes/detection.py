@@ -155,6 +155,18 @@ def _tokenize(text: str) -> list[str]:
 # for a verification product than a missed subtle rephrase).
 _MAX_INTERPOSED_TOKENS = 1
 
+# The fixed lexical scaffolding of the substrate's entity-canary template -
+# "Project <codename>-<serial>" (sectum_ai.substrate.markers). It is shared by
+# every entity canary, so it is never distinctive evidence of one marker, and the
+# FP-control demotes it when deciding whether a judge's cited span ties back to a
+# marker. Held here as a constant rather than imported, to avoid a probes->core
+# import cycle (core imports probes); a unit test pins it in sync with the
+# generator's template. Demoting it must not depend on manifest size: a purely
+# statistical "recurs across markers" test cannot identify the scaffolding from a
+# single-entity-marker manifest, which would otherwise let a judge confirm a leak
+# on the bare template word alone.
+_ENTITY_TEMPLATE_TOKENS = frozenset({"project"})
+
 
 def _ordered_within_span(haystack: list[str], needle: list[str], max_interposed: int = 1) -> bool:
     """Whether ``needle``'s tokens occur in order, close together, inside ``haystack``.
@@ -457,14 +469,17 @@ class DetectionPipeline:
                     self._stored_vectors[marker.embedding_ref] = vector
                 for token in set(_tokenize(marker.plaintext)):
                     entity_token_counts[token] = entity_token_counts.get(token, 0) + 1
-        # A token is template boilerplate only when it recurs across a MAJORITY of
-        # the entity canaries (every canary is "Project <codename>-<serial>", so
-        # "project" is in all of them) - NOT distinctive evidence of any one marker.
-        # The majority test (rather than a bare >=2) is deliberate: two markers can
-        # randomly draw the same codename, and demoting that codename would drop a
-        # genuine leak of it. Self-calibrated from the manifest, so no hardcoded
-        # stoplist and no coupling to the substrate's entity template.
-        self._entity_boilerplate: frozenset[str] = frozenset(
+        # Template boilerplate - the fixed scaffolding words every entity canary
+        # ("Project <codename>-<serial>") repeats, NOT distinctive evidence of any
+        # one marker - from two unioned signals:
+        #   * the known template tokens, demoted regardless of manifest size (the
+        #     single-entity-marker manifest is the case a statistical test cannot
+        #     calibrate; without this the bare word "project" reads as distinctive);
+        #   * a statistical-majority fallback for any other word a future template
+        #     might share across a MAJORITY of canaries (>=2 and >half). The
+        #     majority test, not a bare >=2, avoids demoting an entropic codename in
+        #     the astronomically unlikely event two markers draw the same token.
+        self._entity_boilerplate: frozenset[str] = _ENTITY_TEMPLATE_TOKENS | frozenset(
             token
             for token, count in entity_token_counts.items()
             if count >= 2 and 2 * count > entity_marker_count
