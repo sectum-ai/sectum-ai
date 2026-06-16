@@ -55,11 +55,15 @@ _REDACTED = "<redacted>"
 # mirror ``sectum_ai.substrate.markers``: the HARD canary's branded prefix and the
 # three secret-canary credential formats. Entity canaries are ordinary-looking
 # text, so they are covered by the key-name pass (``plaintext``/``canary``/…), not
-# value-scrubbed, to avoid false positives on legitimate prose.
+# value-scrubbed, to avoid false positives on legitimate prose. The ``sk-``/``AKIA``
+# shapes are anchored at a non-alphanumeric boundary so they match a standalone
+# token, not a substring of a benign identifier (``task-``/``disk-`` + a long id,
+# ``…AKIA…`` mid-word); an underscore still counts as a boundary so ``api_sk-…``
+# is caught.
 _SECRET_VALUE_RE = re.compile(
     r"SECTUM-CANARY-[A-Z2-7]+"  # HARD canary (branded high-entropy token)
-    r"|sk-[A-Za-z0-9]{20,}"  # OpenAI-style API key
-    r"|AKIA[A-Z0-9]{16}"  # AWS access-key id
+    r"|(?<![A-Za-z0-9])sk-[A-Za-z0-9]{20,}"  # OpenAI-style API key
+    r"|(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}"  # AWS access-key id
     r"|\b9\d{2}-\d{2}-\d{4}\b"  # non-issuable 9xx US SSN shape
 )
 
