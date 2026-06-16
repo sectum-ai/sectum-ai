@@ -1,11 +1,12 @@
 """Sigstore Rekor transparency-log anchoring for the evidence chain (engineering spec, section 8.2).
 
-After the run digest is timestamped (the RFC 3161 path in :mod:`sectum_ai.evidence.tsa`),
+After the digest is timestamped (the RFC 3161 path in :mod:`sectum_ai.evidence.tsa`),
 it can also be recorded in the `Sigstore Rekor <https://docs.sigstore.dev/logging/overview/>`_
 transparency log. ``RekorTransparencyLog`` signs the digest and submits a
 ``hashedrekord`` entry; the log returns an inclusion proof that anyone can
-verify offline. ``sectum-ai verify`` then proves the run digest is present in a
-public, append-only log under a checkpoint signed by Rekor itself.
+verify offline. ``sectum-ai verify`` then proves the digest is present in a
+public, append-only log under a checkpoint signed by Rekor itself. (In the
+evidence chain this digest is the whole-pack ``attested_digest`` — ADR-0016.)
 
 Trust model (the same shape as the TSA): the inclusion proof is only as
 trustworthy as the log key its checkpoint is checked against. We never trust a
@@ -85,7 +86,7 @@ def rekor_keyring(*key_pems: bytes) -> dict[str, bytes]:
 
 
 class RekorTransparencyLog:
-    """Records a run digest in a Sigstore Rekor transparency log.
+    """Records a digest in a Sigstore Rekor transparency log.
 
     Signs the digest with an ECDSA P-256 key (ephemeral by default; pass
     ``signing_key_pem`` to pin a stable key) and submits a ``hashedrekord``
@@ -114,8 +115,9 @@ class RekorTransparencyLog:
     def record(self, digest: str) -> str:
         """Record ``digest`` in the log; return the inclusion proof as JSON.
 
-        ``digest`` is a SHA-256 hex string (the run digest). The hashedrekord
-        signature is over the digest bytes, prehashed, as Rekor expects.
+        ``digest`` is a SHA-256 hex string (the evidence chain passes the
+        whole-pack ``attested_digest``). The hashedrekord signature is over the
+        digest bytes, prehashed, as Rekor expects.
         """
         try:
             from cryptography.hazmat.primitives import hashes
@@ -131,9 +133,9 @@ class RekorTransparencyLog:
         try:
             digest_bytes = bytes.fromhex(digest)
         except ValueError as error:
-            raise EvidenceError(f"the run digest is not a hex string: {digest!r}") from error
+            raise EvidenceError(f"the digest is not a hex string: {digest!r}") from error
         if len(digest_bytes) != 32:
-            raise EvidenceError(f"the run digest must be a 32-byte SHA-256 hex string: {digest!r}")
+            raise EvidenceError(f"the digest must be a 32-byte SHA-256 hex string: {digest!r}")
 
         if self._signing_key_pem is not None:
             key = load_pem_private_key(self._signing_key_pem, password=None)

@@ -45,7 +45,7 @@ def _builtin_cert(filename: str) -> bytes:
 class Rfc3161Timestamper:
     """A :class:`~sectum_ai.evidence.chain.Timestamper` backed by an RFC 3161 TSA.
 
-    Submits the SHA-256 of the run digest to the TSA and returns the DER
+    Submits the SHA-256 of the digest to the TSA and returns the DER
     timestamp response, base64-encoded so it round-trips through the evidence
     pack's JSON. Defaults to FreeTSA; pass ``tsa_url`` for a customer-pinned TSA.
     """

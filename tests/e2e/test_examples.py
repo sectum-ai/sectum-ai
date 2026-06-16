@@ -102,7 +102,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
 
     # Mutate the pack: change a single field VALUE inside the canonical run
     # JSON. The pack still validates as an EvidencePack (the schema is
-    # unchanged) but the run digest no longer matches what the TSA token
+    # unchanged) but the attested digest no longer matches what the TSA token
     # attests to; verify must catch the mismatch and exit 4 with a "[FAIL]"
     # line. Mutating a key instead would trip the schema check first and
     # exit 3 (a different failure mode covered elsewhere).
