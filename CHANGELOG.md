@@ -1211,6 +1211,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Log redaction is recursive and value-aware (defense in depth).** The
+  `redact_sensitive` processor previously dropped sensitive values only by
+  *top-level* key name, so a secret nested under a benign key, embedded in the
+  event message, or carried in an exception's text could slip into logs. It now
+  recurses into nested dicts/lists (dropping a sensitive key at any depth) and
+  scrubs the distinctive canary/secret *shapes* (`SECTUM-CANARY-…`, `sk-…`,
+  `AKIA…`, the non-issuable `9xx` SSN form) wherever they appear. No production
+  call site relied on the gap (logs carry only operational metadata); this is a
+  backstop against a future careless one. DEBUG output is unchanged (ADR-0020).
 - **`sectum-ai verify` now requires an independent anchor by default.** The
   flag-based downgrade guards could not stop an attacker who edits a pack,
   recomputes the digest with both anchor flags false, and re-stamps it with a
