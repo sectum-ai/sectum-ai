@@ -865,6 +865,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A missing optional adapter dependency fails with a clear error, not a
+  traceback.** Selecting a live backend (`kind: pgvector`/`chroma`/`weaviate`/
+  `pinecone`/`qdrant`/`redis`) without installing its extra raised an uncaught
+  `ModuleNotFoundError` (exit 1) instead of the documented `AdapterError` →
+  config/adapter exit code 3 that the model adapter already produced. The resolver
+  now maps the missing-dependency `ImportError` to an `AdapterError` with an
+  `install sectum-ai-adapters[<extra>]` hint, uniformly for every SDK-backed kind.
 - **Demo metrics in the docs match the current code.** The retrieval-pivot
   example showed a stale confirmed-finding count (321 → 325) and an imprecise
   rate, and several places claimed a "100%" Retrieval-Pivot Rate on the

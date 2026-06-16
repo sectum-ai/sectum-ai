@@ -1,5 +1,6 @@
 """Tests for the ``sectum-ai.yaml`` configuration loader."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,7 @@ from sectum_ai.config import (
     load_config,
 )
 from sectum_ai.probes import OpenAIEmbeddingProvider, OpenAIJudge
-from sectum_ai.spec import ConfigError
+from sectum_ai.spec import AdapterError, ConfigError
 
 
 def test_load_config_returns_defaults_for_an_empty_file(tmp_path: Path) -> None:
@@ -1243,3 +1244,36 @@ def test_load_config_local_mode_hosted_provider_raises_config_error(tmp_path: Pa
     path.write_text("detection:\n  mode: local\n  embedder:\n    kind: openai\n")
     with pytest.raises(ConfigError, match="forbids hosted"):
         load_config(path)
+
+
+# Each SDK-backed live adapter must surface a clear AdapterError (which the CLI
+# maps to the config/adapter exit code 3) - not a raw ModuleNotFoundError
+# traceback (exit 1) - when its optional extra is not installed. Forced by
+# stubbing the SDK to None in sys.modules and evicting the adapter module so the
+# resolver re-imports it, so the test holds whether or not the SDK is installed.
+_MISSING_EXTRA_VECTOR = [
+    ("pgvector", "psycopg", "sectum_ai.adapters.vector.pgvector", {"dsn": "postgresql://x"}),
+    ("chroma", "chromadb", "sectum_ai.adapters.vector.chroma", {}),
+    ("weaviate", "weaviate", "sectum_ai.adapters.vector.weaviate", {}),
+    ("pinecone", "pinecone", "sectum_ai.adapters.vector.pinecone", {"api_key": "k", "index": "i"}),
+    ("qdrant", "qdrant_client", "sectum_ai.adapters.vector.qdrant", {}),
+]
+
+
+@pytest.mark.parametrize(("kind", "sdk", "module", "fields"), _MISSING_EXTRA_VECTOR)
+def test_build_vector_store_missing_extra_raises_adaptererror(
+    monkeypatch: pytest.MonkeyPatch, kind: str, sdk: str, module: str, fields: dict[str, str]
+) -> None:
+    monkeypatch.setitem(sys.modules, sdk, None)  # simulate the extra not installed
+    monkeypatch.delitem(sys.modules, module, raising=False)  # force a fresh import
+    with pytest.raises(AdapterError, match=kind):
+        build_vector_store(AdapterConfig(kind=kind, **fields))
+
+
+def test_build_cache_missing_redis_extra_raises_adaptererror(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "redis", None)
+    monkeypatch.delitem(sys.modules, "sectum_ai.adapters.cache.redis", raising=False)
+    with pytest.raises(AdapterError, match="redis"):
+        build_cache(AdapterConfig(kind="redis"))
