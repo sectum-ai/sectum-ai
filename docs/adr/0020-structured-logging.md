@@ -43,8 +43,12 @@ Add `sectum_ai.spec._logging`, re-exported as `get_logger`, `configure_logging`,
   (`token`, `api_key`, `authorization`, `plaintext`, `canary`, …) and raw
   tenant-content keys (`content`, `raw_response`, `answer`, `query`, `prompt`,
   `evidence_span`, …) from every event emitted *above* DEBUG, replacing them with
-  `<redacted>`. DEBUG is opt-in, so verbose local troubleshooting may still carry
-  raw values — exactly the "never … above DEBUG" boundary the spec draws.
+  `<redacted>`. It recurses into nested dicts/lists (so a sensitive key is caught
+  at any depth) and additionally scrubs the distinctive canary/secret *shapes*
+  (`SECTUM-CANARY-…`, `sk-…`, `AKIA…`, the non-issuable `9xx` SSN form) wherever
+  they appear — including the event message and an exception's text. DEBUG is
+  opt-in, so verbose local troubleshooting may still carry raw values — exactly
+  the "never … above DEBUG" boundary the spec draws.
 - **What gets logged.** Operational metadata only: probe-run completion (probe id,
   step/finding/confirmed-leak counts), a WARNING per confirmed cross-tenant leak
   (marker id, owner/observed tenant ids, surface, severity — never the span),
@@ -60,9 +64,14 @@ Add `sectum_ai.spec._logging`, re-exported as `get_logger`, `configure_logging`,
   (`tests/unit/test_logging.py`): secrets and tenant content are `<redacted>` at
   INFO, pass through at DEBUG, logs land on stderr (never stdout), and DEBUG is
   silent by default.
-- Redaction is **key-name based**: a caller that puts a secret under an unlisted
-  key, or inside a free-text message, can still leak it. The mitigation is the
-  convention enforced here — pass structured fields, never interpolate tenant
-  content or secrets into the event string — plus the small, audited set of log
-  sites. A value-scanning processor was considered and rejected as both costly
-  and false-positive-prone for v1.
+- Redaction is **key-name based, with a narrow value-shape backstop**: sensitive
+  keys are dropped at any nesting depth, and the distinctive canary/secret shapes
+  are scrubbed wherever they appear (the message, a nested value, an exception's
+  text). A caller that puts a *non-shaped* secret under an unlisted key inside
+  free text could still leak it, so the convention still stands — pass structured
+  fields, never interpolate tenant content or secrets into the event string —
+  backed by the small, audited set of log sites. A *broad* value-scanner (every
+  value against many patterns) was considered and rejected as costly and
+  false-positive-prone; the shape-scoped scrub added later — defense in depth,
+  after a review flagged the key-name-only gap — is cheap and matches only
+  unmistakable canary/credential formats, so it avoids both objections.

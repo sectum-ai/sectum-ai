@@ -18,6 +18,7 @@ deterministic and stdout stays clean.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from typing import cast
 
@@ -48,6 +49,53 @@ _TENANT_CONTENT_KEYS = frozenset(
 _SENSITIVE_KEYS = _SECRET_KEYS | _TENANT_CONTENT_KEYS
 _REDACTED = "<redacted>"
 
+# Canary/secret value shapes, scrubbed wherever they appear (nested under a benign
+# key, inside the event message, or in an exception's text) so a future careless
+# call site cannot leak one even without using a sensitive key name. The shapes
+# mirror ``sectum_ai.substrate.markers``: the HARD canary's branded prefix and the
+# three secret-canary credential formats. Entity canaries are ordinary-looking
+# text, so they are covered by the key-name pass (``plaintext``/``canary``/…), not
+# value-scrubbed, to avoid false positives on legitimate prose.
+_SECRET_VALUE_RE = re.compile(
+    r"SECTUM-CANARY-[A-Z2-7]+"  # HARD canary (branded high-entropy token)
+    r"|sk-[A-Za-z0-9]{20,}"  # OpenAI-style API key
+    r"|AKIA[A-Z0-9]{16}"  # AWS access-key id
+    r"|\b9\d{2}-\d{2}-\d{4}\b"  # non-issuable 9xx US SSN shape
+)
+
+
+def _scrub_text(text: str) -> str:
+    """Replace any embedded canary/secret-shaped token with the redaction marker."""
+    return _SECRET_VALUE_RE.sub(_REDACTED, text)
+
+
+def _redact_value(value: object) -> object:
+    """Recursively redact sensitive keys and scrub secret-shaped strings.
+
+    Walks nested mappings/sequences so a sensitive key or a secret-shaped value is
+    caught at any depth, not just at the top level. A sensitive key is dropped
+    wholesale; strings (including the event message) and the text of exception
+    values are scrubbed for embedded secret shapes. Other scalars pass through.
+    """
+    if isinstance(value, dict):
+        return {
+            key: (
+                _REDACTED
+                if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS
+                else _redact_value(val)
+            )
+            for key, val in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
+    if isinstance(value, str):
+        return _scrub_text(value)
+    if isinstance(value, BaseException):
+        return _scrub_text(f"{type(value).__name__}: {value}")
+    return value
+
 
 def redact_sensitive(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
     """Drop secret-bearing keys and raw tenant content from non-DEBUG events.
@@ -56,13 +104,17 @@ def redact_sensitive(_logger: WrappedLogger, _method: str, event_dict: EventDict
     raw values; everything at INFO and above is redacted (the engineering spec,
     section 16: "never log secrets or raw tenant content above DEBUG"). Requires
     ``add_log_level`` to run first so ``level`` is present in the event dict.
+
+    Redaction is recursive and value-aware (defense in depth): a sensitive key is
+    dropped at any nesting depth, and a canary/secret-shaped token is scrubbed
+    wherever it appears — nested under a benign key, embedded in the event
+    message, or carried in an exception's text — so a careless call site cannot
+    leak one. Today every production call site logs only operational metadata
+    (IDs, counts, model names, digests); this is the backstop for the future.
     """
     if event_dict.get("level") == "debug":
         return event_dict
-    for key in list(event_dict):
-        if key.lower() in _SENSITIVE_KEYS:
-            event_dict[key] = _REDACTED
-    return event_dict
+    return cast(EventDict, _redact_value(event_dict))
 
 
 def configure_logging(*, debug: bool = False, json_output: bool = True) -> None:
