@@ -234,3 +234,29 @@ def test_end_to_end_logger_redacts_nested_and_message_secrets(
     assert _SK not in record["event"] and "<redacted>" in record["event"]
     assert record["request"]["meta"]["api_key"] == "<redacted>"
     assert _AKIA not in record["note"]
+
+
+def test_scrub_only_matches_credential_shapes_at_a_word_boundary() -> None:
+    # The sk-/AKIA shapes must match a standalone token, not a substring of a
+    # benign identifier — else an ops field like a task/disk id is over-redacted.
+    preserved = {
+        "level": "info",
+        "event": "x",
+        "task": "task-" + "A" * 40,  # contains 'sk-'+long, but mid-identifier
+        "disk": "disk-" + "A" * 40,
+        "midword_aws": "x" + _AKIA,  # AKIA preceded by an alphanumeric
+    }
+    assert redact_sensitive(None, "info", dict(preserved)) == preserved
+    # ... but a standalone token, or one after a non-alphanumeric boundary
+    # (including '_'), is still scrubbed.
+    boundary = {
+        "level": "info",
+        "event": "x",
+        "underscore": "api_" + _SK,
+        "equals": "key=" + _AKIA,
+        "standalone": _SK,
+    }
+    out = redact_sensitive(None, "info", dict(boundary))
+    assert out["underscore"] == "api_<redacted>"
+    assert out["equals"] == "key=<redacted>"
+    assert out["standalone"] == "<redacted>"
