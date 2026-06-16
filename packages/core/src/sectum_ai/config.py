@@ -25,7 +25,8 @@ adapter resolver can look them up at run time without storing secrets.
 import hashlib
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -68,7 +69,7 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import ConfigError
+from sectum_ai.spec import AdapterError, ConfigError
 
 
 class ScenarioConfig(BaseModel):
@@ -387,6 +388,27 @@ def _unsupported(family: str, kind: str) -> ConfigError:
     return ConfigError(f"{family} kind {kind!r} is not yet supported by the CLI resolver")
 
 
+@contextmanager
+def _optional_extra(extra: str) -> Iterator[None]:
+    """Map a missing optional adapter dependency to a typed ``AdapterError``.
+
+    The SDK-backed live adapters import their client SDK lazily (either at module
+    import or at construction). If the operator selected ``kind: <extra>`` without
+    ``pip install sectum-ai-adapters[<extra>]``, surface a clear install hint -
+    which the CLI maps to the documented config/adapter exit code (3) - instead of
+    a bare ``ModuleNotFoundError`` traceback (exit 1). Mirrors the model adapter's
+    ``_import_required``. Only ``ImportError`` is mapped; a ``ConfigError`` from
+    resolving backend fields passes through unchanged.
+    """
+    try:
+        yield
+    except ImportError as error:
+        raise AdapterError(
+            f"the '{extra}' adapter requires the optional `{extra}` dependency; "
+            f"install sectum-ai-adapters[{extra}] to enable it"
+        ) from error
+
+
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     """Build the vector-store adapter the config selects."""
     extras = config.model_extra or {}
@@ -397,60 +419,69 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "pgvector":
-        from sectum_ai.adapters.vector.pgvector import PgVectorStore
+        with _optional_extra("pgvector"):
+            from sectum_ai.adapters.vector.pgvector import PgVectorStore
 
-        dsn = _resolve_secret(extras, "dsn", "dsn_env")
-        return PgVectorStore(
-            dsn, _hashing_embed, dim=_EMBED_DIM, user_scoped=_bool(extras, "user_scoped", False)
-        )
+            dsn = _resolve_secret(extras, "dsn", "dsn_env")
+            return PgVectorStore(
+                dsn, _hashing_embed, dim=_EMBED_DIM, user_scoped=_bool(extras, "user_scoped", False)
+            )
     if config.kind == "chroma":
-        from sectum_ai.adapters.vector.chroma import ChromaVectorStore
+        with _optional_extra("chroma"):
+            from sectum_ai.adapters.vector.chroma import ChromaVectorStore
 
-        host = _str(extras, "host", "localhost")
-        port = _int(extras, "port", 8000)
-        return ChromaVectorStore(
-            host, port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
-        )
+            host = _str(extras, "host", "localhost")
+            port = _int(extras, "port", 8000)
+            return ChromaVectorStore(
+                host, port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
+            )
     if config.kind == "weaviate":
-        from sectum_ai.adapters.vector.weaviate import WeaviateVectorStore
+        with _optional_extra("weaviate"):
+            from sectum_ai.adapters.vector.weaviate import WeaviateVectorStore
 
-        host = _str(extras, "host", "localhost")
-        port = _int(extras, "port", 8080)
-        grpc_port = _int(extras, "grpc_port", 50051)
-        return WeaviateVectorStore(
-            host, port, grpc_port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
-        )
+            host = _str(extras, "host", "localhost")
+            port = _int(extras, "port", 8080)
+            grpc_port = _int(extras, "grpc_port", 50051)
+            return WeaviateVectorStore(
+                host,
+                port,
+                grpc_port,
+                _hashing_embed,
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
     if config.kind == "pinecone":
-        from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
+        with _optional_extra("pinecone"):
+            from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
 
-        api_key = _resolve_secret(extras, "api_key", "api_key_env")
-        index_name = _required_str(extras, "index")
-        return PineconeVectorStore.connect(
-            api_key,
-            index_name,
-            _hashing_embed,
-            host=_optional_str(extras, "host"),
-            user_scoped=_bool(extras, "user_scoped", False),
-        )
+            api_key = _resolve_secret(extras, "api_key", "api_key_env")
+            index_name = _required_str(extras, "index")
+            return PineconeVectorStore.connect(
+                api_key,
+                index_name,
+                _hashing_embed,
+                host=_optional_str(extras, "host"),
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
     if config.kind == "qdrant":
-        from sectum_ai.adapters.vector.qdrant import QdrantVectorStore
+        with _optional_extra("qdrant"):
+            from sectum_ai.adapters.vector.qdrant import QdrantVectorStore
 
-        # api_key is optional: a local/self-hosted Qdrant typically has no auth.
-        # (distinct variable name so mypy doesn't narrow it against pinecone's str)
-        qdrant_api_key = (
-            _resolve_secret(extras, "api_key", "api_key_env")
-            if "api_key" in extras or "api_key_env" in extras
-            else None
-        )
-        return QdrantVectorStore(
-            _hashing_embed,
-            dim=_EMBED_DIM,
-            host=_str(extras, "host", "localhost"),
-            port=_int(extras, "port", 6333),
-            grpc_port=_int(extras, "grpc_port", 6334),
-            api_key=qdrant_api_key,
-            user_scoped=_bool(extras, "user_scoped", False),
-        )
+            # api_key is optional: a local/self-hosted Qdrant typically has no auth.
+            # (distinct variable name so mypy doesn't narrow it against pinecone's str)
+            qdrant_api_key = (
+                _resolve_secret(extras, "api_key", "api_key_env")
+                if "api_key" in extras or "api_key_env" in extras
+                else None
+            )
+            return QdrantVectorStore(
+                _hashing_embed,
+                dim=_EMBED_DIM,
+                host=_str(extras, "host", "localhost"),
+                port=_int(extras, "port", 6333),
+                grpc_port=_int(extras, "grpc_port", 6334),
+                api_key=qdrant_api_key,
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
     raise _unsupported("vector_store", config.kind)
 
 
@@ -464,16 +495,17 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "redis":
-        from sectum_ai.adapters.cache.redis import RedisCache
+        with _optional_extra("redis"):
+            from sectum_ai.adapters.cache.redis import RedisCache
 
-        host = _str(extras, "host", "localhost")
-        port = _int(extras, "port", 6379)
-        tenant_scoped = _bool(extras, "tenant_scoped", True)
-        user_scoped = _bool(extras, "user_scoped", False)
-        prefix = _str(extras, "prefix", "sectum-ai")
-        return RedisCache(
-            host, port, tenant_scoped=tenant_scoped, user_scoped=user_scoped, prefix=prefix
-        )
+            host = _str(extras, "host", "localhost")
+            port = _int(extras, "port", 6379)
+            tenant_scoped = _bool(extras, "tenant_scoped", True)
+            user_scoped = _bool(extras, "user_scoped", False)
+            prefix = _str(extras, "prefix", "sectum-ai")
+            return RedisCache(
+                host, port, tenant_scoped=tenant_scoped, user_scoped=user_scoped, prefix=prefix
+            )
     raise _unsupported("cache", config.kind)
 
 
