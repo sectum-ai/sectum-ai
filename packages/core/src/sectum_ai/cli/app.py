@@ -247,7 +247,7 @@ adapters:
 evidence:
   timestamper: local    # local | rfc3161
   # tsa_url: https://freetsa.org/tsr
-  rekor: false          # true: also record the run digest in a Sigstore Rekor log
+  rekor: false          # true: also record the attested digest in a Sigstore Rekor log
   # rekor_url: https://rekor.sigstore.dev
 
 # At-rest protection for the seeded substrate (which holds the ground-truth
@@ -894,7 +894,7 @@ def report(
     ] = None,
     rekor: Annotated[
         bool,
-        typer.Option("--rekor", help="Also record the run digest in a Sigstore Rekor log."),
+        typer.Option("--rekor", help="Also record the attested digest in a Sigstore Rekor log."),
     ] = False,
     pdf_engine: Annotated[
         PdfEngine,

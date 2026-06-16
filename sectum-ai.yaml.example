@@ -170,8 +170,8 @@ adapters:
 # Evidence chain (the engineering spec, section 8).
 # -----------------------------------------------------------------------------
 evidence:
-  # `local`   — fast, dev-only HMAC stamp (the default).
-  # `rfc3161` — submit the run digest to an RFC 3161 Time-Stamp Authority.
+  # `local`   — fast, dev-only local timestamp with no external anchor (the default).
+  # `rfc3161` — submit the attested (whole-pack) digest to an RFC 3161 Time-Stamp Authority.
   timestamper: local
   # tsa_url: https://freetsa.org/tsr
   # Sigstore Rekor transparency log (off by default for dev; on for prod).

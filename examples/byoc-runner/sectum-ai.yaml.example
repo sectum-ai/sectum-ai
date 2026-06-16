@@ -67,7 +67,7 @@ adapters:
     tenant_argument: tenant_id
 
 # Evidence-chain anchoring. Production runs use a real RFC 3161 TSA
-# and (optionally) record the run digest in a Sigstore Rekor
+# and (optionally) record the attested (whole-pack) digest in a Sigstore Rekor
 # transparency log.
 evidence:
   timestamper: rfc3161
