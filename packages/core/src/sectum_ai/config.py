@@ -9,8 +9,8 @@ built-in defaults would otherwise use (the engineering spec, section 10).
 adapter instances the CLI's probe suite can drive. Each family resolves
 ``kind: fake`` to its in-memory fake and dispatches the live kinds to their
 adapters (for example
-``pgvector``/``chroma``/``weaviate``/``pinecone``/``qdrant`` for the
-vector store, ``redis`` for the cache,
+``pgvector``/``chroma``/``weaviate``/``pinecone``/``qdrant``/``milvus``/
+``opensearch``/``azure-search`` for the vector store, ``redis`` for the cache,
 ``phoenix``/``langfuse``/``langsmith``/``otel``/``helicone``/``datadog``
 for observability, ``http``/``langchain`` for RAG,
 ``http``/``langgraph``/``autogen``/``crewai``/``openai-assistants``/
@@ -480,6 +480,56 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 port=_int(extras, "port", 6333),
                 grpc_port=_int(extras, "grpc_port", 6334),
                 api_key=qdrant_api_key,
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
+    if config.kind == "milvus":
+        with _optional_extra("milvus"):
+            from sectum_ai.adapters.vector.milvus import MilvusVectorStore
+
+            # token is optional: a local/self-hosted Milvus typically has no auth.
+            milvus_token = (
+                _resolve_secret(extras, "token", "token_env")
+                if "token" in extras or "token_env" in extras
+                else None
+            )
+            return MilvusVectorStore(
+                _hashing_embed,
+                dim=_EMBED_DIM,
+                uri=_str(extras, "uri", "http://localhost:19530"),
+                token=milvus_token,
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
+    if config.kind == "opensearch":
+        with _optional_extra("opensearch"):
+            from sectum_ai.adapters.vector.opensearch import OpenSearchVectorStore
+
+            # password is optional: a local OpenSearch with the security plugin
+            # disabled has no auth.
+            opensearch_password = (
+                _resolve_secret(extras, "password", "password_env")
+                if "password" in extras or "password_env" in extras
+                else None
+            )
+            return OpenSearchVectorStore(
+                _hashing_embed,
+                dim=_EMBED_DIM,
+                host=_str(extras, "host", "localhost"),
+                port=_int(extras, "port", 9200),
+                user=_optional_str(extras, "user"),
+                password=opensearch_password,
+                use_ssl=_bool(extras, "use_ssl", False),
+                verify_certs=_bool(extras, "verify_certs", False),
+                user_scoped=_bool(extras, "user_scoped", False),
+            )
+    if config.kind == "azure-search":
+        with _optional_extra("azure-search"):
+            from sectum_ai.adapters.vector.azure_search import AzureSearchVectorStore
+
+            return AzureSearchVectorStore(
+                _hashing_embed,
+                dim=_EMBED_DIM,
+                endpoint=_required_str(extras, "endpoint"),
+                api_key=_resolve_secret(extras, "api_key", "api_key_env"),
                 user_scoped=_bool(extras, "user_scoped", False),
             )
     raise _unsupported("vector_store", config.kind)

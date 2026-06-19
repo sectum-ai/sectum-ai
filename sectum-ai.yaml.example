@@ -52,6 +52,17 @@ adapters:
     # kind: pinecone           # Pinecone (cloud, opt-in)
     #   index_env: SECTUM_PINECONE_INDEX
     #   api_key_env: SECTUM_PINECONE_API_KEY
+    # kind: qdrant             # Qdrant (self-hosted)
+    #   host: localhost
+    #   port: 6333
+    # kind: milvus             # Milvus (self-hosted; needs etcd + minio)
+    #   uri: http://localhost:19530
+    # kind: opensearch         # OpenSearch (self-hosted; knn_vector)
+    #   host: localhost
+    #   port: 9200
+    # kind: azure-search       # Azure AI Search (cloud, opt-in)
+    #   endpoint: https://<service>.search.windows.net
+    #   api_key_env: SECTUM_AZURE_SEARCH_KEY
     kind: fake
 
   cache:

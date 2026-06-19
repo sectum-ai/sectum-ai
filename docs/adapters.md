@@ -32,13 +32,17 @@ Live adapters implement the same family interface. This section is the narrative
 tour; for the full per-family reference — every `kind`, its fields, and how it
 scopes and erases a tenant — see [configuration.md](configuration.md).
 
-**Vector stores.** The pgvector, Chroma, Weaviate, and Qdrant stores are
-tenant-isolated — each tenant gets its own table/collection — and add a
-`fetch`-by-id primitive alongside similarity `query`; the Pinecone store gives
-each tenant its own namespace within one index and is verified by a mock-backed
-test plus an opt-in live test (it is a hosted service, so there is no local
-backend). Qdrant is self-hosted (`kind: qdrant`, `[qdrant]` extra), so it ships a
-docker-compose service and a live integration test.
+**Vector stores.** The pgvector, Chroma, Weaviate, Qdrant, OpenSearch, and Milvus
+stores are tenant-isolated — each tenant gets its own table/collection/index — and
+add a `fetch`-by-id primitive alongside similarity `query`; the Pinecone and Azure
+AI Search stores give each tenant its own namespace/index on a hosted service and
+are verified by an opt-in live test (no local backend). Qdrant (`kind: qdrant`,
+`[qdrant]`) and OpenSearch (`kind: opensearch`, `[opensearch]`) are self-hosted, so
+each ships a docker-compose service and a live integration test in CI. Milvus
+(`kind: milvus`, `[milvus]`) is also self-hosted but heavier (it needs etcd and
+minio), so its compose service is gated behind the `milvus` profile and its live
+integration test runs locally (`docker compose --profile milvus up -d`) rather than
+in CI. Azure AI Search uses `kind: azure-search`, `[azure-search]`.
 
 **Cache.** The Redis cache prefixes its keys and tenant-scopes them by default;
 `tenant_scoped=False` models the shared key space Class 4 is built to catch.
@@ -91,9 +95,10 @@ extras, imported lazily so the base install stays light:
 `pip install sectum-ai-adapters[<name>]` for `huggingface`, `rag-langchain`,
 `langgraph`, `crewai`, `autogen`, `openai-assistants`, or `anthropic-tooluse`.
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent / MCP
-adapters use only the standard library. The pgvector, Chroma, Weaviate, Redis,
-and Phoenix adapters run against docker-compose backends in CI (the **Integration**
-job); the hosted and SDK-backed adapters are exercised by tests that mock their
+adapters use only the standard library. The pgvector, Chroma, Weaviate, Qdrant,
+OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI
+(the **Integration** job); Milvus runs against its profile-gated compose service
+locally. The hosted and SDK-backed adapters are exercised by tests that mock their
 transport, with any live tests gated behind credentials so CI never needs them.
 
 Run `sectum-ai adapters` to list the installed adapters and their capabilities.

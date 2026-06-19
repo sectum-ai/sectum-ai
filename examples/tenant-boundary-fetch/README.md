@@ -67,8 +67,9 @@ Each Class 1 finding carries:
 
 The probe is adapter-agnostic; only the `VectorStoreAdapter` it
 routes through changes. Point `vector_store.kind` at any of the
-live vector adapters Sectum ships (`pinecone` / `pgvector` /
-`weaviate` / `chroma`) and the same probe runs against real
+live vector adapters Sectum ships (`pgvector` / `chroma` /
+`weaviate` / `qdrant` / `pinecone` / `milvus` / `opensearch` /
+`azure-search`) and the same probe runs against real
 infrastructure:
 
 ```yaml
