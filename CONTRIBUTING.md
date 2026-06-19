@@ -33,8 +33,10 @@ uv run pre-commit install   # enable git hooks
 The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the
 local backends up with `docker compose up -d --wait` (pgvector, Chroma, Weaviate,
-Qdrant, Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against the live
-adapters. CI runs them too, in the dedicated **Integration** job.
+Qdrant, OpenSearch, Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against
+the live adapters. CI runs them too, in the dedicated **Integration** job. (Milvus is
+heavier — it needs etcd and minio — so it lives behind a compose profile: run
+`docker compose --profile milvus up -d` to exercise its test locally.)
 
 ## Conventions
 

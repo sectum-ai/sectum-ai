@@ -8,7 +8,7 @@ Every adapter family ships a deterministic in-memory `fake` (used by the unit
 suite and offline runs) plus live backends, each behind a capability-reporting
 interface so probes can declare what they require:
 
-- **Vector stores** — Pinecone, pgvector, Weaviate, Chroma
+- **Vector stores** — pgvector, Chroma, Weaviate, Qdrant, Pinecone, Milvus, OpenSearch, Azure AI Search
 - **RAG pipelines** — generic HTTP, LangChain
 - **Observability** — Langfuse, LangSmith, Phoenix, Helicone, Datadog APM, generic OpenTelemetry
 - **Agents** — LangGraph, AutoGen, CrewAI, OpenAI Assistants, Anthropic tool-use, generic HTTP
