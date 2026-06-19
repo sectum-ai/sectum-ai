@@ -23,8 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   post-fetch check (ADR-0006). Deterministic point ids (UUIDv5 of the `doc_id`)
   make upserts idempotent. Ships a docker-compose service and a live integration
   test that skips when the client/server is absent (the repo's standard live-
-  adapter pattern). More vector backends (Milvus / OpenSearch / Azure AI Search)
-  to follow.
+  adapter pattern).
+- **Milvus, OpenSearch, and Azure AI Search vector adapters.** Three more live
+  `VectorStoreAdapter`s, each per-tenant isolated (one collection/index per
+  tenant), with the same `fetch`-by-id primitive, deterministic UUIDv5 ids, and
+  optional user-scoping (a filter on `query` + a post-fetch owner check, ADR-0006)
+  as the Qdrant adapter. `kind: milvus` (`[milvus]` extra; strong consistency so a
+  verification never reads stale), `kind: opensearch` (`[opensearch]` extra;
+  `knn_vector` on the Lucene engine), `kind: azure-search` (`[azure-search]`
+  extra; hosted HNSW). OpenSearch ships a docker-compose service and a CI live
+  integration test; Milvus ships a `milvus`-profile compose service plus a live
+  test run locally (it needs etcd + minio, so it is excluded from CI); Azure AI
+  Search is hosted and verified by an opt-in live test (no local backend).
 - **Deeper MCP coverage for Class 7 (`agent-tool-hijack`).** The MCP probe now
   runs four manifest-grounded sub-probes per foreign resource instead of two: the
   original confused-deputy and token-passthrough lookups, plus a **cross-server

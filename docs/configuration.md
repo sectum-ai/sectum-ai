@@ -84,6 +84,9 @@ fakes generally.
 | `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051` | Weaviate server. Each tenant maps to its own collection. |
 | `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)* | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
 | `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
+| `milvus` | `uri: str = "http://localhost:19530"`, `token_env: str` *(or `token: str`, optional)*, `user_scoped: bool = false` | Milvus server. Each tenant maps to its own collection (strong consistency); `user_scoped: true` adds a per-user filter expression. A local/self-hosted Milvus usually needs no `token`. Requires the `milvus` extra. |
+| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = false`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
+| `azure-search` | `endpoint: str` *(required)*, `api_key_env: str` *(or `api_key: str`)*, `user_scoped: bool = false` | Azure AI Search service. Each tenant maps to its own index (HNSW, cosine); `user_scoped: true` adds an OData filter. Hosted (no local backend); requires the `azure-search` extra. |
 
 ### `cache`
 

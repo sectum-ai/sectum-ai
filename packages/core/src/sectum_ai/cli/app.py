@@ -214,7 +214,7 @@ workdir: .sectum-ai
 # credentials - reference them from the environment.
 adapters:
   vector_store:
-    kind: fake               # fake | pgvector | chroma | weaviate | pinecone | qdrant
+    kind: fake  # fake|pgvector|chroma|weaviate|pinecone|qdrant|milvus|opensearch|azure-search
     shared_index: true       # demo leak: one index serves every tenant
     # dsn_env: SECTUM_PGVECTOR_DSN
   cache:

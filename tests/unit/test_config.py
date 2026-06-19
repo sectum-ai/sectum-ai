@@ -316,6 +316,13 @@ def test_build_vector_store_pgvector_requires_a_dsn() -> None:
         build_vector_store(AdapterConfig(kind="pgvector"))
 
 
+def test_build_vector_store_azure_search_requires_an_endpoint() -> None:
+    # The endpoint is validated before the SDK is touched, so this holds whether
+    # or not the azure-search extra is installed.
+    with pytest.raises(ConfigError, match="endpoint"):
+        build_vector_store(AdapterConfig(kind="azure-search", api_key="k"))
+
+
 def test_build_cache_redis_constructs_a_redis_cache() -> None:
     from sectum_ai.adapters.cache.redis import RedisCache
 
@@ -1257,6 +1264,14 @@ _MISSING_EXTRA_VECTOR = [
     ("weaviate", "weaviate", "sectum_ai.adapters.vector.weaviate", {}),
     ("pinecone", "pinecone", "sectum_ai.adapters.vector.pinecone", {"api_key": "k", "index": "i"}),
     ("qdrant", "qdrant_client", "sectum_ai.adapters.vector.qdrant", {}),
+    ("milvus", "pymilvus", "sectum_ai.adapters.vector.milvus", {}),
+    ("opensearch", "opensearchpy", "sectum_ai.adapters.vector.opensearch", {}),
+    (
+        "azure-search",
+        "azure",
+        "sectum_ai.adapters.vector.azure_search",
+        {"endpoint": "https://x.search.windows.net", "api_key": "k"},
+    ),
 ]
 
 

@@ -19,6 +19,7 @@ dev = [
     "chromadb-client>=0.5",
     "weaviate-client>=4.21.3",
     "qdrant-client>=1.12",
+    "opensearch-py>=2.4",
     "redis>=5",
     "arize-phoenix-client>=2",
     "mcp>=1",
@@ -121,6 +122,27 @@ follow_imports = "skip"
 # the qdrant client is an optional, live-only dependency; treat it as opaque
 # so the adapter type-checks without it installed (the adapter's API is typed).
 module = ["qdrant_client", "qdrant_client.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# the milvus client (pymilvus) is an optional, live-only dependency; treat it as
+# opaque so the adapter type-checks without it installed (the adapter's API is typed).
+module = ["pymilvus", "pymilvus.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# the opensearch client is an optional, live-only dependency; treat it as opaque
+# so the adapter type-checks without it installed (the adapter's API is typed).
+module = ["opensearchpy", "opensearchpy.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# the Azure AI Search SDK is an optional, live-only (cloud) dependency; treat it
+# as opaque so the adapter type-checks without it installed (the adapter's API is typed).
+module = ["azure.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
