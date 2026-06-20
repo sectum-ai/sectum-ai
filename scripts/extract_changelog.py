@@ -12,6 +12,8 @@ Behaviour:
       while the version's final section is still being drafted.
     - If neither is found, exit non-zero so the workflow fails before
       publishing an empty release.
+    - If the resolved section (including an Unreleased fallback) is empty,
+      exit non-zero too - an empty section would ship a release with no notes.
 
 Usage:
     python scripts/extract_changelog.py v0.1.0 > release-notes.md
@@ -71,20 +73,37 @@ def main(argv: list[str]) -> int:
 
     text = _CHANGELOG.read_text(encoding="utf-8")
 
-    # A final release section is mandatory; a pre-release may use Unreleased.
+    # A final release section is mandatory; a pre-release may fall back to the
+    # Unreleased section so a release candidate can ship while the version's
+    # final section is still being drafted.
     body = _read_section(text, version)
+    used_unreleased_fallback = False
     if body is None and _is_prerelease(version):
         body = _read_section(text, "Unreleased")
-        if body is not None:
-            body = (
-                f"_Release notes for `{tag}` (pre-release) are drawn from the "
-                "`Unreleased` section of CHANGELOG.md._\n\n" + body
-            )
+        used_unreleased_fallback = True
     if body is None:
         raise SystemExit(
             f"refusing to release: CHANGELOG.md has no `## [{version}]` "
             "section (and no Unreleased fallback was eligible). Add the "
             "section and re-tag."
+        )
+
+    # An empty section - including an empty Unreleased fallback - would publish a
+    # release with no notes, so refuse it just like a missing section. The check
+    # runs before the pre-release banner is prepended, so the banner can never
+    # masquerade as content. (`_read_section` strips, so an empty body is "".)
+    if not body.strip():
+        source = "Unreleased" if used_unreleased_fallback else version
+        raise SystemExit(
+            f"refusing to release: the `## [{source}]` section of CHANGELOG.md "
+            f"is empty, so `{tag}` would ship with no release notes. Add entries "
+            "and re-tag."
+        )
+
+    if used_unreleased_fallback:
+        body = (
+            f"_Release notes for `{tag}` (pre-release) are drawn from the "
+            "`Unreleased` section of CHANGELOG.md._\n\n" + body
         )
 
     print(body)
