@@ -76,8 +76,30 @@ A `uv` workspace of five publishable packages:
 
 ## Quickstart
 
-Run the flagship demo — the organic entity-bleed Retrieval Pivot — end to end
-([`uv`](https://docs.astral.sh/uv/) is the only prerequisite):
+Install from PyPI ([`pip`](https://pip.pypa.io/) or [`uv`](https://docs.astral.sh/uv/)):
+
+```sh
+pip install sectum-ai          # or: uv pip install sectum-ai  (or: uv tool install sectum-ai)
+```
+
+Then drive the `sectum-ai` CLI:
+
+```sh
+sectum-ai init                 # scaffold a sectum-ai.yaml (optional)
+sectum-ai seed   --workdir .sectum-ai
+sectum-ai probe  --workdir .sectum-ai
+sectum-ai report --workdir .sectum-ai
+sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
+```
+
+Optional backends (live vector stores, model/agent frameworks) are extras, e.g.
+`pip install "sectum-ai-adapters[qdrant]"` — see [docs/adapters.md](docs/adapters.md).
+
+### Run the flagship demo
+
+The bundled examples live in the repo, so clone it to run the organic
+entity-bleed Retrieval Pivot end to end ([`uv`](https://docs.astral.sh/uv/) is the
+only prerequisite):
 
 ```sh
 git clone https://github.com/sectum-ai/sectum-ai
@@ -89,15 +111,6 @@ It seeds a four-tenant marker substrate, probes a deliberately leaky shared
 vector index, assembles a tamper-evident evidence pack, and independently
 verifies it. See [`examples/`](examples/) for this and the GDPR Article 17
 erasure-attestation walkthrough.
-
-Or drive the `sectum-ai` CLI directly:
-
-```sh
-uv run sectum-ai seed   --workdir .sectum-ai
-uv run sectum-ai probe  --workdir .sectum-ai
-uv run sectum-ai report --workdir .sectum-ai
-uv run sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
-```
 
 For richer configuration (live vector store, real embedder/judge, Rekor
 signing, manifest-at-rest), copy
