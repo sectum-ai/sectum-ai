@@ -6,6 +6,7 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 
 import functools
 import json
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -987,6 +988,218 @@ def report(
         typer.echo(f"evidence bundle -> {bundle_path}")
     typer.echo(f"in-toto attestation -> {intoto_path}")
     typer.echo(f"dsse envelope -> {dsse_path}")
+
+
+_CONFIG_SECRET_TOKENS = (
+    "api_key",
+    "apikey",
+    "dsn",
+    "password",
+    "passphrase",
+    "token",
+    "secret",
+    "credential",
+    "application_key",
+)
+"""Config key fragments whose inline VALUE is a secret. ``*_env`` keys name an
+environment variable (not the secret itself) and are kept."""
+
+# Value-shape backstop: an inline secret can hide under a benign key name - in a
+# header value (`Authorization: Bearer ...`), embedded in a URL
+# (`scheme://user:pass@host`), or as a CLI token in `args`. These shapes are
+# scrubbed wherever they appear, regardless of the key, so key-name redaction
+# alone cannot be bypassed. A `headers` map is redacted wholesale because any
+# header value may be an opaque token with no recognisable shape.
+# Each alternative is a single linear run (no overlapping/adjacent quantifiers),
+# so there is no super-linear backtracking.
+_CONFIG_SECRET_VALUE_RE = re.compile(
+    r"(?<![A-Za-z0-9])sk-[A-Za-z0-9][A-Za-z0-9_-]{14,}"  # OpenAI-style API key
+    r"|(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}"  # AWS access-key id
+    r"|(?<![A-Za-z0-9])gh[a-z]_[A-Za-z0-9]{20,}"  # GitHub token (ghp_/gho_/ghs_/ghu_/ghr_)
+    r"|(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{20,}"  # GitHub fine-grained PAT
+    r"|(?<![A-Za-z0-9])glpat-[A-Za-z0-9_-]{18,}"  # GitLab PAT
+    r"|(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}"  # Slack token
+    r"|(?<![A-Za-z0-9])hf_[A-Za-z0-9]{20,}"  # Hugging Face token
+    r"|(?<![A-Za-z0-9])AIza[A-Za-z0-9_-]{16,}"  # Google API key
+    r"|SECTUM-CANARY-[A-Z2-7]+"  # Sectum canary plaintext
+    r"|[Bb]earer\s+[A-Za-z0-9._~+/=-]{8,}"  # bearer token
+)
+# Embedded URL credentials: the whole userinfo (`user:pass@` or `token@`) and any
+# query-parameter value (a base_url can carry `?api-key=...`). Single-run classes
+# bounded by literals -> linear.
+_URL_USERINFO_RE = re.compile(r"://[^\s/@]+@")
+_URL_QUERY_VALUE_RE = re.compile(r"([?&][^=&\s]+=)[^&\s]+")
+
+
+def _scrub_config_secret_value(text: str) -> str:
+    """Redact credential-shaped substrings and embedded URL credentials in a value,
+    so a secret survives neither under a benign key, inside a URL's userinfo, nor in
+    a URL query parameter."""
+    scrubbed = _URL_USERINFO_RE.sub("://<redacted>@", text)
+    scrubbed = _URL_QUERY_VALUE_RE.sub(r"\1<redacted>", scrubbed)
+    return _CONFIG_SECRET_VALUE_RE.sub("<redacted>", scrubbed)
+
+
+def _redact_config_value(value: object) -> object:
+    """Recursively redact inline secrets in a parsed config.
+
+    A key naming a secret (a ``_CONFIG_SECRET_TOKENS`` fragment, not ending in
+    ``_env``) has its value replaced with ``<redacted>``; a ``headers`` map is
+    redacted wholesale; and every string is scrubbed for credential shapes and
+    embedded URL credentials (`_scrub_config_secret_value`). ``*_env`` references
+    and benign values are otherwise preserved, so the packed config keeps its
+    reproducible shape without carrying a raw credential.
+    """
+    if isinstance(value, dict):
+        redacted: dict[object, object] = {}
+        for key, val in value.items():
+            name = str(key).lower()
+            is_secret_key = not name.endswith("_env") and any(
+                tok in name for tok in _CONFIG_SECRET_TOKENS
+            )
+            # A `headers` map is redacted wholesale: any value may be an opaque token.
+            is_headers = name == "headers" or name.endswith("_headers")
+            if is_secret_key or is_headers:
+                redacted[key] = "<redacted>"
+            else:
+                redacted[key] = _redact_config_value(val)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_config_value(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_config_secret_value(value)
+    return value
+
+
+def _redact_config_text(text: str) -> str:
+    """Return the config YAML with inline secret values redacted.
+
+    Comments are not preserved - the packed config is a record, not the editable
+    source. A config that uses the ``*_env`` convention is unchanged.
+    """
+    import yaml
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return "# config omitted: not valid YAML\n"
+    if not isinstance(data, dict | list):
+        return text
+    dumped = yaml.safe_dump(_redact_config_value(data), sort_keys=False, default_flow_style=False)
+    return str(dumped)
+
+
+def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) -> str:
+    """The human-readable, secret-free README placed at the top of a run pack."""
+    config_line = (
+        "- `sectum-ai.config.redacted.yaml` - the configuration used, inline secrets redacted\n"
+        if has_config
+        else "- (no config file - the run used the built-in defaults)\n"
+    )
+    manifest_line = (
+        "- `ground-truth-manifest.json.aes` - the marker manifest, sealed AES-256-GCM\n"
+        if sealed_manifest
+        else ""
+    )
+    return (
+        f"# Sectum AI run pack - {run_id}\n\n"
+        "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
+        "Sectum AI verification run. It carries the run details (`run.json`, including\n"
+        "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
+        "redacts. Share it only with trusted parties (for example, your auditor under NDA).\n\n"
+        "## Verify\n\n"
+        "```sh\n"
+        "sectum-ai verify run-pack.zip\n"
+        "```\n\n"
+        "A pack built with `report --tsa --rekor` verifies as independently anchored tamper\n"
+        "evidence; otherwise add `--allow-unanchored` (the local-dev timestamp is\n"
+        "regenerable, so it is an integrity-only check).\n\n"
+        "## Contents\n\n"
+        "- `evidence.json` - the signed, tamper-evident evidence pack (the canonical record)\n"
+        "- `audit-pack.pdf` - the human-readable audit pack\n"
+        "- `attestation.intoto.json`, `evidence.dsse.json` - the attestation sidecars\n"
+        "- `run.json` - the full run record (findings + evidence spans) - SENSITIVE\n"
+        f"{config_line}"
+        f"{manifest_line}"
+        "- `bundle-manifest.json` - the SHA-256 of every member\n"
+    )
+
+
+@app.command()
+@_handle_typed_errors
+def pack(
+    workdir: Annotated[
+        Path | None,
+        typer.Option(help="Directory holding the substrate, run, and evidence pack."),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config", help="The sectum-ai.yaml used; bundled with inline secrets redacted."
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Where to write the pack (default: <workdir>/run-pack.zip)."),
+    ] = None,
+    include_manifest: Annotated[
+        bool,
+        typer.Option(
+            "--include-manifest",
+            help=(
+                "Include the ground-truth manifest, sealed AES-256-GCM under "
+                "security.manifest_key_env. The manifest holds canary plaintexts."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Assemble a single, portable run-pack.zip - the evidence pack plus the run
+    record and (redacted) config - for reproducing or auditing a run.
+
+    SENSITIVE: a run pack carries the run details and ground-truth markers that
+    Sectum normally redacts, so share it only with trusted parties. Requires a
+    prior ``sectum-ai report`` (the evidence pack and sidecars). Verify it with
+    ``sectum-ai verify run-pack.zip``.
+    """
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
+    evidence_path = workdir / "evidence.json"
+    if not evidence_path.exists():
+        raise ConfigError(f"no evidence pack at {evidence_path}; run 'sectum-ai report' first")
+    run = _load_run(workdir)
+
+    members: dict[str, bytes] = {"evidence.json": evidence_path.read_bytes()}
+    for name in ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json", "run.json"):
+        sibling = workdir / name
+        if sibling.exists():
+            members[name] = sibling.read_bytes()
+    if config is not None:
+        members["sectum-ai.config.redacted.yaml"] = _redact_config_text(
+            Path(config).read_text(encoding="utf-8")
+        ).encode("utf-8")
+    if include_manifest:
+        key_env = loaded.security.manifest_key_env
+        if key_env is None:
+            raise ConfigError(
+                "--include-manifest needs security.manifest_key_env set to seal the manifest"
+            )
+        substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
+        sealed = seal_bytes(
+            substrate.manifest.model_dump_json().encode("utf-8"), load_key_from_env(key_env)
+        )
+        members["ground-truth-manifest.json.aes"] = sealed
+    members["PACK-README.md"] = _run_pack_readme(
+        run.run_id, sealed_manifest=include_manifest, has_config=config is not None
+    ).encode("utf-8")
+
+    out_path = out if out is not None else workdir / "run-pack.zip"
+    out_path.write_bytes(build_bundle(members))
+    typer.echo(f"run pack -> {out_path}")
+    typer.echo(
+        "SENSITIVE: this pack carries the run details and ground-truth markers; "
+        "share only with trusted parties."
+    )
 
 
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
