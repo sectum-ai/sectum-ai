@@ -47,7 +47,8 @@ pack, and verifies it.
 | `sectum-ai seed` | Provision synthetic tenants, corpora, and canary markers. |
 | `sectum-ai probe` | Run the probe suite and record findings. |
 | `sectum-ai report` | Assemble a tamper-evident evidence pack (JSON and PDF). |
-| `sectum-ai verify` | Independently verify an evidence pack. |
+| `sectum-ai pack` | Bundle a portable, **sensitive** run pack (evidence + run + redacted config) for an auditor. |
+| `sectum-ai verify` | Independently verify an evidence pack (or a bundle / run pack). |
 | `sectum-ai erasure` | Run the GDPR Article 17 erasure-verification workflow. |
 | `sectum-ai baseline` | Save a regression baseline, or compare a run against it. |
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
@@ -58,6 +59,26 @@ Exit codes: `0` no confirmed leaks; `2` a gating result — confirmed leaks
 residual / attestable-with-caveat data on an erased surface (`sectum-ai erasure`,
 where data is presumed retained); `3` config or adapter error; `4` evidence
 verification failure.
+
+## Bundle a portable run pack
+
+`sectum-ai pack` rolls a completed run into one self-verifying `run-pack.zip` — the
+signed evidence pack and its sidecars, plus `run.json`, the (secret-redacted)
+config, and a `PACK-README.md` — so an auditor can both verify it and see exactly
+what was tested:
+
+```sh
+sectum-ai report --workdir .sectum-ai          # produce the evidence pack first
+sectum-ai pack   --workdir .sectum-ai --config sectum-ai.yaml
+sectum-ai verify .sectum-ai/run-pack.zip --allow-unanchored
+```
+
+> **A run pack is sensitive.** Unlike the evidence pack — which is redacted — a run
+> pack carries `run.json` (evidence spans) and, with `--include-manifest`, the
+> ground-truth marker manifest (sealed AES-256-GCM under
+> `security.manifest_key_env`). Inline secrets in the bundled config are replaced
+> with `<redacted>` (`*_env` references are kept), but the pack still reveals what
+> was tested — share it only with trusted parties.
 
 ## Read the probe summary from CI
 

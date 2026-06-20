@@ -989,6 +989,174 @@ def report(
     typer.echo(f"dsse envelope -> {dsse_path}")
 
 
+_CONFIG_SECRET_TOKENS = (
+    "api_key",
+    "apikey",
+    "dsn",
+    "password",
+    "passphrase",
+    "token",
+    "secret",
+    "credential",
+    "application_key",
+)
+"""Config key fragments whose inline VALUE is a secret. ``*_env`` keys name an
+environment variable (not the secret itself) and are kept."""
+
+
+def _redact_config_value(value: object) -> object:
+    """Recursively redact inline secret values in a parsed config.
+
+    A key whose name contains a token in ``_CONFIG_SECRET_TOKENS`` and does not end
+    in ``_env`` has its value replaced with ``<redacted>``; ``*_env`` references and
+    every other value are preserved, so a packed config keeps its reproducible
+    shape without carrying a raw credential.
+    """
+    if isinstance(value, dict):
+        redacted: dict[object, object] = {}
+        for key, val in value.items():
+            name = str(key).lower()
+            if not name.endswith("_env") and any(tok in name for tok in _CONFIG_SECRET_TOKENS):
+                redacted[key] = "<redacted>"
+            else:
+                redacted[key] = _redact_config_value(val)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_config_value(item) for item in value]
+    return value
+
+
+def _redact_config_text(text: str) -> str:
+    """Return the config YAML with inline secret values redacted.
+
+    Comments are not preserved - the packed config is a record, not the editable
+    source. A config that uses the ``*_env`` convention is unchanged.
+    """
+    import yaml
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return "# config omitted: not valid YAML\n"
+    if not isinstance(data, dict | list):
+        return text
+    dumped = yaml.safe_dump(_redact_config_value(data), sort_keys=False, default_flow_style=False)
+    return str(dumped)
+
+
+def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) -> str:
+    """The human-readable, secret-free README placed at the top of a run pack."""
+    config_line = (
+        "- `sectum-ai.config.redacted.yaml` - the configuration used, inline secrets redacted\n"
+        if has_config
+        else "- (no config file - the run used the built-in defaults)\n"
+    )
+    manifest_line = (
+        "- `ground-truth-manifest.json.aes` - the marker manifest, sealed AES-256-GCM\n"
+        if sealed_manifest
+        else ""
+    )
+    return (
+        f"# Sectum AI run pack - {run_id}\n\n"
+        "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
+        "Sectum AI verification run. It carries the run details (`run.json`, including\n"
+        "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
+        "redacts. Share it only with trusted parties (for example, your auditor under NDA).\n\n"
+        "## Verify\n\n"
+        "```sh\n"
+        "sectum-ai verify run-pack.zip\n"
+        "```\n\n"
+        "A pack built with `report --tsa --rekor` verifies as independently anchored tamper\n"
+        "evidence; otherwise add `--allow-unanchored` (the local-dev timestamp is\n"
+        "regenerable, so it is an integrity-only check).\n\n"
+        "## Contents\n\n"
+        "- `evidence.json` - the signed, tamper-evident evidence pack (the canonical record)\n"
+        "- `audit-pack.pdf` - the human-readable audit pack\n"
+        "- `attestation.intoto.json`, `evidence.dsse.json` - the attestation sidecars\n"
+        "- `run.json` - the full run record (findings + evidence spans) - SENSITIVE\n"
+        f"{config_line}"
+        f"{manifest_line}"
+        "- `bundle-manifest.json` - the SHA-256 of every member\n"
+    )
+
+
+@app.command()
+@_handle_typed_errors
+def pack(
+    workdir: Annotated[
+        Path | None,
+        typer.Option(help="Directory holding the substrate, run, and evidence pack."),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config", help="The sectum-ai.yaml used; bundled with inline secrets redacted."
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Where to write the pack (default: <workdir>/run-pack.zip)."),
+    ] = None,
+    include_manifest: Annotated[
+        bool,
+        typer.Option(
+            "--include-manifest",
+            help=(
+                "Include the ground-truth manifest, sealed AES-256-GCM under "
+                "security.manifest_key_env. The manifest holds canary plaintexts."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Assemble a single, portable run-pack.zip - the evidence pack plus the run
+    record and (redacted) config - for reproducing or auditing a run.
+
+    SENSITIVE: a run pack carries the run details and ground-truth markers that
+    Sectum normally redacts, so share it only with trusted parties. Requires a
+    prior ``sectum-ai report`` (the evidence pack and sidecars). Verify it with
+    ``sectum-ai verify run-pack.zip``.
+    """
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
+    evidence_path = workdir / "evidence.json"
+    if not evidence_path.exists():
+        raise ConfigError(f"no evidence pack at {evidence_path}; run 'sectum-ai report' first")
+    run = _load_run(workdir)
+
+    members: dict[str, bytes] = {"evidence.json": evidence_path.read_bytes()}
+    for name in ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json", "run.json"):
+        sibling = workdir / name
+        if sibling.exists():
+            members[name] = sibling.read_bytes()
+    if config is not None:
+        members["sectum-ai.config.redacted.yaml"] = _redact_config_text(
+            Path(config).read_text(encoding="utf-8")
+        ).encode("utf-8")
+    if include_manifest:
+        key_env = loaded.security.manifest_key_env
+        if key_env is None:
+            raise ConfigError(
+                "--include-manifest needs security.manifest_key_env set to seal the manifest"
+            )
+        substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
+        sealed = seal_bytes(
+            substrate.manifest.model_dump_json().encode("utf-8"), load_key_from_env(key_env)
+        )
+        members["ground-truth-manifest.json.aes"] = sealed
+    members["PACK-README.md"] = _run_pack_readme(
+        run.run_id, sealed_manifest=include_manifest, has_config=config is not None
+    ).encode("utf-8")
+
+    out_path = out if out is not None else workdir / "run-pack.zip"
+    out_path.write_bytes(build_bundle(members))
+    typer.echo(f"run pack -> {out_path}")
+    typer.echo(
+        "SENSITIVE: this pack carries the run details and ground-truth markers; "
+        "share only with trusted parties."
+    )
+
+
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
     """Return the bytes of the audit PDF written beside ``pack_path``, if present.
 
