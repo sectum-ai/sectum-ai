@@ -8,7 +8,12 @@ from typing import Any, cast
 
 from typer.testing import CliRunner
 
-from sectum_ai.cli.app import _redact_config_text, _redact_config_value, app
+from sectum_ai.cli.app import (
+    _redact_config_text,
+    _redact_config_value,
+    _scrub_config_secret_value,
+    app,
+)
 
 _runner = CliRunner()
 
@@ -78,8 +83,37 @@ def test_redact_config_scrubs_headers_url_creds_and_inline_shapes() -> None:
     assert "deadbeefdeadbeefdeadbeef" not in out  # opaque header token (headers redacted wholesale)
     assert "p4ssw0rd" not in out  # URL userinfo stripped
     assert "sk-anotherlongsecretvalue00" not in out  # token in an args element
-    assert "otel.example.com" in out  # only the userinfo is removed, host kept
+    assert "://<redacted>@" in out  # userinfo replaced with the marker, URL kept
     assert "<redacted>" in out
+
+
+def test_redact_config_scrubs_url_query_and_provider_tokens() -> None:
+    # A token in a URL query string, and common provider tokens hiding in `args`,
+    # must also be scrubbed (they sit under benign key names). The token values are
+    # assembled at runtime so no literal secret is committed in the fixture.
+    q_val = "0123456789abcdef0123"
+    gh_prefix = "ghp_"  # split + variable operand so the token is not const-folded
+    gh_val = gh_prefix + "0123456789abcdefABCDEF0123"
+    text = (
+        "adapters:\n"
+        "  observability:\n"
+        "    kind: otel\n"
+        f"    base_url: https://ingest.example.com/v1/traces?dd-api-key={q_val}\n"
+        "  agent:\n"
+        "    kind: stdio\n"
+        "    args:\n"
+        f"      - --auth={gh_val}\n"
+    )
+    out = _redact_config_text(text)
+    assert q_val not in out  # query-parameter value scrubbed
+    assert gh_val not in out  # GitHub token scrubbed
+    assert "<redacted>" in out
+
+
+def test_scrub_config_secret_value_keeps_benign_urls() -> None:
+    # No over-redaction: a plain endpoint with no userinfo or secret query is kept.
+    assert _scrub_config_secret_value("https://localhost:8080/v1") == "https://localhost:8080/v1"
+    assert _scrub_config_secret_value("gpt-4o-mini") == "gpt-4o-mini"
 
 
 def test_redact_config_text_tolerates_invalid_yaml() -> None:

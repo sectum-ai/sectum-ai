@@ -1010,19 +1010,33 @@ environment variable (not the secret itself) and are kept."""
 # scrubbed wherever they appear, regardless of the key, so key-name redaction
 # alone cannot be bypassed. A `headers` map is redacted wholesale because any
 # header value may be an opaque token with no recognisable shape.
+# Each alternative is a single linear run (no overlapping/adjacent quantifiers),
+# so there is no super-linear backtracking.
 _CONFIG_SECRET_VALUE_RE = re.compile(
     r"(?<![A-Za-z0-9])sk-[A-Za-z0-9][A-Za-z0-9_-]{14,}"  # OpenAI-style API key
     r"|(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}"  # AWS access-key id
+    r"|(?<![A-Za-z0-9])gh[a-z]_[A-Za-z0-9]{20,}"  # GitHub token (ghp_/gho_/ghs_/ghu_/ghr_)
+    r"|(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{20,}"  # GitHub fine-grained PAT
+    r"|(?<![A-Za-z0-9])glpat-[A-Za-z0-9_-]{18,}"  # GitLab PAT
+    r"|(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{10,}"  # Slack token
+    r"|(?<![A-Za-z0-9])hf_[A-Za-z0-9]{20,}"  # Hugging Face token
+    r"|(?<![A-Za-z0-9])AIza[A-Za-z0-9_-]{16,}"  # Google API key
     r"|SECTUM-CANARY-[A-Z2-7]+"  # Sectum canary plaintext
     r"|[Bb]earer\s+[A-Za-z0-9._~+/=-]{8,}"  # bearer token
 )
-_URL_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s@]+@")
+# Embedded URL credentials: the whole userinfo (`user:pass@` or `token@`) and any
+# query-parameter value (a base_url can carry `?api-key=...`). Single-run classes
+# bounded by literals -> linear.
+_URL_USERINFO_RE = re.compile(r"://[^\s/@]+@")
+_URL_QUERY_VALUE_RE = re.compile(r"([?&][^=&\s]+=)[^&\s]+")
 
 
 def _scrub_config_secret_value(text: str) -> str:
     """Redact credential-shaped substrings and embedded URL credentials in a value,
-    so a secret survives neither under a benign key nor inside a URL."""
+    so a secret survives neither under a benign key, inside a URL's userinfo, nor in
+    a URL query parameter."""
     scrubbed = _URL_USERINFO_RE.sub("://<redacted>@", text)
+    scrubbed = _URL_QUERY_VALUE_RE.sub(r"\1<redacted>", scrubbed)
     return _CONFIG_SECRET_VALUE_RE.sub("<redacted>", scrubbed)
 
 
