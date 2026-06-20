@@ -2,6 +2,18 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_package:
+        description: "Staged bootstrap: publish ONLY this distribution to PyPI (creates the project so its pending Trusted Publisher activates and frees a pending slot). Leave 'none' for a build+sign dry run that never publishes."
+        type: choice
+        default: none
+        options:
+          - none
+          - sectum-ai
+          - sectum-ai-spec
+          - sectum-ai-probes
+          - sectum-ai-adapters
+          - sectum-ai-evidence
   push:
     tags: ["v*"]
 
@@ -145,9 +157,11 @@ jobs:
   publish-pypi:
     name: Publish to PyPI (Trusted Publisher)
     needs: sign
-    # Manual `workflow_dispatch` runs build and sign for inspection but never
-    # publish; PyPI publishing only fires on a real tag push.
-    if: github.event_name == 'push'
+    # A tag push publishes all five distributions. A manual `workflow_dispatch`
+    # publishes exactly one (the `publish_package` input) — the staged one-by-one
+    # bootstrap that creates each project so its pending Trusted Publisher
+    # activates; with `none` the run builds and signs but never publishes.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_package != 'none')
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -164,6 +178,19 @@ jobs:
           name: distributions
           path: dist/
 
+      - name: Stage a single distribution (manual one-by-one bootstrap)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          norm="$(echo '${{ inputs.publish_package }}' | tr '-' '_')"
+          echo "Bootstrap publish: keeping only ${norm}-* in dist/"
+          find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) \
+            ! -name "${norm}-*" -delete
+          echo "Will publish:"
+          ls -1 dist/
+          ls "dist/${norm}-"*.whl >/dev/null 2>&1 \
+            || { echo "::error::no built distribution matched ${norm}-*"; exit 1; }
+
       - name: Publish sdists and wheels
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -173,10 +200,17 @@ jobs:
           # Verbose logs make a release postmortem easier; nothing in them is
           # sensitive (the upload is OIDC-authenticated, not token-printed).
           verbose: true
+          # Idempotent: after the staged one-by-one bootstrap creates the
+          # projects, the final `v*` tag re-runs publish for all five and skips
+          # the versions already uploaded instead of failing the release.
+          skip-existing: true
 
   github-release:
     name: Publish GitHub Release
     needs: publish-pypi
+    # Only a tag push cuts a GitHub Release; a manual staged-bootstrap run has no
+    # tag (its GITHUB_REF_NAME is a branch), so it publishes to PyPI only.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       # `softprops/action-gh-release` needs write access to create the release
