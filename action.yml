@@ -101,7 +101,11 @@ runs:
         SECTUM_OUTPUT: ${{ inputs.output }}
         SECTUM_OUTPUT_FILE: ${{ inputs.output-file }}
       run: |
-        set -uo pipefail
+        # GitHub runs composite `run:` steps with `bash -e`, but the probe
+        # legitimately exits 2 on a confirmed leak, so disable errexit and capture
+        # the code ourselves (the gate step decides whether it fails the build).
+        # An explicit `exit` still works for the validation below.
+        set +e
         # Validate `output` up front: an invalid value makes the CLI exit 2 as a
         # usage error, which collides with the probe's "confirmed leak" exit 2 and
         # would be misreported as a leak. Fail fast with a clear message instead.
