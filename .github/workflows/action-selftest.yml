@@ -1,0 +1,62 @@
+name: Action self-test
+
+# Exercises the repo's own composite action (action.yml) end to end in real
+# GitHub Actions - the one thing the unit/integration jobs can't do, since they
+# never execute the action. Runs only when the action (or this test) changes.
+on:
+  push:
+    branches: [main]
+    paths: ["action.yml", ".github/workflows/action-selftest.yml"]
+  pull_request:
+    paths: ["action.yml", ".github/workflows/action-selftest.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reports:
+    name: Action runs and reports the demo leak
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No `config` -> the built-in demo substrate, which is deliberately leaky,
+      # so the probe must confirm a leak (exit 2). `fail-on-leak: false` lets the
+      # step succeed so we can assert on its outputs.
+      - id: scan
+        uses: ./
+        with:
+          version: ""          # install the latest published sectum-ai
+          fail-on-leak: false
+      - name: Assert the action ran and reported the leak
+        env:
+          CODE: ${{ steps.scan.outputs.exit-code }}
+          FINDINGS: ${{ steps.scan.outputs.confirmed-findings }}
+          RESULTS: ${{ steps.scan.outputs.results-file }}
+        run: |
+          set -euo pipefail
+          [ "${CODE}" = "2" ] || { echo "::error::expected probe exit-code 2 on the leaky demo, got '${CODE}'"; exit 1; }
+          [ -n "${FINDINGS}" ] && [ "${FINDINGS}" -gt 0 ] 2>/dev/null || { echo "::error::expected >0 confirmed findings, got '${FINDINGS}'"; exit 1; }
+          [ -f "${RESULTS}" ] || { echo "::error::results file '${RESULTS}' was not written"; exit 1; }
+          echo "OK: action ran end to end (exit=${CODE}, confirmed-findings=${FINDINGS}, results=${RESULTS})."
+
+  gates:
+    name: fail-on-leak gates the build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same leaky demo, but with the default fail-on-leak: true the action must
+      # FAIL the step. continue-on-error lets us assert that it did.
+      - id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ""
+          fail-on-leak: true
+      - name: Assert the gated run failed on the confirmed leak
+        env:
+          OUTCOME: ${{ steps.gate.outcome }}
+        run: |
+          set -euo pipefail
+          [ "${OUTCOME}" = "failure" ] || { echo "::error::expected the gated run to FAIL on the leaky demo, got '${OUTCOME}'"; exit 1; }
+          echo "OK: fail-on-leak failed the build on a confirmed cross-tenant leak."
