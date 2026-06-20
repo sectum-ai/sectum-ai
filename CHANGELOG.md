@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub Action (`action.yml`).** A composite action that installs `sectum-ai`
+  from PyPI, seeds a marker substrate, probes your stack for cross-tenant leaks,
+  and **fails the build on a confirmed leak** (probe exit 2, toggleable via
+  `fail-on-leak`). Inputs cover `version`, `config`, `workdir`, `output`
+  (text/json/sarif/oscal) + `output-file`, and `python-version`; outputs expose
+  the exit code, report/run paths, confirmed-finding count, and Retrieval-Pivot
+  Rate. `output: sarif` feeds the code-scanning Security tab. Usage:
+  `uses: sectum-ai/sectum-ai@<ref>` — see [docs/github-action.md](docs/github-action.md).
+
 ### Changed
 
 - **Install docs lead with PyPI.** Now that the packages are published, the

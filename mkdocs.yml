@@ -25,6 +25,7 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - GitHub Action: github-action.md
   - Configuration: configuration.md
   - Marker substrate: substrate.md
   - Attack catalog:

@@ -117,6 +117,20 @@ signing, manifest-at-rest), copy
 [`sectum-ai.yaml.example`](sectum-ai.yaml.example) to `sectum-ai.yaml` and pass
 `--config sectum-ai.yaml` to each command.
 
+### Run it in CI
+
+A GitHub Action seeds, probes, and fails the build on a confirmed cross-tenant
+leak (and can emit SARIF for the Security tab):
+
+```yaml
+- uses: sectum-ai/sectum-ai@main   # pin to a release tag or SHA for production
+  with:
+    config: sectum-ai.yaml
+```
+
+See [docs/github-action.md](docs/github-action.md) for inputs, outputs, and the
+SARIF integration.
+
 To work on the repository itself, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation, security, contributing
