@@ -83,7 +83,8 @@ jobs:
 
 The probe's `run.json` lands in `workdir`; run `sectum-ai report` afterwards (or a
 follow-up step) to assemble a tamper-evident evidence pack and upload it as a
-build artifact:
+build artifact. The example uses the default workdir `.sectum-ai` — if you set a
+custom `workdir`, match it in both the `report --workdir` and the upload `path`:
 
 ```yaml
       - run: sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml

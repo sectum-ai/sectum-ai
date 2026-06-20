@@ -102,6 +102,13 @@ runs:
         SECTUM_OUTPUT_FILE: ${{ inputs.output-file }}
       run: |
         set -uo pipefail
+        # Validate `output` up front: an invalid value makes the CLI exit 2 as a
+        # usage error, which collides with the probe's "confirmed leak" exit 2 and
+        # would be misreported as a leak. Fail fast with a clear message instead.
+        case "${SECTUM_OUTPUT}" in
+          text|json|sarif|oscal) ;;
+          *) echo "::error::invalid output '${SECTUM_OUTPUT}' (expected: text, json, sarif, oscal)"; exit 1 ;;
+        esac
         args=(--workdir "${SECTUM_WORKDIR}" --output "${SECTUM_OUTPUT}")
         if [ -n "${SECTUM_CONFIG}" ]; then args+=(--config "${SECTUM_CONFIG}"); fi
         # The probe exits 2 on a confirmed leak; capture the code (the gate step
