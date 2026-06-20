@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Run pack (`sectum-ai pack`).** Bundles a completed run into one self-verifying
   `run-pack.zip` — the signed evidence pack and its sidecars plus `run.json`, the
-  config (inline secrets redacted, `*_env` references kept), and a `PACK-README.md`
+  config (inline secrets redacted - secret-named values, `headers` maps, embedded
+  URL credentials, and credential-shaped strings; `*_env` references kept), and a
+  `PACK-README.md`
   — so a recipient can both verify it (`sectum-ai verify run-pack.zip`) and see
   exactly what was tested. Unlike the redacted evidence pack, a run pack is
   **sensitive**: it carries `run.json` (evidence spans) and, with

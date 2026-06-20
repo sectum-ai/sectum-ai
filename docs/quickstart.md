@@ -76,9 +76,10 @@ sectum-ai verify .sectum-ai/run-pack.zip --allow-unanchored
 > **A run pack is sensitive.** Unlike the evidence pack — which is redacted — a run
 > pack carries `run.json` (evidence spans) and, with `--include-manifest`, the
 > ground-truth marker manifest (sealed AES-256-GCM under
-> `security.manifest_key_env`). Inline secrets in the bundled config are replaced
-> with `<redacted>` (`*_env` references are kept), but the pack still reveals what
-> was tested — share it only with trusted parties.
+> `security.manifest_key_env`). The bundled config has inline secrets redacted —
+> secret-named values, `headers` maps, credentials embedded in a URL, and
+> credential-shaped strings (`*_env` references are kept) — but the pack still
+> reveals what was tested, so share it only with trusted parties.
 
 ## Read the probe summary from CI
 

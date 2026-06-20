@@ -55,6 +55,33 @@ def test_redact_config_text_redacts_nested_inline_secret_keeps_env() -> None:
     assert "kind: pgvector" in out  # structure preserved
 
 
+def test_redact_config_scrubs_headers_url_creds_and_inline_shapes() -> None:
+    # Inline secrets can hide under benign key names: header values, credentials
+    # embedded in a URL, or a CLI token in `args`. None may survive into the pack.
+    text = (
+        "adapters:\n"
+        "  mcp:\n"
+        "    kind: http\n"
+        "    headers:\n"
+        "      Authorization: Bearer sk-supersecrettoken1234567890\n"
+        "      X-Api-Key: deadbeefdeadbeefdeadbeef\n"
+        "  observability:\n"
+        "    kind: otel\n"
+        "    base_url: https://user:p4ssw0rd@otel.example.com/ingest\n"
+        "  agent:\n"
+        "    kind: stdio\n"
+        "    args:\n"
+        "      - --api-key=sk-anotherlongsecretvalue00\n"
+    )
+    out = _redact_config_text(text)
+    assert "sk-supersecrettoken1234567890" not in out  # bearer / header value
+    assert "deadbeefdeadbeefdeadbeef" not in out  # opaque header token (headers redacted wholesale)
+    assert "p4ssw0rd" not in out  # URL userinfo stripped
+    assert "sk-anotherlongsecretvalue00" not in out  # token in an args element
+    assert "otel.example.com" in out  # only the userinfo is removed, host kept
+    assert "<redacted>" in out
+
+
 def test_redact_config_text_tolerates_invalid_yaml() -> None:
     # Never raise (and never echo the raw text back) on a malformed config.
     out = _redact_config_text("::: not : valid : yaml :::")

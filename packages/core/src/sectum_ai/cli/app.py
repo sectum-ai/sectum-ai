@@ -6,6 +6,7 @@ Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
 
 import functools
 import json
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -1003,26 +1004,56 @@ _CONFIG_SECRET_TOKENS = (
 """Config key fragments whose inline VALUE is a secret. ``*_env`` keys name an
 environment variable (not the secret itself) and are kept."""
 
+# Value-shape backstop: an inline secret can hide under a benign key name - in a
+# header value (`Authorization: Bearer ...`), embedded in a URL
+# (`scheme://user:pass@host`), or as a CLI token in `args`. These shapes are
+# scrubbed wherever they appear, regardless of the key, so key-name redaction
+# alone cannot be bypassed. A `headers` map is redacted wholesale because any
+# header value may be an opaque token with no recognisable shape.
+_CONFIG_SECRET_VALUE_RE = re.compile(
+    r"(?<![A-Za-z0-9])sk-[A-Za-z0-9][A-Za-z0-9_-]{14,}"  # OpenAI-style API key
+    r"|(?<![A-Za-z0-9])AKIA[A-Z0-9]{16}"  # AWS access-key id
+    r"|SECTUM-CANARY-[A-Z2-7]+"  # Sectum canary plaintext
+    r"|[Bb]earer\s+[A-Za-z0-9._~+/=-]{8,}"  # bearer token
+)
+_URL_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s@]+@")
+
+
+def _scrub_config_secret_value(text: str) -> str:
+    """Redact credential-shaped substrings and embedded URL credentials in a value,
+    so a secret survives neither under a benign key nor inside a URL."""
+    scrubbed = _URL_USERINFO_RE.sub("://<redacted>@", text)
+    return _CONFIG_SECRET_VALUE_RE.sub("<redacted>", scrubbed)
+
 
 def _redact_config_value(value: object) -> object:
-    """Recursively redact inline secret values in a parsed config.
+    """Recursively redact inline secrets in a parsed config.
 
-    A key whose name contains a token in ``_CONFIG_SECRET_TOKENS`` and does not end
-    in ``_env`` has its value replaced with ``<redacted>``; ``*_env`` references and
-    every other value are preserved, so a packed config keeps its reproducible
-    shape without carrying a raw credential.
+    A key naming a secret (a ``_CONFIG_SECRET_TOKENS`` fragment, not ending in
+    ``_env``) has its value replaced with ``<redacted>``; a ``headers`` map is
+    redacted wholesale; and every string is scrubbed for credential shapes and
+    embedded URL credentials (`_scrub_config_secret_value`). ``*_env`` references
+    and benign values are otherwise preserved, so the packed config keeps its
+    reproducible shape without carrying a raw credential.
     """
     if isinstance(value, dict):
         redacted: dict[object, object] = {}
         for key, val in value.items():
             name = str(key).lower()
-            if not name.endswith("_env") and any(tok in name for tok in _CONFIG_SECRET_TOKENS):
+            is_secret_key = not name.endswith("_env") and any(
+                tok in name for tok in _CONFIG_SECRET_TOKENS
+            )
+            # A `headers` map is redacted wholesale: any value may be an opaque token.
+            is_headers = name == "headers" or name.endswith("_headers")
+            if is_secret_key or is_headers:
                 redacted[key] = "<redacted>"
             else:
                 redacted[key] = _redact_config_value(val)
         return redacted
     if isinstance(value, list):
         return [_redact_config_value(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_config_secret_value(value)
     return value
 
 
