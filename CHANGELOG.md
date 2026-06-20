@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Install docs lead with PyPI.** Now that the packages are published, the
+  README and `docs/quickstart.md` open with `pip install sectum-ai` (and the
+  `uv pip`/`uv tool` equivalents) and use the installed `sectum-ai` command;
+  the `git clone` flow is scoped to running the bundled `examples/` demo. ADR-0016
+  drops a stale "v0.1.0 is not yet published" aside.
+
 ## [0.1.1] - 2026-06-19
 
 ### Added

@@ -53,7 +53,8 @@ changes the digest and fails verification.
 
 This is a schema change: `SCHEMA_VERSION` is bumped `0.1.0` → `0.2.0`, and packs
 produced under the old scheme do not verify under the new verifier (acceptable —
-v0.1.0 is not yet published and no packs are in the wild).
+at the time of this decision nothing had been published to PyPI and no packs were
+in the wild; the first public release, v0.1.1, ships `SCHEMA_VERSION` 0.5.0).
 
 **Update (2026-06-03): the timestamp anchor is downgrade-resistant too.** A later
 hardening review found the RFC 3161 TSA anchor still had the asymmetry this ADR

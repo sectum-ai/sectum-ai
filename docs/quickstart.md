@@ -1,9 +1,35 @@
 # Quickstart
 
-Sectum AI ships a `uv` workspace and a `sectum-ai` CLI.
-[`uv`](https://docs.astral.sh/uv/) is the only prerequisite.
+Install Sectum AI from PyPI ([`pip`](https://pip.pypa.io/) or
+[`uv`](https://docs.astral.sh/uv/)):
 
-## Run the flagship demo
+```sh
+pip install sectum-ai          # or: uv pip install sectum-ai  (or: uv tool install sectum-ai)
+```
+
+This installs the `sectum-ai` CLI and the core packages. Optional backends
+(live vector stores, model/agent frameworks) are extras — see
+[adapters.md](adapters.md).
+
+## Drive the CLI
+
+```sh
+sectum-ai init                 # scaffold a sectum-ai.yaml (optional)
+sectum-ai seed   --workdir .sectum-ai
+sectum-ai probe  --workdir .sectum-ai
+sectum-ai report --workdir .sectum-ai
+sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
+```
+
+The quickstart pack is timestamped by the offline local-dev token, which anyone
+can regenerate — so `verify` requires `--allow-unanchored` to accept it as an
+integrity-only check. A production pack built with `report --tsa --rekor`
+verifies without the flag, as independently anchored tamper evidence.
+
+## Run the flagship demo (from a clone)
+
+The bundled examples live in the repo, so clone it to run them
+([`uv`](https://docs.astral.sh/uv/) is the only prerequisite):
 
 ```sh
 git clone https://github.com/sectum-ai/sectum-ai
@@ -14,20 +40,6 @@ cd sectum-ai
 This seeds a four-tenant marker substrate, runs the probe suite against a
 deliberately leaky shared vector index, assembles a tamper-evident evidence
 pack, and verifies it.
-
-## Drive the CLI directly
-
-```sh
-uv run sectum-ai seed   --workdir .sectum-ai
-uv run sectum-ai probe  --workdir .sectum-ai
-uv run sectum-ai report --workdir .sectum-ai
-uv run sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
-```
-
-The quickstart pack is timestamped by the offline local-dev token, which anyone
-can regenerate — so `verify` requires `--allow-unanchored` to accept it as an
-integrity-only check. A production pack built with `report --tsa --rekor`
-verifies without the flag, as independently anchored tamper evidence.
 
 | Command | Purpose |
 |---|---|
@@ -54,7 +66,7 @@ emit a single JSON object on stdout instead — convenient for CI dashboards
 that want to act on the headline metrics without scraping prose:
 
 ```sh
-uv run sectum-ai probe --workdir .sectum-ai --output json | jq '.retrieval_pivot_rate'
+sectum-ai probe --workdir .sectum-ai --output json | jq '.retrieval_pivot_rate'
 ```
 
 For GitHub code scanning (or any SAST dashboard), pass `--output sarif` instead to
@@ -68,7 +80,7 @@ assessment-results** document so the run can be ingested as a machine-readable,
 control-mapped assessment:
 
 ```sh
-uv run sectum-ai probe --workdir .sectum-ai --output oscal > assessment-results.json
+sectum-ai probe --workdir .sectum-ai --output oscal > assessment-results.json
 ```
 
 It carries one OSCAL *observation* per finding (the marker-grounded evidence) and
