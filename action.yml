@@ -1,0 +1,157 @@
+name: "Sectum AI"
+description: >-
+  Verify multi-tenant AI isolation in CI: seed a marker substrate, probe for
+  cross-tenant leaks, and fail the build on a confirmed leak. Emits a JSON / SARIF
+  / OSCAL report for dashboards and the code-scanning Security tab.
+author: "Sectum AI"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  version:
+    description: >-
+      sectum-ai version to install from PyPI (for example 0.1.1). Pin it for
+      reproducible runs. Leave empty to install the latest release.
+    required: false
+    default: "0.1.1"
+  config:
+    description: >-
+      Path to a sectum-ai.yaml describing your adapters. If empty, the built-in
+      demo substrate is used - a deliberately leaky fixture that exits with a
+      confirmed leak, useful only for trying the action out.
+    required: false
+    default: ""
+  workdir:
+    description: "Directory for the seeded substrate and run artifacts."
+    required: false
+    default: ".sectum-ai"
+  output:
+    description: "Report format written to output-file: text | json | sarif | oscal."
+    required: false
+    default: "json"
+  output-file:
+    description: "Where to write the probe report (in the chosen output format)."
+    required: false
+    default: "sectum-results.json"
+  python-version:
+    description: "Python to set up (sectum-ai requires >= 3.12)."
+    required: false
+    default: "3.12"
+  fail-on-leak:
+    description: "Fail the step when the probe confirms a cross-tenant leak (probe exit code 2)."
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: "The sectum-ai probe exit code (0 = no confirmed leaks; 2 = confirmed leak; 3 = config/adapter error)."
+    value: ${{ steps.probe.outputs.exit-code }}
+  results-file:
+    description: "Path to the written probe report (the output-file input)."
+    value: ${{ inputs.output-file }}
+  run-path:
+    description: "Path to the run.json the probe wrote in the workdir."
+    value: ${{ steps.probe.outputs.run-path }}
+  confirmed-findings:
+    description: "Number of confirmed cross-tenant findings (populated when output is json)."
+    value: ${{ steps.probe.outputs.confirmed-findings }}
+  retrieval-pivot-rate:
+    description: "Headline Retrieval-Pivot Rate (populated when output is json and Class 2 ran)."
+    value: ${{ steps.probe.outputs.retrieval-pivot-rate }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install sectum-ai
+      shell: bash
+      env:
+        SECTUM_AI_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ -n "${SECTUM_AI_VERSION}" ]; then
+          python -m pip install --upgrade "sectum-ai==${SECTUM_AI_VERSION}"
+        else
+          python -m pip install --upgrade sectum-ai
+        fi
+        sectum-ai --version
+
+    - name: Seed substrate
+      shell: bash
+      env:
+        SECTUM_WORKDIR: ${{ inputs.workdir }}
+        SECTUM_CONFIG: ${{ inputs.config }}
+      run: |
+        set -euo pipefail
+        args=(--workdir "${SECTUM_WORKDIR}")
+        if [ -n "${SECTUM_CONFIG}" ]; then args+=(--config "${SECTUM_CONFIG}"); fi
+        sectum-ai seed "${args[@]}"
+
+    - name: Probe
+      id: probe
+      shell: bash
+      env:
+        SECTUM_WORKDIR: ${{ inputs.workdir }}
+        SECTUM_CONFIG: ${{ inputs.config }}
+        SECTUM_OUTPUT: ${{ inputs.output }}
+        SECTUM_OUTPUT_FILE: ${{ inputs.output-file }}
+      run: |
+        set -uo pipefail
+        # Validate `output` up front: an invalid value makes the CLI exit 2 as a
+        # usage error, which collides with the probe's "confirmed leak" exit 2 and
+        # would be misreported as a leak. Fail fast with a clear message instead.
+        case "${SECTUM_OUTPUT}" in
+          text|json|sarif|oscal) ;;
+          *) echo "::error::invalid output '${SECTUM_OUTPUT}' (expected: text, json, sarif, oscal)"; exit 1 ;;
+        esac
+        args=(--workdir "${SECTUM_WORKDIR}" --output "${SECTUM_OUTPUT}")
+        if [ -n "${SECTUM_CONFIG}" ]; then args+=(--config "${SECTUM_CONFIG}"); fi
+        # The probe exits 2 on a confirmed leak; capture the code (the gate step
+        # below decides whether that fails the build) so this step can still set
+        # its outputs.
+        sectum-ai probe "${args[@]}" > "${SECTUM_OUTPUT_FILE}"
+        code=$?
+        echo "exit-code=${code}" >> "${GITHUB_OUTPUT}"
+        echo "run-path=${SECTUM_WORKDIR}/run.json" >> "${GITHUB_OUTPUT}"
+        if [ "${SECTUM_OUTPUT}" = "json" ] && command -v jq >/dev/null 2>&1; then
+          cf=$(jq -r '.confirmed_findings // ""' "${SECTUM_OUTPUT_FILE}" 2>/dev/null || echo "")
+          rpr=$(jq -r '.retrieval_pivot_rate // ""' "${SECTUM_OUTPUT_FILE}" 2>/dev/null || echo "")
+          echo "confirmed-findings=${cf}" >> "${GITHUB_OUTPUT}"
+          echo "retrieval-pivot-rate=${rpr}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Sectum AI — multi-tenant leak check"
+            echo ""
+            echo "- Confirmed cross-tenant findings: **${cf:-unknown}**"
+            if [ -n "${rpr}" ]; then echo "- Retrieval-Pivot Rate: ${rpr}"; fi
+          } >> "${GITHUB_STEP_SUMMARY}" || true
+        fi
+        # Always succeed here; gating happens in the next step.
+        exit 0
+
+    - name: Gate on findings
+      shell: bash
+      env:
+        FAIL_ON_LEAK: ${{ inputs.fail-on-leak }}
+        EXIT_CODE: ${{ steps.probe.outputs.exit-code }}
+        RESULTS: ${{ inputs.output-file }}
+      run: |
+        set -uo pipefail
+        if [ "${EXIT_CODE}" = "0" ]; then
+          echo "sectum-ai: no confirmed cross-tenant leaks."
+          exit 0
+        fi
+        if [ "${EXIT_CODE}" = "2" ]; then
+          if [ "${FAIL_ON_LEAK}" = "true" ]; then
+            echo "::error::sectum-ai confirmed a cross-tenant leak (see ${RESULTS}). Set fail-on-leak: false to report without failing."
+            exit 1
+          fi
+          echo "::warning::sectum-ai confirmed a cross-tenant leak (see ${RESULTS}); not failing because fail-on-leak is false."
+          exit 0
+        fi
+        echo "::error::sectum-ai probe errored (exit ${EXIT_CODE})."
+        exit 1
