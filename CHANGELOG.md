@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-21
+
 ### Added
 
 - **vLLM model adapter (`kind: vllm`).** A serving-only model adapter that reaches
