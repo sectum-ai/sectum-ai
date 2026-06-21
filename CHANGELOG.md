@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **vLLM model adapter (`kind: vllm`).** A serving-only model adapter that reaches
+  a vLLM server over its OpenAI-compatible API to run inference and measure
+  time-to-first-token — the Class 5 KV-prefix-cache timing channel. It trains no
+  per-tenant adapter, so it reports the `shared_prefix_cache` capability and not
+  `per_tenant_adapter`. Probes now declare `requires_any_capability`; `sectum-ai
+  probe` skips a probe whose capability no configured adapter provides (so Class 9
+  `lora-cross-tenant` is skipped for a serving-only model instead of erroring
+  mid-run), and a Class 11 erasure leaves the model surface `NOT_COVERED`. Install
+  with `pip install sectum-ai-adapters[vllm]`.
+
 - **Run pack (`sectum-ai pack`).** Bundles a completed run into one self-verifying
   `run-pack.zip` — the signed evidence pack and its sidecars plus `run.json`, the
   config (inline secrets redacted - secret-named values, `headers` maps, embedded

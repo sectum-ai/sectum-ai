@@ -8,6 +8,7 @@ every other tenant; a foreign canary surfacing in a response is weight bleed.
 
 from uuid import UUID
 
+from sectum_ai.adapters import Capability
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
 from sectum_ai.spec import (
     Finding,
@@ -33,6 +34,14 @@ class LoraCrossTenantProbe(DetectingProbe):
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MODEL_ADAPTER,)
     requires_adapters: tuple[str, ...] = ("model",)
+    # This probe trains a per-tenant adapter, so it applies to any model that
+    # trains them - in either posture: PER_TENANT_ADAPTER (isolated) or
+    # SHARED_WEIGHTS (the bleed it is built to catch). The CLI skips it for a
+    # serving-only backend (e.g. vLLM) that reports neither and so cannot train.
+    requires_any_capability: tuple[Capability, ...] = (
+        Capability.PER_TENANT_ADAPTER,
+        Capability.SHARED_WEIGHTS,
+    )
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per hard canary: train its owning principal's adapter, infer as foreigners.

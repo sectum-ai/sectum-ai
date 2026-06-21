@@ -84,7 +84,12 @@ cross-tenant tool-call hijack Class 7 examines.
 **Model.** The HuggingFace LoRA model fine-tunes a per-tenant PEFT adapter on a
 base causal LM and routes inference to the caller's adapter; its `adapter_bleed`
 knob merges every tenant's LoRA into every inference — the Class 9 weight-bleed
-leak.
+leak. The vLLM model is **serving-only**: it reaches a vLLM server over its
+OpenAI-compatible API to run inference and measure time-to-first-token (the
+Class 5 KV-prefix-cache timing channel), but it trains no per-tenant adapter, so
+it reports the `shared_prefix_cache` capability and not `per_tenant_adapter` —
+`sectum-ai probe` skips Class 9 for it, and a Class 11 erasure leaves the model
+surface `NOT_COVERED`.
 
 **MCP.** The MCP client speaks the Model Context Protocol over either a stdio
 subprocess or a streamable HTTP session; a generic MCP call carries no tenant
@@ -92,8 +97,9 @@ identity, which is the confused-deputy gap Class 7 examines.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:
-`pip install sectum-ai-adapters[<name>]` for `huggingface`, `rag-langchain`,
-`langgraph`, `crewai`, `autogen`, `openai-assistants`, or `anthropic-tooluse`.
+`pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`,
+`rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`, or
+`anthropic-tooluse`.
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent / MCP
 adapters use only the standard library. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI

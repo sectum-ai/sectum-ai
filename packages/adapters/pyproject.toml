@@ -45,6 +45,9 @@ langgraph = ["langgraph>=0.2", "langchain-core>=0.3"]
 autogen = ["pyautogen>=0.2,<0.3"]
 crewai = ["crewai>=0.80"]
 huggingface = ["transformers>=4.45", "peft>=0.13", "torch>=2.4", "accelerate>=1"]
+# vLLM is reached over its OpenAI-compatible HTTP API, so the client SDK is the
+# only dependency (not the GPU-heavy vllm package itself).
+vllm = ["openai>=1.50"]
 openai-assistants = ["openai>=1.50"]
 anthropic-tooluse = ["anthropic>=0.40"]
 rag-langchain = ["langchain-core>=0.3"]

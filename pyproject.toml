@@ -257,6 +257,9 @@ omit = [
     "*/sectum_ai/adapters/vector/*",
     "*/sectum_ai/adapters/cache/*",
     "*/sectum_ai/adapters/observability/*",
+    # The live vLLM backend talks to a server via the openai client; it is
+    # exercised by the env-gated integration test, like the other live adapters.
+    "*/sectum_ai/adapters/model/_vllm_live.py",
 ]
 
 [tool.coverage.report]
