@@ -590,6 +590,30 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
             train_epochs=_int(extras, "train_epochs", 1),
             device_map=_str(extras, "device_map", "auto"),
         )
+    if config.kind == "vllm":
+        # A live vLLM server over its OpenAI-compatible API. Serving-only: it
+        # runs inference against fixed weights and shares one prefix cache, so it
+        # drives Class 5 (KV-cache timing) but trains no per-tenant adapter - the
+        # CLI skips Class 9 for it. The ``openai`` client is imported lazily by
+        # ``connect``; ``_optional_extra`` maps a missing dependency to a typed
+        # AdapterError (exit 3) with an install hint.
+        from sectum_ai.adapters.model.vllm import VLLMModel
+
+        base_url = _required_str(extras, "base_url")
+        model_name = _required_str(extras, "model")
+        api_key = (
+            _resolve_secret(extras, "api_key", "api_key_env")
+            if "api_key" in extras or "api_key_env" in extras
+            else "EMPTY"
+        )
+        with _optional_extra("vllm"):
+            return VLLMModel.connect(
+                base_url=base_url,
+                model=model_name,
+                api_key=api_key,
+                timeout=_float(extras, "timeout", 30.0),
+                max_tokens=_int(extras, "max_tokens", 16),
+            )
     raise _unsupported("model", config.kind)
 
 

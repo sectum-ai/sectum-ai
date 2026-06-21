@@ -4571,6 +4571,9 @@ rag-langchain = [
 redis = [
     { name = "redis" },
 ]
+vllm = [
+    { name = "openai" },
+]
 weaviate = [
     { name = "weaviate-client" },
 ]
@@ -4592,6 +4595,7 @@ requires-dist = [
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1" },
     { name = "openai", marker = "extra == 'openai-assistants'", specifier = ">=1.50" },
+    { name = "openai", marker = "extra == 'vllm'", specifier = ">=1.50" },
     { name = "opensearch-py", marker = "extra == 'opensearch'", specifier = ">=2.4" },
     { name = "peft", marker = "extra == 'huggingface'", specifier = ">=0.13" },
     { name = "pinecone", marker = "extra == 'pinecone'", specifier = ">=5" },
@@ -4606,7 +4610,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.45" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
 ]
-provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "qdrant", "milvus", "opensearch", "azure-search", "langgraph", "autogen", "crewai", "huggingface", "openai-assistants", "anthropic-tooluse", "rag-langchain"]
+provides-extras = ["pgvector", "chroma", "weaviate", "redis", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "qdrant", "milvus", "opensearch", "azure-search", "langgraph", "autogen", "crewai", "huggingface", "vllm", "openai-assistants", "anthropic-tooluse", "rag-langchain"]
 
 [[package]]
 name = "sectum-ai-evidence"

@@ -38,6 +38,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum_ai.config import (
+    AdapterBundle,
     AdapterConfig,
     EmbedderConfig,
     EvidenceConfig,
@@ -180,6 +181,38 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
     )
 
 
+def _skip_inapplicable(
+    suite: tuple[Probe, ...], bundle: AdapterBundle
+) -> tuple[tuple[Probe, ...], list[tuple[str, str]]]:
+    """Drop probes the configured stack cannot satisfy by adapter capability.
+
+    A probe may list alternative capabilities in ``requires_any_capability`` - it
+    applies if any adapter it drives reports at least one of them. The LoRA probe,
+    for instance, needs a model that trains per-tenant adapters in either posture
+    (``per_tenant_adapter`` or ``shared_weights``); a serving-only model (vLLM)
+    reports neither, so the probe is skipped rather than run into a mid-probe
+    adapter error. Returns the runnable probes and the ``(probe id, missing
+    capabilities)`` pairs that were skipped.
+    """
+    runnable: list[Probe] = []
+    skipped: list[tuple[str, str]] = []
+    for probe in suite:
+        required_any = getattr(probe, "requires_any_capability", ())
+        present = [
+            adapter
+            for slot in probe.requires_adapters
+            if (adapter := getattr(bundle, slot, None)) is not None
+        ]
+        satisfied = not required_any or any(
+            adapter.supports(cap) for adapter in present for cap in required_any
+        )
+        if satisfied:
+            runnable.append(probe)
+        else:
+            skipped.append((probe.id, " or ".join(cap.value for cap in required_any)))
+    return tuple(runnable), skipped
+
+
 # The CLI's default for `sectum-ai probe`: every fake's leak knob is on, so the
 # probe suite reproduces the cross-tenant findings the probes are built to
 # catch. Override by passing `--config sectum-ai.yaml`.
@@ -222,9 +255,12 @@ adapters:
     kind: fake               # fake | redis
     tenant_scoped: false     # demo leak: a shared key space across tenants
   model:
-    kind: fake               # fake | huggingface
+    kind: fake               # fake | huggingface | vllm
     adapter_bleed: true      # demo leak: one tenant's adapter influences others
     prefix_cache: true       # demo leak: a shared KV prefix cache leaks via timing
+    # vllm is serving-only (Class 5 KV-cache timing); Class 9 is skipped for it.
+    # base_url: http://localhost:8000/v1
+    # model: meta-llama/Llama-3.1-8B-Instruct
   mcp:
     kind: fake               # fake | stdio | http
     confused_deputy: true    # demo leak: the MCP server lost tenant scope
@@ -661,6 +697,13 @@ def probe(
         suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
     bundle = build_adapters(loaded)
+    suite, skipped_probes = _skip_inapplicable(suite, bundle)
+    for skipped_id, missing_cap in skipped_probes:
+        typer.echo(
+            f"skipping {skipped_id}: no configured adapter provides '{missing_cap}' "
+            "(e.g. a serving-only model trains no per-tenant adapter)",
+            err=True,
+        )
     vector = bundle.vector
     cache = bundle.cache
     model = bundle.model
