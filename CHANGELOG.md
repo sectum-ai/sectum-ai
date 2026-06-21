@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a vLLM server over its OpenAI-compatible API to run inference and measure
   time-to-first-token — the Class 5 KV-prefix-cache timing channel. It trains no
   per-tenant adapter, so it reports the `shared_prefix_cache` capability and not
-  `per_tenant_adapter`. Probes now declare `requires_capabilities`; `sectum-ai
+  `per_tenant_adapter`. Probes now declare `requires_any_capability`; `sectum-ai
   probe` skips a probe whose capability no configured adapter provides (so Class 9
   `lora-cross-tenant` is skipped for a serving-only model instead of erroring
   mid-run), and a Class 11 erasure leaves the model surface `NOT_COVERED`. Install
