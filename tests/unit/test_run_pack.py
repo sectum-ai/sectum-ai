@@ -116,6 +116,43 @@ def test_scrub_config_secret_value_keeps_benign_urls() -> None:
     assert _scrub_config_secret_value("gpt-4o-mini") == "gpt-4o-mini"
 
 
+def test_redact_config_secret_key_matches_on_a_word_boundary() -> None:
+    # A vLLM config's benign `max_tokens` must NOT be redacted by the `token`
+    # secret-key rule (it is `tokens`, not `token`), and `public_key` stays public;
+    # real secret keys still redact. (The cross-cutting B3-redaction x D2-vllm bug.)
+    out = cast(
+        dict[str, Any],
+        _redact_config_value(
+            {
+                "max_tokens": 16,
+                "timeout": 30,
+                "tokenizer": "gpt2",
+                "public_key": "pk-public-id",
+                "token": "t",
+                "secret_key": "s",
+                "api_key": "sk-LEAKME",
+                "api_key_env": "SECTUM_VLLM_API_KEY",
+            }
+        ),
+    )
+    assert out["max_tokens"] == 16  # not redacted by the `token` rule
+    assert out["timeout"] == 30
+    assert out["tokenizer"] == "gpt2"
+    assert out["public_key"] == "pk-public-id"  # the public half is kept
+    assert out["token"] == "<redacted>"  # a bare secret key still redacts
+    assert out["secret_key"] == "<redacted>"
+    assert out["api_key"] == "<redacted>"
+    assert out["api_key_env"] == "SECTUM_VLLM_API_KEY"  # env reference kept
+
+
+def test_redact_config_hardening_bearer_userinfo_scalar() -> None:
+    # bearer is matched in any case; a malformed mid-password `@` still redacts the
+    # whole userinfo (no surviving tail); a scalar-only config is scrubbed, not echoed.
+    assert "ABCDEFGH12345678" not in _scrub_config_secret_value("note: BEARER ABCDEFGH12345678")
+    assert "p4ss" not in _scrub_config_secret_value("http://user:p4ss@w0rd@host/v1")
+    assert "<redacted>" in _redact_config_text("sk-" + "x" * 24)
+
+
 def test_redact_config_text_tolerates_invalid_yaml() -> None:
     # Never raise (and never echo the raw text back) on a malformed config.
     out = _redact_config_text("::: not : valid : yaml :::")

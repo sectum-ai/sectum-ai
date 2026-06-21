@@ -1033,19 +1033,16 @@ def report(
     typer.echo(f"dsse envelope -> {dsse_path}")
 
 
-_CONFIG_SECRET_TOKENS = (
-    "api_key",
-    "apikey",
-    "dsn",
-    "password",
-    "passphrase",
-    "token",
-    "secret",
-    "credential",
-    "application_key",
+# A config key names a secret when one of these words appears with a trailing
+# word boundary (end / ``_`` / ``-`` / non-alphanumeric): ``api_key``,
+# ``secret_key``, ``db_dsn`` and a bare ``token`` match, but ``max_tokens``,
+# ``tokenizer`` and ``public_key`` do NOT (the trailing-boundary stops ``token``
+# from matching inside ``tokens``). ``*_env`` keys name an environment variable,
+# not the secret, and are kept (handled by the caller).
+_CONFIG_SECRET_KEY_RE = re.compile(
+    r"(?:api_?key|dsn|password|passphrase|token|secret|credential|application_key)"
+    r"(?![A-Za-z0-9])"
 )
-"""Config key fragments whose inline VALUE is a secret. ``*_env`` keys name an
-environment variable (not the secret itself) and are kept."""
 
 # Value-shape backstop: an inline secret can hide under a benign key name - in a
 # header value (`Authorization: Bearer ...`), embedded in a URL
@@ -1065,12 +1062,14 @@ _CONFIG_SECRET_VALUE_RE = re.compile(
     r"|(?<![A-Za-z0-9])hf_[A-Za-z0-9]{20,}"  # Hugging Face token
     r"|(?<![A-Za-z0-9])AIza[A-Za-z0-9_-]{16,}"  # Google API key
     r"|SECTUM-CANARY-[A-Z2-7]+"  # Sectum canary plaintext
-    r"|[Bb]earer\s+[A-Za-z0-9._~+/=-]{8,}"  # bearer token
+    r"|(?i:bearer)\s+[A-Za-z0-9._~+/=-]{8,}"  # bearer token (any case)
 )
-# Embedded URL credentials: the whole userinfo (`user:pass@` or `token@`) and any
-# query-parameter value (a base_url can carry `?api-key=...`). Single-run classes
-# bounded by literals -> linear.
-_URL_USERINFO_RE = re.compile(r"://[^\s/@]+@")
+# Embedded URL credentials: the whole userinfo (`user:pass@`, `:pass@`, `token@`)
+# and any query-parameter value (a base_url can carry `?api-key=...`). The
+# userinfo class allows `@` so a malformed mid-password `@` still redacts the
+# whole userinfo up to the last `@` before the path. Single-run classes bounded
+# by literals -> linear.
+_URL_USERINFO_RE = re.compile(r"://[^\s/]+@")
 _URL_QUERY_VALUE_RE = re.compile(r"([?&][^=&\s]+=)[^&\s]+")
 
 
@@ -1086,7 +1085,7 @@ def _scrub_config_secret_value(text: str) -> str:
 def _redact_config_value(value: object) -> object:
     """Recursively redact inline secrets in a parsed config.
 
-    A key naming a secret (a ``_CONFIG_SECRET_TOKENS`` fragment, not ending in
+    A key naming a secret (a ``_CONFIG_SECRET_KEY_RE`` match, not ending in
     ``_env``) has its value replaced with ``<redacted>``; a ``headers`` map is
     redacted wholesale; and every string is scrubbed for credential shapes and
     embedded URL credentials (`_scrub_config_secret_value`). ``*_env`` references
@@ -1097,8 +1096,8 @@ def _redact_config_value(value: object) -> object:
         redacted: dict[object, object] = {}
         for key, val in value.items():
             name = str(key).lower()
-            is_secret_key = not name.endswith("_env") and any(
-                tok in name for tok in _CONFIG_SECRET_TOKENS
+            is_secret_key = (
+                not name.endswith("_env") and _CONFIG_SECRET_KEY_RE.search(name) is not None
             )
             # A `headers` map is redacted wholesale: any value may be an opaque token.
             is_headers = name == "headers" or name.endswith("_headers")
@@ -1127,7 +1126,9 @@ def _redact_config_text(text: str) -> str:
     except yaml.YAMLError:
         return "# config omitted: not valid YAML\n"
     if not isinstance(data, dict | list):
-        return text
+        # A scalar-only config is not a real sectum-ai mapping, but still scrub it
+        # for credential shapes rather than echoing it back verbatim.
+        return _scrub_config_secret_value(text)
     dumped = yaml.safe_dump(_redact_config_value(data), sort_keys=False, default_flow_style=False)
     return str(dumped)
 
