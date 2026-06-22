@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-21
+
+### Fixed
+
+- **`sectum-ai pack` no longer over-redacts a config's `max_tokens`.** The redacted
+  config carried in a run pack matched secret key names by bare substring, so the
+  vLLM adapter's benign `max_tokens` field was written as `<redacted>` and the
+  redacted config no longer round-tripped. Secret keys are now matched on a word
+  boundary — `api_key`/`secret_key`/`token` still redact, while `max_tokens`,
+  `tokenizer`, and `public_key` are kept. The value-shape scrub is also hardened:
+  `bearer` is matched case-insensitively, URL userinfo with an embedded `@` is
+  fully redacted, and a scalar-only config is scrubbed rather than echoed. No
+  secret was ever exposed — this was over-redaction.
+
 ## [0.1.3] - 2026-06-21
 
 ### Added
