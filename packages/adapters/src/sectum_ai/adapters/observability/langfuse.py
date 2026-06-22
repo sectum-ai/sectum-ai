@@ -7,10 +7,11 @@ hex id when the trace is recorded). A search lists that tenant's traces and
 substring-matches the marker in their text; erasure lists the tenant's trace ids
 and bulk-deletes them.
 
-Targets the Langfuse v3 Python SDK (``langfuse>=3,<4``); the package is imported
-only on the live ``connect`` path, so the adapter and its mock-backed test need
-no dependency. The live path requires the ``langfuse`` optional dependency:
-``pip install sectum-ai-adapters[langfuse]``.
+Targets the Langfuse v4 Python SDK (``langfuse>=4,<5``); it uses the generated
+``client.api.{trace,projects}`` surface, which is unchanged from v3. The package
+is imported only on the live ``connect`` path, so the adapter and its mock-backed
+test need no dependency. The live path requires the ``langfuse`` optional
+dependency: ``pip install sectum-ai-adapters[langfuse]``.
 """
 
 import time
