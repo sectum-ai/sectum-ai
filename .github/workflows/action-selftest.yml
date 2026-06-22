@@ -19,7 +19,7 @@ jobs:
     name: Action runs and reports the demo leak
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # No `config` -> the built-in demo substrate, which is deliberately leaky,
       # so the probe must confirm a leak (exit 2). `fail-on-leak: false` lets the
       # step succeed so we can assert on its outputs.
@@ -44,7 +44,7 @@ jobs:
     name: fail-on-leak gates the build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Same leaky demo, but with the default fail-on-leak: true the action must
       # FAIL the step. continue-on-error lets us assert that it did.
       - id: gate

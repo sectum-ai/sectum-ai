@@ -33,7 +33,7 @@ redis = ["redis>=5"]
 # the Phoenix adapter imports httpx directly (observability/phoenix.py); declare
 # it explicitly rather than relying on arize-phoenix-client to pull it in.
 phoenix = ["arize-phoenix-client>=2", "httpx>=0.27"]
-langfuse = ["langfuse>=3,<4"]
+langfuse = ["langfuse>=4,<5"]
 langsmith = ["langsmith>=0.1"]
 mcp = ["mcp>=1"]
 pinecone = ["pinecone>=5"]

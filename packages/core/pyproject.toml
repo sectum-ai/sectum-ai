@@ -19,7 +19,12 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "typer>=0.12",
+    # Capped <0.26 deliberately: typer 0.26's CliRunner closes the captured
+    # stderr between in-process invocations, which trips structlog's cached
+    # stream (ValueError: I/O operation on closed file) and breaks the CLI test
+    # harness. No runtime impact (one invocation per real process). Remove the
+    # cap once logging resolves sys.stderr at emit time rather than at configure.
+    "typer>=0.12,<0.26",
     "pyyaml>=6",
     # config.py and cli/app.py import pydantic directly; declare it rather than
     # relying on the transitive dependency via sectum-ai-spec (§13, mirrors adapters).
