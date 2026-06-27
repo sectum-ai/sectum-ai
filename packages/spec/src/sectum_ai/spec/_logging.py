@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
-from typing import cast
+from typing import TextIO, cast
 
 import structlog
 from structlog.types import EventDict, FilteringBoundLogger, Processor, WrappedLogger
@@ -121,6 +121,26 @@ def redact_sensitive(_logger: WrappedLogger, _method: str, event_dict: EventDict
     return cast(EventDict, _redact_value(event_dict))
 
 
+class _LiveStderr:
+    """A ``sys.stderr`` proxy that resolves the stream at write time.
+
+    structlog's ``PrintLogger`` (with ``cache_logger_on_first_use``) binds its
+    output stream once, so capturing ``sys.stderr`` directly pins the cached logger
+    to one object. A Typer/Click ``CliRunner`` (typer >= 0.26) swaps and then closes
+    the ``sys.stderr`` it captured between in-process invocations, so the next log
+    on the pinned stream raises ``ValueError: I/O operation on closed file``.
+    Forwarding to the current ``sys.stderr`` on every call keeps logging robust to
+    that without giving up logger caching. No production path closes stderr; this
+    just makes the test harness (and any embedder of the CLI) safe.
+    """
+
+    def write(self, message: str) -> int:
+        return sys.stderr.write(message)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+
 def configure_logging(*, debug: bool = False, json_output: bool = True) -> None:
     """Configure process-wide structured logging. Call once, from the entry point.
 
@@ -145,7 +165,7 @@ def configure_logging(*, debug: bool = False, json_output: bool = True) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.DEBUG if debug else logging.INFO
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+        logger_factory=structlog.PrintLoggerFactory(file=cast(TextIO, _LiveStderr())),
         cache_logger_on_first_use=True,
     )
 

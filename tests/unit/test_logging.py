@@ -260,3 +260,30 @@ def test_scrub_only_matches_credential_shapes_at_a_word_boundary() -> None:
     assert out["underscore"] == "api_<redacted>"
     assert out["equals"] == "key=<redacted>"
     assert out["standalone"] == "<redacted>"
+
+
+def test_logging_resolves_stderr_at_write_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression: the cached logger must resolve the CURRENT sys.stderr on each
+    # write. The root cause is the pin — a cached logger bound to the stderr
+    # captured at configure time misses a later-swapped stream (this test's first
+    # assertion already fails under the old code, before any close); and if that
+    # pinned stream is then closed (as typer >= 0.26's CliRunner does between
+    # in-process invocations) the next log raises "I/O operation on closed file".
+    # See sectum_ai.spec._logging._LiveStderr.
+    import io
+    import sys
+
+    structlog.reset_defaults()
+    configure_logging(json_output=True)
+    log = get_logger("test.stderr")
+
+    first = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", first)
+    log.warning("one")
+    assert "one" in first.getvalue()
+    first.close()  # the captured stream is closed, as CliRunner does on exit
+
+    second = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", second)
+    log.warning("two")  # must not raise; writes to the live stderr
+    assert "two" in second.getvalue()
