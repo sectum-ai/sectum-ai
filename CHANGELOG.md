@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-27
+
 ### Added
 
 - **TGI model adapter (`kind: tgi`).** A serving-only HuggingFace Text Generation
