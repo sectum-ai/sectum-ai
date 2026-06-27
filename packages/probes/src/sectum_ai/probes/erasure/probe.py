@@ -16,6 +16,7 @@ from uuid import UUID
 from sectum_ai.adapters import (
     BackupAdapter,
     CacheAdapter,
+    Capability,
     EvalSetAdapter,
     MemoryAdapter,
     ModelAdapter,
@@ -378,10 +379,22 @@ class ErasureProbe:
         Querying the model with the canary surfaces it only while the tenant's
         fine-tune/adapter has memorized it; once the adapter is erased the model
         recalls nothing for that prompt.
+
+        A serving-only model (vLLM/TGI) supports neither PER_TENANT_ADAPTER nor
+        SHARED_WEIGHTS - the pair the LoRA probe gates on - so it trained nothing
+        that could reproduce a canary. Skip its per-marker inference for that case
+        and report nothing: the coverage block reads NOT_COVERED (never a false
+        ERASED), and a transient backend error can't abort the run over a scan that
+        is structurally empty anyway.
         """
         if self._model is None:
             return []
         model = self._model
+        if not any(
+            model.supports(cap)
+            for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
+        ):
+            return []
         return [
             marker
             for marker in markers

@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   base that vLLM and TGI both build on. Install with
   `pip install sectum-ai-adapters[tgi]`.
 
+### Fixed
+
+- **Class 11 erasure skips model inference for serving-only models.** An `erasure`
+  run configured with a serving-only model (`kind: vllm`/`tgi`) issued a live
+  completion per canary on the model surface, even though such a model trains no
+  per-tenant adapter and can never reproduce one — wasted I/O whose only outcome was
+  the correct `NOT_COVERED`, and a transient backend error there aborted the whole
+  run. The scan now short-circuits for a model that supports neither
+  `per_tenant_adapter` nor `shared_weights`, reading `NOT_COVERED` without a network
+  call.
+
 ## [0.1.4] - 2026-06-21
 
 ### Fixed
