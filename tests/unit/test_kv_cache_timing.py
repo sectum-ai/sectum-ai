@@ -157,6 +157,42 @@ def test_timing_statistics_are_deterministic() -> None:
     assert [s.ci_low_ms for s in first.signals] == [s.ci_low_ms for s in second.signals]
 
 
+def test_kv_timing_detects_a_leak_through_a_serving_adapter() -> None:
+    # The serving adapters (vLLM/TGI) exist to drive Class 5: confirm the probe's
+    # warm-then-measure flow surfaces a cross-tenant prefix-cache timing gap through
+    # a VLLMModel whose backend shares one prefix cache across callers (no tenant
+    # scope), mirroring a real shared KV cache.
+    import hashlib
+
+    from sectum_ai.adapters.model.vllm import VLLMModel
+
+    class _SharedCacheBackend:
+        # Mirrors FakeModel's prefix-cache timing so the paired-trial Welch test has
+        # a real signal: a warmed 20-char prefix returns ~60ms faster, with a paired
+        # last-token jitter. The cache is keyed on the prompt only (no tenant), so an
+        # owner's warmed prefix leaks into an observer's timing.
+        def __init__(self) -> None:
+            self._warm: set[str] = set()
+
+        def complete(self, prompt: str) -> str:
+            self._warm.add(prompt[:20])
+            return ""  # completion only, no echo
+
+        def first_token_latency_ms(self, prompt: str) -> float:
+            tokens = prompt.split()
+            key = (tokens[-1] if tokens else prompt).encode("utf-8")
+            jitter = float(int.from_bytes(hashlib.sha256(key).digest()[:2], "big") % 16)
+            latency = 100.0 + jitter
+            return latency - 60.0 if prompt[:20] in self._warm else latency
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    report = KvCacheTimingProbe(substrate, model=VLLMModel(_SharedCacheBackend())).run()
+    findings = confirmed_findings(report.findings)
+    assert findings  # the shared prefix cache leaks a warmed prefix across tenants
+    assert all(f.owner_tenant_id != f.observed_in_tenant_id for f in findings)
+    assert all(f.surface is Surface.KV_CACHE for f in findings)
+
+
 # --- Gate-arm and degenerate-input coverage (the avoid-over-claiming logic) ---
 
 from sectum_ai.probes.kv_cache_timing.probe import TimingSignal  # noqa: E402
