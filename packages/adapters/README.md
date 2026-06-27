@@ -14,7 +14,7 @@ interface so probes can declare what they require:
 - **Agents** — LangGraph, AutoGen, CrewAI, OpenAI Assistants, Anthropic tool-use, generic HTTP
 - **MCP** — stdio + streamable-HTTP Model Context Protocol clients
 - **Cache** — Redis
-- **Model** — HuggingFace + PEFT LoRA, vLLM (serving-only)
+- **Model** — HuggingFace + PEFT LoRA, vLLM and TGI (serving-only)
 
 ```sh
 pip install sectum-ai-adapters

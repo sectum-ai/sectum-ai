@@ -614,6 +614,27 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
                 timeout=_float(extras, "timeout", 30.0),
                 max_tokens=_int(extras, "max_tokens", 16),
             )
+    if config.kind == "tgi":
+        # A live HuggingFace Text Generation Inference server. Serving-only like
+        # vLLM (Class 5 KV-cache timing, no per-tenant training -> Class 9 skipped).
+        # TGI serves one model per endpoint, so only ``base_url`` is required;
+        # ``api_key`` is an optional bearer token. The ``huggingface_hub`` client
+        # is imported lazily by ``connect``.
+        from sectum_ai.adapters.model.tgi import TGIModel
+
+        tgi_base_url = _required_str(extras, "base_url")
+        tgi_api_key = (
+            _resolve_secret(extras, "api_key", "api_key_env")
+            if "api_key" in extras or "api_key_env" in extras
+            else None
+        )
+        with _optional_extra("tgi"):
+            return TGIModel.connect(
+                base_url=tgi_base_url,
+                api_key=tgi_api_key,
+                timeout=_float(extras, "timeout", 30.0),
+                max_tokens=_int(extras, "max_tokens", 16),
+            )
     raise _unsupported("model", config.kind)
 
 

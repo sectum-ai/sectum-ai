@@ -255,12 +255,13 @@ adapters:
     kind: fake               # fake | redis
     tenant_scoped: false     # demo leak: a shared key space across tenants
   model:
-    kind: fake               # fake | huggingface | vllm
+    kind: fake               # fake | huggingface | vllm | tgi
     adapter_bleed: true      # demo leak: one tenant's adapter influences others
     prefix_cache: true       # demo leak: a shared KV prefix cache leaks via timing
-    # vllm is serving-only (Class 5 KV-cache timing); Class 9 is skipped for it.
-    # base_url: http://localhost:8000/v1
+    # vllm and tgi are serving-only (Class 5 KV-cache timing); Class 9 is skipped.
+    # base_url: http://localhost:8000/v1   # vllm: OpenAI-compatible endpoint
     # model: meta-llama/Llama-3.1-8B-Instruct
+    # base_url: http://localhost:8080      # tgi: server URL (one model per endpoint)
   mcp:
     kind: fake               # fake | stdio | http
     confused_deputy: true    # demo leak: the MCP server lost tenant scope
