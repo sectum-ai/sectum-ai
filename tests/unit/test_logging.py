@@ -263,11 +263,13 @@ def test_scrub_only_matches_credential_shapes_at_a_word_boundary() -> None:
 
 
 def test_logging_resolves_stderr_at_write_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Regression: the cached logger must write to the CURRENT sys.stderr, not a
-    # stream captured at configure time. A harness that swaps and then closes
-    # stderr between calls (typer >= 0.26's CliRunner, between in-process
-    # invocations) would otherwise make the next log raise "I/O operation on
-    # closed file". See sectum_ai.spec._logging._LiveStderr.
+    # Regression: the cached logger must resolve the CURRENT sys.stderr on each
+    # write. The root cause is the pin — a cached logger bound to the stderr
+    # captured at configure time misses a later-swapped stream (this test's first
+    # assertion already fails under the old code, before any close); and if that
+    # pinned stream is then closed (as typer >= 0.26's CliRunner does between
+    # in-process invocations) the next log raises "I/O operation on closed file".
+    # See sectum_ai.spec._logging._LiveStderr.
     import io
     import sys
 
