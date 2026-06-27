@@ -373,14 +373,16 @@ def test_erasure_fails_when_the_model_adapter_soft_deletes() -> None:
 
 
 def test_erasure_model_surface_is_not_covered_for_a_serving_only_model() -> None:
-    # A serving-only model (vLLM/TGI) trains no per-tenant adapter and echoes no
-    # prompt, so no canary surfaces via inference: the model surface must read
-    # NOT_COVERED, never a vacuous ERASED.
+    # A serving-only model (vLLM/TGI) supports neither PER_TENANT_ADAPTER nor
+    # SHARED_WEIGHTS, so it trained nothing that could hold a canary: the erasure
+    # scan must skip inference entirely and read NOT_COVERED, never a vacuous ERASED.
+    # The backend's complete raises if reached, proving no per-marker I/O happens
+    # (so a flaky serving backend cannot abort an erasure run).
     from sectum_ai.adapters.model.vllm import VLLMModel
 
     class _ServingBackend:
         def complete(self, prompt: str) -> str:
-            return ""  # completion only -> no canary surfaces via inference
+            raise AssertionError("infer must not be called for a serving-only model")
 
         def first_token_latency_ms(self, prompt: str) -> float:
             return 0.0
