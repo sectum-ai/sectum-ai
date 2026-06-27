@@ -179,6 +179,13 @@ adapters:
     #   base_url: http://localhost:8000/v1
     #   model: meta-llama/Llama-3.1-8B-Instruct
     #   api_key_env: SECTUM_VLLM_API_KEY   # optional; omit if the server is open
+    # kind: tgi               # a serving-only HuggingFace Text Generation Inference
+    #                         # server (same Class 5 behavior as vllm; one model per
+    #                         # endpoint, so no `model` field). Reached via the
+    #                         # huggingface_hub client.
+    #                         # Requires `pip install sectum-ai-adapters[tgi]`.
+    #   base_url: http://localhost:8080
+    #   api_key_env: SECTUM_TGI_API_KEY    # optional; omit for an open endpoint
     kind: fake
 
   memory:

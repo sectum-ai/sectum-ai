@@ -48,6 +48,9 @@ huggingface = ["transformers>=4.45", "peft>=0.13", "torch>=2.4", "accelerate>=1"
 # vLLM is reached over its OpenAI-compatible HTTP API, so the client SDK is the
 # only dependency (not the GPU-heavy vllm package itself).
 vllm = ["openai>=1.50"]
+# TGI is reached over its native text-generation API via the huggingface_hub
+# InferenceClient (not the GPU-heavy text-generation-inference server package).
+tgi = ["huggingface_hub>=0.24"]
 openai-assistants = ["openai>=1.50"]
 anthropic-tooluse = ["anthropic>=0.40"]
 rag-langchain = ["langchain-core>=0.3"]

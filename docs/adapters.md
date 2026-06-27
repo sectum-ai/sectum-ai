@@ -89,7 +89,8 @@ OpenAI-compatible API to run inference and measure time-to-first-token (the
 Class 5 KV-prefix-cache timing channel), but it trains no per-tenant adapter, so
 it reports the `shared_prefix_cache` capability and not `per_tenant_adapter` —
 `sectum-ai probe` skips Class 9 for it, and a Class 11 erasure leaves the model
-surface `NOT_COVERED`.
+surface `NOT_COVERED`. The TGI model is the same serving-only shape over
+HuggingFace Text Generation Inference's native text-generation API.
 
 **MCP.** The MCP client speaks the Model Context Protocol over either a stdio
 subprocess or a streamable HTTP session; a generic MCP call carries no tenant
@@ -97,7 +98,7 @@ identity, which is the confused-deputy gap Class 7 examines.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:
-`pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`,
+`pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`, `tgi`,
 `rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`, or
 `anthropic-tooluse`.
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent / MCP

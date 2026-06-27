@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **TGI model adapter (`kind: tgi`).** A serving-only HuggingFace Text Generation
+  Inference adapter, reached over TGI's native text-generation API via the
+  `huggingface_hub` client. Like the vLLM adapter it runs inference and measures
+  time-to-first-token (Class 5 KV-cache timing) but trains no per-tenant adapter,
+  so it declares `shared_prefix_cache` and not `per_tenant_adapter` — `sectum-ai
+  probe` skips Class 9 for it and a Class 11 erasure leaves the model surface
+  `NOT_COVERED`. The shared serving-only behavior now lives in a `_ServingModel`
+  base that vLLM and TGI both build on. Install with
+  `pip install sectum-ai-adapters[tgi]`.
+
 ## [0.1.4] - 2026-06-21
 
 ### Fixed
