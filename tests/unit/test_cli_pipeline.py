@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
@@ -626,3 +627,38 @@ def test_verify_requires_an_anchor_by_default(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json")])
     assert result.exit_code == 4
     assert "independent-anchor" in result.output
+
+
+def test_probe_with_a_serving_only_model_skips_class_9(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # End to end: a serving-only model (vLLM/TGI) trains no per-tenant adapter, so
+    # `probe` must skip Class 9 (lora-cross-tenant) and still complete — including
+    # driving Class 5 KV-cache timing against it. Inject one without a live SDK by
+    # stubbing the model builder; the rest of the demo bundle is unchanged.
+    import sectum_ai.cli.app as app_mod
+    import sectum_ai.config as config_mod
+    from sectum_ai.adapters.model.vllm import VLLMModel
+
+    class _FakeServingBackend:
+        def complete(self, prompt: str) -> str:
+            return ""  # completion only, never an echo of the prompt
+
+        def first_token_latency_ms(self, prompt: str) -> float:
+            return 5.0
+
+    def _serving_model(_config: object) -> VLLMModel:
+        return VLLMModel(_FakeServingBackend())
+
+    # build_adapters (config) builds the suite model; the probe command builds a
+    # fresh KV-timing model via the app-level name — patch both to the serving stub.
+    monkeypatch.setattr(config_mod, "build_model", _serving_model)
+    monkeypatch.setattr(app_mod, "build_model", _serving_model)
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    # The demo's other surfaces still leak, so the run completes with exit 2.
+    assert result.exit_code == 2, result.output
+    versions = json.loads((tmp_path / "run.json").read_text())["probe_versions"]
+    assert "lora-cross-tenant" not in versions  # gated out: a serving model can't train
+    assert "tenant-boundary-fetch" in versions  # the rest of the suite still ran

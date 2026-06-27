@@ -372,6 +372,28 @@ def test_erasure_fails_when_the_model_adapter_soft_deletes() -> None:
     assert any(finding.surface is Surface.MODEL_ADAPTER for finding in report.findings)
 
 
+def test_erasure_model_surface_is_not_covered_for_a_serving_only_model() -> None:
+    # A serving-only model (vLLM/TGI) trains no per-tenant adapter and echoes no
+    # prompt, so no canary surfaces via inference: the model surface must read
+    # NOT_COVERED, never a vacuous ERASED.
+    from sectum_ai.adapters.model.vllm import VLLMModel
+
+    class _ServingBackend:
+        def complete(self, prompt: str) -> str:
+            return ""  # completion only -> no canary surfaces via inference
+
+        def first_token_latency_ms(self, prompt: str) -> float:
+            return 0.0
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, model=VLLMModel(_ServingBackend())).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.MODEL_ADAPTER].markers_before == 0
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+
+
 def test_erasure_clears_the_search_index_when_it_hard_deletes() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id
