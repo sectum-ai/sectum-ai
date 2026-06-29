@@ -6,6 +6,13 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # The autogen adapter targets the stable pyautogen 0.2.x API. pyautogen
+      # 0.3+/0.10 is the AG2 fork (a thin shim over autogen-agentchat/-core 0.7) —
+      # a breaking API change that needs a deliberate adapter migration, not a
+      # dependabot bump. See the autogen extra in packages/adapters/pyproject.toml.
+      - dependency-name: "pyautogen"
+        versions: [">=0.3"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
