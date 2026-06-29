@@ -2733,7 +2733,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.38.0"
+version = "2.44.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -2745,9 +2745,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/12/cfa322c5f5dd8fa21aab9a7a8e979e7a11123800f86ca8d82eb68a83d213/openai-2.38.0.tar.gz", hash = "sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3", size = 772764, upload-time = "2026-05-21T21:23:42.105Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/f5/7c7cb955305cb41f7f3c5fd7e0e38bf6bbf2658468863d4b7b868a5cb8df/openai-2.44.0.tar.gz", hash = "sha256:68a5a5ffad82b8ff7d451c437529fb64f7c3b8123aaf0c021966a882d9e3947d", size = 988753, upload-time = "2026-06-24T20:56:02.293Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/bf/ccff9be562e24207716d04ef9dc931c76aff0c89a7265da43e2104d7fe06/openai-2.38.0-py3-none-any.whl", hash = "sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c", size = 1344910, upload-time = "2026-05-21T21:23:39.636Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/f4/561ed79fd94876160018a5e75254cfcb9b0e62d4dded9dcb20072e86d623/openai-2.44.0-py3-none-any.whl", hash = "sha256:0a2a3ab2e29aeda368700f662ff9ba0f9df17ba4c54577a64e08b8115a3cc0ad", size = 1366216, upload-time = "2026-06-24T20:55:58.882Z" },
 ]
 
 [[package]]
@@ -4551,7 +4551,7 @@ weasyprint = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.40" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=2.44.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
@@ -4665,8 +4665,8 @@ requires-dist = [
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1" },
-    { name = "openai", marker = "extra == 'openai-assistants'", specifier = ">=1.50" },
-    { name = "openai", marker = "extra == 'vllm'", specifier = ">=1.50" },
+    { name = "openai", marker = "extra == 'openai-assistants'", specifier = ">=2.44.0" },
+    { name = "openai", marker = "extra == 'vllm'", specifier = ">=2.44.0" },
     { name = "opensearch-py", marker = "extra == 'opensearch'", specifier = ">=2.4" },
     { name = "peft", marker = "extra == 'huggingface'", specifier = ">=0.13" },
     { name = "pinecone", marker = "extra == 'pinecone'", specifier = ">=5" },
