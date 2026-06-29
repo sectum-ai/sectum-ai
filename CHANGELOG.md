@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Data-subject erasure verification by record id (`sectum-ai erasure --subject`).**
+  Verifies a *real* data subject's GDPR Article 17 / CCPA §1798.105 erasure by
+  record id — after your own deletion has run — rather than scanning the synthetic
+  canaries. Reads a YAML manifest (an opaque `subject_ref` plus the subject's
+  record ids per surface; ids only, no subject content) and confirms each id is
+  gone by id, emitting a per-subject signed attestation that reuses the same
+  evidence pack and exit codes as the canary flow. Surfaces with a by-id existence
+  check (the vector store and the semantic cache) are verified; every other surface
+  reads `NOT_COVERED`, so the attestation never implies coverage it did not verify.
+  (The structural-verification phase of the planned DSR connector.)
+
 ## [0.1.5] - 2026-06-27
 
 ### Added

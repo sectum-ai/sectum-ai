@@ -1,0 +1,107 @@
+"""Tests for A3 Phase 0 - the by-id data-subject erasure probe."""
+
+from uuid import UUID
+
+from sectum_ai.adapters import FakeCache, FakeVectorStore
+from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
+from sectum_ai.spec import CoverageVerdict, Surface
+from sectum_ai.substrate import build_substrate, default_scenario
+
+
+def _populated_store() -> tuple[FakeVectorStore, UUID, str]:
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = FakeVectorStore()
+    store.upsert(tenant, docs)
+    return store, tenant, docs[0].doc_id
+
+
+def test_subject_erasure_is_erased_when_every_supplied_id_is_gone() -> None:
+    store, tenant, _present = _populated_store()
+    # Only ids that were never in the store (the deletion already removed them).
+    manifest = SubjectManifest(
+        subject_ref="user-1", records={Surface.VECTOR_DB: ("deleted-1", "deleted-2")}
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surfaces = {s.surface: s for s in report.surfaces}
+    assert surfaces[Surface.VECTOR_DB].markers_before == 2
+    assert surfaces[Surface.VECTOR_DB].residual_after == 0
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    assert report.erased
+    assert report.findings == ()
+
+
+def test_subject_erasure_is_residual_when_a_record_remains() -> None:
+    store, tenant, present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-2", records={Surface.VECTOR_DB: (present, "deleted-1")}
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surfaces = {s.surface: s for s in report.surfaces}
+    assert surfaces[Surface.VECTOR_DB].markers_before == 2
+    assert surfaces[Surface.VECTOR_DB].residual_after == 1  # the still-present id
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    assert report.genuine_residual
+    assert not report.erased
+    assert len(report.findings) == 1
+    assert report.findings[0].surface is Surface.VECTOR_DB
+
+
+def test_subject_erasure_covers_the_cache_surface_by_key() -> None:
+    store, tenant, _present = _populated_store()
+    cache = FakeCache()
+    cache.set(tenant, "live-key", "value")
+    manifest = SubjectManifest(
+        subject_ref="user-3",
+        records={Surface.SEMANTIC_CACHE: ("live-key", "evicted-key")},
+    )
+    report = SubjectErasureProbe(vector=store, cache=cache).verify(tenant, manifest)
+    cache_surface = {s.surface: s for s in report.surfaces}[Surface.SEMANTIC_CACHE]
+    assert cache_surface.markers_before == 2
+    assert cache_surface.residual_after == 1  # "live-key" is still present
+    assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.RESIDUAL
+
+
+def test_subject_erasure_surface_with_no_supplied_ids_is_not_covered() -> None:
+    store, tenant, _present = _populated_store()
+    # Cache adapter configured, but the manifest supplies no cache ids.
+    manifest = SubjectManifest(subject_ref="user-4", records={Surface.VECTOR_DB: ("deleted-1",)})
+    report = SubjectErasureProbe(vector=store, cache=FakeCache()).verify(tenant, manifest)
+    assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.NOT_COVERED
+    assert Surface.SEMANTIC_CACHE not in {s.surface for s in report.surfaces}
+
+
+def test_subject_erasure_surface_without_an_adapter_is_not_covered_not_erased() -> None:
+    # ids supplied for the cache, but no cache adapter to check them: the surface
+    # must read NOT_COVERED, never a vacuous ERASED (it was not actually verified).
+    store, tenant, _present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-5", records={Surface.SEMANTIC_CACHE: ("some-key",)}
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.NOT_COVERED
+    assert report.surfaces == ()  # nothing was verifiable
+
+
+def test_subject_erasure_unsupported_surface_is_not_covered() -> None:
+    # A surface with no by-id primitive (agent memory) cannot be verified by id.
+    store, tenant, _present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-6",
+        records={Surface.VECTOR_DB: ("deleted-1",), Surface.AGENT_MEMORY: ("mem-1",)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
+
+
+def test_subject_erasure_residual_finding_carries_no_subject_content() -> None:
+    # The manifest holds ids only; a residual finding must reference the record id
+    # and subject ref, never subject PII content.
+    store, tenant, present = _populated_store()
+    manifest = SubjectManifest(subject_ref="user-7", records={Surface.VECTOR_DB: (present,)})
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    finding = report.findings[0]
+    assert finding.marker_id == present
+    assert "user-7" in finding.evidence_span
+    assert present in finding.evidence_span

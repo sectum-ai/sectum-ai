@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 import sectum_ai.probes as probes
-from sectum_ai.probes import ERASURE_SURFACES
+from sectum_ai.probes import ERASURE_SURFACES, SUBJECT_VERIFIABLE_SURFACES
 
 # Probes that run as a standalone statistical/erasure workflow rather than the
 # plan/detect protocol, so they carry no class-level `surfaces`/`requires_adapters`.
@@ -29,10 +29,12 @@ from sectum_ai.probes import ERASURE_SURFACES
 _WORKFLOW_SURFACES: dict[str, list[str]] = {
     "kv-cache-timing": ["kv_cache"],
     "gdpr-erasure-verification": [surface.value for surface in ERASURE_SURFACES],
+    "gdpr-subject-erasure-verification": [surface.value for surface in SUBJECT_VERIFIABLE_SURFACES],
 }
 _WORKFLOW_REQUIRES: dict[str, list[str]] = {
     "kv-cache-timing": ["model"],
     "gdpr-erasure-verification": ["vector_store"],
+    "gdpr-subject-erasure-verification": ["vector_store", "cache"],
 }
 
 # id -> runnable example directory (omitted where a probe has no dedicated demo).

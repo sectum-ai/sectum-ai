@@ -60,6 +60,33 @@ residual / attestable-with-caveat data on an erased surface (`sectum-ai erasure`
 where data is presumed retained); `3` config or adapter error; `4` evidence
 verification failure.
 
+## Verify a real data subject's erasure (by id)
+
+`sectum-ai erasure --subject <manifest.yaml>` verifies a **real** data subject's
+erasure by record id, rather than scanning the synthetic canaries. After your own
+deletion has run for a GDPR Article 17 / CCPA §1798.105 request, it confirms each
+of the subject's records is gone **by id** on every surface that exposes a by-id
+check, and writes a per-subject signed attestation.
+
+The manifest carries record **ids only** — an opaque `subject_ref` and the
+subject's ids per surface — so it holds no subject content:
+
+```yaml
+subject_ref: "dsr-2026-00042"   # your opaque reference for the request; no PII
+records:
+  vector_db: ["doc-9c1f", "doc-aa20"]   # the subject's vector ids
+  semantic_cache: ["qa:7f3e", "qa:1b09"]
+```
+
+```sh
+sectum-ai erasure --subject subject.yaml --config sectum-ai.yaml
+```
+
+Today the vector store (`fetch`) and semantic cache (`get`) are checked by id;
+every other surface reads `NOT_COVERED`, so the attestation never implies coverage
+it did not verify. Exit codes match the canary flow: `0` every supplied id is gone,
+`2` a record remains, `3` nothing could be verified.
+
 ## Bundle a portable run pack
 
 `sectum-ai pack` rolls a completed run into one self-verifying `run-pack.zip` — the
