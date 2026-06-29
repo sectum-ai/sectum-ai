@@ -34,8 +34,8 @@ _IDS = [str(cast(Any, cls).id) for cls in _PROBES]
 
 
 def test_every_probe_class_is_discovered() -> None:
-    # 11 plan/detect probes + the erasure and kv-cache workflows = 13.
-    assert len(_PROBES) == 13
+    # 11 plan/detect probes + the erasure, subject-erasure, and kv-cache workflows = 14.
+    assert len(_PROBES) == 14
 
 
 @pytest.mark.parametrize("cls", _PROBES, ids=_IDS)

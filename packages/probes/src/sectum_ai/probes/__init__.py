@@ -49,12 +49,18 @@ from sectum_ai.probes.rag_entity_bleed import RagEntityBleedProbe
 from sectum_ai.probes.rag_pipeline_bleed import RagPipelineBleedProbe
 from sectum_ai.probes.rag_poisoning import RagPoisoningProbe
 from sectum_ai.probes.semantic_cache import SemanticCacheProbe
+from sectum_ai.probes.subject_erasure import (
+    SUBJECT_VERIFIABLE_SURFACES,
+    SubjectErasureProbe,
+    SubjectManifest,
+)
 from sectum_ai.probes.tenant_boundary import TenantBoundaryProbe
 
 __all__ = [
     "DEFAULT_SEMANTIC_THRESHOLD",
     "ERASURE_SURFACES",
     "MODEL_THRESHOLDS",
+    "SUBJECT_VERIFIABLE_SURFACES",
     "AgentFrameworkHijackProbe",
     "AgentToolHijackProbe",
     "AnthropicJudge",
@@ -84,6 +90,8 @@ __all__ = [
     "RagPipelineBleedProbe",
     "RagPoisoningProbe",
     "SemanticCacheProbe",
+    "SubjectErasureProbe",
+    "SubjectManifest",
     "SurfaceErasure",
     "TenantBoundaryProbe",
     "ThresholdScore",

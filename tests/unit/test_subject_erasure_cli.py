@@ -1,0 +1,71 @@
+"""End-to-end CLI tests for ``sectum-ai erasure --subject`` (A3 Phase 0)."""
+
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from sectum_ai.cli.app import app
+
+
+def _seed(tmp_path: Path) -> None:
+    result = CliRunner().invoke(app, ["seed", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+
+def _write_manifest(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / "subject.yaml"
+    path.write_text(body)
+    return path
+
+
+def test_erasure_subject_verifies_and_writes_attestation(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        "subject_ref: user-1\nrecords:\n  vector_db: [doc-a, doc-b]\n  semantic_cache: [k1]\n",
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    # The default fakes are empty, so the supplied ids are already gone -> ERASED
+    # -> exit 0, and the subject-scoped attestation is written.
+    assert result.exit_code == 0, result.output
+    assert "ERASURE VERIFIED" in result.output
+    assert (tmp_path / "erasure-evidence.json").exists()
+    assert (tmp_path / "erasure-attestation.intoto.json").exists()
+    # The pass states its boundary: the unverifiable surfaces read NOT_COVERED.
+    assert "NOT_COVERED" in result.output
+
+
+def test_erasure_subject_marks_unsupported_surface_not_covered(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        "subject_ref: user-2\nrecords:\n  vector_db: [doc-a]\n  agent_memory: [m1]\n",
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    # A surface with no by-id check is warned and read NOT_COVERED, not silently dropped.
+    assert "not supported yet for agent_memory" in result.output
+
+
+def test_erasure_subject_rejects_an_unknown_surface(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(tmp_path, "subject_ref: user-3\nrecords:\n  not_a_surface: [x]\n")
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 3
+    assert "unknown surface" in result.output
+
+
+def test_erasure_subject_requires_a_subject_ref(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(tmp_path, "records:\n  vector_db: [doc-a]\n")
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 3
+    assert "subject_ref" in result.output

@@ -1,8 +1,10 @@
 # Spec: A3 — DSR Connector
 
-- Status: **Planned (hold)** — build gated on the first Cloud customer that needs it
+- Status: **Phase 0 shipped (OSS); Phases 1+ on hold** — the Cloud layers are gated
+  on the first Cloud customer. Phase 0 (`sectum-ai erasure --subject`, by-id
+  verification for the vector store + semantic cache) shipped 2026-06-29.
 - Owner: Dmitry Maranik
-- Last updated: 2026-06-27
+- Last updated: 2026-06-29
 - Related: [ADR internal/0001 — DSR erasure-verification model](../adr/0001-dsr-erasure-verification-model.md),
   [docs/adr/0002 — evidence-layer OSS boundary](../../docs/adr/0002-evidence-layer-oss-boundary.md),
   E1 control mappings (ISO/IEC 42001, CCPA/CPRA), A1 erasure `--scope`
@@ -100,7 +102,7 @@ no canary, so "how do you verify a *real* subject's erasure" is the core fork.
 
 | Phase | Where | Scope |
 |---|---|---|
-| **0** | OSS | Class 11 erasure verify keyed on real record ids + per-subject attestation; `sectum-ai erasure --subject <ids>` |
+| **0** ✅ | OSS | **Shipped.** By-id erasure verify + per-subject attestation; `sectum-ai erasure --subject <manifest.yaml>`. Verifies the vector store (`fetch`) and semantic cache (`get`); other surfaces read `NOT_COVERED` until their adapters gain a by-id accessor. |
 | **1** | Cloud (MVP) | Generic inbound **webhook** intake + outbound signed attestation; structural verification; works with any DSR system |
 | **2** | Cloud | Native **OneTrust + Transcend** connectors; content-fingerprint residual probing |
 | **3** | Cloud | Scheduled re-attestation, multi-subject batch, dashboard tie-in (overlaps E3) |

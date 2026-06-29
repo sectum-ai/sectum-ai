@@ -16,6 +16,7 @@ from typing import Annotated
 from uuid import UUID
 
 import typer
+import yaml
 from pydantic import ValidationError
 
 from sectum_ai.adapters import (
@@ -80,6 +81,7 @@ from sectum_ai.evidence import (
 from sectum_ai.jobs import build_job_runner
 from sectum_ai.probes import (
     ERASURE_SURFACES,
+    SUBJECT_VERIFIABLE_SURFACES,
     AgentFrameworkHijackProbe,
     AgentToolHijackProbe,
     CalibrationResult,
@@ -87,6 +89,7 @@ from sectum_ai.probes import (
     EmbeddingInversionProbe,
     EmbeddingProvider,
     ErasureProbe,
+    ErasureReport,
     FakeEmbeddingProvider,
     IkeaExtractionProbe,
     KvCacheTimingProbe,
@@ -97,6 +100,8 @@ from sectum_ai.probes import (
     RagPipelineBleedProbe,
     RagPoisoningProbe,
     SemanticCacheProbe,
+    SubjectErasureProbe,
+    SubjectManifest,
     TenantBoundaryProbe,
     calibrate_threshold,
     confirmed_findings,
@@ -1422,6 +1427,155 @@ def verify(
     )
 
 
+def _load_subject_manifest(path: Path) -> SubjectManifest:
+    """Parse a data-subject manifest (YAML) into a :class:`SubjectManifest`.
+
+    The file carries a ``subject_ref`` (an opaque DSR reference - never subject
+    content) and ``records``: a map of erasure-surface name to the subject's
+    record ids on it. Surface names match the ``--scope`` names (``vector_db``,
+    ``semantic_cache``, ...).
+    """
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"subject manifest {path} must be a mapping")
+    subject_ref = raw.get("subject_ref")
+    if not isinstance(subject_ref, str) or not subject_ref:
+        raise ConfigError(f"subject manifest {path} must set a non-empty 'subject_ref'")
+    raw_records = raw.get("records") or {}
+    if not isinstance(raw_records, dict):
+        raise ConfigError(f"subject manifest {path}: 'records' must map a surface to a list of ids")
+    records: dict[Surface, tuple[str, ...]] = {}
+    for name, ids in raw_records.items():
+        try:
+            surface = Surface(name)
+        except ValueError:
+            valid = ", ".join(s.value for s in ERASURE_SURFACES)
+            raise ConfigError(
+                f"subject manifest {path}: unknown surface '{name}'; valid: {valid}"
+            ) from None
+        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+            raise ConfigError(
+                f"subject manifest {path}: records['{name}'] must be a list of string ids"
+            )
+        records[surface] = tuple(ids)
+    return SubjectManifest(subject_ref=subject_ref, records=records)
+
+
+def _emit_erasure_attestation(
+    report: ErasureReport,
+    *,
+    run_id: str,
+    substrate: Substrate,
+    workdir: Path,
+    adapter_versions: dict[str, str],
+    probe_id: str,
+    loaded: SectumConfig,
+    started: datetime,
+    finished: datetime,
+) -> None:
+    """Build and write the signed erasure attestation for a report, then report it.
+
+    Shared by the canary (Class 11) and by-id data-subject (A3 Phase 0) erasure
+    modes: both produce an :class:`ErasureReport`, so the run record, evidence
+    pack, and exit-code logic are identical. Returns on a clean verified pass;
+    raises ``typer.Exit`` with code 2 (residual / caveat) or 3 (inconclusive).
+    """
+    run = RunResult(
+        run_id=run_id,
+        scenario_hash=canonical_hash(substrate.scenario),
+        manifest_hash=canonical_hash(substrate.manifest),
+        started_at=started,
+        finished_at=finished,
+        adapter_versions=adapter_versions,
+        probe_versions={probe_id: __version__},
+        findings=report.findings,
+        metrics=RunMetrics(
+            confirmed_findings=len(confirmed_findings(report.findings)),
+            erasure_residue={
+                surface.surface.value: surface.residual_after
+                for surface in report.surfaces
+                if surface.erasure_supported
+            },
+            erasure_caveats={
+                surface.surface.value: surface.residual_after
+                for surface in report.surfaces
+                if not surface.erasure_supported
+            },
+            erasure_coverage={
+                surface.value: verdict.value for surface, verdict in report.coverage().items()
+            },
+        ),
+    )
+    controls = control_mappings()
+    pdf_path = workdir / "erasure-attestation.pdf"
+    pdf_ref = render_audit_pack_and_hash(
+        run, canonical_hash(substrate.manifest), controls, pdf_path
+    )
+    pack = build_evidence_pack(
+        run,
+        substrate.manifest,
+        control_mappings=controls,
+        pdf_ref=pdf_ref,
+        timestamper=_resolve_timestamper(loaded.evidence, None),
+        transparency_log=_resolve_transparency_log(loaded.evidence, False),
+    )
+    json_path = workdir / "erasure-evidence.json"
+    json_path.write_text(pack.model_dump_json(indent=2))
+    intoto_path = workdir / "erasure-attestation.intoto.json"
+    intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
+
+    for surface in report.surfaces:
+        typer.echo(
+            f"{surface.surface.value}: {surface.markers_before} markers before, "
+            f"{surface.residual_after} after -> {surface.verdict}"
+        )
+    if report.not_covered:
+        not_covered_names = ", ".join(surface.value for surface in report.not_covered)
+        typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
+    typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
+    if report.genuine_residual:
+        typer.echo("ERASURE FAILED: residual data remains.", err=True)
+        if report.caveats:
+            caveat_names = ", ".join(surface.surface.value for surface in report.caveats)
+            typer.echo(
+                f"  also attestable-with-caveat: {caveat_names} expose no per-tenant "
+                "erasure API, so that data is presumed retained (a backend "
+                "limitation, itemized in the attestation).",
+                err=True,
+            )
+        raise typer.Exit(code=2)
+    if report.caveats:
+        names = ", ".join(surface.surface.value for surface in report.caveats)
+        typer.echo(
+            f"ERASURE ATTESTABLE WITH CAVEAT: {names} expose no per-tenant erasure "
+            "API, so the tenant's data is presumed retained until it ages out of "
+            "the backend's retention window. Itemized as a caveat in the "
+            "attestation - a backend limitation, not a failure of the erasure flow.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if report.erased:
+        scanned = ", ".join(surface.surface.value for surface in report.surfaces)
+        typer.echo(f"ERASURE VERIFIED: no residual marker on {scanned}.")
+        if report.not_covered:
+            not_covered_names = ", ".join(surface.value for surface in report.not_covered)
+            typer.echo(
+                f"  scope: this attests {scanned} only; NOT_COVERED (not verified): "
+                f"{not_covered_names}.",
+            )
+        return
+    no_baseline = [
+        surface.surface.value for surface in report.surfaces if surface.markers_before == 0
+    ]
+    typer.echo(
+        f"ERASURE INCONCLUSIVE: no baseline on {', '.join(no_baseline)} - "
+        "the target tenant's markers were not found on those surfaces, so "
+        "erasure cannot be attested.",
+        err=True,
+    )
+    raise typer.Exit(code=3)
+
+
 @app.command()
 @_handle_typed_errors
 def erasure(
@@ -1459,6 +1613,20 @@ def erasure(
         Path | None,
         typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
     ] = None,
+    subject: Annotated[
+        Path | None,
+        typer.Option(
+            "--subject",
+            help=(
+                "Verify a REAL data subject's erasure by record id (A3 Phase 0), instead "
+                "of the synthetic-canary scan. Reads a YAML manifest with 'subject_ref' "
+                "(an opaque DSR reference, no PII) and 'records' mapping a surface "
+                "(vector_db, semantic_cache) to the subject's record ids, then checks each "
+                "id is gone after your own deletion ran. Surfaces with no by-id check or no "
+                "ids read NOT_COVERED. Ignores --scope and --soft-delete."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run the GDPR Article 17 erasure-verification workflow (Class 11, the wedge)."""
     erasure_scope = _resolve_erasure_scope(scope)
@@ -1478,6 +1646,51 @@ def erasure(
         workdir = loaded.workdir
     substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     target = _resolve_target(substrate, target_tenant)
+    if subject is not None:
+        # A3 Phase 0: verify a real data subject's records are gone by id, rather
+        # than scanning the synthetic canaries. Only the surfaces with a by-id
+        # existence primitive (vector store, semantic cache) are checked; the rest
+        # read NOT_COVERED, the same anti-over-claim contract as the canary scan.
+        if scope is not None:
+            typer.echo(
+                "warning: --scope is ignored with --subject; the manifest's surfaces "
+                "define what is checked.",
+                err=True,
+            )
+        manifest = _load_subject_manifest(subject)
+        subject_store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
+        subject_cache = build_cache(loaded.adapters.get("cache", fake_default))
+        unsupported = [
+            surface.value
+            for surface in manifest.records
+            if surface not in SUBJECT_VERIFIABLE_SURFACES
+        ]
+        if unsupported:
+            typer.echo(
+                "warning: by-id erasure verification is not supported yet for "
+                f"{', '.join(unsupported)} -> NOT_COVERED.",
+                err=True,
+            )
+        subject_started = datetime.now(UTC)
+        subject_report = SubjectErasureProbe(vector=subject_store, cache=subject_cache).verify(
+            target, manifest
+        )
+        subject_finished = datetime.now(UTC)
+        _emit_erasure_attestation(
+            subject_report,
+            run_id=f"erasure-subject-{target.hex[:8]}",
+            substrate=substrate,
+            workdir=workdir,
+            adapter_versions={
+                subject_store.name: _ADAPTERS_VERSION,
+                subject_cache.name: _ADAPTERS_VERSION,
+            },
+            probe_id=SubjectErasureProbe.id,
+            loaded=loaded,
+            started=subject_started,
+            finished=subject_finished,
+        )
+        return
     store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
     obs = build_observability(loaded.adapters.get("observability", fake_default))
     memory = build_memory(loaded.adapters.get("memory", fake_default))
@@ -1530,12 +1743,11 @@ def erasure(
     ).run(target, scope=erasure_scope)
     finished = datetime.now(UTC)
 
-    run = RunResult(
+    _emit_erasure_attestation(
+        report,
         run_id=f"erasure-{target.hex[:8]}",
-        scenario_hash=canonical_hash(substrate.scenario),
-        manifest_hash=canonical_hash(substrate.manifest),
-        started_at=started,
-        finished_at=finished,
+        substrate=substrate,
+        workdir=workdir,
         adapter_versions={
             store.name: _ADAPTERS_VERSION,
             obs.name: _ADAPTERS_VERSION,
@@ -1546,126 +1758,11 @@ def erasure(
             evalset.name: _ADAPTERS_VERSION,
             backup.name: _ADAPTERS_VERSION,
         },
-        probe_versions={ErasureProbe.id: __version__},
-        findings=report.findings,
-        metrics=RunMetrics(
-            # Count only genuinely confirmed findings (residual-after-erasure),
-            # not the whole list: attestable-with-caveat findings are UNVERIFIED
-            # (a same-tenant backend limitation, not a confirmed leak), so
-            # counting len(report.findings) would inflate the headline count and
-            # make `sectum-ai diff`/`baseline` read a no-per-tenant-erasure-API
-            # backend as a regression. confirmed_findings() filters to confirmed.
-            confirmed_findings=len(confirmed_findings(report.findings)),
-            # Genuine residual (a surface that supports erasure but still holds
-            # the marker) is kept separate from caveat surfaces (no per-tenant
-            # erasure API) so the signed pack and the baseline diff never
-            # conflate a backend limitation with an erasure failure.
-            erasure_residue={
-                surface.surface.value: surface.residual_after
-                for surface in report.surfaces
-                if surface.erasure_supported
-            },
-            erasure_caveats={
-                surface.surface.value: surface.residual_after
-                for surface in report.surfaces
-                if not surface.erasure_supported
-            },
-            # Per-surface coverage for EVERY erasure surface, including the ones
-            # this run did not scan (out of scope, no adapter, or no baseline),
-            # which carry NOT_COVERED. Bound into the signed pack so the
-            # attestation can never imply more coverage than it verified - the
-            # anti-over-claim guarantee (the engineering spec, section 7, Class 11).
-            erasure_coverage={
-                surface.value: verdict.value for surface, verdict in report.coverage().items()
-            },
-        ),
+        probe_id=ErasureProbe.id,
+        loaded=loaded,
+        started=started,
+        finished=finished,
     )
-    controls = control_mappings()
-    # Bind the audit PDF into the attested digest (see `report`).
-    pdf_path = workdir / "erasure-attestation.pdf"
-    pdf_ref = render_audit_pack_and_hash(
-        run, canonical_hash(substrate.manifest), controls, pdf_path
-    )
-    pack = build_evidence_pack(
-        run,
-        substrate.manifest,
-        control_mappings=controls,
-        pdf_ref=pdf_ref,
-        timestamper=_resolve_timestamper(loaded.evidence, None),
-        transparency_log=_resolve_transparency_log(loaded.evidence, False),
-    )
-    json_path = workdir / "erasure-evidence.json"
-    json_path.write_text(pack.model_dump_json(indent=2))
-    intoto_path = workdir / "erasure-attestation.intoto.json"
-    intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
-
-    for surface in report.surfaces:
-        typer.echo(
-            f"{surface.surface.value}: {surface.markers_before} markers before, "
-            f"{surface.residual_after} after -> {surface.verdict}"
-        )
-    # Surfaces this run did not scan (out of scope, no adapter, or no baseline)
-    # are stated explicitly so the operator and the DPO can see exactly what the
-    # attestation does NOT cover - the attestation never implies more coverage
-    # than it verified (the engineering spec, section 7, Class 11).
-    if report.not_covered:
-        not_covered_names = ", ".join(surface.value for surface in report.not_covered)
-        typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
-    typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
-    # A genuine erasure failure (a surface that supports erasure but still
-    # holds the marker) is the dominant signal and takes precedence.
-    if report.genuine_residual:
-        typer.echo("ERASURE FAILED: residual data remains.", err=True)
-        # A caveat surface can co-exist with a genuine failure; itemize it too
-        # rather than letting the dominant failure hide it - the data on a
-        # no-erasure-API backend is still presumed retained.
-        if report.caveats:
-            caveat_names = ", ".join(surface.surface.value for surface in report.caveats)
-            typer.echo(
-                f"  also attestable-with-caveat: {caveat_names} expose no per-tenant "
-                "erasure API, so that data is presumed retained (a backend "
-                "limitation, itemized in the attestation).",
-                err=True,
-            )
-        raise typer.Exit(code=2)
-    # A caveat surface (no programmatic per-tenant erasure API) holds data that
-    # is presumed retained - never a clean PASS, but a documented backend
-    # limitation rather than a flow failure. Exit non-zero (the data is still
-    # there) but say so distinctly so a DPO does not read it as an isolation
-    # defect (spec §7, Class 11, hiding place #8).
-    if report.caveats:
-        names = ", ".join(surface.surface.value for surface in report.caveats)
-        typer.echo(
-            f"ERASURE ATTESTABLE WITH CAVEAT: {names} expose no per-tenant erasure "
-            "API, so the tenant's data is presumed retained until it ages out of "
-            "the backend's retention window. Itemized as a caveat in the "
-            "attestation - a backend limitation, not a failure of the erasure flow.",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-    if report.erased:
-        scanned = ", ".join(surface.surface.value for surface in report.surfaces)
-        typer.echo(f"ERASURE VERIFIED: no residual marker on {scanned}.")
-        # An honest "verified" states its boundary: a scoped (snapshot) run, or
-        # one with surfaces that had no adapter, verified only what it scanned.
-        # Naming the NOT_COVERED surfaces keeps the pass from over-claiming.
-        if report.not_covered:
-            not_covered_names = ", ".join(surface.value for surface in report.not_covered)
-            typer.echo(
-                f"  scope: this attests {scanned} only; NOT_COVERED (not verified): "
-                f"{not_covered_names}.",
-            )
-        return
-    no_baseline = [
-        surface.surface.value for surface in report.surfaces if surface.markers_before == 0
-    ]
-    typer.echo(
-        f"ERASURE INCONCLUSIVE: no baseline on {', '.join(no_baseline)} - "
-        "the target tenant's markers were not found on those surfaces, so "
-        "erasure cannot be attested.",
-        err=True,
-    )
-    raise typer.Exit(code=3)
 
 
 @app.command()
