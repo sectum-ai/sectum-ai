@@ -107,6 +107,97 @@ def test_subject_erasure_residual_finding_carries_no_subject_content() -> None:
     assert present in finding.evidence_span
 
 
+def _content_phrase() -> tuple[FakeVectorStore, UUID, str]:
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = FakeVectorStore()
+    store.upsert(tenant, docs)
+    # A phrase drawn from a real document's content, so a semantic query surfaces it.
+    return store, tenant, " ".join(docs[0].content.split()[:4])
+
+
+def test_subject_erasure_fingerprint_flags_residual_content() -> None:
+    store, tenant, phrase = _content_phrase()
+    manifest = SubjectManifest(
+        subject_ref="u-fp1", records={}, fingerprints={Surface.VECTOR_DB: (phrase,)}
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.VECTOR_DB]
+    assert surface.markers_before == 1
+    assert surface.residual_after == 1  # the subject's content still surfaces
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    # The finding stores a hash of the phrase, never the raw content (no PII).
+    finding = report.findings[0]
+    assert phrase not in finding.evidence_span
+    assert "fingerprint" in finding.finding_id
+
+
+def test_subject_erasure_fingerprint_erased_when_content_absent() -> None:
+    store, tenant, _phrase = _content_phrase()
+    manifest = SubjectManifest(
+        subject_ref="u-fp2",
+        records={},
+        fingerprints={Surface.VECTOR_DB: ("zzxq nonexistent 90218 phrase",)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    assert report.erased
+
+
+def test_subject_erasure_combines_id_and_content_into_one_verdict() -> None:
+    store, tenant, phrase = _content_phrase()
+    manifest = SubjectManifest(
+        subject_ref="u-fp3",
+        records={Surface.VECTOR_DB: ("already-deleted-id",)},
+        fingerprints={Surface.VECTOR_DB: (phrase,)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.VECTOR_DB]
+    assert surface.markers_before == 2  # one id + one content fingerprint
+    assert surface.residual_after == 1  # id gone, but content still surfaces
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+
+
+def test_subject_erasure_fingerprint_content_never_reaches_the_evidence_pack() -> None:
+    # The strongest PII guarantee: even when a fingerprint phrase surfaces (so a
+    # finding is emitted), the raw content must appear nowhere in the signed
+    # evidence pack or its in-toto statement - only its hash.
+    import json
+    from datetime import UTC, datetime
+
+    from sectum_ai.evidence import build_evidence_pack, control_mappings, to_in_toto_statement
+    from sectum_ai.probes import confirmed_findings
+    from sectum_ai.spec import RunMetrics, RunResult, canonical_hash
+
+    store, tenant, phrase = _content_phrase()
+    report = SubjectErasureProbe(vector=store).verify(
+        tenant,
+        SubjectManifest(
+            subject_ref="leak", records={}, fingerprints={Surface.VECTOR_DB: (phrase,)}
+        ),
+    )
+    assert report.findings, "the phrase must surface so there is a finding to leak-check"
+    run = RunResult(
+        run_id="erasure-subject-leak",
+        scenario_hash="0" * 64,
+        manifest_hash=canonical_hash(build_substrate(default_scenario(seed=2026)).manifest),
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        adapter_versions={},
+        probe_versions={},
+        findings=report.findings,
+        metrics=RunMetrics(
+            confirmed_findings=len(confirmed_findings(report.findings)),
+            erasure_coverage={s.value: v.value for s, v in report.coverage().items()},
+        ),
+    )
+    manifest = build_substrate(default_scenario(seed=2026)).manifest
+    pack = build_evidence_pack(run, manifest, control_mappings=control_mappings())
+    assert phrase not in pack.model_dump_json()
+    assert phrase not in json.dumps(to_in_toto_statement(pack))
+
+
 def test_subject_erasure_dedupes_repeated_ids() -> None:
     # A manifest that repeats an id counts it once (distinct markers_before) and
     # emits a single finding, so finding_ids stay unique (no colliding OSCAL UUIDs).

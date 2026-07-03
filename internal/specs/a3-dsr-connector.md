@@ -104,7 +104,7 @@ no canary, so "how do you verify a *real* subject's erasure" is the core fork.
 |---|---|---|
 | **0** ✅ | OSS | **Shipped.** By-id erasure verify + per-subject attestation; `sectum-ai erasure --subject <manifest.yaml>`. Verifies the vector store (`fetch`) and semantic cache (`get`); other surfaces read `NOT_COVERED` until their adapters gain a by-id accessor. |
 | **1** | Cloud (MVP) | Generic inbound **webhook** intake + outbound signed attestation; structural verification; works with any DSR system |
-| **2** | Cloud | Native **OneTrust + Transcend** connectors; content-fingerprint residual probing |
+| **2** ◐ | OSS + Cloud | **Content-fingerprint residual probing shipped (OSS, vector store):** `fingerprints` in the manifest → semantic query for the subject's content, hashed in the attestation. Remaining: model-surface fingerprinting; native **OneTrust + Transcend** connectors (Cloud). |
 | **3** | Cloud | Scheduled re-attestation, multi-subject batch, dashboard tie-in (overlaps E3) |
 
 ## Attestation artifact

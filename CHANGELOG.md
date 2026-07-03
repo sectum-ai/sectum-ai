@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Content-fingerprint residual verification for `sectum-ai erasure --subject`
+  (A3 Phase 2).** Beyond the by-id check, the subject manifest may now carry
+  `fingerprints` — the subject's known content per surface — and the run probes the
+  vector store with a semantic query to catch *derived* residual (an embedding copy)
+  that by-id enumeration would miss. A vector surface is `ERASED` only when every
+  supplied id is gone **and** no supplied content still surfaces. The content is
+  used only to query and is never persisted: a fingerprint finding records a hash of
+  the phrase, so the attestation holds no PII. Fingerprint probing is best-effort —
+  a clean result is evidence the content no longer surfaces, not proof of absence.
+
 ## [0.1.6] - 2026-07-03
 
 ### Added

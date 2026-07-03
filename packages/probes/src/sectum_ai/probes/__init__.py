@@ -50,6 +50,7 @@ from sectum_ai.probes.rag_pipeline_bleed import RagPipelineBleedProbe
 from sectum_ai.probes.rag_poisoning import RagPoisoningProbe
 from sectum_ai.probes.semantic_cache import SemanticCacheProbe
 from sectum_ai.probes.subject_erasure import (
+    SUBJECT_FINGERPRINT_SURFACES,
     SUBJECT_VERIFIABLE_SURFACES,
     SubjectErasureProbe,
     SubjectManifest,
@@ -60,6 +61,7 @@ __all__ = [
     "DEFAULT_SEMANTIC_THRESHOLD",
     "ERASURE_SURFACES",
     "MODEL_THRESHOLDS",
+    "SUBJECT_FINGERPRINT_SURFACES",
     "SUBJECT_VERIFIABLE_SURFACES",
     "AgentFrameworkHijackProbe",
     "AgentToolHijackProbe",
