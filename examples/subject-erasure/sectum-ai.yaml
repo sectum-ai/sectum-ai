@@ -1,0 +1,12 @@
+# A small corpus for a fast, deterministic demo. `erasure --subject` verifies the
+# configured adapters; the default here is the built-in synthetic store, so this
+# demo reports ERASED with a "no live adapter" warning. Point vector_store at a
+# real backend to verify production data (and to catch residual).
+scenario:
+  seed: 2026
+  corpus_size: 24
+# adapters:
+#   vector_store:
+#     kind: qdrant
+#     host: localhost
+#     port: 6335

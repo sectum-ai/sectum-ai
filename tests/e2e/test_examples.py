@@ -26,6 +26,7 @@ _EXAMPLES = (
     "retrieval-pivot",
     "rag-pipeline-bleed",
     "erasure-attestation",
+    "subject-erasure",
     "mcp-tenant-boundary",
     "agent-tool-hijack",
     "agent-framework-hijack",

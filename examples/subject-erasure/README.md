@@ -1,0 +1,45 @@
+# Verify a real data subject's erasure (A3)
+
+`sectum-ai erasure --subject` verifies a **real** data subject's GDPR Article 17 /
+CCPA §1798.105 erasure *after your own deletion has run* — by record id and by
+content fingerprint — and writes a per-subject signed attestation. Unlike the
+canary-driven [erasure-attestation](../erasure-attestation/) demo, this verifies a
+specific subject's real records rather than synthetic markers.
+
+## Two methods
+
+- **By id** — confirm each of the subject's record ids is gone by id (deterministic).
+  The vector store (`fetch`) and semantic cache (`get`) expose a by-id check today.
+- **By content fingerprint** — probe the vector store with the subject's known
+  content and check whether it still surfaces, catching *derived* residual (an
+  embedding copy) that a by-id check would miss.
+
+`records` carries **ids only** (no PII); `fingerprints` carries the subject's
+**content**, used only to query and stored as a **hash** in the attestation — never
+in the clear. See [`subject.yaml`](subject.yaml).
+
+## Run
+
+```sh
+./run.sh
+```
+
+`run.sh` seeds a substrate, runs `erasure --subject subject.yaml`, and independently
+verifies the attestation. It runs against the built-in synthetic store, so it reports
+`ERASED` with a loud warning that no live adapter is configured — an honest run never
+reads "verified" against an empty store.
+
+## Against production data
+
+Point `vector_store` in [`sectum-ai.yaml`](sectum-ai.yaml) at your real backend
+(Qdrant, pgvector, …). A surface is `ERASED` only when every supplied id is gone
+**and** no supplied content still surfaces; every other surface reads `NOT_COVERED`,
+so the attestation never implies coverage it did not verify. Fingerprint probing is
+best-effort — a clean result is evidence the content no longer surfaces, not proof of
+absence. `tests/integration/test_subject_erasure_qdrant.py` shows a live,
+residual-catching run against Qdrant.
+
+## Exit codes
+
+`0` clean · `2` residual remains (a record still present or content still surfaces) ·
+`3` nothing could be verified.
