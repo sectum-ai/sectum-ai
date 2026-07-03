@@ -92,7 +92,9 @@ class SubjectErasureProbe:
 
         vector = self._vector
         if vector is not None:
-            ids = manifest.records.get(Surface.VECTOR_DB, ())
+            # Dedupe per surface so markers_before counts distinct ids and a
+            # repeated id cannot emit two findings with the same finding_id.
+            ids = tuple(dict.fromkeys(manifest.records.get(Surface.VECTOR_DB, ())))
             if ids:
                 present = [rid for rid in ids if vector.fetch(target, rid) is not None]
                 surfaces.append(self._surface(Surface.VECTOR_DB, ids, present))
@@ -103,7 +105,7 @@ class SubjectErasureProbe:
 
         cache = self._cache
         if cache is not None:
-            ids = manifest.records.get(Surface.SEMANTIC_CACHE, ())
+            ids = tuple(dict.fromkeys(manifest.records.get(Surface.SEMANTIC_CACHE, ())))
             if ids:
                 present = [rid for rid in ids if cache.get(target, rid) is not None]
                 surfaces.append(self._surface(Surface.SEMANTIC_CACHE, ids, present))

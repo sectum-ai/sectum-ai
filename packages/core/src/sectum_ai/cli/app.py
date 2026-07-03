@@ -1447,11 +1447,13 @@ def _load_subject_manifest(path: Path) -> SubjectManifest:
     records: dict[Surface, tuple[str, ...]] = {}
     for name, ids in raw_records.items():
         try:
-            surface = Surface(name)
+            surface: Surface | None = Surface(name)
         except ValueError:
+            surface = None
+        if surface is None or surface not in ERASURE_SURFACES:
             valid = ", ".join(s.value for s in ERASURE_SURFACES)
             raise ConfigError(
-                f"subject manifest {path}: unknown surface '{name}'; valid: {valid}"
+                f"subject manifest {path}: '{name}' is not an erasure surface; valid: {valid}"
             ) from None
         if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
             raise ConfigError(
@@ -1567,8 +1569,9 @@ def _emit_erasure_attestation(
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]
+    scanned = ", ".join(no_baseline) or "(no supported ids or adapters were provided)"
     typer.echo(
-        f"ERASURE INCONCLUSIVE: no baseline on {', '.join(no_baseline)} - "
+        f"ERASURE INCONCLUSIVE: no baseline on {scanned} - "
         "the target tenant's markers were not found on those surfaces, so "
         "erasure cannot be attested.",
         err=True,
@@ -1669,6 +1672,24 @@ def erasure(
             typer.echo(
                 "warning: by-id erasure verification is not supported yet for "
                 f"{', '.join(unsupported)} -> NOT_COVERED.",
+                err=True,
+            )
+        # A verifiable surface backed by only the built-in synthetic fake (no live
+        # adapter configured) checks the subject's ids against an empty store, so an
+        # ERASED verdict there does not reflect the customer's production data. Say
+        # so loudly - an honest DSR attestation must not read as verified when it
+        # verified nothing real.
+        synthetic = []
+        if Surface.VECTOR_DB in manifest.records and isinstance(subject_store, FakeVectorStore):
+            synthetic.append("vector_db")
+        if Surface.SEMANTIC_CACHE in manifest.records and isinstance(subject_cache, FakeCache):
+            synthetic.append("semantic_cache")
+        if synthetic:
+            typer.echo(
+                f"warning: no live adapter configured for {', '.join(synthetic)} - "
+                "verifying against the built-in synthetic store, so an ERASED verdict "
+                "does not reflect production data. Configure a real adapter via --config "
+                "for a DSR attestation.",
                 err=True,
             )
         subject_started = datetime.now(UTC)
