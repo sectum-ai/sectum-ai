@@ -18,7 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence pack and exit codes as the canary flow. Surfaces with a by-id existence
   check (the vector store and the semantic cache) are verified; every other surface
   reads `NOT_COVERED`, so the attestation never implies coverage it did not verify.
-  (The structural-verification phase of the planned DSR connector.)
+  When a verifiable surface would be checked against the built-in synthetic store
+  (no live adapter configured), it warns loudly, so a green verdict is never
+  mistaken for a real verification. (The structural-verification phase of the
+  planned DSR connector.)
 
 ## [0.1.5] - 2026-06-27
 

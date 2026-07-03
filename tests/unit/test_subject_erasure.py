@@ -105,3 +105,18 @@ def test_subject_erasure_residual_finding_carries_no_subject_content() -> None:
     assert finding.marker_id == present
     assert "user-7" in finding.evidence_span
     assert present in finding.evidence_span
+
+
+def test_subject_erasure_dedupes_repeated_ids() -> None:
+    # A manifest that repeats an id counts it once (distinct markers_before) and
+    # emits a single finding, so finding_ids stay unique (no colliding OSCAL UUIDs).
+    store, tenant, present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-8", records={Surface.VECTOR_DB: (present, present, "deleted-1")}
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.VECTOR_DB]
+    assert surface.markers_before == 2  # (present, deleted-1) - the duplicate counts once
+    assert surface.residual_after == 1  # only `present` still exists
+    assert len(report.findings) == 1
+    assert len({f.finding_id for f in report.findings}) == 1

@@ -35,6 +35,9 @@ def test_erasure_subject_verifies_and_writes_attestation(tmp_path: Path) -> None
     assert (tmp_path / "erasure-attestation.intoto.json").exists()
     # The pass states its boundary: the unverifiable surfaces read NOT_COVERED.
     assert "NOT_COVERED" in result.output
+    # And without a live adapter it warns loudly that the verdict is against the
+    # synthetic store, not production data - an honest DSR attestation.
+    assert "built-in synthetic store" in result.output
 
 
 def test_erasure_subject_marks_unsupported_surface_not_covered(tmp_path: Path) -> None:
@@ -58,7 +61,19 @@ def test_erasure_subject_rejects_an_unknown_surface(tmp_path: Path) -> None:
         app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
     )
     assert result.exit_code == 3
-    assert "unknown surface" in result.output
+    assert "not an erasure surface" in result.output
+
+
+def test_erasure_subject_rejects_a_non_erasure_surface(tmp_path: Path) -> None:
+    # `api` is a valid Surface but not one of the erasure surfaces; the manifest
+    # must reject it rather than silently accept it as NOT_COVERED.
+    _seed(tmp_path)
+    manifest = _write_manifest(tmp_path, "subject_ref: user-4\nrecords:\n  api: [x]\n")
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 3
+    assert "not an erasure surface" in result.output
 
 
 def test_erasure_subject_requires_a_subject_ref(tmp_path: Path) -> None:
