@@ -81,6 +81,7 @@ from sectum_ai.evidence import (
 from sectum_ai.jobs import build_job_runner
 from sectum_ai.probes import (
     ERASURE_SURFACES,
+    SUBJECT_FINGERPRINT_SURFACES,
     SUBJECT_VERIFIABLE_SURFACES,
     AgentFrameworkHijackProbe,
     AgentToolHijackProbe,
@@ -1427,25 +1428,17 @@ def verify(
     )
 
 
-def _load_subject_manifest(path: Path) -> SubjectManifest:
-    """Parse a data-subject manifest (YAML) into a :class:`SubjectManifest`.
-
-    The file carries a ``subject_ref`` (an opaque DSR reference - never subject
-    content) and ``records``: a map of erasure-surface name to the subject's
-    record ids on it. Surface names match the ``--scope`` names (``vector_db``,
-    ``semantic_cache``, ...).
-    """
-    raw = yaml.safe_load(path.read_text()) or {}
-    if not isinstance(raw, dict):
-        raise ConfigError(f"subject manifest {path} must be a mapping")
-    subject_ref = raw.get("subject_ref")
-    if not isinstance(subject_ref, str) or not subject_ref:
-        raise ConfigError(f"subject manifest {path} must set a non-empty 'subject_ref'")
-    raw_records = raw.get("records") or {}
-    if not isinstance(raw_records, dict):
-        raise ConfigError(f"subject manifest {path}: 'records' must map a surface to a list of ids")
-    records: dict[Surface, tuple[str, ...]] = {}
-    for name, ids in raw_records.items():
+def _parse_subject_surface_map(
+    path: Path, raw: dict[str, object], key: str
+) -> dict[Surface, tuple[str, ...]]:
+    """Parse one ``surface-name -> list[str]`` block of a subject manifest."""
+    raw_map = raw.get(key) or {}
+    if not isinstance(raw_map, dict):
+        raise ConfigError(
+            f"subject manifest {path}: '{key}' must map a surface to a list of strings"
+        )
+    result: dict[Surface, tuple[str, ...]] = {}
+    for name, values in raw_map.items():
         try:
             surface: Surface | None = Surface(name)
         except ValueError:
@@ -1455,12 +1448,32 @@ def _load_subject_manifest(path: Path) -> SubjectManifest:
             raise ConfigError(
                 f"subject manifest {path}: '{name}' is not an erasure surface; valid: {valid}"
             ) from None
-        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
-            raise ConfigError(
-                f"subject manifest {path}: records['{name}'] must be a list of string ids"
-            )
-        records[surface] = tuple(ids)
-    return SubjectManifest(subject_ref=subject_ref, records=records)
+        if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+            raise ConfigError(f"subject manifest {path}: {key}['{name}'] must be a list of strings")
+        result[surface] = tuple(values)
+    return result
+
+
+def _load_subject_manifest(path: Path) -> SubjectManifest:
+    """Parse a data-subject manifest (YAML) into a :class:`SubjectManifest`.
+
+    The file carries a ``subject_ref`` (an opaque DSR reference - never subject
+    content), ``records`` (a map of erasure-surface name to the subject's record
+    **ids**), and optional ``fingerprints`` (a map of surface name to the subject's
+    known **content** phrases to probe for residual). Surface names match the
+    ``--scope`` names (``vector_db``, ``semantic_cache``, ...).
+    """
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"subject manifest {path} must be a mapping")
+    subject_ref = raw.get("subject_ref")
+    if not isinstance(subject_ref, str) or not subject_ref:
+        raise ConfigError(f"subject manifest {path} must set a non-empty 'subject_ref'")
+    return SubjectManifest(
+        subject_ref=subject_ref,
+        records=_parse_subject_surface_map(path, raw, "records"),
+        fingerprints=_parse_subject_surface_map(path, raw, "fingerprints"),
+    )
 
 
 def _emit_erasure_attestation(
@@ -1650,10 +1663,11 @@ def erasure(
     substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     target = _resolve_target(substrate, target_tenant)
     if subject is not None:
-        # A3 Phase 0: verify a real data subject's records are gone by id, rather
-        # than scanning the synthetic canaries. Only the surfaces with a by-id
-        # existence primitive (vector store, semantic cache) are checked; the rest
-        # read NOT_COVERED, the same anti-over-claim contract as the canary scan.
+        # A3 Phase 0/2: verify a real data subject's data is gone - by record id
+        # (Phase 0) and, for supplied content, by semantic fingerprint (Phase 2) -
+        # rather than scanning the synthetic canaries. Only the surfaces with a
+        # by-id / fingerprint primitive are checked; the rest read NOT_COVERED, the
+        # same anti-over-claim contract as the canary scan.
         if scope is not None:
             typer.echo(
                 "warning: --scope is ignored with --subject; the manifest's surfaces "
@@ -1674,13 +1688,33 @@ def erasure(
                 f"{', '.join(unsupported)} -> NOT_COVERED.",
                 err=True,
             )
+        fp_unsupported = [
+            surface.value
+            for surface in manifest.fingerprints
+            if surface not in SUBJECT_FINGERPRINT_SURFACES
+        ]
+        if fp_unsupported:
+            typer.echo(
+                "warning: content-fingerprint probing is not supported yet for "
+                f"{', '.join(fp_unsupported)} -> NOT_COVERED.",
+                err=True,
+            )
+        if manifest.fingerprints.get(Surface.VECTOR_DB):
+            typer.echo(
+                "note: content-fingerprint probing is best-effort - a clean result is "
+                "evidence the content no longer surfaces, not proof of absence.",
+                err=True,
+            )
         # A verifiable surface backed by only the built-in synthetic fake (no live
-        # adapter configured) checks the subject's ids against an empty store, so an
+        # adapter configured) checks the subject's data against an empty store, so an
         # ERASED verdict there does not reflect the customer's production data. Say
         # so loudly - an honest DSR attestation must not read as verified when it
         # verified nothing real.
         synthetic = []
-        if Surface.VECTOR_DB in manifest.records and isinstance(subject_store, FakeVectorStore):
+        vector_checked = (
+            Surface.VECTOR_DB in manifest.records or Surface.VECTOR_DB in manifest.fingerprints
+        )
+        if vector_checked and isinstance(subject_store, FakeVectorStore):
             synthetic.append("vector_db")
         if Surface.SEMANTIC_CACHE in manifest.records and isinstance(subject_cache, FakeCache):
             synthetic.append("semantic_cache")

@@ -76,6 +76,22 @@ def test_erasure_subject_rejects_a_non_erasure_surface(tmp_path: Path) -> None:
     assert "not an erasure surface" in result.output
 
 
+def test_erasure_subject_fingerprint_notes_best_effort(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        'subject_ref: user-fp\nfingerprints:\n  vector_db: ["some subject content phrase"]\n',
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    # Empty fake store -> the content does not surface -> ERASED (exit 0), and the
+    # run states that fingerprint probing is best-effort (a clean result is evidence,
+    # not proof).
+    assert result.exit_code == 0, result.output
+    assert "best-effort" in result.output
+
+
 def test_erasure_subject_requires_a_subject_ref(tmp_path: Path) -> None:
     _seed(tmp_path)
     manifest = _write_manifest(tmp_path, "records:\n  vector_db: [doc-a]\n")

@@ -60,32 +60,41 @@ residual / attestable-with-caveat data on an erased surface (`sectum-ai erasure`
 where data is presumed retained); `3` config or adapter error; `4` evidence
 verification failure.
 
-## Verify a real data subject's erasure (by id)
+## Verify a real data subject's erasure (by id and by content)
 
 `sectum-ai erasure --subject <manifest.yaml>` verifies a **real** data subject's
-erasure by record id, rather than scanning the synthetic canaries. After your own
-deletion has run for a GDPR Article 17 / CCPA §1798.105 request, it confirms each
-of the subject's records is gone **by id** on every surface that exposes a by-id
-check, and writes a per-subject signed attestation.
+erasure after your own deletion has run for a GDPR Article 17 / CCPA §1798.105
+request, rather than scanning the synthetic canaries. It writes a per-subject signed
+attestation, using two methods:
 
-The manifest carries record **ids only** — an opaque `subject_ref` and the
-subject's ids per surface — so it holds no subject content:
+- **By id** — confirm each of the subject's records is gone by id (deterministic);
+  the vector store (`fetch`) and semantic cache (`get`) expose a by-id check today.
+- **By content fingerprint** — probe the vector store with the subject's known
+  content and check whether it still surfaces, catching *derived* residual (an
+  embedding copy) that a by-id check would miss.
+
+`records` carries **ids only** (no PII); `fingerprints` carries the subject's
+**content** to probe — used only to query, and stored as a **hash** in the
+attestation, never in the clear:
 
 ```yaml
 subject_ref: "dsr-2026-00042"   # your opaque reference for the request; no PII
 records:
   vector_db: ["doc-9c1f", "doc-aa20"]   # the subject's vector ids
   semantic_cache: ["qa:7f3e", "qa:1b09"]
+fingerprints:
+  vector_db: ["Maria Chen", "maria@example.com"]   # content to probe; hashed in the attestation
 ```
 
 ```sh
 sectum-ai erasure --subject subject.yaml --config sectum-ai.yaml
 ```
 
-Today the vector store (`fetch`) and semantic cache (`get`) are checked by id;
-every other surface reads `NOT_COVERED`, so the attestation never implies coverage
-it did not verify. Exit codes match the canary flow: `0` every supplied id is gone,
-`2` a record remains, `3` nothing could be verified.
+A surface is `ERASED` only when every supplied id is gone **and** no supplied content
+still surfaces; every other surface reads `NOT_COVERED`, so the attestation never
+implies coverage it did not verify. Fingerprint probing is best-effort — a clean
+result is evidence the content no longer surfaces, not proof of absence. Exit codes
+match the canary flow: `0` clean, `2` residual remains, `3` nothing could be verified.
 
 ## Bundle a portable run pack
 
