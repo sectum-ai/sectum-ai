@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sectum_ai.adapters import FakeCache, FakeObservability, FakeVectorStore
+from sectum_ai.adapters import FakeCache, FakeModel, FakeObservability, FakeVectorStore
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
 from sectum_ai.spec import CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -239,3 +239,60 @@ def test_subject_erasure_dedupes_repeated_ids() -> None:
     assert surface.residual_after == 1  # only `present` still exists
     assert len(report.findings) == 1
     assert len({f.finding_id for f in report.findings}) == 1
+
+
+def _model_with_memorized_phrase() -> tuple[FakeModel, UUID, str]:
+    tenant = UUID(int=7)
+    phrase = "Maria Chen lives at 12 Elm Street"
+    model = FakeModel()
+    model.train_adapter(tenant, [phrase])  # the model memorized the subject's content
+    return model, tenant, phrase
+
+
+def test_subject_erasure_model_fingerprint_flags_residual_memorization() -> None:
+    model, tenant, phrase = _model_with_memorized_phrase()
+    manifest = SubjectManifest(
+        subject_ref="u-m1", records={}, fingerprints={Surface.MODEL_ADAPTER: (phrase,)}
+    )
+    report = SubjectErasureProbe(model=model).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.MODEL_ADAPTER]
+    assert surface.markers_before == 1
+    assert surface.residual_after == 1  # the model still reproduces the subject's content
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
+    # The finding stores a hash of the phrase, never the raw content (no PII).
+    finding = report.findings[0]
+    assert phrase not in finding.evidence_span
+    assert "fingerprint" in finding.finding_id
+    assert finding.surface is Surface.MODEL_ADAPTER
+
+
+def test_subject_erasure_model_fingerprint_erased_when_forgotten() -> None:
+    model, tenant, phrase = _model_with_memorized_phrase()
+    model.delete(tenant)  # the customer's erasure retired the tenant's adapter
+    manifest = SubjectManifest(
+        subject_ref="u-m2", records={}, fingerprints={Surface.MODEL_ADAPTER: (phrase,)}
+    )
+    report = SubjectErasureProbe(model=model).verify(tenant, manifest)
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.erased
+
+
+def test_subject_erasure_model_serving_only_is_not_covered() -> None:
+    # A serving-only model (no per-tenant adapter / shared-weights training) memorized
+    # nothing, so the model surface reads NOT_COVERED - never a vacuous ERASED - and
+    # inference is never invoked (the capability gate short-circuits before infer).
+    class _ServingOnly(FakeModel):
+        def __init__(self) -> None:
+            super().__init__()
+            self.capabilities = frozenset()  # a stateless inference endpoint
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            raise AssertionError("a serving-only model must not be probed for memorization")
+
+    tenant = UUID(int=7)
+    manifest = SubjectManifest(
+        subject_ref="u-m3", records={}, fingerprints={Surface.MODEL_ADAPTER: ("Maria Chen",)}
+    )
+    report = SubjectErasureProbe(model=_ServingOnly()).verify(tenant, manifest)
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert Surface.MODEL_ADAPTER not in {s.surface for s in report.surfaces}

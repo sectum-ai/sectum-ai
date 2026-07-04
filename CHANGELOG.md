@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Model-surface content-fingerprint verification for `sectum-ai erasure
+  --subject` (A3 Phase 2).** The subject manifest's `fingerprints` may now include
+  `model_adapter` — the subject's known content — and the run probes the model with
+  an inference call to catch residual *memorization* in a per-tenant fine-tune or
+  adapter that neither a by-id check nor the vector fingerprint can see. The model
+  surface is checked only when the model is trainable (reports `per_tenant_adapter`
+  or `shared_weights`); a serving-only endpoint memorized nothing and reads
+  `NOT_COVERED`, never a false `ERASED`. As with the vector fingerprint, the content
+  is used only to query and is never persisted — the finding records a hash of the
+  phrase — and a clean result is best-effort evidence, not proof of absence.
+
 ## [0.1.7] - 2026-07-03
 
 ### Added

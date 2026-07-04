@@ -13,9 +13,12 @@ Two verification methods, both folded into one per-surface verdict:
   and the semantic cache (:meth:`CacheAdapter.get`) expose a by-id primitive today;
   every other surface reads ``NOT_COVERED``.
 - **By content fingerprint (Phase 2):** given the subject's known content, probe
-  the vector store with a semantic :meth:`VectorStoreAdapter.query` and check
-  whether that content still surfaces - catching *derived* residual (an embedding
-  copy) that a by-id check cannot see. A positive hit is deterministic evidence of
+  the high-risk *derived* surfaces for residual a by-id check cannot see. The
+  vector store is probed with a semantic :meth:`VectorStoreAdapter.query`; the
+  model is probed with :meth:`ModelAdapter.infer` and a completion that reproduces
+  the content is residual *memorization* (a fine-tune/adapter copy) - checked only
+  when the model is trainable (per-tenant adapter or shared weights), else the
+  surface reads ``NOT_COVERED``. A positive hit is deterministic evidence of
   residual; a clean result is best-effort (a non-hit is evidence, not proof of
   absence). The content is used only to query and is **never** persisted: a
   fingerprint finding records a hash of the phrase, so the attestation holds no PII.
@@ -31,7 +34,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sectum_ai.adapters import CacheAdapter, ObservabilityAdapter, VectorStoreAdapter
+from sectum_ai.adapters import (
+    CacheAdapter,
+    Capability,
+    ModelAdapter,
+    ObservabilityAdapter,
+    VectorStoreAdapter,
+)
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
 
@@ -46,8 +55,10 @@ SUBJECT_VERIFIABLE_SURFACES: tuple[Surface, ...] = (
     Surface.TRACING,
 )
 
-# Surfaces that support content-fingerprint (semantic-query) residual probing today.
-SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (Surface.VECTOR_DB,)
+# Surfaces that support content-fingerprint residual probing today: the vector
+# store (semantic query) and the model (residual memorization via inference, when
+# the model is trainable). Both are derived surfaces a by-id check cannot see into.
+SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (Surface.VECTOR_DB, Surface.MODEL_ADAPTER)
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
 _FINGERPRINT_QUERY_K = 10
@@ -66,10 +77,22 @@ _REMEDIATION = {
         "purge the tenant's traces from the observability backend"
     ),
 }
-_FINGERPRINT_REMEDIATION = (
-    "the subject's content still surfaces in a semantic query of the vector store; "
-    "purge the derived embeddings/records that still carry it"
-)
+_FINGERPRINT_REMEDIATION = {
+    Surface.VECTOR_DB: (
+        "the subject's content still surfaces in a semantic query of the vector store; "
+        "purge the derived embeddings/records that still carry it"
+    ),
+    Surface.MODEL_ADAPTER: (
+        "the subject's content is still reproduced by the model; retire or retrain the "
+        "tenant's fine-tune/adapter so it no longer memorizes it"
+    ),
+}
+# The label each fingerprint surface uses in a finding's evidence span - the probe
+# method that surfaced the residual.
+_FINGERPRINT_PROBE_LABEL = {
+    Surface.VECTOR_DB: "semantic probe",
+    Surface.MODEL_ADAPTER: "model inference probe",
+}
 
 
 @dataclass(frozen=True)
@@ -105,10 +128,12 @@ class SubjectErasureProbe:
         vector: VectorStoreAdapter | None = None,
         cache: CacheAdapter | None = None,
         observability: ObservabilityAdapter | None = None,
+        model: ModelAdapter | None = None,
     ) -> None:
         self._vector = vector
         self._cache = cache
         self._observability = observability
+        self._model = model
 
     def verify(self, target: UUID, manifest: SubjectManifest) -> ErasureReport:
         """Check the subject's ids and content are gone; return an erasure report.
@@ -181,6 +206,32 @@ class SubjectErasureProbe:
                         for tid in present
                     )
 
+        model = self._model
+        if model is not None:
+            # The model surface is fingerprint-only: there is no "fetch a memorized
+            # fact by id" primitive, so a subject's model residual is caught by
+            # probing inference with the subject's content. Only a trainable model
+            # (per-tenant adapter or shared weights) can memorize it; a serving-only
+            # endpoint trained nothing, so the surface is left unscanned and reads
+            # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
+            # canary model scan.
+            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ())))
+            if phrases and self._model_can_memorize(model):
+                recalled = [p for p in phrases if self._content_recalled(model, target, p)]
+                surfaces.append(
+                    SurfaceErasure(
+                        surface=Surface.MODEL_ADAPTER,
+                        markers_before=len(phrases),
+                        residual_after=len(recalled),
+                    )
+                )
+                findings.extend(
+                    self._fingerprint_finding(
+                        target, Surface.MODEL_ADAPTER, manifest.subject_ref, p
+                    )
+                    for p in recalled
+                )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -193,6 +244,24 @@ class SubjectErasureProbe:
         needle = phrase.casefold()
         hits = vector.query(target, phrase, k=_FINGERPRINT_QUERY_K)
         return any(needle in hit.content.casefold() for hit in hits)
+
+    @staticmethod
+    def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
+        # Probe the model with the subject's content: infer returns the completion
+        # only (never an echo of the prompt), so a completion that reproduces the
+        # phrase is genuine residual memorization - a fine-tune/adapter copy the
+        # by-id check cannot see.
+        return phrase.casefold() in model.infer(target, phrase).casefold()
+
+    @staticmethod
+    def _model_can_memorize(model: ModelAdapter) -> bool:
+        # A model can hold a subject's residual only if it trains per-tenant
+        # adapters/fine-tunes or shares (bleeding) weights; a serving-only endpoint
+        # memorizes nothing, so its surface is NOT_COVERED, never a false ERASED.
+        return any(
+            model.supports(cap)
+            for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
+        )
 
     @staticmethod
     def _surface(surface: Surface, ids: Sequence[str], present: Sequence[str]) -> SurfaceErasure:
@@ -240,11 +309,11 @@ class SubjectErasureProbe:
             marker_id=digest,
             evidence_span=(
                 f"subject {subject_ref}: content fingerprint {digest} still surfaces "
-                "(semantic probe)"
+                f"({_FINGERPRINT_PROBE_LABEL[surface]})"
             ),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
-            remediation_pointer=_FINGERPRINT_REMEDIATION,
+            remediation_pointer=_FINGERPRINT_REMEDIATION[surface],
         )

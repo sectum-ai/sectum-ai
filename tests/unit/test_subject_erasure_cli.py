@@ -100,3 +100,22 @@ def test_erasure_subject_requires_a_subject_ref(tmp_path: Path) -> None:
     )
     assert result.exit_code == 3
     assert "subject_ref" in result.output
+
+
+def test_erasure_subject_model_fingerprint_warns_synthetic_and_verifies(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        'subject_ref: user-m\nfingerprints:\n  model_adapter: ["a memorized subject phrase"]\n',
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    # The default fake model memorized nothing, so the phrase is not reproduced ->
+    # ERASED (exit 0); and because it is the built-in synthetic model, the run warns
+    # the model_adapter verdict is not against production weights, and states that
+    # content-fingerprint probing is best-effort.
+    assert result.exit_code == 0, result.output
+    assert "model_adapter" in result.output
+    assert "built-in synthetic store" in result.output
+    assert "best-effort" in result.output

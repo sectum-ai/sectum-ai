@@ -71,9 +71,12 @@ attestation, using two methods:
   the vector store (`fetch`) and semantic cache (`get`) expose a by-id check today,
   as does tracing (`fetch_trace`) when the configured observability adapter (e.g.
   Langfuse) supports it — otherwise the tracing surface reads `NOT_COVERED`.
-- **By content fingerprint** — probe the vector store with the subject's known
-  content and check whether it still surfaces, catching *derived* residual (an
-  embedding copy) that a by-id check would miss.
+- **By content fingerprint** — probe the vector store (a semantic query) and the
+  model (an inference call) with the subject's known content and check whether it
+  still surfaces, catching *derived* residual — an embedding copy, or residual
+  *memorization* in a fine-tune/adapter — that a by-id check would miss. The model
+  is checked only when it is trainable (a per-tenant adapter or shared weights); a
+  serving-only endpoint reads `NOT_COVERED`.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the
@@ -86,6 +89,7 @@ records:
   semantic_cache: ["qa:7f3e", "qa:1b09"]
 fingerprints:
   vector_db: ["Maria Chen", "maria@example.com"]   # content to probe; hashed in the attestation
+  model_adapter: ["Maria Chen"]                    # probe the fine-tune for residual memorization
 ```
 
 ```sh

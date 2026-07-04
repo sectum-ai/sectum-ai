@@ -1678,6 +1678,7 @@ def erasure(
         subject_store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
         subject_cache = build_cache(loaded.adapters.get("cache", fake_default))
         subject_obs = build_observability(loaded.adapters.get("observability", fake_default))
+        subject_model = build_model(loaded.adapters.get("model", fake_default))
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -1700,7 +1701,7 @@ def erasure(
                 f"{', '.join(fp_unsupported)} -> NOT_COVERED.",
                 err=True,
             )
-        if manifest.fingerprints.get(Surface.VECTOR_DB):
+        if any(surface in SUBJECT_FINGERPRINT_SURFACES for surface in manifest.fingerprints):
             typer.echo(
                 "note: content-fingerprint probing is best-effort - a clean result is "
                 "evidence the content no longer surfaces, not proof of absence.",
@@ -1721,6 +1722,8 @@ def erasure(
             synthetic.append("semantic_cache")
         if Surface.TRACING in manifest.records and isinstance(subject_obs, FakeObservability):
             synthetic.append("tracing")
+        if Surface.MODEL_ADAPTER in manifest.fingerprints and isinstance(subject_model, FakeModel):
+            synthetic.append("model_adapter")
         if synthetic:
             typer.echo(
                 f"warning: no live adapter configured for {', '.join(synthetic)} - "
@@ -1731,7 +1734,10 @@ def erasure(
             )
         subject_started = datetime.now(UTC)
         subject_report = SubjectErasureProbe(
-            vector=subject_store, cache=subject_cache, observability=subject_obs
+            vector=subject_store,
+            cache=subject_cache,
+            observability=subject_obs,
+            model=subject_model,
         ).verify(target, manifest)
         subject_finished = datetime.now(UTC)
         _emit_erasure_attestation(
@@ -1743,6 +1749,7 @@ def erasure(
                 subject_store.name: _ADAPTERS_VERSION,
                 subject_cache.name: _ADAPTERS_VERSION,
                 subject_obs.name: _ADAPTERS_VERSION,
+                subject_model.name: _ADAPTERS_VERSION,
             },
             probe_id=SubjectErasureProbe.id,
             loaded=loaded,
