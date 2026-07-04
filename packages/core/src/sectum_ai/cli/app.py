@@ -1677,6 +1677,7 @@ def erasure(
         manifest = _load_subject_manifest(subject)
         subject_store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
         subject_cache = build_cache(loaded.adapters.get("cache", fake_default))
+        subject_obs = build_observability(loaded.adapters.get("observability", fake_default))
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -1718,6 +1719,8 @@ def erasure(
             synthetic.append("vector_db")
         if Surface.SEMANTIC_CACHE in manifest.records and isinstance(subject_cache, FakeCache):
             synthetic.append("semantic_cache")
+        if Surface.TRACING in manifest.records and isinstance(subject_obs, FakeObservability):
+            synthetic.append("tracing")
         if synthetic:
             typer.echo(
                 f"warning: no live adapter configured for {', '.join(synthetic)} - "
@@ -1727,9 +1730,9 @@ def erasure(
                 err=True,
             )
         subject_started = datetime.now(UTC)
-        subject_report = SubjectErasureProbe(vector=subject_store, cache=subject_cache).verify(
-            target, manifest
-        )
+        subject_report = SubjectErasureProbe(
+            vector=subject_store, cache=subject_cache, observability=subject_obs
+        ).verify(target, manifest)
         subject_finished = datetime.now(UTC)
         _emit_erasure_attestation(
             subject_report,
@@ -1739,6 +1742,7 @@ def erasure(
             adapter_versions={
                 subject_store.name: _ADAPTERS_VERSION,
                 subject_cache.name: _ADAPTERS_VERSION,
+                subject_obs.name: _ADAPTERS_VERSION,
             },
             probe_id=SubjectErasureProbe.id,
             loaded=loaded,

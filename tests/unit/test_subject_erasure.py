@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sectum_ai.adapters import FakeCache, FakeVectorStore
+from sectum_ai.adapters import FakeCache, FakeObservability, FakeVectorStore
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
 from sectum_ai.spec import CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -196,6 +196,34 @@ def test_subject_erasure_fingerprint_content_never_reaches_the_evidence_pack() -
     pack = build_evidence_pack(run, manifest, control_mappings=control_mappings())
     assert phrase not in pack.model_dump_json()
     assert phrase not in json.dumps(to_in_toto_statement(pack))
+
+
+def test_subject_erasure_verifies_tracing_by_id() -> None:
+    tenant = UUID(int=1)
+    obs = FakeObservability()
+    trace_id = obs.record(tenant, "proj", "a trace about the subject")
+    manifest = SubjectManifest(
+        subject_ref="u-tr", records={Surface.TRACING: (trace_id, "deleted-trace")}
+    )
+    report = SubjectErasureProbe(observability=obs).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.TRACING]
+    assert surface.markers_before == 2
+    assert surface.residual_after == 1  # the recorded trace id is still present
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.RESIDUAL
+
+
+def test_subject_erasure_tracing_not_covered_without_by_id_support() -> None:
+    # An observability adapter without a by-id fetch (fetch_trace raises) must read
+    # NOT_COVERED, never a false ERASED.
+    class _NoFetch(FakeObservability):
+        def fetch_trace(self, tenant: UUID, trace_id: str) -> None:
+            raise NotImplementedError
+
+    tenant = UUID(int=1)
+    manifest = SubjectManifest(subject_ref="u-tr2", records={Surface.TRACING: ("t1",)})
+    report = SubjectErasureProbe(observability=_NoFetch()).verify(tenant, manifest)
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.NOT_COVERED
+    assert report.surfaces == ()
 
 
 def test_subject_erasure_dedupes_repeated_ids() -> None:

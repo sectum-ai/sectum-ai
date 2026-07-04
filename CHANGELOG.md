@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **By-id tracing verification for `sectum-ai erasure --subject`.** The subject
+  manifest's `records` may now include `tracing` trace ids, verified by id against
+  the observability backend via a new optional `ObservabilityAdapter.fetch_trace`
+  (implemented for the fake and the Langfuse adapter). An adapter without a by-id
+  trace fetch leaves the tracing surface `NOT_COVERED`, never a false `ERASED`.
 - **Content-fingerprint residual verification for `sectum-ai erasure --subject`
   (A3 Phase 2).** Beyond the by-id check, the subject manifest may now carry
   `fingerprints` — the subject's known content per surface — and the run probes the

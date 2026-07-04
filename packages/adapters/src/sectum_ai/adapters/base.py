@@ -195,6 +195,18 @@ class ObservabilityAdapter(Adapter):
         remains.
         """
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one trace by id from the tenant's scope, or ``None``.
+
+        The by-id existence primitive for the A3 data-subject erasure check
+        (:class:`~sectum_ai.probes.subject_erasure.SubjectErasureProbe`): a
+        tenant-scoped backend returns ``None`` for another tenant's - or an
+        erased - trace id. Optional: an adapter that cannot look a trace up by id
+        leaves this ``NotImplementedError`` raised, and the subject-erasure check
+        reports the tracing surface ``NOT_COVERED`` rather than guessing.
+        """
+        raise NotImplementedError  # pragma: no cover - optional default; subclasses override
+
 
 class AgentAdapter(Adapter):
     """Adapter for an agent framework."""

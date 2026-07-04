@@ -31,14 +31,20 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sectum_ai.adapters import CacheAdapter, VectorStoreAdapter
+from sectum_ai.adapters import CacheAdapter, ObservabilityAdapter, VectorStoreAdapter
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
 
 # The erasure surfaces with a by-id existence primitive in the adapter SDK today.
 # A subject's ids on any other surface cannot be checked by id yet, so they read
-# NOT_COVERED until that adapter family gains a by-id accessor.
-SUBJECT_VERIFIABLE_SURFACES: tuple[Surface, ...] = (Surface.VECTOR_DB, Surface.SEMANTIC_CACHE)
+# NOT_COVERED until that adapter family gains a by-id accessor. Tracing is by-id
+# verifiable only when the configured observability adapter implements
+# ``fetch_trace`` (else the probe reports it NOT_COVERED, never a false ERASED).
+SUBJECT_VERIFIABLE_SURFACES: tuple[Surface, ...] = (
+    Surface.VECTOR_DB,
+    Surface.SEMANTIC_CACHE,
+    Surface.TRACING,
+)
 
 # Surfaces that support content-fingerprint (semantic-query) residual probing today.
 SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (Surface.VECTOR_DB,)
@@ -54,6 +60,10 @@ _REMEDIATION = {
     Surface.SEMANTIC_CACHE: (
         "a record named in the subject's erasure request is still present in the cache; "
         "evict the entry"
+    ),
+    Surface.TRACING: (
+        "a trace named in the subject's erasure request is still fetchable by id; "
+        "purge the tenant's traces from the observability backend"
     ),
 }
 _FINGERPRINT_REMEDIATION = (
@@ -94,9 +104,11 @@ class SubjectErasureProbe:
         *,
         vector: VectorStoreAdapter | None = None,
         cache: CacheAdapter | None = None,
+        observability: ObservabilityAdapter | None = None,
     ) -> None:
         self._vector = vector
         self._cache = cache
+        self._observability = observability
 
     def verify(self, target: UUID, manifest: SubjectManifest) -> ErasureReport:
         """Check the subject's ids and content are gone; return an erasure report.
@@ -149,6 +161,25 @@ class SubjectErasureProbe:
                     )
                     for rid in present
                 )
+
+        observability = self._observability
+        if observability is not None:
+            ids = tuple(dict.fromkeys(manifest.records.get(Surface.TRACING, ())))
+            if ids:
+                try:
+                    present = [
+                        tid for tid in ids if observability.fetch_trace(target, tid) is not None
+                    ]
+                except NotImplementedError:
+                    # The adapter has no by-id trace fetch: leave the surface unscanned
+                    # so the coverage block reads NOT_COVERED, never a false ERASED.
+                    pass
+                else:
+                    surfaces.append(self._surface(Surface.TRACING, ids, present))
+                    findings.extend(
+                        self._residual_finding(target, Surface.TRACING, manifest.subject_ref, tid)
+                        for tid in present
+                    )
 
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
