@@ -68,7 +68,9 @@ request, rather than scanning the synthetic canaries. It writes a per-subject si
 attestation, using two methods:
 
 - **By id** — confirm each of the subject's records is gone by id (deterministic);
-  the vector store (`fetch`) and semantic cache (`get`) expose a by-id check today.
+  the vector store (`fetch`) and semantic cache (`get`) expose a by-id check today,
+  as does tracing (`fetch_trace`) when the configured observability adapter (e.g.
+  Langfuse) supports it — otherwise the tracing surface reads `NOT_COVERED`.
 - **By content fingerprint** — probe the vector store with the subject's known
   content and check whether it still surfaces, catching *derived* residual (an
   embedding copy) that a by-id check would miss.

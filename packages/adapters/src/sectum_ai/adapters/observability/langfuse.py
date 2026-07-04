@@ -103,6 +103,21 @@ class LangfuseObservability(ObservabilityAdapter):
                 hits.append(TraceHit(trace_id=str(trace.id), project=project, snippet=snippet))
         return hits
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one of the tenant's traces by id, or ``None`` if it is gone.
+
+        Reuses the tenant-scoped ``_tenant_traces`` listing (``user_id ==
+        tenant.hex``) rather than a bare ``trace.get``, so another tenant's trace
+        id - or an erased one - returns ``None``. The by-id existence primitive
+        for the A3 subject-erasure check.
+        """
+        for trace in self._tenant_traces(tenant):
+            if str(trace.id) == trace_id:
+                return TraceHit(
+                    trace_id=trace_id, project=self._project_name(), snippet=self._snippet(trace)
+                )
+        return None
+
     def list_projects(self) -> list[str]:
         return sorted(str(project.name) for project in self._client.api.projects.get().data)
 

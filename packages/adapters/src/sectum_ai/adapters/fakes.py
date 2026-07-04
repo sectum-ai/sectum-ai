@@ -283,6 +283,12 @@ class FakeObservability(ObservabilityAdapter):
             if marker in text
         ]
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        for tid, project, text in self._traces.get(tenant, []):
+            if tid == trace_id:
+                return TraceHit(trace_id=tid, project=project, snippet=text)
+        return None
+
     def list_projects(self) -> list[str]:
         return sorted({project for traces in self._traces.values() for _, project, _ in traces})
 
