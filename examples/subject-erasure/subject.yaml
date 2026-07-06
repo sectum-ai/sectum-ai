@@ -1,8 +1,9 @@
 # A data-subject manifest for `sectum-ai erasure --subject`.
 #
 # `records` are the subject's record ids per surface (ids only, no PII), checked
-# by id. `fingerprints` are the subject's known content per surface, probed by a
-# semantic query for residual - used only to query, and stored as a hash in the
+# by id. `fingerprints` are the subject's known content per surface, probed for
+# residual - the vector store by a semantic query, the model by an inference call
+# (residual memorization) - used only to query, and stored as a hash in the
 # attestation, never in the clear.
 subject_ref: "dsr-2026-00042" # your opaque reference for the request; no PII
 records:
@@ -10,3 +11,4 @@ records:
   semantic_cache: ["qa:7f3e", "qa:1b09"]
 fingerprints:
   vector_db: ["Dana Lin", "dana.lin@example.com"]
+  model_adapter: ["Dana Lin"] # probe a per-tenant fine-tune for residual memorization
