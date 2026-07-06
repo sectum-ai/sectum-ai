@@ -35,7 +35,7 @@ rekor = ["cryptography>=43"]
 # weasyprint HTML/CSS audit-pack renderer (the engineering spec, sections 13 and
 # 21). Optional: the default reportlab renderer is pure Python with no system
 # libraries; weasyprint adds the pango/cairo/gdk-pixbuf system libraries.
-weasyprint = ["weasyprint>=60"]
+weasyprint = ["weasyprint>=69.0"]
 
 [project.urls]
 Homepage = "https://sectum.ai"
