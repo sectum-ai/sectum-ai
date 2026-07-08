@@ -86,6 +86,18 @@ class LivePeftBackend:
     def _scope_dir(self, scope: str) -> Path:
         return self._adapters_dir / scope
 
+    def _load_base(self) -> Any:
+        """Load a fresh, uncontaminated copy of the base model.
+
+        PEFT's ``get_peft_model`` / ``PeftModel.from_pretrained`` inject adapter
+        modules into the model *in place*, so training and scoped inference must run
+        on a fresh base - never the shared ``self._base_model`` - or one tenant's
+        LoRA would bleed into every later (base or other-tenant) inference and even
+        survive a per-tenant delete: the exact cross-tenant residue this tool exists
+        to catch. The shared ``self._base_model`` is kept pristine for base inference.
+        """
+        return self._AutoModel.from_pretrained(self._base_model_id, device_map=self._device_map)
+
     def train_lora(self, scope: str, texts: list[str]) -> None:
         if not texts:
             return
@@ -97,7 +109,10 @@ class LivePeftBackend:
             task_type="CAUSAL_LM",
             target_modules=["q_proj", "v_proj"],
         )
-        peft_model = self._get_peft_model(self._base_model, peft_config)
+        # Train on a FRESH base copy, never the shared pristine base: get_peft_model
+        # injects LoRA modules in place, so training on the shared base would
+        # permanently contaminate every later base / other-tenant inference.
+        peft_model = self._get_peft_model(self._load_base(), peft_config)
 
         encodings = self._tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
         encodings["labels"] = encodings["input_ids"].clone()
@@ -117,7 +132,10 @@ class LivePeftBackend:
             model=peft_model,
             args=training_args,
             train_dataset=dataset,
-            tokenizer=self._tokenizer,
+            # transformers 5.x removed the `tokenizer=` Trainer arg (deprecated in
+            # 4.46) in favour of `processing_class=`; the huggingface extra pins
+            # transformers>=5.13, so pass the tokenizer under the current name.
+            processing_class=self._tokenizer,
         )
         trainer.train()
         peft_model.save_pretrained(str(scope_dir))
@@ -125,11 +143,16 @@ class LivePeftBackend:
         _safe_rmtree(scope_dir / "_trainer")
 
     def infer(self, scope: str | None, prompt: str) -> str:
+        # Base inference uses the shared PRISTINE base; a scoped call loads the LoRA
+        # onto a FRESH base copy so it never mutates the shared one (PeftModel.
+        # from_pretrained injects adapter modules in place). Sharing the base would
+        # leak this tenant's LoRA into every later base / other-tenant inference and
+        # survive a per-tenant delete.
         model = self._base_model
         if scope is not None:
             scope_dir = self._scope_dir(scope)
             if scope_dir.exists():
-                model = self._PeftModel.from_pretrained(self._base_model, str(scope_dir))
+                model = self._PeftModel.from_pretrained(self._load_base(), str(scope_dir))
         inputs = self._tokenizer(prompt, return_tensors="pt")
         with self._torch.no_grad():
             outputs = model.generate(

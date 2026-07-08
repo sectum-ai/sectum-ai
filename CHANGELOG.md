@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Prefix-continuation extraction for the A3 model-surface fingerprint.** The
+  model-surface residual check now also detects memorization the way a real
+  autoregressive model surfaces it: because such a model *continues* a prompt rather
+  than echoing it, the probe prompts with the leading half of the subject's content
+  and flags residual when the sensitive trailing half is regurgitated — not only the
+  whole-phrase recall the in-memory fake exhibits. Backward-compatible (it strictly
+  catches more residual) and PII-safe (findings still store only a hash).
+- **Live model-surface erasure integration test** (`tests/integration/
+  test_subject_erasure_hf_lora.py`) against a real HuggingFace + PEFT LoRA backend:
+  a per-tenant LoRA fine-tuned on the subject's content is caught as `RESIDUAL`, and
+  after the adapter is deleted the surface reads `ERASED`. Opt-in (needs the
+  `huggingface` extras and `SECTUM_RUN_HF_LORA=1`), like the vLLM/TGI live tests.
+
+### Fixed
+
+- **HuggingFace LoRA adapter: transformers 5.x compatibility.** `Trainer`'s
+  `tokenizer=` argument was removed in transformers 5.x (the `huggingface` extra
+  pins `transformers>=5.13`); the live adapter now passes the tokenizer as
+  `processing_class=`, so `train_adapter` works again instead of raising `TypeError`.
+- **HuggingFace LoRA adapter: per-tenant base-model isolation.** PEFT injects LoRA
+  modules into the model *in place*, so training or scoped inference on the shared
+  base model permanently contaminated it — one tenant's fine-tune bled into every
+  later base and other-tenant inference and even survived a per-tenant delete. The
+  adapter now trains and runs scoped inference on fresh base copies, keeping the
+  shared base pristine for base-model inference.
+
 ## [0.1.8] - 2026-07-06
 
 ### Added

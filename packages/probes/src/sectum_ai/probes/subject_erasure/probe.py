@@ -15,10 +15,13 @@ Two verification methods, both folded into one per-surface verdict:
 - **By content fingerprint (Phase 2):** given the subject's known content, probe
   the high-risk *derived* surfaces for residual a by-id check cannot see. The
   vector store is probed with a semantic :meth:`VectorStoreAdapter.query`; the
-  model is probed with :meth:`ModelAdapter.infer` and a completion that reproduces
-  the content is residual *memorization* (a fine-tune/adapter copy) - checked only
-  when the model is trainable (per-tenant adapter or shared weights), else the
-  surface reads ``NOT_COVERED``. A positive hit is deterministic evidence of
+  model is probed with :meth:`ModelAdapter.infer` - both for whole-phrase recall
+  and, because a real autoregressive model *continues* a prompt rather than echoing
+  it, for prefix-continuation extraction (prompt the leading half, catch the
+  sensitive trailing half regurgitated) - and a reproduced completion is residual
+  *memorization* (a fine-tune/adapter copy), checked only when the model is trainable
+  (per-tenant adapter or shared weights), else the surface reads ``NOT_COVERED``. A
+  positive hit is deterministic evidence of
   residual; a clean result is best-effort (a non-hit is evidence, not proof of
   absence). The content is used only to query and is **never** persisted: a
   fingerprint finding records a hash of the phrase, so the attestation holds no PII.
@@ -247,11 +250,25 @@ class SubjectErasureProbe:
 
     @staticmethod
     def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
-        # Probe the model with the subject's content: infer returns the completion
-        # only (never an echo of the prompt), so a completion that reproduces the
-        # phrase is genuine residual memorization - a fine-tune/adapter copy the
-        # by-id check cannot see.
-        return phrase.casefold() in model.infer(target, phrase).casefold()
+        # ``infer`` returns the completion only (never an echo of the prompt), so a
+        # model surfaces residual memorization of the subject's content two ways:
+        #  (1) direct recall - a model whose adapter returns the memorized text (the
+        #      in-memory fake) surfaces the whole phrase when prompted with it; and
+        #  (2) prefix-continuation extraction - a real autoregressive model does not
+        #      echo, it *continues*, so the whole-phrase prompt is stripped from the
+        #      completion and never matches; prompting with the phrase's leading half
+        #      and seeing its trailing (sensitive) half regurgitated is the
+        #      memorization/extraction signal a whole-phrase probe alone misses.
+        # Either hit is residual; a clean result on both is best-effort evidence.
+        if phrase.casefold() in model.infer(target, phrase).casefold():
+            return True
+        tokens = phrase.split()
+        if len(tokens) < 2:
+            return False
+        cut = max(1, len(tokens) // 2)
+        prefix = " ".join(tokens[:cut])
+        suffix = " ".join(tokens[cut:]).casefold()
+        return bool(suffix) and suffix in model.infer(target, prefix).casefold()
 
     @staticmethod
     def _model_can_memorize(model: ModelAdapter) -> bool:

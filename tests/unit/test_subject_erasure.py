@@ -296,3 +296,66 @@ def test_subject_erasure_model_serving_only_is_not_covered() -> None:
     report = SubjectErasureProbe(model=_ServingOnly()).verify(tenant, manifest)
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
     assert Surface.MODEL_ADAPTER not in {s.surface for s in report.surfaces}
+
+
+_EXTRACTION_PHRASE = "patient dana lin diagnosis reference code ZX90210QQ"
+
+
+def test_subject_erasure_model_fingerprint_detects_prefix_continuation() -> None:
+    # A real autoregressive model does not ECHO the prompt - it CONTINUES it - so the
+    # whole-phrase probe finds nothing (the prompt is stripped from the completion).
+    # The probe must also try prefix->suffix extraction: prompt with the phrase's
+    # leading half and catch the sensitive trailing half regurgitated. This locks
+    # that detection path deterministically, without a real model.
+    class _Continuation(FakeModel):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            # Regurgitate the memorized remainder for a leading slice of the phrase;
+            # never echo the whole phrase back.
+            if prompt and prompt != _EXTRACTION_PHRASE and _EXTRACTION_PHRASE.startswith(prompt):
+                return _EXTRACTION_PHRASE[len(prompt) :] + " and further clinical notes"
+            return "an unrelated model continuation"
+
+    report = SubjectErasureProbe(model=_Continuation()).verify(
+        UUID(int=7),
+        SubjectManifest(
+            subject_ref="u-m4",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
+    assert report.findings and "fingerprint" in report.findings[0].finding_id
+
+
+def test_subject_erasure_model_fingerprint_clean_when_not_regurgitated() -> None:
+    # A model that neither echoes nor regurgitates the suffix reads ERASED: the
+    # prefix-continuation probe does not false-positive on an unrelated continuation.
+    class _NoRecall(FakeModel):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "an unrelated model continuation with nothing sensitive"
+
+    report = SubjectErasureProbe(model=_NoRecall()).verify(
+        UUID(int=7),
+        SubjectManifest(
+            subject_ref="u-m5",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+
+
+def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only() -> None:
+    # A single-token fingerprint has no prefix/suffix to split, so only whole-phrase
+    # recall applies; an unrecalled single token reads ERASED.
+    class _NoRecall(FakeModel):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "an unrelated continuation"
+
+    report = SubjectErasureProbe(model=_NoRecall()).verify(
+        UUID(int=7),
+        SubjectManifest(
+            subject_ref="u-m6", records={}, fingerprints={Surface.MODEL_ADAPTER: ("ZX90210QQ",)}
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
