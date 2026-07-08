@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-07
+
 ### Added
 
 - **Prefix-continuation extraction for the A3 model-surface fingerprint.** The
