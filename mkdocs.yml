@@ -46,6 +46,7 @@ nav:
   - Compliance mappings: compliance-mappings.md
   - SKUs and suites: skus.md
   - Adapters: adapters.md
+  - Coverage: coverage.md
   - vs DeepTeam: vs-deepteam.md
   - Threat model: threat-model.md
   - Sample evidence packs: samples/README.md
