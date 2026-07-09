@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Live Redis memory adapter (`kind: redis` for the memory surface).** The
+  long-term / agent-memory surface — previously fake-only — now has a live backend,
+  so Class 8 (persistent memory contamination) and the memory erasure surface run
+  against a real Redis store, not just the synthetic substrate. Each tenant's entries
+  live in a prefixed per-tenant list; `shared_memory=True` models the shared memory
+  space Class 8 catches, `user_scoped=True` isolates users within a tenant (ADR-0006),
+  and `soft_delete=True` leaves the Class 11 erasure residue. Verified end-to-end
+  against a real Redis in the docker-compose integration suite.
+
 ## [0.2.0] - 2026-07-07
 
 ### Added

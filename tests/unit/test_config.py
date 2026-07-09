@@ -331,6 +331,16 @@ def test_build_cache_redis_constructs_a_redis_cache() -> None:
     assert adapter.supports(Capability.TENANT_SCOPED_KEYS)
 
 
+def test_build_memory_redis_constructs_a_redis_memory() -> None:
+    from sectum_ai.adapters.memory.redis import RedisMemory
+
+    adapter = build_memory(
+        AdapterConfig(kind="redis", host="example", port=6380, prefix="mem", shared_memory=True)
+    )
+    assert isinstance(adapter, RedisMemory)
+    assert adapter.supports(Capability.SHARED_MEMORY)
+
+
 def test_build_mcp_stdio_constructs_a_stdio_client() -> None:
     from sectum_ai.adapters.mcp.client import StdioMCPClient
 
