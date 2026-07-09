@@ -52,7 +52,9 @@ A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
 agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
-and **Class 9** (with per-tenant LoRA). Nothing falls back to the synthetic substrate.
+and **Class 9** (with per-tenant LoRA) — so no probe class falls back to the synthetic
+substrate for this stack. (The erasure scan's search-index / eval-set / backup
+sub-surfaces stay fake — see the gaps below.)
 
 ## Known coverage gaps
 
