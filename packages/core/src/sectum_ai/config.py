@@ -677,6 +677,24 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
             soft_delete=_bool(extras, "soft_delete", False),
             user_scoped=_bool(extras, "user_scoped", False),
         )
+    if config.kind == "redis":
+        with _optional_extra("redis"):
+            from sectum_ai.adapters.memory.redis import RedisMemory
+
+            host = _str(extras, "host", "localhost")
+            port = _int(extras, "port", 6379)
+            shared_memory = _bool(extras, "shared_memory", False)
+            user_scoped = _bool(extras, "user_scoped", False)
+            soft_delete = _bool(extras, "soft_delete", False)
+            prefix = _str(extras, "prefix", "sectum-ai-mem")
+            return RedisMemory(
+                host,
+                port,
+                shared_memory=shared_memory,
+                user_scoped=user_scoped,
+                soft_delete=soft_delete,
+                prefix=prefix,
+            )
     raise _unsupported("memory", config.kind)
 
 

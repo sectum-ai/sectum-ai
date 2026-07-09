@@ -20,7 +20,7 @@ synthetic substrate.
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
 | Embedding provider (Class 2 sweep) | `openai`, `sentence-transformers` | ✅ |
-| Long-term / agent memory | — *(fake only)* | ✅ |
+| Long-term / agent memory | `redis` | ✅ |
 | Full-text search index | — *(fake only)* | ✅ |
 | Eval / golden set | — *(fake only)* | ✅ |
 | Backup / snapshot | — *(fake only)* | ✅ |
@@ -40,7 +40,7 @@ See [Adapters](adapters.md) for how to configure each backend.
 | Embedding inversion (6) | vector store | any live vector backend |
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
 | Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
-| Persistent memory contamination (8) | memory | *fake only today — no live memory adapter* |
+| Persistent memory contamination (8) | memory | Redis (or the fake, offline) |
 | LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
@@ -50,17 +50,19 @@ See [Adapters](adapters.md) for how to configure each backend.
 
 A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis** with
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
-agents — runs Classes **1, 2, 3, 4, 6, 7, 10, 11** and the **A3 DSR** check out of the
-box, plus **Class 5** (with a GPU) and **Class 9** (with per-tenant LoRA). Only
-**Class 8** (memory) falls back to the synthetic substrate.
+agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
+the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
+and **Class 9** (with per-tenant LoRA) — so no probe class falls back to the synthetic
+substrate for this stack. (The erasure scan's search-index / eval-set / backup
+sub-surfaces stay fake — see the gaps below.)
 
 ## Known coverage gaps
 
-- **Memory, search index, eval set, and backup have no live adapter** — they run
-  against the deterministic fake only. So Class 8 (memory contamination) and the
-  erasure scan of those three "hiding places" verify the *model* of the surface, not
-  a production store (mem0 / Zep, Elasticsearch / OpenSearch-as-search, an eval set, a
-  backup bucket). A live adapter for any of them is what makes them real.
+- **Search index, eval set, and backup have no live adapter** — they run against the
+  deterministic fake only, so the erasure scan of those three "hiding places" verifies
+  the *model* of the surface, not a production store (Elasticsearch / OpenSearch as a
+  search index, an eval set, a backup bucket). Long-term / agent memory now has a live
+  **Redis** backend; a mem0 / Zep adapter can follow the same seam.
 - **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API

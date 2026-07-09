@@ -263,6 +263,7 @@ source = ["sectum_ai"]
 omit = [
     "*/sectum_ai/adapters/vector/*",
     "*/sectum_ai/adapters/cache/*",
+    "*/sectum_ai/adapters/memory/*",
     "*/sectum_ai/adapters/observability/*",
     # The live vLLM / TGI backends talk to a server via their client SDKs; they
     # are exercised by env-gated integration tests, like the other live adapters.

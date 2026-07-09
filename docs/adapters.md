@@ -47,6 +47,13 @@ in CI. Azure AI Search uses `kind: azure-search`, `[azure-search]`.
 **Cache.** The Redis cache prefixes its keys and tenant-scopes them by default;
 `tenant_scoped=False` models the shared key space Class 4 is built to catch.
 
+**Memory.** The Redis memory store (`kind: redis`, the `[redis]` extra) keeps each
+tenant's long-term agent-memory entries in a prefixed per-tenant list and recalls by
+keyword; it is tenant-scoped by default, so `shared_memory=True` models the single
+shared memory space Class 8 (persistent memory contamination) is built to catch, and
+`user_scoped=True` isolates users within a tenant (ADR-0006). `soft_delete=True`
+acknowledges a delete but keeps the entries — the Class 11 erasure residue.
+
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
 *Erasable* backends expose a real per-tenant delete: Phoenix and LangSmith each
