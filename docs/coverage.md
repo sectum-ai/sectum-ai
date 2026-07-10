@@ -21,7 +21,7 @@ synthetic substrate.
 | MCP server | `stdio`, `http` | ✅ |
 | Embedding provider (Class 2 sweep) | `openai`, `sentence-transformers` | ✅ |
 | Long-term / agent memory | `redis` | ✅ |
-| Full-text search index | — *(fake only)* | ✅ |
+| Full-text search index | `opensearch` | ✅ |
 | Eval / golden set | — *(fake only)* | ✅ |
 | Backup / snapshot | — *(fake only)* | ✅ |
 
@@ -58,11 +58,11 @@ sub-surfaces stay fake — see the gaps below.)
 
 ## Known coverage gaps
 
-- **Search index, eval set, and backup have no live adapter** — they run against the
-  deterministic fake only, so the erasure scan of those three "hiding places" verifies
-  the *model* of the surface, not a production store (Elasticsearch / OpenSearch as a
-  search index, an eval set, a backup bucket). Long-term / agent memory now has a live
-  **Redis** backend; a mem0 / Zep adapter can follow the same seam.
+- **Eval set and backup have no live adapter** — they run against the deterministic
+  fake only, so the erasure scan of those two "hiding places" verifies the *model* of
+  the surface, not a production store (an eval / golden set, a backup bucket). The
+  search index now has a live **OpenSearch** backend and long-term / agent memory a
+  live **Redis** one; a mem0 / Zep memory adapter can follow the same seam.
 - **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API

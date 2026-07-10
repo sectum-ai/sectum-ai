@@ -32,6 +32,7 @@ from sectum_ai.config import (
     build_model,
     build_observability,
     build_rag,
+    build_search_index,
     build_vector_store,
     load_config,
 )
@@ -339,6 +340,22 @@ def test_build_memory_redis_constructs_a_redis_memory() -> None:
     )
     assert isinstance(adapter, RedisMemory)
     assert adapter.supports(Capability.SHARED_MEMORY)
+
+
+def test_build_search_index_opensearch_constructs_an_opensearch_index() -> None:
+    from sectum_ai.adapters.search_index.opensearch import OpenSearchSearchIndex
+
+    adapter = build_search_index(
+        AdapterConfig(kind="opensearch", host="example", port=9200, prefix="s", soft_delete=True)
+    )
+    assert isinstance(adapter, OpenSearchSearchIndex)
+    assert adapter.supports(Capability.TEXT_SEARCH)
+    assert adapter.supports(Capability.SOFT_DELETE)
+
+
+def test_build_search_index_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_search_index(AdapterConfig(kind="not-a-real-kind"))
 
 
 def test_build_mcp_stdio_constructs_a_stdio_client() -> None:

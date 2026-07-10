@@ -51,12 +51,14 @@ from sectum_ai.adapters import (
     FakeModel,
     FakeObservability,
     FakeRAGPipeline,
+    FakeSearchIndex,
     FakeVectorStore,
     MCPAdapter,
     MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
     RAGPipelineAdapter,
+    SearchIndexAdapter,
     VectorStoreAdapter,
 )
 from sectum_ai.embeddings import validate_embedding_spec
@@ -696,6 +698,35 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
                 prefix=prefix,
             )
     raise _unsupported("memory", config.kind)
+
+
+def build_search_index(config: AdapterConfig) -> SearchIndexAdapter:
+    """Build the search-index adapter the config selects."""
+    extras = config.model_extra or {}
+    if config.kind == "fake":
+        return FakeSearchIndex(soft_delete=_bool(extras, "soft_delete", False))
+    if config.kind == "opensearch":
+        with _optional_extra("opensearch"):
+            from sectum_ai.adapters.search_index.opensearch import OpenSearchSearchIndex
+
+            # password is optional: a local OpenSearch with the security plugin
+            # disabled has no auth.
+            password = (
+                _resolve_secret(extras, "password", "password_env")
+                if "password" in extras or "password_env" in extras
+                else None
+            )
+            return OpenSearchSearchIndex(
+                _str(extras, "host", "localhost"),
+                _int(extras, "port", 9200),
+                user=_optional_str(extras, "user"),
+                password=password,
+                use_ssl=_bool(extras, "use_ssl", False),
+                verify_certs=_bool(extras, "verify_certs", False),
+                prefix=_str(extras, "prefix", "sectum-ai-search"),
+                soft_delete=_bool(extras, "soft_delete", False),
+            )
+    raise _unsupported("search index", config.kind)
 
 
 def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:

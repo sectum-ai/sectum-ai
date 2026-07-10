@@ -397,6 +397,15 @@ class SearchIndexAdapter(Adapter):
     family = AdapterFamily.SEARCH_INDEX
 
     @abstractmethod
+    def index(self, tenant: UUID, text: str) -> None:
+        """Index ``text`` as a document in ``tenant``'s scope.
+
+        Class 11 (erasure verification) seeds the derived index with the tenant's
+        content through this, then confirms a ``delete`` purges it. A live index
+        must make the entry immediately searchable so the pre/post scan is reliable.
+        """
+
+    @abstractmethod
     def search(self, tenant: UUID, query: str) -> list[str]:
         """Return the indexed document snippets in ``tenant``'s scope matching ``query``."""
 
