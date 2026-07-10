@@ -2,7 +2,14 @@
 
 from uuid import UUID
 
-from sectum_ai.adapters import FakeCache, FakeModel, FakeObservability, FakeVectorStore
+from sectum_ai.adapters import (
+    FakeCache,
+    FakeMemory,
+    FakeModel,
+    FakeObservability,
+    FakeSearchIndex,
+    FakeVectorStore,
+)
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
 from sectum_ai.spec import CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -359,3 +366,136 @@ def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only()
         ),
     )
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+
+
+_MEMORY_PHRASE = "Maria Chen lives at 12 Elm Street"
+
+
+def test_subject_erasure_memory_fingerprint_flags_residual_content() -> None:
+    # The subject's content still lives in the agent-memory store (a failed/soft
+    # deletion): a keyword recall surfaces it, so the surface reads RESIDUAL.
+    tenant = UUID(int=8)
+    memory = FakeMemory()
+    memory.remember(tenant, _MEMORY_PHRASE)
+    manifest = SubjectManifest(
+        subject_ref="u-mem1", records={}, fingerprints={Surface.AGENT_MEMORY: (_MEMORY_PHRASE,)}
+    )
+    report = SubjectErasureProbe(memory=memory).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.AGENT_MEMORY]
+    assert surface.markers_before == 1
+    assert surface.residual_after == 1
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.RESIDUAL
+    # Data-minimized: the finding carries a hash of the phrase, never the raw PII.
+    finding = report.findings[0]
+    assert _MEMORY_PHRASE not in finding.evidence_span
+    assert "fingerprint" in finding.finding_id
+    assert finding.surface is Surface.AGENT_MEMORY
+
+
+def test_subject_erasure_memory_fingerprint_erased_when_purged() -> None:
+    # The customer's erasure purged the tenant's memory: a recall surfaces nothing,
+    # so the surface reads ERASED.
+    tenant = UUID(int=8)
+    memory = FakeMemory()
+    memory.remember(tenant, _MEMORY_PHRASE)
+    memory.delete(tenant)  # a real (hard) purge
+    manifest = SubjectManifest(
+        subject_ref="u-mem2", records={}, fingerprints={Surface.AGENT_MEMORY: (_MEMORY_PHRASE,)}
+    )
+    report = SubjectErasureProbe(memory=memory).verify(tenant, manifest)
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.ERASED
+    assert report.erased
+
+
+def test_subject_erasure_memory_soft_delete_leaves_residue() -> None:
+    # A soft-delete memory store acknowledges the purge but keeps the entries, so
+    # the subject's content still surfaces - the Class 8/11 residue.
+    tenant = UUID(int=8)
+    memory = FakeMemory(soft_delete=True)
+    memory.remember(tenant, _MEMORY_PHRASE)
+    memory.delete(tenant)  # acknowledged, but the entry survives
+    manifest = SubjectManifest(
+        subject_ref="u-mem3", records={}, fingerprints={Surface.AGENT_MEMORY: (_MEMORY_PHRASE,)}
+    )
+    report = SubjectErasureProbe(memory=memory).verify(tenant, manifest)
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.RESIDUAL
+
+
+def test_subject_erasure_memory_not_covered_without_fingerprints() -> None:
+    # A memory adapter is configured, but the manifest supplies no memory fingerprint:
+    # the surface reads NOT_COVERED, never a vacuous ERASED.
+    tenant = UUID(int=8)
+    manifest = SubjectManifest(
+        subject_ref="u-mem4", records={}, fingerprints={Surface.VECTOR_DB: ("anything",)}
+    )
+    report = SubjectErasureProbe(vector=FakeVectorStore(), memory=FakeMemory()).verify(
+        tenant, manifest
+    )
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
+    assert Surface.AGENT_MEMORY not in {s.surface for s in report.surfaces}
+
+
+_SEARCH_PHRASE = "quarterly revenue projection for account Northwind"
+
+
+def test_subject_erasure_search_fingerprint_flags_residual_content() -> None:
+    # The subject's content still lives in the derived full-text search index: a
+    # search surfaces it, so the surface reads RESIDUAL.
+    tenant = UUID(int=9)
+    search = FakeSearchIndex()
+    search.index(tenant, _SEARCH_PHRASE)
+    manifest = SubjectManifest(
+        subject_ref="u-si1", records={}, fingerprints={Surface.SEARCH_INDEX: (_SEARCH_PHRASE,)}
+    )
+    report = SubjectErasureProbe(search_index=search).verify(tenant, manifest)
+    surface = {s.surface: s for s in report.surfaces}[Surface.SEARCH_INDEX]
+    assert surface.markers_before == 1
+    assert surface.residual_after == 1
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.RESIDUAL
+    finding = report.findings[0]
+    assert _SEARCH_PHRASE not in finding.evidence_span
+    assert "fingerprint" in finding.finding_id
+    assert finding.surface is Surface.SEARCH_INDEX
+
+
+def test_subject_erasure_search_fingerprint_erased_when_purged() -> None:
+    # The customer's erasure dropped the tenant's documents from the index: a search
+    # surfaces nothing, so the surface reads ERASED.
+    tenant = UUID(int=9)
+    search = FakeSearchIndex()
+    search.index(tenant, _SEARCH_PHRASE)
+    search.delete(tenant)
+    manifest = SubjectManifest(
+        subject_ref="u-si2", records={}, fingerprints={Surface.SEARCH_INDEX: (_SEARCH_PHRASE,)}
+    )
+    report = SubjectErasureProbe(search_index=search).verify(tenant, manifest)
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.ERASED
+    assert report.erased
+
+
+def test_subject_erasure_search_soft_delete_leaves_residue() -> None:
+    # A soft-delete search index acknowledges the drop but keeps the documents
+    # searchable - the Class 11 residue in the tenth hiding place.
+    tenant = UUID(int=9)
+    search = FakeSearchIndex(soft_delete=True)
+    search.index(tenant, _SEARCH_PHRASE)
+    search.delete(tenant)
+    manifest = SubjectManifest(
+        subject_ref="u-si3", records={}, fingerprints={Surface.SEARCH_INDEX: (_SEARCH_PHRASE,)}
+    )
+    report = SubjectErasureProbe(search_index=search).verify(tenant, manifest)
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.RESIDUAL
+
+
+def test_subject_erasure_search_not_covered_without_fingerprints() -> None:
+    # A search-index adapter is configured, but the manifest supplies no search
+    # fingerprint: the surface reads NOT_COVERED, never a vacuous ERASED.
+    tenant = UUID(int=9)
+    manifest = SubjectManifest(
+        subject_ref="u-si4", records={}, fingerprints={Surface.VECTOR_DB: ("anything",)}
+    )
+    report = SubjectErasureProbe(vector=FakeVectorStore(), search_index=FakeSearchIndex()).verify(
+        tenant, manifest
+    )
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.NOT_COVERED
+    assert Surface.SEARCH_INDEX not in {s.surface for s in report.surfaces}

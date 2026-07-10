@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A3 subject-erasure fingerprinting reaches the agent-memory and search-index
+  surfaces.** `sectum-ai erasure --subject` already fingerprints the vector store and
+  the model for a real subject's residual content; it now also probes the agent-memory
+  store (a keyword `recall`) and the derived full-text search index (a `search`),
+  catching a lingering memory entry or an un-purged index document a by-id check would
+  miss. Both are fingerprint-only (no stable by-id primitive), residual when the
+  recalled/returned entry still carries the phrase, and — like every fingerprint
+  surface — data-minimized: the finding stores only a hash of the probed phrase, so the
+  attestation holds no PII. Configure `adapters.memory` / `adapters.search_index` with a
+  live backend (Redis / OpenSearch) for a production DSR attestation; the built-in fake
+  triggers the synthetic-substrate warning. New `agent_memory` / `search_index` keys are
+  accepted in a subject manifest's `fingerprints`.
 - **Live OpenSearch search-index adapter (`kind: search_index → opensearch`).** The
   derived full-text search index — the tenth "hiding place", previously fake-only —
   now has a live backend, so the Class 11 erasure scan of the search-index surface

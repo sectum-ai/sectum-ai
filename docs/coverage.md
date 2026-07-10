@@ -44,7 +44,7 @@ See [Adapters](adapters.md) for how to configure each backend.
 | LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
-| Data-subject erasure — A3 DSR | vector store + cache (+ optional model, tracing) | vector + cache; model / tracing when configured |
+| Data-subject erasure — A3 DSR | vector store + cache (+ optional model, tracing, memory, search index) | vector + cache; model / tracing / memory / search index when configured |
 
 ## A worked example
 

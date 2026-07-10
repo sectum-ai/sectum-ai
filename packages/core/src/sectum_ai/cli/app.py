@@ -1680,6 +1680,8 @@ def erasure(
         subject_cache = build_cache(loaded.adapters.get("cache", fake_default))
         subject_obs = build_observability(loaded.adapters.get("observability", fake_default))
         subject_model = build_model(loaded.adapters.get("model", fake_default))
+        subject_memory = build_memory(loaded.adapters.get("memory", fake_default))
+        subject_search = build_search_index(loaded.adapters.get("search_index", fake_default))
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -1725,6 +1727,12 @@ def erasure(
             synthetic.append("tracing")
         if Surface.MODEL_ADAPTER in manifest.fingerprints and isinstance(subject_model, FakeModel):
             synthetic.append("model_adapter")
+        if Surface.AGENT_MEMORY in manifest.fingerprints and isinstance(subject_memory, FakeMemory):
+            synthetic.append("agent_memory")
+        if Surface.SEARCH_INDEX in manifest.fingerprints and isinstance(
+            subject_search, FakeSearchIndex
+        ):
+            synthetic.append("search_index")
         if synthetic:
             typer.echo(
                 f"warning: no live adapter configured for {', '.join(synthetic)} - "
@@ -1739,6 +1747,8 @@ def erasure(
             cache=subject_cache,
             observability=subject_obs,
             model=subject_model,
+            memory=subject_memory,
+            search_index=subject_search,
         ).verify(target, manifest)
         subject_finished = datetime.now(UTC)
         _emit_erasure_attestation(
@@ -1751,6 +1761,8 @@ def erasure(
                 subject_cache.name: _ADAPTERS_VERSION,
                 subject_obs.name: _ADAPTERS_VERSION,
                 subject_model.name: _ADAPTERS_VERSION,
+                subject_memory.name: _ADAPTERS_VERSION,
+                subject_search.name: _ADAPTERS_VERSION,
             },
             probe_id=SubjectErasureProbe.id,
             loaded=loaded,
