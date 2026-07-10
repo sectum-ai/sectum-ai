@@ -119,3 +119,23 @@ def test_erasure_subject_model_fingerprint_warns_synthetic_and_verifies(tmp_path
     assert "model_adapter" in result.output
     assert "built-in synthetic store" in result.output
     assert "best-effort" in result.output
+
+
+def test_erasure_subject_memory_and_search_fingerprints_warn_synthetic(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        "subject_ref: user-ms\nfingerprints:\n"
+        '  agent_memory: ["a subject memory phrase"]\n'
+        '  search_index: ["a subject search phrase"]\n',
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    # The default fakes are empty, so nothing surfaces -> ERASED (exit 0); and because
+    # both surfaces run against the built-in synthetic stores, the run names them in
+    # the not-production warning so the DSR attestation stays honest.
+    assert result.exit_code == 0, result.output
+    assert "agent_memory" in result.output
+    assert "search_index" in result.output
+    assert "built-in synthetic store" in result.output

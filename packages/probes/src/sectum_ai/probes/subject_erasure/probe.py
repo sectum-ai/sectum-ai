@@ -20,11 +20,14 @@ Two verification methods, both folded into one per-surface verdict:
   it, for prefix-continuation extraction (prompt the leading half, catch the
   sensitive trailing half regurgitated) - and a reproduced completion is residual
   *memorization* (a fine-tune/adapter copy), checked only when the model is trainable
-  (per-tenant adapter or shared weights), else the surface reads ``NOT_COVERED``. A
-  positive hit is deterministic evidence of
-  residual; a clean result is best-effort (a non-hit is evidence, not proof of
-  absence). The content is used only to query and is **never** persisted: a
-  fingerprint finding records a hash of the phrase, so the attestation holds no PII.
+  (per-tenant adapter or shared weights), else the surface reads ``NOT_COVERED``; the
+  agent-memory store is probed with :meth:`MemoryAdapter.recall` and the derived
+  full-text search index with :meth:`SearchIndexAdapter.search`, each residual when
+  the recalled/returned entry still carries the phrase. A positive hit is
+  deterministic evidence of residual; a clean result is best-effort (a non-hit is
+  evidence, not proof of absence). The content is used only to query and is **never**
+  persisted: a fingerprint finding records a hash of the phrase, so the attestation
+  holds no PII.
 
 A surface is ``ERASED`` only when every supplied id is gone **and** no supplied
 content still surfaces; ``RESIDUAL`` if either remains; ``NOT_COVERED`` when the
@@ -40,8 +43,10 @@ from uuid import UUID
 from sectum_ai.adapters import (
     CacheAdapter,
     Capability,
+    MemoryAdapter,
     ModelAdapter,
     ObservabilityAdapter,
+    SearchIndexAdapter,
     VectorStoreAdapter,
 )
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
@@ -58,10 +63,16 @@ SUBJECT_VERIFIABLE_SURFACES: tuple[Surface, ...] = (
     Surface.TRACING,
 )
 
-# Surfaces that support content-fingerprint residual probing today: the vector
-# store (semantic query) and the model (residual memorization via inference, when
-# the model is trainable). Both are derived surfaces a by-id check cannot see into.
-SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (Surface.VECTOR_DB, Surface.MODEL_ADAPTER)
+# Surfaces that support content-fingerprint residual probing today: the vector store
+# (semantic query), the model (residual memorization via inference, when trainable),
+# the agent-memory store (recall), and the derived full-text search index (search).
+# All are derived surfaces a by-id check cannot see into.
+SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (
+    Surface.VECTOR_DB,
+    Surface.MODEL_ADAPTER,
+    Surface.AGENT_MEMORY,
+    Surface.SEARCH_INDEX,
+)
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
 _FINGERPRINT_QUERY_K = 10
@@ -89,12 +100,22 @@ _FINGERPRINT_REMEDIATION = {
         "the subject's content is still reproduced by the model; retire or retrain the "
         "tenant's fine-tune/adapter so it no longer memorizes it"
     ),
+    Surface.AGENT_MEMORY: (
+        "the subject's content still surfaces in a recall from the agent-memory store; "
+        "purge the tenant's memory entries that still carry it"
+    ),
+    Surface.SEARCH_INDEX: (
+        "the subject's content still surfaces in the derived full-text search index; "
+        "purge the tenant's documents from the index"
+    ),
 }
 # The label each fingerprint surface uses in a finding's evidence span - the probe
 # method that surfaced the residual.
 _FINGERPRINT_PROBE_LABEL = {
     Surface.VECTOR_DB: "semantic probe",
     Surface.MODEL_ADAPTER: "model inference probe",
+    Surface.AGENT_MEMORY: "memory recall probe",
+    Surface.SEARCH_INDEX: "search-index probe",
 }
 
 
@@ -132,11 +153,15 @@ class SubjectErasureProbe:
         cache: CacheAdapter | None = None,
         observability: ObservabilityAdapter | None = None,
         model: ModelAdapter | None = None,
+        memory: MemoryAdapter | None = None,
+        search_index: SearchIndexAdapter | None = None,
     ) -> None:
         self._vector = vector
         self._cache = cache
         self._observability = observability
         self._model = model
+        self._memory = memory
+        self._search_index = search_index
 
     def verify(self, target: UUID, manifest: SubjectManifest) -> ErasureReport:
         """Check the subject's ids and content are gone; return an erasure report.
@@ -235,6 +260,46 @@ class SubjectErasureProbe:
                     for p in recalled
                 )
 
+        memory = self._memory
+        if memory is not None:
+            # Fingerprint-only, like the vector store: the agent-memory store has no
+            # stable by-id primitive, so a subject's residual is caught by recalling
+            # the subject's content and checking the returned entries still carry it.
+            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.AGENT_MEMORY, ())))
+            if phrases:
+                surfacing = [p for p in phrases if self._content_in_memory(memory, target, p)]
+                surfaces.append(
+                    SurfaceErasure(
+                        surface=Surface.AGENT_MEMORY,
+                        markers_before=len(phrases),
+                        residual_after=len(surfacing),
+                    )
+                )
+                findings.extend(
+                    self._fingerprint_finding(target, Surface.AGENT_MEMORY, manifest.subject_ref, p)
+                    for p in surfacing
+                )
+
+        search_index = self._search_index
+        if search_index is not None:
+            # Fingerprint-only: the derived full-text index is searched for the
+            # subject's content, and a hit whose text still carries the phrase is
+            # residual in the tenth hiding place a by-id check cannot see into.
+            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.SEARCH_INDEX, ())))
+            if phrases:
+                surfacing = [p for p in phrases if self._content_in_search(search_index, target, p)]
+                surfaces.append(
+                    SurfaceErasure(
+                        surface=Surface.SEARCH_INDEX,
+                        markers_before=len(phrases),
+                        residual_after=len(surfacing),
+                    )
+                )
+                findings.extend(
+                    self._fingerprint_finding(target, Surface.SEARCH_INDEX, manifest.subject_ref, p)
+                    for p in surfacing
+                )
+
         return ErasureReport(
             target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
         )
@@ -247,6 +312,20 @@ class SubjectErasureProbe:
         needle = phrase.casefold()
         hits = vector.query(target, phrase, k=_FINGERPRINT_QUERY_K)
         return any(needle in hit.content.casefold() for hit in hits)
+
+    @staticmethod
+    def _content_in_memory(memory: MemoryAdapter, target: UUID, phrase: str) -> bool:
+        # A keyword recall of the subject's content: if the phrase still appears in any
+        # recalled memory entry, that content is residual in the agent-memory store.
+        needle = phrase.casefold()
+        return any(needle in entry.casefold() for entry in memory.recall(target, phrase))
+
+    @staticmethod
+    def _content_in_search(search: SearchIndexAdapter, target: UUID, phrase: str) -> bool:
+        # A full-text search for the subject's content: if the phrase still appears in
+        # any returned hit, that content is residual in the derived search index.
+        needle = phrase.casefold()
+        return any(needle in hit.casefold() for hit in search.search(target, phrase))
 
     @staticmethod
     def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:

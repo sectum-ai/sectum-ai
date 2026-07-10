@@ -72,12 +72,14 @@ attestation, using two methods:
   as does tracing (`fetch_trace`), supported by the Langfuse, LangSmith, Phoenix,
   Helicone, and Datadog adapters — the generic OpenTelemetry reader has no by-id
   lookup, so its tracing surface reads `NOT_COVERED`.
-- **By content fingerprint** — probe the vector store (a semantic query) and the
-  model (an inference call) with the subject's known content and check whether it
-  still surfaces, catching *derived* residual — an embedding copy, or residual
-  *memorization* in a fine-tune/adapter — that a by-id check would miss. The model
-  is checked only when it is trainable (a per-tenant adapter or shared weights); a
-  serving-only endpoint reads `NOT_COVERED`.
+- **By content fingerprint** — probe the vector store (a semantic query), the model
+  (an inference call), the agent-memory store (a keyword recall), and the derived
+  full-text search index (a search) with the subject's known content and check whether
+  it still surfaces, catching *derived* residual — an embedding copy, residual
+  *memorization* in a fine-tune/adapter, a lingering memory entry, or an un-purged
+  index document — that a by-id check would miss. The model is checked only when it is
+  trainable (a per-tenant adapter or shared weights); a serving-only endpoint reads
+  `NOT_COVERED`.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the
@@ -91,6 +93,8 @@ records:
 fingerprints:
   vector_db: ["Maria Chen", "maria@example.com"]   # content to probe; hashed in the attestation
   model_adapter: ["Maria Chen"]                    # probe the fine-tune for residual memorization
+  agent_memory: ["Maria Chen"]                     # probe long-term agent memory (recall)
+  search_index: ["Maria Chen"]                     # probe the derived full-text search index
 ```
 
 ```sh

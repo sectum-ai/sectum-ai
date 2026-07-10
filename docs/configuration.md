@@ -116,9 +116,15 @@ fakes generally.
 
 | `kind` | Fields | Notes |
 |---|---|---|
-| `fake` | `shared_memory: bool = false` | In-memory store. `shared_memory: true` reproduces the Class 8 cross-tenant memory leak. |
+| `fake` | `shared_memory: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false` | In-memory store. `shared_memory: true` reproduces the Class 8 cross-tenant memory leak; `user_scoped: true` isolates users within a tenant (ADR-0006); `soft_delete: true` acknowledges a delete but keeps the entries (the Class 11 residue). |
+| `redis` | `host: str = "localhost"`, `port: int = 6379`, `shared_memory: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false`, `prefix: str = "sectum-ai-mem"` | `RedisMemory` — each tenant's long-term agent-memory entries live in a prefixed per-tenant list, recalled by keyword. Same isolation knobs as the fake. Requires the `redis` extra. |
 
-No live memory adapter is wired into the CLI resolver yet.
+### `search_index`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | `soft_delete: bool = false` | In-memory full-text index (the tenth "hiding place"). `soft_delete: true` acknowledges a delete but leaves the documents searchable — the Class 11 residue. |
+| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = false`, `prefix: str = "sectum-ai-search"`, `soft_delete: bool = false` | `OpenSearchSearchIndex` — each tenant's derived full-text documents live in their own index (`{prefix}-{tenant.hex}`), searched with a `match` query; `delete` drops the index (`soft_delete: true` leaves the residue). A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
 
 ### `rag`
 
