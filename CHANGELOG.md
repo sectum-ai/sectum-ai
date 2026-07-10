@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Live OpenSearch search-index adapter (`kind: search_index → opensearch`).** The
+  derived full-text search index — the tenth "hiding place", previously fake-only —
+  now has a live backend, so the Class 11 erasure scan of the search-index surface
+  runs against a real OpenSearch index instead of the synthetic substrate: each
+  tenant's documents live in their own index (`{prefix}-{tenant}`), and `delete`
+  purges it (`soft_delete=True` leaves the residue). `search_index` is now configured
+  via `adapters.search_index` like the other surfaces (falling back to the fake), and
+  the `SearchIndexAdapter.index` seed primitive is promoted to the interface. Verified
+  end-to-end — adapter and the full `sectum-ai erasure` flow — against a real
+  OpenSearch in the docker-compose integration suite.
+
 ## [0.2.2] - 2026-07-10
 
 ### Added

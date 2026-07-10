@@ -821,7 +821,7 @@ class FakeSearchIndex(SearchIndexAdapter):
         self._documents: dict[UUID, list[str]] = {}
 
     def index(self, tenant: UUID, text: str) -> None:
-        """Index a document's text for ``tenant`` (test helper; not part of the interface)."""
+        """Index a document's text for ``tenant``."""
         self._documents.setdefault(tenant, []).append(text)
 
     def search(self, tenant: UUID, query: str) -> list[str]:

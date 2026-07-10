@@ -52,6 +52,7 @@ from sectum_ai.config import (
     build_memory,
     build_model,
     build_observability,
+    build_search_index,
     build_vector_store,
     embedder_model_name,
     load_config,
@@ -1762,11 +1763,12 @@ def erasure(
     memory = build_memory(loaded.adapters.get("memory", fake_default))
     cache = build_cache(loaded.adapters.get("cache", fake_default))
     model = build_model(loaded.adapters.get("model", fake_default))
-    # The search index and eval set have no live adapters yet; deterministic
-    # fakes model them. soft_delete rides on fake_default's extras (set from
-    # --soft-delete when no config is given, absent under --config).
+    # The eval set and backup have no live adapters yet; deterministic fakes model
+    # them. soft_delete rides on fake_default's extras (set from --soft-delete when
+    # no config is given, absent under --config). The search index resolves from
+    # config (kind: opensearch) like the other surfaces, falling back to the fake.
     _fake_soft_delete = bool((fake_default.model_extra or {}).get("soft_delete"))
-    search = FakeSearchIndex(soft_delete=_fake_soft_delete)
+    search = build_search_index(loaded.adapters.get("search_index", fake_default))
     evalset = FakeEvalSet(soft_delete=_fake_soft_delete)
     backup = FakeBackup(soft_delete=_fake_soft_delete)
     for tenant in substrate.tenants:

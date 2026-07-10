@@ -54,6 +54,12 @@ shared memory space Class 8 (persistent memory contamination) is built to catch,
 `user_scoped=True` isolates users within a tenant (ADR-0006). `soft_delete=True`
 acknowledges a delete but keeps the entries — the Class 11 erasure residue.
 
+**Search index.** The OpenSearch search index (`kind: opensearch`, the `[opensearch]`
+extra) indexes each tenant's derived full-text documents into its own OpenSearch index
+(`{prefix}-{tenant}`) and searches with a `match` query — the tenth "hiding place",
+distinct from the vector store. Class 11 erasure seeds it, then confirms a `delete`
+purges the index; `soft_delete=True` leaves it in place — the erasure residue.
+
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
 *Erasable* backends expose a real per-tenant delete: Phoenix and LangSmith each
