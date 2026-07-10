@@ -73,6 +73,12 @@ never counted as an erasure failure. Every observability adapter scans the
 trace's own content (name plus attributes or body) for the marker, so a backend
 that quietly ignores the tenant filter is itself caught.
 
+For the A3 data-subject erasure check, five of the six also expose a **by-id**
+`fetch_trace` — Langfuse, LangSmith, Phoenix, Helicone, and Datadog each look a
+trace up by id within the tenant's own scope, so `erasure --subject` can verify a
+named trace is gone. The generic OpenTelemetry reader queries by content, not id,
+so it has no by-id lookup and that surface reads `NOT_COVERED`.
+
 **RAG.** The HTTP RAG pipeline reaches any retrieval backend that adopts its
 small `{tenant, query}` → `{answer, retrieved}` JSON contract, no backend SDK
 required; the LangChain pipeline wraps any LangChain `Runnable` (a composed LCEL

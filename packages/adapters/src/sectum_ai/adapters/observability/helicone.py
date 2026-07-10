@@ -106,6 +106,22 @@ class HeliconeObservability(ObservabilityAdapter):
                 )
         return hits
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one of the tenant's requests by id, or ``None`` if it is gone.
+
+        Lists the tenant's own requests (like ``search_traces``) and matches the
+        request id, so another tenant's - or an erased - id returns ``None``: the
+        by-id existence primitive for the A3 subject-erasure check.
+        """
+        for row in self._client.query_requests(tenant.hex):
+            if str(row.get("request_id") or row.get("id") or "") == trace_id:
+                return TraceHit(
+                    trace_id=trace_id,
+                    project=self._row_owner(row, tenant.hex),
+                    snippet=_row_snippet(row),
+                )
+        return None
+
     def _row_owner(self, row: dict[str, Any], default: str) -> str:
         properties = row.get("properties") or row.get("request_properties") or {}
         if isinstance(properties, dict) and self._tenant_property in properties:

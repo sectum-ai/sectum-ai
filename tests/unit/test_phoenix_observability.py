@@ -45,3 +45,20 @@ def test_phoenix_delete_propagates_non_404_errors() -> None:
     )
     with pytest.raises(httpx.HTTPStatusError):
         adapter.delete(_TENANT)
+
+
+def test_phoenix_fetch_trace_finds_a_trace_by_id() -> None:
+    adapter, client = _adapter_with_mock_client()
+    client.projects.list.return_value = [{"name": f"t-{_TENANT.hex}"}]
+    client.spans.get_spans.return_value = [
+        {"context": {"trace_id": "trace-xyz"}, "name": "span", "attributes": {}}
+    ]
+    hit = adapter.fetch_trace(_TENANT, "trace-xyz")
+    assert hit is not None and hit.trace_id == "trace-xyz"
+    assert adapter.fetch_trace(_TENANT, "missing-trace") is None
+
+
+def test_phoenix_fetch_trace_none_when_tenant_has_no_project() -> None:
+    adapter, client = _adapter_with_mock_client()
+    client.projects.list.return_value = []  # tenant has no project -> no scan, no hit
+    assert adapter.fetch_trace(_TENANT, "trace-xyz") is None

@@ -88,6 +88,17 @@ def test_langsmith_search_returns_nothing_when_the_marker_is_absent() -> None:
     assert LangSmithObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
 
 
+def test_langsmith_fetch_trace_finds_a_run_by_id() -> None:
+    client = _FakeLangSmith()
+    _seed(client, _TENANT_A, "a recorded run")
+    adapter = LangSmithObservability(client)
+    hit = adapter.fetch_trace(_TENANT_A, "run-0000")
+    assert hit is not None and hit.trace_id == "run-0000"
+    # a bogus id, and a foreign tenant's query, both return None (tenant-scoped)
+    assert adapter.fetch_trace(_TENANT_A, "run-9999") is None
+    assert adapter.fetch_trace(_TENANT_B, "run-0000") is None
+
+
 def test_langsmith_lists_projects() -> None:
     client = _FakeLangSmith()
     _seed(client, _TENANT_A, "a recorded run")

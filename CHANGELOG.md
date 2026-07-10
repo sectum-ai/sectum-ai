@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **By-id `fetch_trace` for four more observability adapters (A3 tracing).** The A3
+  data-subject erasure check verifies a subject's traces are gone by id; previously
+  only the Langfuse adapter exposed the `fetch_trace` primitive (every other backend
+  read `NOT_COVERED`). LangSmith, Phoenix, Helicone, and Datadog now each look a
+  trace up by id within the tenant's own scope, so `erasure --subject` can attest the
+  tracing surface for those backends too. The generic OpenTelemetry reader queries by
+  content, not id, so it has no by-id lookup and stays `NOT_COVERED` (honest, not a
+  false `ERASED`). Verified end-to-end against a real Phoenix in the docker-compose
+  integration suite; the rest are covered by mock-backed unit tests.
+
 ## [0.2.1] - 2026-07-09
 
 ### Added

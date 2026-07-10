@@ -107,6 +107,22 @@ class DatadogObservability(ObservabilityAdapter):
                 )
         return hits
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one of the tenant's spans by id, or ``None`` if it is gone.
+
+        Lists the tenant's own spans (like ``search_traces``) and matches the span
+        id, so another tenant's - or an erased - id returns ``None``: the by-id
+        existence primitive for the A3 subject-erasure check.
+        """
+        for event in self._client.search_spans(tenant.hex):
+            if str(event.get("id") or "") == trace_id:
+                return TraceHit(
+                    trace_id=trace_id,
+                    project=self._event_owner(event, tenant.hex),
+                    snippet=_event_snippet(event),
+                )
+        return None
+
     def _event_owner(self, event: dict[str, Any], default: str) -> str:
         attributes = event.get("attributes") or {}
         if not isinstance(attributes, dict):

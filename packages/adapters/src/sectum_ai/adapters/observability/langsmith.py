@@ -74,6 +74,21 @@ class LangSmithObservability(ObservabilityAdapter):
                 hits.append(TraceHit(trace_id=str(run.id), project=project, snippet=snippet))
         return hits
 
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one of the tenant's runs by id, or ``None`` if it is gone.
+
+        Scoped to the tenant's own project (like ``search_traces``), so another
+        tenant's run id - or an erased one - returns ``None``: the by-id existence
+        primitive for the A3 subject-erasure check.
+        """
+        project = self._project_name(tenant)
+        if project not in self._project_names():
+            return None
+        for run in self._client.list_runs(project_name=project, limit=_RUN_LIMIT):
+            if str(run.id) == trace_id:
+                return TraceHit(trace_id=trace_id, project=project, snippet=self._snippet(run))
+        return None
+
     def list_projects(self) -> list[str]:
         return sorted(self._project_names())
 

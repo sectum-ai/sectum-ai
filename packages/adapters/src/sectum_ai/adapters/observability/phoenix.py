@@ -7,6 +7,7 @@ OpenTelemetry SDK is required.
 Requires the ``phoenix`` optional dependency: ``pip install sectum-ai-adapters[phoenix]``.
 """
 
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -38,10 +39,7 @@ class PhoenixObservability(ObservabilityAdapter):
             return []
         hits: list[TraceHit] = []
         for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
-            attributes = span.get("attributes") or {}
-            snippet = " ".join(
-                [str(span.get("name", "")), *(str(value) for value in attributes.values())]
-            )
+            snippet = self._snippet(span)
             if marker in snippet:
                 hits.append(
                     TraceHit(
@@ -51,6 +49,26 @@ class PhoenixObservability(ObservabilityAdapter):
                     )
                 )
         return hits
+
+    def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+        """Fetch one of the tenant's traces by id, or ``None`` if it is gone.
+
+        Scans the tenant's own project (like ``search_traces``); a span carrying
+        the trace id makes the trace present, so another tenant's - or an erased -
+        trace id returns ``None``. The by-id existence primitive for A3.
+        """
+        project = self._project_name(tenant)
+        if project not in self._project_names():
+            return None
+        for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
+            if str(span["context"]["trace_id"]) == trace_id:
+                return TraceHit(trace_id=trace_id, project=project, snippet=self._snippet(span))
+        return None
+
+    @staticmethod
+    def _snippet(span: Any) -> str:
+        attributes = span.get("attributes") or {}
+        return " ".join([str(span.get("name", "")), *(str(value) for value in attributes.values())])
 
     def list_projects(self) -> list[str]:
         return sorted(self._project_names())
