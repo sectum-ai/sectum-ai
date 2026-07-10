@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-10
+
 ### Added
 
 - **By-id `fetch_trace` for four more observability adapters (A3 tracing).** The A3
