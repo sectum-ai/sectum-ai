@@ -83,6 +83,16 @@ def test_helicone_search_returns_nothing_when_marker_absent() -> None:
     assert HeliconeObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
 
 
+def test_helicone_fetch_trace_finds_a_request_by_id() -> None:
+    client = _FakeHelicone()
+    client.add(_TENANT_A.hex, "a recorded request")
+    adapter = HeliconeObservability(client)
+    hit = adapter.fetch_trace(_TENANT_A, "req-0000")
+    assert hit is not None and hit.trace_id == "req-0000"
+    assert adapter.fetch_trace(_TENANT_A, "req-9999") is None
+    assert adapter.fetch_trace(_TENANT_B, "req-0000") is None
+
+
 def test_helicone_lists_tenant_values() -> None:
     client = _FakeHelicone()
     client.add(_TENANT_A.hex, "a")
@@ -166,6 +176,16 @@ def test_datadog_scans_the_meta_bag_where_span_io_lives() -> None:
     hits = DatadogObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
     assert hits
     assert "SECTUM-CANARY-AAA" in hits[0].snippet
+
+
+def test_datadog_fetch_trace_finds_a_span_by_id() -> None:
+    client = _FakeDatadog()
+    client.add(_TENANT_A.hex, "a recorded span")
+    adapter = DatadogObservability(client)
+    hit = adapter.fetch_trace(_TENANT_A, "span-0000")
+    assert hit is not None and hit.trace_id == "span-0000"
+    assert adapter.fetch_trace(_TENANT_A, "span-9999") is None
+    assert adapter.fetch_trace(_TENANT_B, "span-0000") is None
 
 
 def test_datadog_lists_tenant_values() -> None:

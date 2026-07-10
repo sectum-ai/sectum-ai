@@ -113,3 +113,17 @@ def test_phoenix_delete_is_idempotent_when_no_project_exists(
     # delete on a tenant that was never seeded must not raise (the 404 is swallowed)
     adapter.delete(_TENANT_B)
     assert adapter.search_traces(_TENANT_B, "anything") == []
+
+
+def test_phoenix_fetch_trace_by_id(adapter: PhoenixObservability) -> None:
+    # Seed a trace, learn its id as Phoenix returns it (robust to any id
+    # normalization), then fetch it by id - the A3 subject-erasure primitive.
+    _seed(Client(base_url=_BASE_URL), _TENANT_A, "the output mentions SECTUM-CANARY-FT")
+    hits = _search_with_retry(adapter, _TENANT_A, "SECTUM-CANARY-FT")
+    assert hits
+    trace_id = hits[0].trace_id
+    hit = adapter.fetch_trace(_TENANT_A, trace_id)
+    assert hit is not None and hit.trace_id == trace_id
+    # a bogus id, and a foreign tenant, both return None (tenant-scoped)
+    assert adapter.fetch_trace(_TENANT_A, "does-not-exist") is None
+    assert adapter.fetch_trace(_TENANT_B, trace_id) is None
