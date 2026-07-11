@@ -432,6 +432,16 @@ class EvalSetAdapter(Adapter):
     family = AdapterFamily.EVAL_SET
 
     @abstractmethod
+    def add(self, tenant: UUID, text: str) -> None:
+        """Add ``text`` as an eval-set fixture in ``tenant``'s scope.
+
+        Class 11 (erasure verification) seeds the eval set with the tenant's
+        content through this, then confirms a ``delete`` purges it. A live store
+        must make the fixture immediately searchable so the pre/post scan is
+        reliable.
+        """
+
+    @abstractmethod
     def search(self, tenant: UUID, query: str) -> list[str]:
         """Return the eval-set entries in ``tenant``'s scope matching ``query``."""
 
@@ -457,6 +467,15 @@ class BackupAdapter(Adapter):
     """
 
     family = AdapterFamily.BACKUP
+
+    @abstractmethod
+    def add(self, tenant: UUID, text: str) -> None:
+        """Add ``text`` as a backup snapshot entry in ``tenant``'s scope.
+
+        Class 11 (erasure verification) seeds the backup store with the tenant's
+        content through this, then confirms a ``delete`` purges it (or that the
+        store reports no per-tenant purge - the attestable-with-caveat case).
+        """
 
     @abstractmethod
     def search(self, tenant: UUID, query: str) -> list[str]:

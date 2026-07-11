@@ -855,7 +855,7 @@ class FakeEvalSet(EvalSetAdapter):
         self._entries: dict[UUID, list[str]] = {}
 
     def add(self, tenant: UUID, text: str) -> None:
-        """Add an eval-set fixture for ``tenant`` (test helper; not part of the interface)."""
+        """Add an eval-set fixture for ``tenant``."""
         self._entries.setdefault(tenant, []).append(text)
 
     def search(self, tenant: UUID, query: str) -> list[str]:
@@ -894,7 +894,7 @@ class FakeBackup(BackupAdapter):
         self._snapshots: dict[UUID, list[str]] = {}
 
     def add(self, tenant: UUID, text: str) -> None:
-        """Add a backup snapshot entry for ``tenant`` (test helper; not the interface)."""
+        """Add a backup snapshot entry for ``tenant``."""
         self._snapshots.setdefault(tenant, []).append(text)
 
     def search(self, tenant: UUID, query: str) -> list[str]:

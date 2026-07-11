@@ -53,16 +53,20 @@ an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **Crew
 agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
 and **Class 9** (with per-tenant LoRA) — so no probe class falls back to the synthetic
-substrate for this stack. (The erasure scan's search-index / eval-set / backup
-sub-surfaces stay fake — see the gaps below.)
+substrate for this stack. Every one of the erasure scan's ten "hiding places" now has a
+live backend too — the search index (**OpenSearch**), the eval set (**LangSmith
+Datasets**), and the backup store (**S3**) were the last three fake-only surfaces.
 
 ## Known coverage gaps
 
-- **Eval set and backup have no live adapter** — they run against the deterministic
-  fake only, so the erasure scan of those two "hiding places" verifies the *model* of
-  the surface, not a production store (an eval / golden set, a backup bucket). The
-  search index now has a live **OpenSearch** backend and long-term / agent memory a
-  live **Redis** one; a mem0 / Zep memory adapter can follow the same seam.
+- **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
+  eval set (**LangSmith Datasets**) and backup (**S3**) adapters — like the hosted
+  vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests that
+  skip without credentials, so their contract is verified offline against a mock and
+  live against a real backend on demand (S3 against a local MinIO). The search index
+  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
+  against docker-compose backends in CI every push. A mem0 / Zep memory adapter can
+  follow the same seam.
 - **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API

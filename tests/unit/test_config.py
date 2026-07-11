@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -24,8 +25,10 @@ from sectum_ai.config import (
     _resolve_secret,
     build_adapters,
     build_agent,
+    build_backup,
     build_cache,
     build_embedder,
+    build_eval_set,
     build_judge,
     build_mcp,
     build_memory,
@@ -37,7 +40,7 @@ from sectum_ai.config import (
     load_config,
 )
 from sectum_ai.probes import OpenAIEmbeddingProvider, OpenAIJudge
-from sectum_ai.spec import AdapterError, ConfigError
+from sectum_ai.spec import AdapterError, ConfigError, ErasureUnsupported
 
 
 def test_load_config_returns_defaults_for_an_empty_file(tmp_path: Path) -> None:
@@ -356,6 +359,40 @@ def test_build_search_index_opensearch_constructs_an_opensearch_index() -> None:
 def test_build_search_index_rejects_an_unknown_kind() -> None:
     with pytest.raises(ConfigError, match="not yet supported"):
         build_search_index(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_eval_set_fake_carries_the_soft_delete_knob() -> None:
+    from sectum_ai.adapters import FakeEvalSet
+
+    default = build_eval_set(AdapterConfig(kind="fake"))
+    assert isinstance(default, FakeEvalSet)
+    assert not default.supports(Capability.SOFT_DELETE)
+    soft = build_eval_set(AdapterConfig(kind="fake", soft_delete=True))
+    assert soft.supports(Capability.SOFT_DELETE)
+
+
+def test_build_eval_set_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_eval_set(AdapterConfig(kind="not-a-real-kind"))
+
+
+def test_build_backup_fake_carries_the_soft_delete_and_no_erasure_knobs() -> None:
+    from sectum_ai.adapters import FakeBackup
+
+    default = build_backup(AdapterConfig(kind="fake"))
+    assert isinstance(default, FakeBackup)
+    assert not default.supports(Capability.SOFT_DELETE)
+    soft = build_backup(AdapterConfig(kind="fake", soft_delete=True))
+    assert soft.supports(Capability.SOFT_DELETE)
+    # no_erasure makes delete raise ErasureUnsupported (attestable-with-caveat)
+    caveat = build_backup(AdapterConfig(kind="fake", no_erasure=True))
+    with pytest.raises(ErasureUnsupported):
+        caveat.delete(UUID(int=1))
+
+
+def test_build_backup_rejects_an_unknown_kind() -> None:
+    with pytest.raises(ConfigError, match="not yet supported"):
+        build_backup(AdapterConfig(kind="not-a-real-kind"))
 
 
 def test_build_mcp_stdio_constructs_a_stdio_client() -> None:
