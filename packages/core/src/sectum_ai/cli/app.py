@@ -46,9 +46,11 @@ from sectum_ai.config import (
     SectumConfig,
     SecurityConfig,
     build_adapters,
+    build_backup,
     build_cache,
     build_detection_providers,
     build_embedder,
+    build_eval_set,
     build_memory,
     build_model,
     build_observability,
@@ -1775,14 +1777,13 @@ def erasure(
     memory = build_memory(loaded.adapters.get("memory", fake_default))
     cache = build_cache(loaded.adapters.get("cache", fake_default))
     model = build_model(loaded.adapters.get("model", fake_default))
-    # The eval set and backup have no live adapters yet; deterministic fakes model
-    # them. soft_delete rides on fake_default's extras (set from --soft-delete when
-    # no config is given, absent under --config). The search index resolves from
-    # config (kind: opensearch) like the other surfaces, falling back to the fake.
-    _fake_soft_delete = bool((fake_default.model_extra or {}).get("soft_delete"))
+    # The search index, eval set, and backup each resolve from config (kind:
+    # opensearch / langsmith / s3) like the other surfaces, falling back to the
+    # fake. soft_delete (and backup's no_erasure) ride on fake_default's extras -
+    # set from --soft-delete when no config is given, absent under --config.
     search = build_search_index(loaded.adapters.get("search_index", fake_default))
-    evalset = FakeEvalSet(soft_delete=_fake_soft_delete)
-    backup = FakeBackup(soft_delete=_fake_soft_delete)
+    evalset = build_eval_set(loaded.adapters.get("eval_set", fake_default))
+    backup = build_backup(loaded.adapters.get("backup", fake_default))
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)

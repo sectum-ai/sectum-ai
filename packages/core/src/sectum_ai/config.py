@@ -43,9 +43,13 @@ from pydantic import (
 
 from sectum_ai.adapters import (
     AgentAdapter,
+    BackupAdapter,
     CacheAdapter,
+    EvalSetAdapter,
     FakeAgent,
+    FakeBackup,
     FakeCache,
+    FakeEvalSet,
     FakeMCP,
     FakeMemory,
     FakeModel,
@@ -727,6 +731,61 @@ def build_search_index(config: AdapterConfig) -> SearchIndexAdapter:
                 soft_delete=_bool(extras, "soft_delete", False),
             )
     raise _unsupported("search index", config.kind)
+
+
+def build_eval_set(config: AdapterConfig) -> EvalSetAdapter:
+    """Build the eval-set adapter the config selects."""
+    extras = config.model_extra or {}
+    if config.kind == "fake":
+        return FakeEvalSet(soft_delete=_bool(extras, "soft_delete", False))
+    if config.kind == "langsmith":
+        api_key = _resolve_secret(extras, "api_key", "api_key_env")
+        api_url = _optional_str(extras, "api_url")
+        prefix = _str(extras, "prefix", "sectum-ai-eval")
+        soft_delete = _bool(extras, "soft_delete", False)
+        with _optional_extra("langsmith"):
+            from sectum_ai.adapters.eval_set.langsmith import LangSmithEvalSet
+
+            return LangSmithEvalSet.connect(
+                api_key, api_url, prefix=prefix, soft_delete=soft_delete
+            )
+    raise _unsupported("eval set", config.kind)
+
+
+def build_backup(config: AdapterConfig) -> BackupAdapter:
+    """Build the backup adapter the config selects."""
+    extras = config.model_extra or {}
+    if config.kind == "fake":
+        return FakeBackup(
+            soft_delete=_bool(extras, "soft_delete", False),
+            no_erasure=_bool(extras, "no_erasure", False),
+        )
+    if config.kind == "s3":
+        bucket = _required_str(extras, "bucket")
+        access_key_id = (
+            _resolve_secret(extras, "access_key_id", "access_key_id_env")
+            if "access_key_id" in extras or "access_key_id_env" in extras
+            else None
+        )
+        secret_access_key = (
+            _resolve_secret(extras, "secret_access_key", "secret_access_key_env")
+            if "secret_access_key" in extras or "secret_access_key_env" in extras
+            else None
+        )
+        with _optional_extra("boto3"):
+            from sectum_ai.adapters.backup.s3 import S3Backup
+
+            return S3Backup.connect(
+                bucket,
+                endpoint_url=_optional_str(extras, "endpoint_url"),
+                region_name=_optional_str(extras, "region_name"),
+                access_key_id=access_key_id,
+                secret_access_key=secret_access_key,
+                prefix=_str(extras, "prefix", "sectum-ai-backup"),
+                no_erasure=_bool(extras, "no_erasure", False),
+                soft_delete=_bool(extras, "soft_delete", False),
+            )
+    raise _unsupported("backup", config.kind)
 
 
 def build_rag(config: AdapterConfig) -> RAGPipelineAdapter:

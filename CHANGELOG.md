@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Live eval-set (LangSmith Datasets) and backup (S3) adapters — the last two
+  fake-only erasure surfaces are closed.** The Class 11 erasure scan's fourth and
+  seventh "hiding places" now have live backends, so every one of the ten hiding places
+  can be verified against a real store, not the synthetic substrate:
+  - **Eval set → LangSmith Datasets** (`kind: eval_set → langsmith`, the `[langsmith]`
+    extra): each tenant maps to its own LangSmith Dataset (`{prefix}-{tenant}`); a
+    fixture is a dataset example, and `delete` removes the dataset.
+  - **Backup → S3** (`kind: backup → s3`, the `[boto3]` extra): each tenant's snapshots
+    live under `{prefix}/{tenant}/` in one bucket (AWS S3 or any S3-compatible store via
+    `endpoint_url`); `no_erasure=true` models an immutable / object-lock (WORM) bucket
+    with no per-tenant purge, so Class 11 records it as *attestable-with-caveat*.
+  `eval_set` and `backup` now resolve from `adapters.eval_set` / `adapters.backup` like
+  the other surfaces (falling back to the fake), and the `add` seed primitive is promoted
+  to both interfaces. Both are opt-in live (credential- / endpoint-gated) like the hosted
+  vector stores; verified offline against a mock and live against a backend on demand (the
+  S3 adapter end-to-end against a local MinIO, through the full `sectum-ai erasure` flow).
+
 ## [0.3.0] - 2026-07-10
 
 ### Added

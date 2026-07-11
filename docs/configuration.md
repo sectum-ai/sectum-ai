@@ -126,6 +126,20 @@ fakes generally.
 | `fake` | `soft_delete: bool = false` | In-memory full-text index (the tenth "hiding place"). `soft_delete: true` acknowledges a delete but leaves the documents searchable — the Class 11 residue. |
 | `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = false`, `prefix: str = "sectum-ai-search"`, `soft_delete: bool = false` | `OpenSearchSearchIndex` — each tenant's derived full-text documents live in their own index (`{prefix}-{tenant.hex}`), searched with a `match` query; `delete` drops the index (`soft_delete: true` leaves the residue). A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
 
+### `eval_set`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | `soft_delete: bool = false` | In-memory golden eval set (the fourth "hiding place"). `soft_delete: true` acknowledges a delete but keeps the fixtures — the Class 11 residue. |
+| `langsmith` | `api_key_env: str` *(or `api_key: str`)*, `api_url: str` *(optional)*, `prefix: str = "sectum-ai-eval"`, `soft_delete: bool = false` | `LangSmithEvalSet` — each tenant maps to its own LangSmith **Dataset** (`{prefix}-{tenant.hex}`); a fixture is a dataset example, a search scans the dataset's examples, and `delete` removes the dataset (`soft_delete: true` leaves the fixtures — the residue). Requires the `langsmith` extra. |
+
+### `backup`
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `fake` | `soft_delete: bool = false`, `no_erasure: bool = false` | In-memory backup / snapshot store (the seventh "hiding place"). `soft_delete: true` acknowledges a delete but keeps the snapshot (residue); `no_erasure: true` raises `ErasureUnsupported` so Class 11 records the surface as *attestable-with-caveat* (an immutable backup, presumed retained). |
+| `s3` | `bucket: str` *(required)*, `endpoint_url: str` *(optional; set for MinIO/Ceph)*, `region_name: str` *(optional)*, `access_key_id_env: str` *(or `access_key_id: str`, optional)*, `secret_access_key_env: str` *(or `secret_access_key: str`, optional)*, `prefix: str = "sectum-ai-backup"`, `no_erasure: bool = false`, `soft_delete: bool = false` | `S3Backup` — each tenant's snapshots live under the key prefix `{prefix}/{tenant.hex}/` in one bucket; a search lists that prefix and `delete` purges it. `no_erasure: true` models an immutable / object-lock (WORM) bucket with no per-tenant purge (attestable-with-caveat). Credentials fall back to boto3's own chain (env / profile / instance role). Works against AWS S3 or any S3-compatible store. Requires the `boto3` extra. |
+
 ### `rag`
 
 | `kind` | Fields | Notes |

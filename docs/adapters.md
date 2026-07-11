@@ -60,6 +60,20 @@ extra) indexes each tenant's derived full-text documents into its own OpenSearch
 distinct from the vector store. Class 11 erasure seeds it, then confirms a `delete`
 purges the index; `soft_delete=True` leaves it in place — the erasure residue.
 
+**Eval set.** The LangSmith eval set (`kind: langsmith`, the `[langsmith]` extra) maps
+each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant}`) — a dataset *is* a
+curated golden eval set, the fourth "hiding place". A fixture is a dataset example,
+Class 11 erasure seeds them, and `delete` removes the tenant's dataset;
+`soft_delete=True` leaves the fixtures in place.
+
+**Backup.** The S3 backup (`kind: s3`, the `[boto3]` extra) keeps each tenant's
+snapshots under the key prefix `{prefix}/{tenant}/` in one bucket (AWS S3 or any
+S3-compatible store — MinIO, Ceph — via `endpoint_url`), the seventh "hiding place". A
+search lists that prefix and `delete` purges it; `no_erasure=True` models an immutable /
+object-lock (WORM) bucket that exposes no per-tenant purge, so `delete` raises
+`ErasureUnsupported` and Class 11 records the surface as **attestable-with-caveat** (data
+presumed retained) — the same erasure-caveat contract as the read-only trace backends.
+
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
 *Erasable* backends expose a real per-tenant delete: Phoenix and LangSmith each
@@ -118,13 +132,15 @@ identity, which is the confused-deputy gap Class 7 examines.
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:
 `pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`, `tgi`,
-`rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`, or
-`anthropic-tooluse`.
+`rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`,
+`anthropic-tooluse`, `langsmith` (the eval-set adapter), or `boto3` (the S3 backup).
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent / MCP
 adapters use only the standard library. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI
 (the **Integration** job); Milvus runs against its profile-gated compose service
-locally. The hosted and SDK-backed adapters are exercised by tests that mock their
-transport, with any live tests gated behind credentials so CI never needs them.
+locally. The hosted and SDK-backed adapters — including the LangSmith eval set and
+the S3 backup — are exercised by tests that mock their transport, with any live tests
+gated behind credentials or an endpoint (the S3 backup against a local MinIO) so CI
+never needs them.
 
 Run `sectum-ai adapters` to list the installed adapters and their capabilities.
