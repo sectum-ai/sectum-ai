@@ -4,7 +4,7 @@ Skipped unless ``LANGSMITH_API_KEY`` (or ``LANGCHAIN_API_KEY``) is set (the
 engineering spec, section 13: opt-in live). Enable with
 ``pip install sectum-ai-adapters[langsmith]`` and the env var
 (``LANGSMITH_ENDPOINT`` for self-hosted); the adapter logic itself is covered
-offline by ``tests/unit/test_eval_set_langsmith.py``.
+offline by ``tests/unit/test_eval_set_langsmith_adapter.py``.
 """
 
 import contextlib

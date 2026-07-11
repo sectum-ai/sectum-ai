@@ -8,7 +8,7 @@ opt-in live). Point it at any S3-compatible store - e.g. a local MinIO:
     export SECTUM_S3_ENDPOINT=http://localhost:9100
 
 Enable with ``pip install sectum-ai-adapters[boto3]``; the adapter logic itself is
-covered offline by ``tests/unit/test_backup_s3.py``.
+covered offline by ``tests/unit/test_backup_s3_adapter.py``.
 """
 
 import os
