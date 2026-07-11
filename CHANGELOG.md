@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Live mem0 memory adapter (`kind: memory → mem0`).** A second live backend for the
+  Class 8 agent-memory surface beside Redis: a product that keeps per-user long-term
+  memory in [mem0](https://github.com/mem0ai/mem0) can now be probed for cross-tenant
+  memory contamination. Each tenant maps to a mem0 `user_id`; entries are stored
+  verbatim (`infer=False`), so the adapter is a faithful scoped store independent of
+  mem0's LLM fact-extraction, and a planted marker is found by its own text.
+  `shared_memory=true` collapses every tenant to one shared `user_id` — the Class 8
+  leak. It does **not** model `user_scoped` (mem0's flat `user_id` space has no per-user
+  erasure boundary; the resolver rejects `user_scoped: true` for `kind: mem0` rather than
+  silently ignoring it — use `kind: redis` for that). Opt-in live (mem0 needs an
+  embedder; its default is OpenAI), verified offline against a mock. Requires the `mem0`
+  extra.
 - **Live eval-set (LangSmith Datasets) and backup (S3) adapters — the last two
   fake-only erasure surfaces are closed.** The Class 11 erasure scan's fourth and
   seventh "hiding places" now have live backends, so every one of the ten hiding places

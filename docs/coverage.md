@@ -40,7 +40,7 @@ See [Adapters](adapters.md) for how to configure each backend.
 | Embedding inversion (6) | vector store | any live vector backend |
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
 | Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
-| Persistent memory contamination (8) | memory | Redis (or the fake, offline) |
+| Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
 | LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
@@ -65,8 +65,9 @@ Datasets**), and the backup store (**S3**) were the last three fake-only surface
   skip without credentials, so their contract is verified offline against a mock and
   live against a real backend on demand (S3 against a local MinIO). The search index
   (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
-  against docker-compose backends in CI every push. A mem0 / Zep memory adapter can
-  follow the same seam.
+  against docker-compose backends in CI every push. The agent-memory surface also has a
+  live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow
+  the same seam.
 - **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API

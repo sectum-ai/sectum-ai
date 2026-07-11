@@ -1163,6 +1163,19 @@ def test_build_memory_rejects_an_unknown_kind() -> None:
         build_memory(AdapterConfig(kind="not-a-real-kind"))
 
 
+def test_build_memory_mem0_rejects_user_scoped() -> None:
+    # mem0's flat user_id space has no per-user erasure boundary, so user_scoped is
+    # rejected outright rather than silently ignored. The check fires before the
+    # optional-extra import, so it holds without mem0 installed.
+    with pytest.raises(ConfigError, match=r"user_scoped"):
+        build_memory(AdapterConfig(kind="mem0", user_scoped=True))
+
+
+def test_build_memory_mem0_rejects_a_non_mapping_config() -> None:
+    with pytest.raises(ConfigError, match=r"must be a mapping"):
+        build_memory(AdapterConfig(kind="mem0", config="not-a-dict"))
+
+
 # ---------------------------------------------------------------------------
 # detection-provider resolver: missing-API-key paths
 # ---------------------------------------------------------------------------
