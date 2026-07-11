@@ -1,0 +1,113 @@
+"""Live mem0 adapter: a long-term / agent-memory store backed by mem0.
+
+`mem0 <https://github.com/mem0ai/mem0>`_ is a popular agent-memory framework; a
+product that stores per-user long-term memory in mem0 is exactly the Class 8
+surface (persistent memory contamination). Each tenant maps to a mem0 ``user_id``,
+so one tenant's recall never surfaces another tenant's memory - unless
+``shared_memory=True`` points every tenant at a single shared ``user_id``, the
+cross-tenant contamination Class 8 is built to catch.
+
+Memory is stored with ``infer=False`` (verbatim), so the adapter is a faithful
+scoped store and does not depend on mem0's LLM fact-extraction; a planted marker is
+found by its own text. ``user_scoped`` (the ADR-0006 per-user boundary within a
+tenant) is **not** modelled here - mem0's flat ``user_id`` space has no prefix
+delete, so a two-level tenant/user boundary cannot be erased cleanly; the resolver
+rejects ``user_scoped: true`` for ``kind: mem0`` rather than silently ignoring it.
+Use the Redis memory adapter for the user-scoped case.
+
+The ``mem0`` client is imported only on the live ``connect`` path (or injected for
+the mock-backed test), so the adapter module needs no dependency. The live path
+requires the ``mem0`` optional dependency: ``pip install sectum-ai-adapters[mem0]``.
+"""
+
+import re
+from typing import Any, Self
+from uuid import UUID
+
+from sectum_ai.adapters.base import Capability, MemoryAdapter
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+# The single shared scope every tenant collapses to under shared_memory - the
+# space with no tenant boundary that Class 8 is built to catch.
+_SHARED_SCOPE = "sectum-ai-shared"
+_SEARCH_LIMIT = 100
+
+
+def _tokens(text: str) -> set[str]:
+    return set(_TOKEN_RE.findall(text.lower()))
+
+
+class Mem0Memory(MemoryAdapter):
+    """A long-term / agent-memory store backed by mem0, one ``user_id`` per tenant."""
+
+    def __init__(
+        self,
+        client: Any,
+        *,
+        name: str = "mem0-memory",
+        shared_memory: bool = False,
+        soft_delete: bool = False,
+    ) -> None:
+        scope = Capability.SHARED_MEMORY if shared_memory else Capability.PER_TENANT_MEMORY
+        capabilities = {scope}
+        if soft_delete:
+            capabilities.add(Capability.SOFT_DELETE)
+        super().__init__(name, frozenset(capabilities))
+        self._client = client
+        self._shared_memory = shared_memory
+        self._soft_delete = soft_delete
+
+    @classmethod
+    def connect(
+        cls,
+        config: dict[str, Any] | None = None,
+        *,
+        name: str = "mem0-memory",
+        shared_memory: bool = False,
+        soft_delete: bool = False,
+    ) -> Self:
+        """Open a mem0 ``Memory`` and return the adapter.
+
+        ``config`` is mem0's own config dict (llm / embedder / vector_store); when
+        omitted, mem0's defaults apply. The ``mem0`` package is imported here, on the
+        live path only, so the adapter module and its mock-backed test do not need it.
+        """
+        from mem0 import Memory
+
+        client = Memory.from_config(config) if config else Memory()
+        return cls(client, name=name, shared_memory=shared_memory, soft_delete=soft_delete)
+
+    def _scope(self, tenant: UUID) -> str:
+        # A shared-memory store collapses every tenant to one scope (the leak); a
+        # scoped store gives each tenant its own mem0 user_id.
+        return _SHARED_SCOPE if self._shared_memory else tenant.hex
+
+    @staticmethod
+    def _memories(result: Any) -> list[str]:
+        # mem0 search returns {"results": [{"memory": ...}, ...]} in current
+        # releases and a bare list of dicts in older ones; read either defensively.
+        rows = result.get("results", []) if isinstance(result, dict) else result
+        texts: list[str] = []
+        for row in rows or []:
+            text = row.get("memory") if isinstance(row, dict) else None
+            if text:
+                texts.append(str(text))
+        return texts
+
+    def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+        # user is ignored: this adapter scopes by tenant alone (see the module note).
+        self._client.add(text, user_id=self._scope(tenant), infer=False)
+
+    def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+        result = self._client.search(query, user_id=self._scope(tenant), limit=_SEARCH_LIMIT)
+        query_tokens = _tokens(query)
+        # Post-filter mem0's ranked hits by keyword overlap so a planted marker is
+        # found by its own text (matching the fake and the Redis adapter).
+        return [text for text in self._memories(result) if query_tokens & _tokens(text)]
+
+    def delete(self, tenant: UUID) -> None:
+        # A soft-delete store acknowledges the request but keeps the entries - the
+        # residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
+        self._client.delete_all(user_id=self._scope(tenant))

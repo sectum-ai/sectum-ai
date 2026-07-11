@@ -701,6 +701,23 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
                 soft_delete=soft_delete,
                 prefix=prefix,
             )
+    if config.kind == "mem0":
+        if _bool(extras, "user_scoped", False):
+            raise ConfigError(
+                "memory kind 'mem0' does not support user_scoped - mem0's flat user_id "
+                "space has no per-user erasure boundary; use kind 'redis' for that"
+            )
+        shared_memory = _bool(extras, "shared_memory", False)
+        soft_delete = _bool(extras, "soft_delete", False)
+        mem0_config = extras.get("config")
+        if mem0_config is not None and not isinstance(mem0_config, dict):
+            raise ConfigError(f"memory 'config' must be a mapping, got {mem0_config!r}")
+        with _optional_extra("mem0"):
+            from sectum_ai.adapters.memory.mem0 import Mem0Memory
+
+            return Mem0Memory.connect(
+                mem0_config, shared_memory=shared_memory, soft_delete=soft_delete
+            )
     raise _unsupported("memory", config.kind)
 
 

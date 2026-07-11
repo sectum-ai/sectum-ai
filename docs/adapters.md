@@ -47,12 +47,19 @@ in CI. Azure AI Search uses `kind: azure-search`, `[azure-search]`.
 **Cache.** The Redis cache prefixes its keys and tenant-scopes them by default;
 `tenant_scoped=False` models the shared key space Class 4 is built to catch.
 
-**Memory.** The Redis memory store (`kind: redis`, the `[redis]` extra) keeps each
-tenant's long-term agent-memory entries in a prefixed per-tenant list and recalls by
-keyword; it is tenant-scoped by default, so `shared_memory=True` models the single
-shared memory space Class 8 (persistent memory contamination) is built to catch, and
-`user_scoped=True` isolates users within a tenant (ADR-0006). `soft_delete=True`
-acknowledges a delete but keeps the entries — the Class 11 erasure residue.
+**Memory.** Two long-term / agent-memory backends. The Redis memory store
+(`kind: redis`, the `[redis]` extra) keeps each tenant's entries in a prefixed
+per-tenant list and recalls by keyword; it is tenant-scoped by default, so
+`shared_memory=True` models the single shared memory space Class 8 (persistent memory
+contamination) is built to catch, and `user_scoped=True` isolates users within a
+tenant (ADR-0006). `soft_delete=True` acknowledges a delete but keeps the entries —
+the Class 11 erasure residue. The mem0 store (`kind: mem0`, the `[mem0]` extra) maps
+each tenant to a mem0 `user_id` and stores entries verbatim (`infer=False`), so a
+product that keeps per-user memory in mem0 can be probed for the same Class 8 leak
+(`shared_memory=True` collapses every tenant to one shared `user_id`); it does not
+model `user_scoped` (mem0's flat `user_id` space has no per-user erasure boundary — use
+the Redis store for that). Redis runs against a docker-compose backend in CI; mem0
+needs an embedder (its default is OpenAI), so it is opt-in live.
 
 **Search index.** The OpenSearch search index (`kind: opensearch`, the `[opensearch]`
 extra) indexes each tenant's derived full-text documents into its own OpenSearch index
@@ -133,7 +140,8 @@ identity, which is the confused-deputy gap Class 7 examines.
 extras, imported lazily so the base install stays light:
 `pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`, `tgi`,
 `rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`,
-`anthropic-tooluse`, `langsmith` (the eval-set adapter), or `boto3` (the S3 backup).
+`anthropic-tooluse`, `langsmith` (the eval-set adapter), `boto3` (the S3 backup), or
+`mem0` (the mem0 memory store).
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent / MCP
 adapters use only the standard library. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI

@@ -175,6 +175,13 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# mem0 (the mem0 memory adapter) is an optional, live-only dependency; treat it as
+# opaque so the adapter type-checks without it installed.
+module = ["mem0", "mem0.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # the langgraph, langchain-core, and langchain-openai packages are optional,
 # live-only dependencies; treat them as opaque so the adapter type-checks
 # without them installed (the adapter's API is fully typed). langchain-openai
