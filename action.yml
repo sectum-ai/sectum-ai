@@ -11,10 +11,10 @@ branding:
 inputs:
   version:
     description: >-
-      sectum-ai version to install from PyPI (for example 0.3.0). Pin it for
+      sectum-ai version to install from PyPI (for example 0.4.0). Pin it for
       reproducible runs. Leave empty to install the latest release.
     required: false
-    default: "0.3.0"
+    default: "0.4.0"
   config:
     description: >-
       Path to a sectum-ai.yaml describing your adapters. If empty, the built-in
