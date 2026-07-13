@@ -43,7 +43,7 @@ weasyprint = ["sectum-ai-evidence[weasyprint]"]
 # pure-Python. sentence-transformers runs locally (BYOC-safe); openai is a
 # hosted call. See packages/core/src/sectum_ai/embeddings.py.
 sentence-transformers = ["sentence-transformers>=3"]
-openai = ["openai>=1.40"]
+openai = ["openai>=2.45.0"]
 # hosted embedding providers for the RPR sweep (cohere:<model> / voyage:<model>).
 # Pinned below the next major: both SDKs are fast-moving and reshape their embed
 # response, which would silently break the sweep's vector extraction.
