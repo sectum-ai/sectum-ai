@@ -44,6 +44,11 @@ weasyprint = ["sectum-ai-evidence[weasyprint]"]
 # hosted call. See packages/core/src/sectum_ai/embeddings.py.
 sentence-transformers = ["sentence-transformers>=3"]
 openai = ["openai>=1.40"]
+# hosted embedding providers for the RPR sweep (cohere:<model> / voyage:<model>).
+# Pinned below the next major: both SDKs are fast-moving and reshape their embed
+# response, which would silently break the sweep's vector extraction.
+cohere = ["cohere>=5,<6"]
+voyage = ["voyageai>=0.2,<1"]
 
 [project.scripts]
 sectum-ai = "sectum_ai.cli.app:app"

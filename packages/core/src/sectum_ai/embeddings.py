@@ -10,10 +10,10 @@ This module defines a provider-agnostic :class:`EmbeddingModel` interface (the
 spec, section 13: "provider-agnostic interface; default via configured provider
 (OpenAI/Anthropic/local)"), a deterministic offline implementation for tests and
 CI (:class:`HashingEmbedding`), and opt-in adapters for sentence-transformers
-(the MiniLM-vs-mpnet research pair) and OpenAI behind optional extras. A run that
-configures two or more *real* models records a genuine per-model Retrieval-Pivot
-Rate via :func:`sectum_ai.sweep.embedding_provider_sweep`, regardless of the
-production vector store.
+(the MiniLM-vs-mpnet research pair), OpenAI, Cohere, and Voyage behind optional
+extras. A run that configures two or more *real* models records a genuine
+per-model Retrieval-Pivot Rate via :func:`sectum_ai.sweep.embedding_provider_sweep`,
+regardless of the production vector store.
 """
 
 from __future__ import annotations
@@ -22,21 +22,26 @@ import hashlib
 import math
 import os
 import re
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from sectum_ai.spec import ConfigError
 
 __all__ = [
+    "CohereEmbedding",
     "EmbeddingModel",
     "HashingEmbedding",
     "OpenAIEmbedding",
     "SentenceTransformerEmbedding",
+    "VoyageEmbedding",
     "cosine",
     "resolve_embedding_model",
     "validate_embedding_spec",
 ]
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+# Voyage caps a single embed request (1000 texts / a per-model token budget) and does
+# not auto-batch, unlike Cohere's client; chunk the corpus to stay under the cap.
+_VOYAGE_BATCH = 128
 
 
 @runtime_checkable
@@ -152,6 +157,104 @@ class OpenAIEmbedding:
         return [list(item.embedding) for item in response.data]
 
 
+def _as_float_rows(rows: Any) -> list[list[float]]:
+    """Coerce a provider's embeddings payload to ``list[list[float]]``.
+
+    Shared by the hosted providers whose SDK response shape shifts across releases;
+    keeping the coercion here means it is unit-tested without the SDK installed.
+    """
+    if rows is None:
+        raise ConfigError("embedding provider returned no vectors")
+    return [[float(value) for value in row] for row in rows]
+
+
+class CohereEmbedding:
+    """Cohere embeddings (opt-in extra ``sectum-ai[cohere]``).
+
+    Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
+    a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
+    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    Uses ``input_type="search_document"`` (the sweep embeds corpus documents).
+    """
+
+    def __init__(self, model_name: str, *, api_key_env: str = "COHERE_API_KEY") -> None:
+        try:
+            import cohere
+        except ImportError as error:  # pragma: no cover - exercised only without the extra
+            raise ConfigError(
+                'cohere is not installed; install the extra with: pip install "sectum-ai[cohere]"'
+            ) from error
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise ConfigError(f"Cohere embeddings need an API key in ${api_key_env}")
+        self.name = f"cohere:{model_name}"
+        self._model = model_name
+        self._client = cohere.Client(api_key)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` in one request and return the vectors in input order."""
+        response = self._client.embed(texts=texts, model=self._model, input_type="search_document")
+        return self._vectors(response)
+
+    @staticmethod
+    def _vectors(response: object) -> list[list[float]]:
+        # Cohere's ``embeddings`` is a plain list of vectors on the v1-style client;
+        # a v5 by-type response instead nests them under ``.float``/``.float_``. Read
+        # either, so a client-version bump does not silently break the sweep.
+        embeddings = getattr(response, "embeddings", response)
+        for attr in ("float_", "float"):
+            typed = getattr(embeddings, attr, None)
+            if typed is not None:
+                return _as_float_rows(typed)
+        return _as_float_rows(embeddings)
+
+
+class VoyageEmbedding:
+    """Voyage AI embeddings (opt-in extra ``sectum-ai[voyage]``).
+
+    Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
+    a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
+    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    Uses ``input_type="document"`` (the sweep embeds corpus documents). Voyage caps a
+    single request at 1000 texts (and a per-model token budget) and does not
+    auto-batch, so the whole-corpus sweep is chunked in ``_VOYAGE_BATCH``-sized calls.
+    """
+
+    def __init__(self, model_name: str, *, api_key_env: str = "VOYAGE_API_KEY") -> None:
+        try:
+            import voyageai
+        except ImportError as error:  # pragma: no cover - exercised only without the extra
+            raise ConfigError(
+                'voyageai is not installed; install the extra with: pip install "sectum-ai[voyage]"'
+            ) from error
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise ConfigError(f"Voyage embeddings need an API key in ${api_key_env}")
+        self.name = f"voyage:{model_name}"
+        self._model = model_name
+        self._client = voyageai.Client(api_key=api_key)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` and return the vectors in input order, chunked per request."""
+        return self._embed_batched(self._client, self._model, texts)
+
+    @classmethod
+    def _embed_batched(cls, client: Any, model: str, texts: list[str]) -> list[list[float]]:
+        # Voyage does not batch a single embed request, so split the corpus into
+        # <=_VOYAGE_BATCH-text calls and concatenate the vectors in input order.
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), _VOYAGE_BATCH):
+            batch = texts[start : start + _VOYAGE_BATCH]
+            response = client.embed(batch, model=model, input_type="document")
+            vectors.extend(cls._vectors(response))
+        return vectors
+
+    @staticmethod
+    def _vectors(response: object) -> list[list[float]]:
+        # Voyage returns an object with ``.embeddings`` = list[list[float]].
+        return _as_float_rows(getattr(response, "embeddings", response))
+
+
 def _hash_dim(spec: str) -> int:
     """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension (both prefixes are 5 chars).
 
@@ -179,6 +282,8 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
 
     - ``st:<model>`` -> :class:`SentenceTransformerEmbedding` (e.g. ``st:all-mpnet-base-v2``)
     - ``openai:<model>`` -> :class:`OpenAIEmbedding` (e.g. ``openai:text-embedding-3-small``)
+    - ``cohere:<model>`` -> :class:`CohereEmbedding` (e.g. ``cohere:embed-english-v3.0``)
+    - ``voyage:<model>`` -> :class:`VoyageEmbedding` (e.g. ``voyage:voyage-3``)
     - ``hash-<dim>`` / ``hash:<dim>`` -> deterministic :class:`HashingEmbedding`
 
     Raises :class:`~sectum_ai.spec.ConfigError` for a malformed real spec (the typed
@@ -188,6 +293,10 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
         return SentenceTransformerEmbedding(spec[len("st:") :])
     if spec.startswith("openai:"):
         return OpenAIEmbedding(spec[len("openai:") :])
+    if spec.startswith("cohere:"):
+        return CohereEmbedding(spec[len("cohere:") :])
+    if spec.startswith("voyage:"):
+        return VoyageEmbedding(spec[len("voyage:") :])
     if spec.startswith(("hash-", "hash:")):
         return HashingEmbedding(spec, dim=_hash_dim(spec))
     return None
@@ -203,7 +312,7 @@ def validate_embedding_spec(spec: str) -> None:
     ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` provider
     prefixes (their install / key is checked lazily when the sweep runs).
     """
-    if spec.startswith(("st:", "openai:")):
+    if spec.startswith(("st:", "openai:", "cohere:", "voyage:")):
         return
     if spec.startswith(("hash-", "hash:")):
         _hash_dim(spec)
@@ -212,5 +321,5 @@ def validate_embedding_spec(spec: str) -> None:
         return
     raise ConfigError(
         f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
-        "st:<model>, or openai:<model>"
+        "st:<model>, openai:<model>, cohere:<model>, or voyage:<model>"
     )

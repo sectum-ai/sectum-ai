@@ -79,6 +79,90 @@ def test_resolve_openai_without_the_extra_is_a_config_error() -> None:
         resolve_embedding_model("openai:text-embedding-3-small")
 
 
+def test_resolve_cohere_without_the_extra_is_a_config_error() -> None:
+    with pytest.raises(ConfigError, match="cohere"):
+        resolve_embedding_model("cohere:embed-english-v3.0")
+
+
+def test_resolve_voyage_without_the_extra_is_a_config_error() -> None:
+    with pytest.raises(ConfigError, match="voyageai"):
+        resolve_embedding_model("voyage:voyage-3")
+
+
+def test_validate_accepts_the_hosted_provider_prefixes() -> None:
+    from sectum_ai.embeddings import validate_embedding_spec
+
+    # side-effect-free: accepted at config time, the install/key checked lazily
+    for spec in ("cohere:embed-english-v3.0", "voyage:voyage-3"):
+        validate_embedding_spec(spec)
+
+
+def test_validate_rejects_an_unknown_prefix_and_names_the_options() -> None:
+    from sectum_ai.embeddings import validate_embedding_spec
+
+    with pytest.raises(ConfigError, match="cohere:<model>, or voyage:<model>"):
+        validate_embedding_spec("mystery:model")
+
+
+def test_cohere_vectors_parses_a_v1_list_and_a_v5_by_type_response() -> None:
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import CohereEmbedding
+
+    # v1-style: embeddings is a plain list of vectors (ints coerced to float)
+    v1 = SimpleNamespace(embeddings=[[1, 2], [3, 4]])
+    assert CohereEmbedding._vectors(v1) == [[1.0, 2.0], [3.0, 4.0]]
+    # v5 by-type: vectors nested under .float_ (the reserved-name field)
+    v5 = SimpleNamespace(embeddings=SimpleNamespace(float_=[[0.5, 0.6]]))
+    assert CohereEmbedding._vectors(v5) == [[0.5, 0.6]]
+    # v5 with the un-suffixed .float accessor
+    v5b = SimpleNamespace(embeddings=SimpleNamespace(float=[[0.7, 0.8]]))
+    assert CohereEmbedding._vectors(v5b) == [[0.7, 0.8]]
+
+
+def test_cohere_vectors_raises_when_no_vectors_are_returned() -> None:
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import CohereEmbedding
+
+    with pytest.raises(ConfigError):
+        CohereEmbedding._vectors(SimpleNamespace(embeddings=None))
+
+
+def test_voyage_vectors_parses_the_embeddings_attribute() -> None:
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import VoyageEmbedding
+
+    response = SimpleNamespace(embeddings=[[1, 2, 3]])
+    assert VoyageEmbedding._vectors(response) == [[1.0, 2.0, 3.0]]
+
+
+def test_voyage_embed_chunks_beyond_the_per_request_cap() -> None:
+    # Voyage caps a single embed request and does not auto-batch, so a whole-corpus
+    # embed must be split into <=128-text calls - one vector per input, in order.
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import VoyageEmbedding
+
+    class _FakeVoyage:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def embed(self, texts: list[str], *, model: str, input_type: str) -> object:
+            self.batch_sizes.append(len(texts))
+            # a deterministic 1-d vector per text so order can be checked
+            return SimpleNamespace(embeddings=[[float(len(t))] for t in texts])
+
+    client = _FakeVoyage()
+    texts = [f"text-{i}" for i in range(300)]
+    vectors = VoyageEmbedding._embed_batched(client, "voyage-3", texts)
+    assert len(vectors) == 300  # one vector per input
+    assert client.batch_sizes and max(client.batch_sizes) <= 128  # under the cap
+    assert sum(client.batch_sizes) == 300  # every text embedded exactly once
+    assert vectors[0] == [float(len("text-0"))] and vectors[-1] == [float(len("text-299"))]
+
+
 def test_embedding_provider_sweep_is_deterministic_and_bounded() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     models = [HashingEmbedding("hash-32", dim=32), HashingEmbedding("hash-256", dim=256)]

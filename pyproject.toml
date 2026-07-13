@@ -182,6 +182,13 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# cohere / voyageai (the hosted RPR-sweep embedders) are optional, live-only
+# dependencies; treat them as opaque so embeddings.py type-checks without them.
+module = ["cohere", "cohere.*", "voyageai", "voyageai.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 # the langgraph, langchain-core, and langchain-openai packages are optional,
 # live-only dependencies; treat them as opaque so the adapter type-checks
 # without them installed (the adapter's API is fully typed). langchain-openai

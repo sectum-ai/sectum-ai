@@ -48,7 +48,7 @@ Settings that drive substrate generation.
 | `seed` | int | `2026` | Drives every deterministic generator. |
 | `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 | `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
-| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
+| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
 

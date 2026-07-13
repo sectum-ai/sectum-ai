@@ -72,8 +72,10 @@ Datasets**), and the backup store (**S3**) were the last three fake-only surface
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API
   (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
-- **Embedding providers**: the Class 2 rate sweep ships `openai` and
-  `sentence-transformers`. Cohere / Voyage / Bedrock embeddings are not wired yet.
+- **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`,
+  `openai`, `cohere`, and `voyage` (the last two opt-in live, key-gated). Amazon
+  Bedrock is not wired yet (its per-model-family invoke-body formats need a dispatch
+  the other single-endpoint providers don't).
 
 ## What a run delivers
 

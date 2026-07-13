@@ -1903,7 +1903,8 @@ def _resolve_calibration_embedder(
         if model is None:
             raise ConfigError(
                 f"--embedder {spec!r} does not name a real embedding model; "
-                "use fake, hash-<dim>, st:<model>, or openai:<model>"
+                "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
+                "or voyage:<model>"
             )
         return _BatchToSingleEmbedder(model), model.name
     provider = build_embedder(detection_embedder)
