@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-13
+
 ### Added
 
 - **Amazon Bedrock (Titan) embedding provider for the Class 2 RPR sweep.** `bedrock:<model>`
