@@ -32,7 +32,10 @@ _TENANT_A = UUID(int=0xA)
 
 @pytest.fixture
 def live() -> Iterator[LangSmithEvalSet]:
-    from langsmith import Client
+    try:
+        from langsmith import Client
+    except ImportError:
+        pytest.skip("langsmith not installed")
 
     client = Client(
         api_url=os.environ.get("LANGSMITH_ENDPOINT"),

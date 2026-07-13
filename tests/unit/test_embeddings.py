@@ -112,10 +112,12 @@ def test_cohere_vectors_parses_a_v1_list_and_a_v5_by_type_response() -> None:
     # v1-style: embeddings is a plain list of vectors (ints coerced to float)
     v1 = SimpleNamespace(embeddings=[[1, 2], [3, 4]])
     assert CohereEmbedding._vectors(v1) == [[1.0, 2.0], [3.0, 4.0]]
-    # v5 by-type: vectors nested under .float_ (the reserved-name field)
+    # v5 by-type: vectors nested under .float_ (the reserved-name field the real
+    # SDK exposes)
     v5 = SimpleNamespace(embeddings=SimpleNamespace(float_=[[0.5, 0.6]]))
     assert CohereEmbedding._vectors(v5) == [[0.5, 0.6]]
-    # v5 with the un-suffixed .float accessor
+    # forward-compat: a future/un-suffixed .float accessor is also handled (the
+    # parser tries float_ then float), so a client rename does not break the sweep
     v5b = SimpleNamespace(embeddings=SimpleNamespace(float=[[0.7, 0.8]]))
     assert CohereEmbedding._vectors(v5b) == [[0.7, 0.8]]
 
@@ -158,7 +160,8 @@ def test_voyage_embed_chunks_beyond_the_per_request_cap() -> None:
     texts = [f"text-{i}" for i in range(300)]
     vectors = VoyageEmbedding._embed_batched(client, "voyage-3", texts)
     assert len(vectors) == 300  # one vector per input
-    assert client.batch_sizes and max(client.batch_sizes) <= 128  # under the cap
+    assert max(client.batch_sizes) == 128  # a full batch is actually used (not < cap)
+    assert client.batch_sizes == [128, 128, 44]  # 300 split into <=128 chunks, in order
     assert sum(client.batch_sizes) == 300  # every text embedded exactly once
     assert vectors[0] == [float(len("text-0"))] and vectors[-1] == [float(len("text-299"))]
 

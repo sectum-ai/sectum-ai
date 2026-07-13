@@ -41,8 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extra.
 - **Live eval-set (LangSmith Datasets) and backup (S3) adapters — the last two
   fake-only erasure surfaces are closed.** The Class 11 erasure scan's fourth and
-  seventh "hiding places" now have live backends, so every one of the ten hiding places
-  can be verified against a real store, not the synthetic substrate:
+  seventh "hiding places" now have live backends, so every one of the erasure scan's
+  **eight wired surfaces** can be verified against a real store, not the synthetic
+  substrate (the tenth hiding place — subprocessor residue — has no adapter yet):
   - **Eval set → LangSmith Datasets** (`kind: eval_set → langsmith`, the `[langsmith]`
     extra): each tenant maps to its own LangSmith Dataset (`{prefix}-{tenant}`); a
     fixture is a dataset example, and `delete` removes the dataset.

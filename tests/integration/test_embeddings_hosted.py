@@ -15,6 +15,7 @@ import os
 import pytest
 
 from sectum_ai.embeddings import resolve_embedding_model
+from sectum_ai.spec import ConfigError
 
 pytestmark = pytest.mark.live
 
@@ -22,7 +23,12 @@ _TEXTS = ["Acme Robotics SOC 2 report", "a benign unrelated sentence"]
 
 
 def _check(spec: str) -> None:
-    model = resolve_embedding_model(spec)
+    try:
+        # the SDK is imported (and the key re-checked) in the constructor, so a
+        # key set without the extra installed skips rather than fails.
+        model = resolve_embedding_model(spec)
+    except ConfigError as error:
+        pytest.skip(f"{spec} not runnable: {error}")
     assert model is not None
     vectors = model.embed(_TEXTS)
     assert len(vectors) == len(_TEXTS)

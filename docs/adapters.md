@@ -56,9 +56,10 @@ tenant (ADR-0006). `soft_delete=True` acknowledges a delete but keeps the entrie
 the Class 11 erasure residue. The mem0 store (`kind: mem0`, the `[mem0]` extra) maps
 each tenant to a mem0 `user_id` and stores entries verbatim (`infer=False`), so a
 product that keeps per-user memory in mem0 can be probed for the same Class 8 leak
-(`shared_memory=True` collapses every tenant to one shared `user_id`); it does not
-model `user_scoped` (mem0's flat `user_id` space has no per-user erasure boundary — use
-the Redis store for that). Redis runs against a docker-compose backend in CI; mem0
+(`shared_memory=True` collapses every tenant to one shared `user_id`; in that mode a
+Class 11 erasure `delete` reports *attestable-with-caveat* rather than wiping every
+tenant's shared memory); it does not model `user_scoped` (mem0's flat `user_id` space
+has no per-user erasure boundary — use the Redis store for that). Redis runs against a docker-compose backend in CI; mem0
 needs an embedder (its default is OpenAI), so it is opt-in live.
 
 **Search index.** The OpenSearch search index (`kind: opensearch`, the `[opensearch]`
