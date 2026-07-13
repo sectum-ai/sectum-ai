@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-13
+
 ### Added
 
 - **Cohere and Voyage hosted embedding providers for the Class 2 RPR sweep.** The
@@ -22,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internally), and both SDK pins are capped below their next major to avoid a silent
   response-shape break. Amazon Bedrock remains unwired (its per-model-family invoke
   bodies need a dispatch the single-endpoint providers don't).
+
+### Fixed
+
+- **mem0 memory adapter no longer wipes every tenant on a shared-memory erasure.** In
+  `shared_memory` mode every tenant maps to a single mem0 `user_id`, so a Class 11
+  `delete` (during `sectum-ai erasure`) ran `delete_all` on that shared scope and
+  removed *every* tenant's memory, not the target's — while the surface reported
+  `NOT_COVERED` (no per-tenant baseline). The adapter now raises `ErasureUnsupported` in
+  shared mode (recorded *attestable-with-caveat*, the same honesty that rejects
+  `user_scoped`), checked before `soft_delete`. Affects only `kind: memory → mem0` with
+  `shared_memory: true` (added in 0.4.0). Surfaced by a code+docs review loop, which
+  also corrected a docs over-claim ("all ten erasure hiding places have a live backend"
+  → eight are wired) and hardened the hosted-provider live tests to skip, not fail, when
+  an API key is set without its SDK extra installed.
 
 ## [0.4.0] - 2026-07-11
 
