@@ -20,7 +20,7 @@ synthetic substrate.
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
 | Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage` (the hosted three opt-in live) | ✅ |
-| Long-term / agent memory | `redis`, `mem0` (opt-in live) | ✅ |
+| Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Eval / golden set | `langsmith` (opt-in live) | ✅ |
 | Backup / snapshot | `s3` (opt-in live) | ✅ |

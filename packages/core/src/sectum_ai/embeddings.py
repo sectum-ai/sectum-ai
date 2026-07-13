@@ -309,8 +309,9 @@ def validate_embedding_spec(spec: str) -> None:
     needs no API key or optional extra) used to reject an unknown ``embedding_models``
     entry at config-load / CLI-parse time rather than letting it silently become a
     no-op sweep. Accepts the legacy ``fake-*`` recall names, a deterministic
-    ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` provider
-    prefixes (their install / key is checked lazily when the sweep runs).
+    ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` / ``cohere:``
+    / ``voyage:`` provider prefixes with a non-empty model name (their install / key is
+    checked lazily when the sweep runs).
     """
     for prefix in ("st:", "openai:", "cohere:", "voyage:"):
         if spec.startswith(prefix):

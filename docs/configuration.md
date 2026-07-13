@@ -63,8 +63,9 @@ defaults to a plain (non-leaky) fake.
 
 The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
 `memory`, `rag`, `observability`, and `agent` — and `sectum-ai probe` drives all
-of them through the runner. Other family names parse successfully but are not
-consumed by the CLI.
+of them through the runner. `sectum-ai erasure` additionally consumes the three
+Class 11 erasure surfaces `search_index`, `eval_set`, and `backup` (documented
+below). Any other family name parses successfully but is not consumed.
 
 Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
 that support them), beyond the per-family fields the tables below highlight:
