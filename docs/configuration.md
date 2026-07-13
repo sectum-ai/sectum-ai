@@ -48,7 +48,7 @@ Settings that drive substrate generation.
 | `seed` | int | `2026` | Drives every deterministic generator. |
 | `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 | `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
-| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
+| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries trigger the Class 2 per-model Retrieval-Pivot Rate sweep. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
 
@@ -63,8 +63,9 @@ defaults to a plain (non-leaky) fake.
 
 The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
 `memory`, `rag`, `observability`, and `agent` — and `sectum-ai probe` drives all
-of them through the runner. Other family names parse successfully but are not
-consumed by the CLI.
+of them through the runner. `sectum-ai erasure` additionally consumes the three
+Class 11 erasure surfaces `search_index`, `eval_set`, and `backup` (documented
+below). Any other family name parses successfully but is not consumed.
 
 Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
 that support them), beyond the per-family fields the tables below highlight:
@@ -118,7 +119,7 @@ fakes generally.
 |---|---|---|
 | `fake` | `shared_memory: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false` | In-memory store. `shared_memory: true` reproduces the Class 8 cross-tenant memory leak; `user_scoped: true` isolates users within a tenant (ADR-0006); `soft_delete: true` acknowledges a delete but keeps the entries (the Class 11 residue). |
 | `redis` | `host: str = "localhost"`, `port: int = 6379`, `shared_memory: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false`, `prefix: str = "sectum-ai-mem"` | `RedisMemory` — each tenant's long-term agent-memory entries live in a prefixed per-tenant list, recalled by keyword. Same isolation knobs as the fake. Requires the `redis` extra. |
-| `mem0` | `shared_memory: bool = false`, `soft_delete: bool = false`, `config: dict` *(optional; mem0's own llm/embedder/vector_store config)* | `Mem0Memory` — each tenant maps to a mem0 `user_id`; entries are stored verbatim (`infer=False`), so a planted marker is found by its own text. `shared_memory: true` collapses every tenant to one shared `user_id` (the Class 8 leak). **Does not support `user_scoped`** (mem0's flat `user_id` space has no per-user erasure boundary — the resolver rejects it; use `redis` for that). Requires the `mem0` extra. |
+| `mem0` | `shared_memory: bool = false`, `soft_delete: bool = false`, `config: dict` *(optional; mem0's own llm/embedder/vector_store config)* | `Mem0Memory` — each tenant maps to a mem0 `user_id`; entries are stored verbatim (`infer=False`), so a planted marker is found by its own text. `shared_memory: true` collapses every tenant to one shared `user_id` (the Class 8 leak); in that mode a Class 11 `delete` raises `ErasureUnsupported` → *attestable-with-caveat* (no per-tenant erasure boundary — it would wipe every tenant), never a global wipe. **Does not support `user_scoped`** (mem0's flat `user_id` space has no per-user erasure boundary — the resolver rejects it; use `redis` for that). Requires the `mem0` extra. |
 
 ### `search_index`
 

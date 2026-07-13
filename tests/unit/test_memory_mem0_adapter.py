@@ -9,8 +9,11 @@ client (the engineering spec, section 13). The live path is exercised by
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, MemoryAdapter
 from sectum_ai.adapters.memory.mem0 import Mem0Memory
+from sectum_ai.spec import ErasureUnsupported
 
 _TENANT_A = UUID(int=0xA)
 _TENANT_B = UUID(int=0xB)
@@ -67,6 +70,30 @@ def test_mem0_shared_memory_leaks_across_tenants() -> None:
     adapter.remember(_TENANT_A, "shared note about canary BETA-9")
     assert any("BETA-9" in e for e in adapter.recall(_TENANT_B, "canary BETA-9"))
     assert adapter.supports(Capability.SHARED_MEMORY)
+
+
+def test_mem0_shared_memory_delete_is_attestable_with_caveat_not_a_global_wipe() -> None:
+    # In shared mode every tenant shares one user_id, so a real delete would wipe
+    # *every* tenant. The adapter must raise ErasureUnsupported (attestable-with-
+    # caveat) instead of destroying all tenants' memory.
+    client = _FakeMem0()
+    adapter = Mem0Memory(client, shared_memory=True)
+    adapter.remember(_TENANT_A, "shared note about canary DELME")
+    adapter.remember(_TENANT_B, "shared note about canary KEEPME")
+    with pytest.raises(ErasureUnsupported):
+        adapter.delete(_TENANT_A)
+    # nothing was wiped - both tenants' shared-scope memory survives
+    assert any("KEEPME" in e for e in adapter.recall(_TENANT_B, "canary KEEPME"))
+    assert any("DELME" in e for e in adapter.recall(_TENANT_A, "canary DELME"))
+
+
+def test_mem0_shared_memory_raises_even_with_soft_delete_set() -> None:
+    # shared_memory (no per-tenant erasure boundary) is checked BEFORE soft_delete,
+    # so the verdict is unambiguously attestable-with-caveat, never a silent
+    # soft-delete return that would misreport the surface as RESIDUAL.
+    adapter = Mem0Memory(_FakeMem0(), shared_memory=True, soft_delete=True)
+    with pytest.raises(ErasureUnsupported):
+        adapter.delete(_TENANT_A)
 
 
 def test_mem0_delete_purges_a_tenants_memory() -> None:

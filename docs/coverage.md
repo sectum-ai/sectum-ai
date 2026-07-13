@@ -19,11 +19,11 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | `openai`, `sentence-transformers` | ✅ |
-| Long-term / agent memory | `redis` | ✅ |
+| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage` (the hosted three opt-in live) | ✅ |
+| Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
-| Eval / golden set | — *(fake only)* | ✅ |
-| Backup / snapshot | — *(fake only)* | ✅ |
+| Eval / golden set | `langsmith` (opt-in live) | ✅ |
+| Backup / snapshot | `s3` (opt-in live) | ✅ |
 
 See [Adapters](adapters.md) for how to configure each backend.
 
@@ -52,10 +52,13 @@ A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
 agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
-and **Class 9** (with per-tenant LoRA) — so no probe class falls back to the synthetic
-substrate for this stack. Every one of the erasure scan's ten "hiding places" now has a
-live backend too — the search index (**OpenSearch**), the eval set (**LangSmith
-Datasets**), and the backup store (**S3**) were the last three fake-only surfaces.
+and **Class 9** (once a per-tenant-LoRA model is configured — the example's serving-only
+vLLM covers Class 5 but not Class 9). Every one of the erasure scan's **eight wired
+surfaces** now has a live backend too — the search index (**OpenSearch**), the eval set
+(**LangSmith Datasets**), and the backup store (**S3**) were the last three fake-only
+surfaces. (The remaining hiding place — third-party subprocessor residue — has no
+scanning adapter yet, so it is out of scope, not fake; see the
+[Class 11 page](attack-catalog/class-11-erasure.md).)
 
 ## Known coverage gaps
 
@@ -72,8 +75,10 @@ Datasets**), and the backup store (**S3**) were the last three fake-only surface
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API
   (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
-- **Embedding providers**: the Class 2 rate sweep ships `openai` and
-  `sentence-transformers`. Cohere / Voyage / Bedrock embeddings are not wired yet.
+- **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
+  (local, BYOC-safe) plus the hosted `openai`, `cohere`, and `voyage` (all three
+  opt-in live and key-gated). Amazon Bedrock is not wired yet (its per-model-family
+  invoke-body formats need a dispatch the other single-endpoint providers don't).
 
 ## What a run delivers
 

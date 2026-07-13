@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Cohere and Voyage hosted embedding providers for the Class 2 RPR sweep.** The
+  per-model Retrieval-Pivot Rate sweep ("stronger embeddings leak more") now accepts
+  `cohere:<model>` (e.g. `cohere:embed-english-v3.0`, the `[cohere]` extra,
+  `COHERE_API_KEY`) and `voyage:<model>` (e.g. `voyage:voyage-3`, the `[voyage]` extra,
+  `VOYAGE_API_KEY`) alongside the existing `st:` / `openai:` / `hash-` specs, so the
+  sweep can compare more real embedding models. Both are hosted (they send the
+  synthetic corpus to their API — not BYOC-safe, unlike `st:`), so like `openai:` they
+  are opt-in live and key-gated. The SDK response-vector extraction is isolated into a
+  unit-tested `_vectors` helper (tolerant of Cohere's v1-list vs v5 by-type shapes);
+  Voyage requests are chunked to stay under its per-request cap (Cohere's client batches
+  internally), and both SDK pins are capped below their next major to avoid a silent
+  response-shape break. Amazon Bedrock remains unwired (its per-model-family invoke
+  bodies need a dispatch the single-endpoint providers don't).
+
 ## [0.4.0] - 2026-07-11
 
 ### Added
@@ -25,8 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extra.
 - **Live eval-set (LangSmith Datasets) and backup (S3) adapters — the last two
   fake-only erasure surfaces are closed.** The Class 11 erasure scan's fourth and
-  seventh "hiding places" now have live backends, so every one of the ten hiding places
-  can be verified against a real store, not the synthetic substrate:
+  seventh "hiding places" now have live backends, so every one of the erasure scan's
+  **eight wired surfaces** can be verified against a real store, not the synthetic
+  substrate (the remaining hiding place — subprocessor residue — has no scanning
+  adapter yet):
   - **Eval set → LangSmith Datasets** (`kind: eval_set → langsmith`, the `[langsmith]`
     extra): each tenant maps to its own LangSmith Dataset (`{prefix}-{tenant}`); a
     fixture is a dataset example, and `delete` removes the dataset.
