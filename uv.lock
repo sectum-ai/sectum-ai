@@ -21,7 +21,7 @@ members = [
 
 [manifest.dependency-groups]
 dev = [
-    { name = "arize-phoenix-client", specifier = ">=2" },
+    { name = "arize-phoenix-client", specifier = ">=2.13.0" },
     { name = "chromadb-client", specifier = ">=0.5" },
     { name = "cryptography", specifier = ">=43" },
     { name = "hypothesis", specifier = ">=6.155.1" },
@@ -259,7 +259,7 @@ wheels = [
 
 [[package]]
 name = "arize-phoenix-client"
-version = "2.10.0"
+version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -270,9 +270,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/42/83f1d489c38f1a866cdab0ad54c8c8cc459df516f6655a2ec99557846ab6/arize_phoenix_client-2.10.0.tar.gz", hash = "sha256:9c6ac515bfeb57552bc2d7c7b79ff9a011a876c65e2229dd10c9cd63bb1ab881", size = 232541, upload-time = "2026-06-26T03:23:23.298Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/b3/8231172f4595b658b589974ae811aa6b0267ccc857c118a04d53e1c8ebb6/arize_phoenix_client-2.13.0.tar.gz", hash = "sha256:0fdb49ddc0eab9f9036378c0f0a8ac68d87dadc6561491b254caccc763687c9c", size = 237816, upload-time = "2026-07-12T02:40:55.999Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/2d/2983a94a6301d6eb1b0e5070a95d362f05d9758dc321e71e5469de8b543e/arize_phoenix_client-2.10.0-py3-none-any.whl", hash = "sha256:414cf77141d25fd66feb259d3c9a631a74a935c832267b81c27e74137789fc4e", size = 212279, upload-time = "2026-06-26T03:23:21.914Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/b4/fc2d8cfb9286de91a5410e8f884ab0e61c28c280082cd669e8075111aee6/arize_phoenix_client-2.13.0-py3-none-any.whl", hash = "sha256:efcc41fc8152c38a2cee21588eda7ad519eec69ce46618918d84490eb98796ed", size = 217226, upload-time = "2026-07-12T02:40:54.374Z" },
 ]
 
 [[package]]
@@ -5246,7 +5246,7 @@ weaviate = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'huggingface'", specifier = ">=1" },
     { name = "anthropic", marker = "extra == 'anthropic-tooluse'", specifier = ">=0.40" },
-    { name = "arize-phoenix-client", marker = "extra == 'phoenix'", specifier = ">=2" },
+    { name = "arize-phoenix-client", marker = "extra == 'phoenix'", specifier = ">=2.13.0" },
     { name = "azure-core", marker = "extra == 'azure-search'", specifier = ">=1.30" },
     { name = "azure-search-documents", marker = "extra == 'azure-search'", specifier = ">=11.4" },
     { name = "boto3", marker = "extra == 'boto3'", specifier = ">=1.34" },
