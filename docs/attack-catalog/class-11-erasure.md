@@ -85,7 +85,7 @@ and backup adapters, scans each independently (or a `--scope`-selected subset),
 and reports a per-surface verdict plus the full coverage block above. A backup /
 snapshot store (hiding place #7) is recorded *attestable-with-caveat* when it
 exposes no per-tenant erasure API (the common immutable-snapshot case). The
-remaining hiding place — third-party subprocessor residue — is
-attestable-with-caveat and follows as its adapter family lands. The canonical
+remaining hiding place — third-party subprocessor residue — has no scanning
+adapter yet, so it is out of scope (`NOT_COVERED`) until its adapter family lands. The canonical
 surface set is `sectum_ai.probes.ERASURE_SURFACES`. Walkthrough:
 [`examples/erasure-attestation`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/erasure-attestation).

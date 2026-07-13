@@ -104,6 +104,16 @@ def test_validate_rejects_an_unknown_prefix_and_names_the_options() -> None:
         validate_embedding_spec("mystery:model")
 
 
+def test_validate_rejects_a_bare_provider_prefix_with_no_model_name() -> None:
+    from sectum_ai.embeddings import validate_embedding_spec
+
+    # `openai:` etc. with no model is a structural malformation - reject it at
+    # config-load time rather than letting it fail lazily at sweep runtime.
+    for bad in ("st:", "openai:", "cohere:", "voyage:"):
+        with pytest.raises(ConfigError, match="missing a model name"):
+            validate_embedding_spec(bad)
+
+
 def test_cohere_vectors_parses_a_v1_list_and_a_v5_by_type_response() -> None:
     from types import SimpleNamespace
 

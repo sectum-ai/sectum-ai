@@ -312,8 +312,13 @@ def validate_embedding_spec(spec: str) -> None:
     ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` provider
     prefixes (their install / key is checked lazily when the sweep runs).
     """
-    if spec.startswith(("st:", "openai:", "cohere:", "voyage:")):
-        return
+    for prefix in ("st:", "openai:", "cohere:", "voyage:"):
+        if spec.startswith(prefix):
+            if not spec[len(prefix) :]:
+                raise ConfigError(
+                    f"embedding spec {spec!r} is missing a model name after {prefix!r}"
+                )
+            return
     if spec.startswith(("hash-", "hash:")):
         _hash_dim(spec)
         return

@@ -19,11 +19,11 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | `sentence-transformers`, `openai`, `cohere`, `voyage` (last two opt-in live) | ✅ |
-| Long-term / agent memory | `redis` | ✅ |
+| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage` (the hosted three opt-in live) | ✅ |
+| Long-term / agent memory | `redis`, `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
-| Eval / golden set | — *(fake only)* | ✅ |
-| Backup / snapshot | — *(fake only)* | ✅ |
+| Eval / golden set | `langsmith` (opt-in live) | ✅ |
+| Backup / snapshot | `s3` (opt-in live) | ✅ |
 
 See [Adapters](adapters.md) for how to configure each backend.
 
@@ -75,10 +75,10 @@ scanning adapter yet, so it is out of scope, not fake; see the
   require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API
   (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
-- **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`,
-  `openai`, `cohere`, and `voyage` (the last two opt-in live, key-gated). Amazon
-  Bedrock is not wired yet (its per-model-family invoke-body formats need a dispatch
-  the other single-endpoint providers don't).
+- **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
+  (local, BYOC-safe) plus the hosted `openai`, `cohere`, and `voyage` (all three
+  opt-in live and key-gated). Amazon Bedrock is not wired yet (its per-model-family
+  invoke-body formats need a dispatch the other single-endpoint providers don't).
 
 ## What a run delivers
 

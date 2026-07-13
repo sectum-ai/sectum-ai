@@ -107,18 +107,20 @@ class Mem0Memory(MemoryAdapter):
         return [text for text in self._memories(result) if query_tokens & _tokens(text)]
 
     def delete(self, tenant: UUID) -> None:
-        # A soft-delete store acknowledges the request but keeps the entries - the
-        # residue Class 11 erasure verification is built to catch.
-        if self._soft_delete:
-            return
         if self._shared_memory:
             # Every tenant shares one user_id, so there is no per-tenant erasure
             # boundary - a delete_all would wipe *every* tenant's memory, not the
             # target's. Signal attestable-with-caveat (like the read-only trace
             # backends) instead of destroying every tenant's data, the same honesty
-            # that makes this adapter reject user_scoped.
+            # that makes this adapter reject user_scoped. Checked before soft_delete
+            # so the verdict is unambiguous even if both are set (matches the S3
+            # backup and the fake observability/backup adapters).
             raise ErasureUnsupported(
                 "mem0 in shared-memory mode has no per-tenant erasure boundary; a "
                 "delete would remove every tenant's memory, so it is not performed"
             )
+        # A soft-delete store acknowledges the request but keeps the entries - the
+        # residue Class 11 erasure verification is built to catch.
+        if self._soft_delete:
+            return
         self._client.delete_all(user_id=self._scope(tenant))

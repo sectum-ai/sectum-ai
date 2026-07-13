@@ -87,6 +87,15 @@ def test_mem0_shared_memory_delete_is_attestable_with_caveat_not_a_global_wipe()
     assert any("DELME" in e for e in adapter.recall(_TENANT_A, "canary DELME"))
 
 
+def test_mem0_shared_memory_raises_even_with_soft_delete_set() -> None:
+    # shared_memory (no per-tenant erasure boundary) is checked BEFORE soft_delete,
+    # so the verdict is unambiguously attestable-with-caveat, never a silent
+    # soft-delete return that would misreport the surface as RESIDUAL.
+    adapter = Mem0Memory(_FakeMem0(), shared_memory=True, soft_delete=True)
+    with pytest.raises(ErasureUnsupported):
+        adapter.delete(_TENANT_A)
+
+
 def test_mem0_delete_purges_a_tenants_memory() -> None:
     adapter = Mem0Memory(_FakeMem0())
     adapter.remember(_TENANT_A, "note about canary DEL-1")
