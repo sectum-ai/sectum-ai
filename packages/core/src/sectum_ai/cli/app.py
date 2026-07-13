@@ -605,7 +605,8 @@ def seed(
             help=(
                 "Embedding model for the Class 2 per-model sweep; repeat for two or "
                 "more to record a per-model Retrieval-Pivot Rate. Overrides the config. "
-                "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>."
+                "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>, "
+                "cohere:<model>, voyage:<model>."
             ),
         ),
     ] = None,
