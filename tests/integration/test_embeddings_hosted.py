@@ -51,3 +51,11 @@ def test_cohere_embeds_against_the_live_api() -> None:
 )
 def test_voyage_embeds_against_the_live_api() -> None:
     _check(f"voyage:{os.environ.get('SECTUM_VOYAGE_MODEL', 'voyage-3')}")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("AWS_REGION"),
+    reason="set AWS_REGION (+ AWS credentials) to run the live Bedrock embedding test",
+)
+def test_bedrock_embeds_against_the_live_api() -> None:
+    _check(f"bedrock:{os.environ.get('SECTUM_BEDROCK_MODEL', 'amazon.titan-embed-text-v2:0')}")

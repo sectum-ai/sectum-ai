@@ -19,7 +19,7 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage` (the hosted three opt-in live) | ✅ |
+| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage`, `bedrock` (the four hosted opt-in live) | ✅ |
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Eval / golden set | `langsmith` (opt-in live) | ✅ |
@@ -76,9 +76,10 @@ scanning adapter yet, so it is out of scope, not fake; see the
   HuggingFace + PEFT. A stack that reaches generation only through a hosted API
   (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
 - **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
-  (local, BYOC-safe) plus the hosted `openai`, `cohere`, and `voyage` (all three
-  opt-in live and key-gated). Amazon Bedrock is not wired yet (its per-model-family
-  invoke-body formats need a dispatch the other single-endpoint providers don't).
+  (local, BYOC-safe) plus the hosted `openai`, `cohere`, `voyage`, and `bedrock`
+  (all opt-in live and key/region-gated). The Bedrock adapter is the **Titan** family
+  (`amazon.titan-embed-text-v2:0`), which embeds one text per request; Cohere-on-Bedrock
+  (a different invoke-body shape) is not wired.
 
 ## What a run delivers
 
