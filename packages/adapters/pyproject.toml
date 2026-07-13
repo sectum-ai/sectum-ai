@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 pgvector = ["psycopg[binary]>=3.3.4"]
 chroma = ["chromadb-client>=0.5"]
-weaviate = ["weaviate-client>=4.9"]
+weaviate = ["weaviate-client>=4.22.0"]
 redis = ["redis>=5"]
 # capped below 0.2: mem0 is pre-1.0 and its next line drops user_id/limit from
 # Memory.search (swallowed by **kwargs), which would silently run recall UNSCOPED.
