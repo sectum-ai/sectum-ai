@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Amazon Bedrock (Titan) embedding provider for the Class 2 RPR sweep.** `bedrock:<model>`
+  (e.g. `bedrock:amazon.titan-embed-text-v2:0`, the `[bedrock]` extra) resolves to the
+  Amazon Bedrock Titan text-embeddings family via boto3's `bedrock-runtime` client;
+  credentials and region come from boto3's standard chain (`AWS_REGION` / profile /
+  instance role). Titan embeds one input per `invoke_model` call (no batch API), so the
+  sweep embeds the corpus one text at a time; the streaming-body JSON parse is isolated
+  into a unit-tested `_vector` helper. Cohere-on-Bedrock (a different invoke-body shape)
+  is not wired — this is the single-family Titan adapter. Hosted (not BYOC-safe), opt-in
+  live like the other hosted embedders. This closes the last named embedding-provider
+  gap (`sentence-transformers` / `openai` / `cohere` / `voyage` / `bedrock`).
+
 ## [0.5.0] - 2026-07-13
 
 ### Added

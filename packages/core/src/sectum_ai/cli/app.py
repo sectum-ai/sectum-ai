@@ -606,7 +606,7 @@ def seed(
                 "Embedding model for the Class 2 per-model sweep; repeat for two or "
                 "more to record a per-model Retrieval-Pivot Rate. Overrides the config. "
                 "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>, "
-                "cohere:<model>, voyage:<model>."
+                "cohere:<model>, voyage:<model>, bedrock:<model>."
             ),
         ),
     ] = None,
@@ -1905,7 +1905,7 @@ def _resolve_calibration_embedder(
             raise ConfigError(
                 f"--embedder {spec!r} does not name a real embedding model; "
                 "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
-                "or voyage:<model>"
+                "voyage:<model>, or bedrock:<model>"
             )
         return _BatchToSingleEmbedder(model), model.name
     provider = build_embedder(detection_embedder)

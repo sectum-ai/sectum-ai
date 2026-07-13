@@ -89,18 +89,28 @@ def test_resolve_voyage_without_the_extra_is_a_config_error() -> None:
         resolve_embedding_model("voyage:voyage-3")
 
 
+def test_resolve_bedrock_without_the_extra_is_a_config_error() -> None:
+    with pytest.raises(ConfigError, match="boto3"):
+        resolve_embedding_model("bedrock:amazon.titan-embed-text-v2:0")
+
+
 def test_validate_accepts_the_hosted_provider_prefixes() -> None:
     from sectum_ai.embeddings import validate_embedding_spec
 
-    # side-effect-free: accepted at config time, the install/key checked lazily
-    for spec in ("cohere:embed-english-v3.0", "voyage:voyage-3"):
+    # side-effect-free: accepted at config time, the install/key checked lazily.
+    # the bedrock model id carries an internal colon, which must not trip the parse.
+    for spec in (
+        "cohere:embed-english-v3.0",
+        "voyage:voyage-3",
+        "bedrock:amazon.titan-embed-text-v2:0",
+    ):
         validate_embedding_spec(spec)
 
 
 def test_validate_rejects_an_unknown_prefix_and_names_the_options() -> None:
     from sectum_ai.embeddings import validate_embedding_spec
 
-    with pytest.raises(ConfigError, match="cohere:<model>, or voyage:<model>"):
+    with pytest.raises(ConfigError, match="voyage:<model>, or bedrock:<model>"):
         validate_embedding_spec("mystery:model")
 
 
@@ -109,7 +119,7 @@ def test_validate_rejects_a_bare_provider_prefix_with_no_model_name() -> None:
 
     # `openai:` etc. with no model is a structural malformation - reject it at
     # config-load time rather than letting it fail lazily at sweep runtime.
-    for bad in ("st:", "openai:", "cohere:", "voyage:"):
+    for bad in ("st:", "openai:", "cohere:", "voyage:", "bedrock:"):
         with pytest.raises(ConfigError, match="missing a model name"):
             validate_embedding_spec(bad)
 
@@ -174,6 +184,29 @@ def test_voyage_embed_chunks_beyond_the_per_request_cap() -> None:
     assert client.batch_sizes == [128, 128, 44]  # 300 split into <=128 chunks, in order
     assert sum(client.batch_sizes) == 300  # every text embedded exactly once
     assert vectors[0] == [float(len("text-0"))] and vectors[-1] == [float(len("text-299"))]
+
+
+def test_bedrock_vector_parses_the_titan_streaming_response() -> None:
+    import json
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import BedrockEmbedding
+
+    # Bedrock returns a streaming body; Titan's payload nests the vector under
+    # "embedding" (ints coerced to float).
+    response = {"body": SimpleNamespace(read=lambda: json.dumps({"embedding": [1, 2, 3]}).encode())}
+    assert BedrockEmbedding._vector(response) == [1.0, 2.0, 3.0]
+
+
+def test_bedrock_vector_raises_when_no_embedding_is_returned() -> None:
+    import json
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import BedrockEmbedding
+
+    response = {"body": SimpleNamespace(read=lambda: json.dumps({"other": "x"}).encode())}
+    with pytest.raises(ConfigError):
+        BedrockEmbedding._vector(response)
 
 
 def test_embedding_provider_sweep_is_deterministic_and_bounded() -> None:

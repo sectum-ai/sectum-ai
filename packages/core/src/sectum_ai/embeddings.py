@@ -10,8 +10,8 @@ This module defines a provider-agnostic :class:`EmbeddingModel` interface (the
 spec, section 13: "provider-agnostic interface; default via configured provider
 (OpenAI/Anthropic/local)"), a deterministic offline implementation for tests and
 CI (:class:`HashingEmbedding`), and opt-in adapters for sentence-transformers
-(the MiniLM-vs-mpnet research pair), OpenAI, Cohere, and Voyage behind optional
-extras. A run that configures two or more *real* models records a genuine
+(the MiniLM-vs-mpnet research pair), OpenAI, Cohere, Voyage, and Amazon Bedrock
+(Titan) behind optional extras. A run that configures two or more *real* models records a genuine
 per-model Retrieval-Pivot Rate via :func:`sectum_ai.sweep.embedding_provider_sweep`,
 regardless of the production vector store.
 """
@@ -19,6 +19,7 @@ regardless of the production vector store.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import re
@@ -27,6 +28,7 @@ from typing import Any, Protocol, runtime_checkable
 from sectum_ai.spec import ConfigError
 
 __all__ = [
+    "BedrockEmbedding",
     "CohereEmbedding",
     "EmbeddingModel",
     "HashingEmbedding",
@@ -255,6 +257,55 @@ class VoyageEmbedding:
         return _as_float_rows(getattr(response, "embeddings", response))
 
 
+class BedrockEmbedding:
+    """Amazon Bedrock Titan embeddings (opt-in extra ``sectum-ai[bedrock]``).
+
+    Uses the Titan Text Embeddings family (default ``amazon.titan-embed-text-v2:0``),
+    which embeds one input per ``invoke_model`` call - there is no batch API - so the
+    sweep embeds the corpus one text at a time. Credentials and region come from
+    boto3's standard chain (env ``AWS_REGION`` / profile / instance role); ``region``
+    overrides it. Like :class:`OpenAIEmbedding`, this sends the substrate's synthetic
+    corpus to a hosted API, so it is not BYOC-safe. Cohere-on-Bedrock (a different
+    invoke-body shape) is not wired here - this is the single-family Titan adapter.
+    """
+
+    def __init__(
+        self, model_name: str = "amazon.titan-embed-text-v2:0", *, region: str | None = None
+    ) -> None:
+        try:
+            import boto3
+        except ImportError as error:  # pragma: no cover - exercised only without the extra
+            raise ConfigError(
+                'boto3 is not installed; install the extra with: pip install "sectum-ai[bedrock]"'
+            ) from error
+        self.name = f"bedrock:{model_name}"
+        self._model = model_name
+        self._client = boto3.client("bedrock-runtime", region_name=region)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` one per request (Titan has no batch API), in input order."""
+        return [self._embed_one(text) for text in texts]
+
+    def _embed_one(self, text: str) -> list[float]:
+        response = self._client.invoke_model(
+            modelId=self._model,
+            body=json.dumps({"inputText": text}),
+            accept="application/json",
+            contentType="application/json",
+        )
+        return self._vector(response)
+
+    @staticmethod
+    def _vector(response: Any) -> list[float]:
+        # Bedrock returns a streaming ``body``; Titan's JSON payload carries the
+        # vector under ``embedding``. Isolated so it is unit-tested without boto3.
+        payload = json.loads(response["body"].read())
+        embedding = payload.get("embedding")
+        if embedding is None:
+            raise ConfigError("Bedrock embedding response carried no 'embedding'")
+        return [float(value) for value in embedding]
+
+
 def _hash_dim(spec: str) -> int:
     """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension (both prefixes are 5 chars).
 
@@ -284,6 +335,7 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
     - ``openai:<model>`` -> :class:`OpenAIEmbedding` (e.g. ``openai:text-embedding-3-small``)
     - ``cohere:<model>`` -> :class:`CohereEmbedding` (e.g. ``cohere:embed-english-v3.0``)
     - ``voyage:<model>`` -> :class:`VoyageEmbedding` (e.g. ``voyage:voyage-3``)
+    - ``bedrock:<model>`` -> :class:`BedrockEmbedding` (Amazon Bedrock Titan)
     - ``hash-<dim>`` / ``hash:<dim>`` -> deterministic :class:`HashingEmbedding`
 
     Raises :class:`~sectum_ai.spec.ConfigError` for a malformed real spec (the typed
@@ -297,6 +349,8 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
         return CohereEmbedding(spec[len("cohere:") :])
     if spec.startswith("voyage:"):
         return VoyageEmbedding(spec[len("voyage:") :])
+    if spec.startswith("bedrock:"):
+        return BedrockEmbedding(spec[len("bedrock:") :])
     if spec.startswith(("hash-", "hash:")):
         return HashingEmbedding(spec, dim=_hash_dim(spec))
     return None
@@ -310,10 +364,10 @@ def validate_embedding_spec(spec: str) -> None:
     entry at config-load / CLI-parse time rather than letting it silently become a
     no-op sweep. Accepts the legacy ``fake-*`` recall names, a deterministic
     ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` / ``cohere:``
-    / ``voyage:`` provider prefixes with a non-empty model name (their install / key is
-    checked lazily when the sweep runs).
+    / ``voyage:`` / ``bedrock:`` provider prefixes with a non-empty model name (their
+    install / key is checked lazily when the sweep runs).
     """
-    for prefix in ("st:", "openai:", "cohere:", "voyage:"):
+    for prefix in ("st:", "openai:", "cohere:", "voyage:", "bedrock:"):
         if spec.startswith(prefix):
             if not spec[len(prefix) :]:
                 raise ConfigError(
@@ -327,5 +381,5 @@ def validate_embedding_spec(spec: str) -> None:
         return
     raise ConfigError(
         f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
-        "st:<model>, openai:<model>, cohere:<model>, or voyage:<model>"
+        "st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
     )
