@@ -16,7 +16,8 @@ pip install sectum-ai
 
 This pulls the full family: `sectum-ai-spec` (data models), `sectum-ai-probes`
 (the Class 1–11 attack catalog + leak-detection pipeline), `sectum-ai-adapters`
-(connectors for vector stores, caches, observability, RAG, agents, and MCP), and
+(connectors for vector stores, caches, memory, observability, RAG, agents, MCP,
+and the search-index / eval-set / backup erasure surfaces), and
 `sectum-ai-evidence` (the tamper-evident evidence chain + `sectum-ai verify`).
 
 ## Quickstart
