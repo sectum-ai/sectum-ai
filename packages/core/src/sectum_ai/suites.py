@@ -58,8 +58,9 @@ SUITES: dict[str, Suite] = {
     "owasp-llm08": Suite(
         name="owasp-llm08",
         description=(
-            "Full OWASP LLM08:2025 (Vector & Embedding Weaknesses) coverage: every "
-            "adversarial probe in the catalog - the continuous-verification set."
+            "OWASP LLM08:2025 (Vector & Embedding Weaknesses) coverage: every adversarial "
+            "probe in the default CLI suite - the continuous-verification set. (Class 13 "
+            "multi-modal bleed is measured by its own image-embedding sweep, not this run.)"
         ),
         probe_ids=(
             "tenant-boundary-fetch",
