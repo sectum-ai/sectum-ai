@@ -1870,8 +1870,9 @@ class _BatchToSingleEmbedder:
     The detection pipeline (and the calibration harness) embed one observation at
     a time via ``EmbeddingProvider.embed(text) -> tuple[float, ...]``, while the
     Class-2 sweep models in ``sectum_ai.embeddings`` expose a batch
-    ``embed(texts) -> list[list[float]]``. This wraps the latter so a ``--embedder
-    st:<model>`` / ``openai:<model>`` resolves into the pipeline unchanged.
+    ``embed(texts) -> list[list[float]]``. This wraps the latter so any real
+    ``--embedder`` spec (``st:``/``openai:``/``cohere:``/``voyage:``/``bedrock:``)
+    resolves into the pipeline unchanged.
     """
 
     def __init__(self, model: EmbeddingModel) -> None:
@@ -1890,8 +1891,9 @@ def _resolve_calibration_embedder(
 
     A ``--embedder`` overrides the config. The literal ``fake`` selects the
     deterministic offline :class:`FakeEmbeddingProvider`; any other spec
-    (``st:<model>`` / ``openai:<model>`` / ``hash-<dim>``) is resolved through
-    ``sectum_ai.embeddings`` and adapted to the single-text protocol. When no
+    (``hash-<dim>`` or a real provider ``st:``/``openai:``/``cohere:``/``voyage:``/
+    ``bedrock:``) is resolved through ``sectum_ai.embeddings`` and adapted to the
+    single-text protocol. When no
     ``--embedder`` is given the config's ``detection.embedder`` is used: ``fake``
     -> the offline fake, ``openai`` -> the live OpenAI provider (which needs an
     API key). The canonical name is the key under which a calibrated threshold can

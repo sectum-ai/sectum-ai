@@ -9,8 +9,9 @@ auditor accepts.
 > **Status: pre-alpha.** All six build-plan phases (the spec, §14) have met their
 > acceptance criteria: the marker substrate, the leak-detection pipeline, the
 > Class 1–11 attack catalog, the tamper-evident evidence chain (Class 12), the
-> adapter SDK (live adapters for vector stores, caches, observability, RAG,
-> agents, and MCP, exercised by a docker-compose integration-CI job), the probe
+> adapter SDK (live adapters for vector stores, caches, memory, observability,
+> RAG, agents, MCP, and the search-index / eval-set / backup erasure surfaces,
+> exercised by a docker-compose integration-CI job), the probe
 > interface, the regression-baseline engine, the `sectum-ai` CLI, a mkdocs
 > documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
 > authoritative, per-phase gate record (with the test/example that enforces each

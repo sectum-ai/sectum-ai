@@ -53,11 +53,19 @@ Each entry is resolved to an embedding model:
   data leaves the box (BYOC-safe).
 - `openai:<model>` — OpenAI embeddings (opt-in extra `sectum-ai[openai]`, key in
   `OPENAI_API_KEY`). Sends the synthetic corpus to OpenAI, so it is not BYOC-safe.
+- `cohere:<model>` — Cohere embeddings (opt-in extra `sectum-ai[cohere]`, key in
+  `COHERE_API_KEY`); hosted, not BYOC-safe.
+- `voyage:<model>` — Voyage AI embeddings (opt-in extra `sectum-ai[voyage]`, key in
+  `VOYAGE_API_KEY`); hosted, not BYOC-safe.
+- `bedrock:<model>` — Amazon Bedrock Titan embeddings (opt-in extra
+  `sectum-ai[bedrock]`, region/creds from the boto3 chain); hosted, not BYOC-safe.
 - `hash-<dim>` — a deterministic, offline hashing embedder for CI and demos.
 - `fake-*` — the legacy recall illustration (embedding strength modelled by a
   per-model retrieval recall on the in-memory store).
 
-With **real** providers (`st:`/`openai:`/`hash-`) the per-model rate comes from
+The [`embedding-rpr-sweep`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/embedding-rpr-sweep)
+example runs the deterministic `hash-<dim>` gradient offline and documents swapping
+in these providers. With **real** providers (`st:`/`openai:`/`cohere:`/`voyage:`/`bedrock:`/`hash-`) the per-model rate comes from
 actual cosine retrieval over the embedded corpus, so it is recorded for any
 configured stack — the "stronger embeddings leak more" gradient no longer
 vanishes off the in-memory fake. The legacy `fake-*` recall illustration is
