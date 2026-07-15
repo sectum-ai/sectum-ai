@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cohere-on-Bedrock embedding family for the Class 2 RPR sweep.** `bedrock:<model>`
+  now dispatches on the model id: `cohere.embed-*` ids route to Amazon Bedrock's
+  Cohere Embed models (batch of up to 96 texts per `invoke_model`, request body
+  `{"texts": [...], "input_type": "search_document"}`, vectors under `embeddings`),
+  while `amazon.titan-embed-*` keeps the existing one-input-per-call Titan path. Both
+  share one `[bedrock]` extra and the boto3 credential chain; the per-family response
+  parse is isolated into unit-tested helpers, so no AWS account is needed to exercise
+  the dispatch, the ≤96 batching, and the vector coercion.
 - **`examples/embedding-rpr-sweep/` walkthrough.** A runnable, deterministic example
   reproducing the flagship Class 2 finding *stronger embeddings leak more* as a
   per-model Retrieval-Pivot Rate sweep: at increasing hashing-embedder dimensions it

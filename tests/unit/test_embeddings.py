@@ -186,27 +186,87 @@ def test_voyage_embed_chunks_beyond_the_per_request_cap() -> None:
     assert vectors[0] == [float(len("text-0"))] and vectors[-1] == [float(len("text-299"))]
 
 
-def test_bedrock_vector_parses_the_titan_streaming_response() -> None:
+def _bedrock_body(payload: dict) -> dict:
     import json
     from types import SimpleNamespace
 
+    return {"body": SimpleNamespace(read=lambda: json.dumps(payload).encode())}
+
+
+def test_bedrock_titan_vector_parses_the_streaming_response() -> None:
     from sectum_ai.embeddings import BedrockEmbedding
 
-    # Bedrock returns a streaming body; Titan's payload nests the vector under
+    # Bedrock returns a streaming body; Titan's payload nests one vector under
     # "embedding" (ints coerced to float).
-    response = {"body": SimpleNamespace(read=lambda: json.dumps({"embedding": [1, 2, 3]}).encode())}
-    assert BedrockEmbedding._vector(response) == [1.0, 2.0, 3.0]
+    assert BedrockEmbedding._titan_vector(_bedrock_body({"embedding": [1, 2, 3]})) == [
+        1.0,
+        2.0,
+        3.0,
+    ]
 
 
-def test_bedrock_vector_raises_when_no_embedding_is_returned() -> None:
+def test_bedrock_titan_vector_raises_when_no_embedding_is_returned() -> None:
+    from sectum_ai.embeddings import BedrockEmbedding
+
+    with pytest.raises(ConfigError):
+        BedrockEmbedding._titan_vector(_bedrock_body({"other": "x"}))
+
+
+def test_bedrock_cohere_vectors_parses_the_batch_response() -> None:
+    from sectum_ai.embeddings import BedrockEmbedding
+
+    # Cohere-on-Bedrock returns a batch of vectors under "embeddings".
+    body = _bedrock_body({"embeddings": [[1, 2], [3, 4]], "response_type": "embeddings_floats"})
+    assert BedrockEmbedding._cohere_vectors(body) == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_bedrock_cohere_vectors_raises_when_no_embeddings_are_returned() -> None:
+    from sectum_ai.embeddings import BedrockEmbedding
+
+    with pytest.raises(ConfigError):
+        BedrockEmbedding._cohere_vectors(_bedrock_body({"other": "x"}))
+
+
+def test_bedrock_dispatches_titan_per_text_and_cohere_in_batches() -> None:
+    # The model id chooses the family: Titan embeds one text per invoke_model call;
+    # Cohere-on-Bedrock batches (<=96 texts) per call. Verified with a fake client
+    # that records each call's body, so no boto3/AWS is needed.
     import json
-    from types import SimpleNamespace
 
     from sectum_ai.embeddings import BedrockEmbedding
 
-    response = {"body": SimpleNamespace(read=lambda: json.dumps({"other": "x"}).encode())}
-    with pytest.raises(ConfigError):
-        BedrockEmbedding._vector(response)
+    class _FakeBedrock:
+        def __init__(self, cohere: bool) -> None:
+            self._cohere = cohere
+            self.call_texts: list[list[str]] = []
+
+        def invoke_model(self, *, modelId: str, body: str, **_: object) -> dict:
+            payload = json.loads(body)
+            if self._cohere:
+                texts = payload["texts"]
+                self.call_texts.append(texts)
+                return _bedrock_body({"embeddings": [[float(len(t))] for t in texts]})
+            self.call_texts.append([payload["inputText"]])
+            return _bedrock_body({"embedding": [float(len(payload["inputText"]))]})
+
+    # Titan: one call per text
+    titan = BedrockEmbedding.__new__(BedrockEmbedding)
+    titan._model = "amazon.titan-embed-text-v2:0"
+    titan._is_cohere = False
+    titan._client = _FakeBedrock(cohere=False)
+    out = titan.embed(["aa", "bbbb"])
+    assert out == [[2.0], [4.0]]
+    assert titan._client.call_texts == [["aa"], ["bbbb"]]  # one text per call
+
+    # Cohere-on-Bedrock: batched at <=96, order preserved
+    cohere = BedrockEmbedding.__new__(BedrockEmbedding)
+    cohere._model = "cohere.embed-english-v3"
+    cohere._is_cohere = True
+    cohere._client = _FakeBedrock(cohere=True)
+    texts = [f"t{i}" for i in range(100)]
+    vectors = cohere.embed(texts)
+    assert len(vectors) == 100
+    assert [len(b) for b in cohere._client.call_texts] == [96, 4]  # chunked at 96, in order
 
 
 def test_embedding_provider_sweep_is_deterministic_and_bounded() -> None:

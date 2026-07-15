@@ -44,6 +44,8 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # Voyage caps a single embed request (1000 texts / a per-model token budget) and does
 # not auto-batch, unlike Cohere's client; chunk the corpus to stay under the cap.
 _VOYAGE_BATCH = 128
+# Cohere-on-Bedrock caps a single invoke_model at 96 input texts; chunk to stay under it.
+_BEDROCK_COHERE_BATCH = 96
 
 
 @runtime_checkable
@@ -258,15 +260,21 @@ class VoyageEmbedding:
 
 
 class BedrockEmbedding:
-    """Amazon Bedrock Titan embeddings (opt-in extra ``sectum-ai[bedrock]``).
+    """Amazon Bedrock embeddings (opt-in extra ``sectum-ai[bedrock]``).
 
-    Uses the Titan Text Embeddings family (default ``amazon.titan-embed-text-v2:0``),
-    which embeds one input per ``invoke_model`` call - there is no batch API - so the
-    sweep embeds the corpus one text at a time. Credentials and region come from
-    boto3's standard chain (env ``AWS_REGION`` / profile / instance role); ``region``
-    overrides it. Like :class:`OpenAIEmbedding`, this sends the substrate's synthetic
-    corpus to a hosted API, so it is not BYOC-safe. Cohere-on-Bedrock (a different
-    invoke-body shape) is not wired here - this is the single-family Titan adapter.
+    Supports both Bedrock text-embedding model families, dispatched by the model id:
+
+    - **Titan** (``amazon.titan-embed-*``, the default ``amazon.titan-embed-text-v2:0``)
+      embeds one input per ``invoke_model`` call - there is no batch API - so the sweep
+      embeds the corpus one text at a time. Request body ``{"inputText": ...}``, vector
+      under ``embedding``.
+    - **Cohere-on-Bedrock** (``cohere.embed-*``) takes a batch of up to 96 texts per
+      call. Request body ``{"texts": [...], "input_type": "search_document"}``, vectors
+      under ``embeddings``.
+
+    Credentials and region come from boto3's standard chain (env ``AWS_REGION`` /
+    profile / instance role); ``region`` overrides it. Like :class:`OpenAIEmbedding`,
+    this sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
     """
 
     def __init__(
@@ -280,30 +288,49 @@ class BedrockEmbedding:
             ) from error
         self.name = f"bedrock:{model_name}"
         self._model = model_name
+        self._is_cohere = model_name.startswith("cohere.")
         self._client = boto3.client("bedrock-runtime", region_name=region)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed ``texts`` one per request (Titan has no batch API), in input order."""
-        return [self._embed_one(text) for text in texts]
+        """Embed ``texts`` in input order (Cohere batches ≤96; Titan is one per call)."""
+        if self._is_cohere:
+            return self._embed_cohere(texts)
+        return [self._embed_titan_one(text) for text in texts]
 
-    def _embed_one(self, text: str) -> list[float]:
-        response = self._client.invoke_model(
+    def _invoke(self, body: dict[str, Any]) -> Any:
+        return self._client.invoke_model(
             modelId=self._model,
-            body=json.dumps({"inputText": text}),
+            body=json.dumps(body),
             accept="application/json",
             contentType="application/json",
         )
-        return self._vector(response)
+
+    def _embed_titan_one(self, text: str) -> list[float]:
+        return self._titan_vector(self._invoke({"inputText": text}))
+
+    def _embed_cohere(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), _BEDROCK_COHERE_BATCH):
+            batch = texts[start : start + _BEDROCK_COHERE_BATCH]
+            response = self._invoke({"texts": batch, "input_type": "search_document"})
+            vectors.extend(self._cohere_vectors(response))
+        return vectors
 
     @staticmethod
-    def _vector(response: Any) -> list[float]:
-        # Bedrock returns a streaming ``body``; Titan's JSON payload carries the
-        # vector under ``embedding``. Isolated so it is unit-tested without boto3.
+    def _titan_vector(response: Any) -> list[float]:
+        # Bedrock returns a streaming ``body``; Titan's JSON payload carries the vector
+        # under ``embedding``. Isolated so it is unit-tested without boto3.
         payload = json.loads(response["body"].read())
         embedding = payload.get("embedding")
         if embedding is None:
-            raise ConfigError("Bedrock embedding response carried no 'embedding'")
+            raise ConfigError("Bedrock Titan response carried no 'embedding'")
         return [float(value) for value in embedding]
+
+    @staticmethod
+    def _cohere_vectors(response: Any) -> list[list[float]]:
+        # Cohere-on-Bedrock returns a batch of vectors under ``embeddings``.
+        payload = json.loads(response["body"].read())
+        return _as_float_rows(payload.get("embeddings"))
 
 
 def _hash_dim(spec: str) -> int:
@@ -335,7 +362,8 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
     - ``openai:<model>`` -> :class:`OpenAIEmbedding` (e.g. ``openai:text-embedding-3-small``)
     - ``cohere:<model>`` -> :class:`CohereEmbedding` (e.g. ``cohere:embed-english-v3.0``)
     - ``voyage:<model>`` -> :class:`VoyageEmbedding` (e.g. ``voyage:voyage-3``)
-    - ``bedrock:<model>`` -> :class:`BedrockEmbedding` (Amazon Bedrock Titan)
+    - ``bedrock:<model>`` -> :class:`BedrockEmbedding` (Amazon Bedrock Titan
+      ``amazon.titan-embed-*`` or Cohere ``cohere.embed-*``)
     - ``hash-<dim>`` / ``hash:<dim>`` -> deterministic :class:`HashingEmbedding`
 
     Raises :class:`~sectum_ai.spec.ConfigError` for a malformed real spec (the typed
