@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Class 13 — Multi-modal RAG entity-bleed.** The Class 2 Retrieval Pivot generalised to
+  images: multi-modal RAG embeds images (and text) into one vector space, so a benign
+  image query for a shared *visual* entity (a chart, a logo, a product photo) surfaces
+  another tenant's image, with the canary marker in its caption. New `multimodal-rag-bleed`
+  probe (registered in the attack catalog, OWASP LLM08:2025 / ATLAS AML.T0024+T0057), a
+  deterministic synthetic-image marker substrate (Pillow, the `[multimodal]` extra), two
+  image embedders — `imagehash-<dim>` (a deterministic offline *proxy* for CI/demos, the
+  image analogue of the text `hash-<dim>`; not a semantic model, so its per-dim curve is a
+  substrate artifact, not a strength measurement) and `clip:<model>` (real CLIP via
+  sentence-transformers, the `[clip]` extra, BYOC-safe — sweeping two or more CLIP models
+  measures the genuine "stronger embedders leak more" gradient) — and
+  `multimodal_provider_sweep`, which reports the per-model **image Retrieval-Pivot Rate**
+  with the binomial counts behind a Wilson interval. Runnable, self-asserting example at
+  `examples/multimodal-rag-bleed/` (a fixed demo ladder `imagehash-16` ~46% →
+  `imagehash-256` 100% offline). The image-RPR is measured by its per-model sweep, as
+  Class 2's embedding-strength gradient is; live multi-modal vector-store adapters and
+  generic-suite / CLI wiring are a follow-on.
+
 ## [0.6.0] - 2026-07-15
 
 ### Added

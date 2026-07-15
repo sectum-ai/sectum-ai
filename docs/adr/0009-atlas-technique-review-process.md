@@ -75,8 +75,8 @@ not a per-PR enforcement.
 - The release engineer carries one extra checklist item: run the ATLAS
   sweep, paste the result into the release-PR description (or the
   CHANGELOG entry for the release), and note any ID added, retired, or
-  renamed. The sweep is cheap — under ten minutes for the eleven probes
-  the catalog currently covers.
+  renamed. The sweep is cheap — under ten minutes for the twelve
+  attack classes the catalog currently covers.
 - A future addition of an attack class (a Class 12, a sub-probe) inherits
   the same gate: the probe ships with both an ATLAS assignment **and** a
   one-line comment justifying it.

@@ -3,14 +3,15 @@
 The multi-tenant leakage **attack catalog** and leak-detection pipeline for
 [Sectum AI](https://github.com/sectum-ai/sectum-ai).
 
-This distribution implements the Class 1–11 probes — direct tenant-boundary
+This distribution implements the Class 1–11 and 13 probes — direct tenant-boundary
 fetch, the flagship organic entity-bleed RAG (the 95.4% Retrieval-Pivot
 finding), adversarial RAG poisoning, semantic-cache contamination, KV-cache
 timing, embedding inversion, agent / MCP tool-call hijacking, persistent-memory
-contamination, LoRA cross-tenant influence, IKEA-style benign extraction, and
-the GDPR Article 17 erasure-verification wedge — behind a single pluggable
-`Probe` interface, plus the exact → semantic → calibrated-judge detection
-pipeline that turns observations into manifest-grounded `Finding`s.
+contamination, LoRA cross-tenant influence, IKEA-style benign extraction, the
+GDPR Article 17 erasure-verification wedge, and multi-modal RAG entity-bleed —
+behind a single pluggable `Probe` interface, plus the exact → semantic →
+calibrated-judge detection pipeline that turns observations into
+manifest-grounded `Finding`s.
 
 ```sh
 pip install sectum-ai-probes

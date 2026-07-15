@@ -40,6 +40,7 @@ from sectum_ai.probes.ikea_extraction import IkeaExtractionProbe
 from sectum_ai.probes.kv_cache_timing import KvCacheTimingProbe, KvCacheTimingReport, TimingSignal
 from sectum_ai.probes.lora_cross_tenant import LoraCrossTenantProbe
 from sectum_ai.probes.memory_contam import MemoryContamProbe
+from sectum_ai.probes.multimodal_rag_bleed import VISUAL_ENTITIES, MultimodalRagBleedProbe
 from sectum_ai.probes.providers import (
     AnthropicJudge,
     OpenAIEmbeddingProvider,
@@ -63,6 +64,7 @@ __all__ = [
     "MODEL_THRESHOLDS",
     "SUBJECT_FINGERPRINT_SURFACES",
     "SUBJECT_VERIFIABLE_SURFACES",
+    "VISUAL_ENTITIES",
     "AgentFrameworkHijackProbe",
     "AgentToolHijackProbe",
     "AnthropicJudge",
@@ -84,6 +86,7 @@ __all__ = [
     "KvCacheTimingReport",
     "LoraCrossTenantProbe",
     "MemoryContamProbe",
+    "MultimodalRagBleedProbe",
     "OpenAIEmbeddingProvider",
     "OpenAIJudge",
     "Probe",

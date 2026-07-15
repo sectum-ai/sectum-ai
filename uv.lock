@@ -28,6 +28,7 @@ dev = [
     { name = "mcp", specifier = ">=1" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "opensearch-py", specifier = ">=2.4" },
+    { name = "pillow", specifier = ">=10" },
     { name = "pre-commit", specifier = ">=4.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pytest", specifier = ">=8.3" },
@@ -5244,11 +5245,18 @@ dependencies = [
 bedrock = [
     { name = "boto3" },
 ]
+clip = [
+    { name = "pillow" },
+    { name = "sentence-transformers" },
+]
 cohere = [
     { name = "cohere" },
 ]
 encryption = [
     { name = "cryptography" },
+]
+multimodal = [
+    { name = "pillow" },
 ]
 openai = [
     { name = "openai" },
@@ -5269,6 +5277,8 @@ requires-dist = [
     { name = "cohere", marker = "extra == 'cohere'", specifier = ">=5,<6" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.40" },
+    { name = "pillow", marker = "extra == 'clip'", specifier = ">=10" },
+    { name = "pillow", marker = "extra == 'multimodal'", specifier = ">=10" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "sectum-ai-adapters", editable = "packages/adapters" },
@@ -5276,11 +5286,12 @@ requires-dist = [
     { name = "sectum-ai-evidence", extras = ["weasyprint"], marker = "extra == 'weasyprint'", editable = "packages/evidence" },
     { name = "sectum-ai-probes", editable = "packages/probes" },
     { name = "sectum-ai-spec", editable = "packages/spec" },
+    { name = "sentence-transformers", marker = "extra == 'clip'", specifier = ">=3" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3" },
     { name = "typer", specifier = ">=0.12" },
     { name = "voyageai", marker = "extra == 'voyage'", specifier = ">=0.2,<1" },
 ]
-provides-extras = ["encryption", "weasyprint", "sentence-transformers", "openai", "cohere", "voyage", "bedrock"]
+provides-extras = ["encryption", "weasyprint", "sentence-transformers", "openai", "cohere", "voyage", "bedrock", "multimodal", "clip"]
 
 [[package]]
 name = "sectum-ai-adapters"

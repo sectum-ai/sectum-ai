@@ -30,7 +30,7 @@ run a named, control-mapped subset instead of hand-picking probes:
 | `--suite` | Probes | Frameworks |
 |---|---|---|
 | `soc2-tenant-isolation` | the direct cross-tenant isolation checks: tenant-boundary, RAG entity/pipeline bleed, semantic-cache, agent tool/framework hijack, memory, embedding-inversion, LoRA, KV-cache timing | SOC 2 CC6.1 / CC6.6 / CC6.7, ISO 27001 A.8.3 / A.8.12 |
-| `owasp-llm08` | every adversarial probe in the catalog | OWASP LLM08:2025, NIST AI RMF MEASURE 2.7 |
+| `owasp-llm08` | every adversarial probe in the default CLI suite | OWASP LLM08:2025, NIST AI RMF MEASURE 2.7 |
 
 ```sh
 # A SOC 2 tenant-isolation evidence pack:
@@ -40,9 +40,12 @@ sectum-ai report --workdir .sectum-ai
 sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
 ```
 
-`sectum-ai probe` with no `--suite` runs the full catalog (the
+`sectum-ai probe` with no `--suite` runs the full CLI probe suite (the
 continuous-verification default). The GDPR erasure SKU is the separate
-`sectum-ai erasure` workflow, not a probe suite. Suite definitions live in
+`sectum-ai erasure` workflow, not a probe suite; Class 13 multi-modal bleed is
+measured by its own image-embedding sweep
+([`examples/multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed)),
+not a CLI probe run. Suite definitions live in
 [`sectum_ai.suites`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/core/src/sectum_ai/suites.py),
 and their probe sets are validated against the live catalog in CI.
 

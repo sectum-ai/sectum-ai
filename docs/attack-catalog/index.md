@@ -17,11 +17,13 @@ the classes below are implemented today.
 | [9 — LoRA cross-tenant influence](class-09-lora-cross-tenant.md) | `lora-cross-tenant` | `AML.T0024`, `AML.T0024.000`, `AML.T0057` | model / adapter |
 | [10 — IKEA-style benign extraction](class-10-ikea-extraction.md) | `ikea-extraction` | `AML.T0024`, `AML.T0057` | vector DB |
 | [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification` | — (control check) | all configured surfaces |
+| [13 — Multi-modal RAG entity-bleed](class-13-multimodal-rag-bleed.md) | `multimodal-rag-bleed` | `AML.T0024`, `AML.T0057` | vector DB (multi-modal) |
 
 Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses** and
 **NIST AI RMF MEASURE 2.7** (security/resilience measurement). The MITRE ATLAS
 technique IDs vary by class — see each page for the rationale.
 
-All eleven adversarial attack classes are implemented. Class 12 — the
+All twelve adversarial attack classes (1–11 and 13) are implemented. Class 12 — the
 tamper-evident audit chain — is the cross-cutting
-[evidence chain](../evidence-chain.md).
+[evidence chain](../evidence-chain.md), which is why the attack-class numbering skips
+it.
