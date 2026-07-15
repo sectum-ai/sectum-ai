@@ -402,6 +402,13 @@ def test_build_backup_s3_requires_a_bucket() -> None:
         build_backup(AdapterConfig(kind="s3"))
 
 
+def test_build_backup_gcs_requires_a_bucket() -> None:
+    # `bucket` is read before the google-cloud-storage import, so the missing-bucket
+    # error is raised without the extra installed (a good config-time check).
+    with pytest.raises(ConfigError, match="bucket"):
+        build_backup(AdapterConfig(kind="gcs"))
+
+
 def test_build_mcp_stdio_constructs_a_stdio_client() -> None:
     from sectum_ai.adapters.mcp.client import StdioMCPClient
 

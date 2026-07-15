@@ -81,6 +81,9 @@ search lists that prefix and `delete` purges it; `no_erasure=True` models an imm
 object-lock (WORM) bucket that exposes no per-tenant purge, so `delete` raises
 `ErasureUnsupported` and Class 11 records the surface as **attestable-with-caveat** (data
 presumed retained) — the same erasure-caveat contract as the read-only trace backends.
+The GCS backup (`kind: gcs`, the `[gcs]` extra) is the Google-cloud parallel with the
+same per-tenant-prefix scoping and `no_erasure` / `soft_delete` contract; point it at a
+local fake-gcs-server via `STORAGE_EMULATOR_HOST` for testing.
 
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
