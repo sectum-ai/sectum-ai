@@ -1,6 +1,7 @@
 """Tests for the embedding models and the real-provider sweep (the spec, sections 7 and 13)."""
 
 import math
+from typing import Any
 
 import pytest
 
@@ -186,7 +187,7 @@ def test_voyage_embed_chunks_beyond_the_per_request_cap() -> None:
     assert vectors[0] == [float(len("text-0"))] and vectors[-1] == [float(len("text-299"))]
 
 
-def _bedrock_body(payload: dict) -> dict:
+def _bedrock_body(payload: dict[str, Any]) -> dict[str, Any]:
     import json
     from types import SimpleNamespace
 
@@ -240,7 +241,7 @@ def test_bedrock_dispatches_titan_per_text_and_cohere_in_batches() -> None:
             self._cohere = cohere
             self.call_texts: list[list[str]] = []
 
-        def invoke_model(self, *, modelId: str, body: str, **_: object) -> dict:
+        def invoke_model(self, *, modelId: str, body: str, **_: object) -> dict[str, Any]:
             payload = json.loads(body)
             if self._cohere:
                 texts = payload["texts"]
