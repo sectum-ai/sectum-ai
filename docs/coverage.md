@@ -23,7 +23,7 @@ synthetic substrate.
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Eval / golden set | `langsmith` (opt-in live) | ✅ |
-| Backup / snapshot | `s3` (opt-in live) | ✅ |
+| Backup / snapshot | `s3`, `gcs` (opt-in live) | ✅ |
 
 See [Adapters](adapters.md) for how to configure each backend.
 
@@ -55,18 +55,20 @@ the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a 
 and **Class 9** (once a per-tenant-LoRA model is configured — the example's serving-only
 vLLM covers Class 5 but not Class 9). Every one of the erasure scan's **eight wired
 surfaces** now has a live backend too — the search index (**OpenSearch**), the eval set
-(**LangSmith Datasets**), and the backup store (**S3**) were the last three fake-only
-surfaces. (The remaining hiding place — third-party subprocessor residue — has no
+(**LangSmith Datasets**), and the backup store (**S3**, with **GCS** as a second backend)
+were the last three fake-only surfaces. (The remaining hiding place — third-party
+subprocessor residue — has no
 scanning adapter yet, so it is out of scope, not fake; see the
 [Class 11 page](attack-catalog/class-11-erasure.md).)
 
 ## Known coverage gaps
 
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
-  eval set (**LangSmith Datasets**) and backup (**S3**) adapters — like the hosted
-  vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests that
-  skip without credentials, so their contract is verified offline against a mock and
-  live against a real backend on demand (S3 against a local MinIO). The search index
+  eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
+  hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests
+  that skip without credentials, so their contract is verified offline against a mock and
+  live against a real backend on demand (S3 against a local MinIO, GCS against a local
+  fake-gcs-server). The search index
   (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
   against docker-compose backends in CI every push. The agent-memory surface also has a
   live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow

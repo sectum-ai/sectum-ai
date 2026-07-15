@@ -802,6 +802,18 @@ def build_backup(config: AdapterConfig) -> BackupAdapter:
                 no_erasure=_bool(extras, "no_erasure", False),
                 soft_delete=_bool(extras, "soft_delete", False),
             )
+    if config.kind == "gcs":
+        bucket = _required_str(extras, "bucket")
+        with _optional_extra("gcs"):
+            from sectum_ai.adapters.backup.gcs import GCSBackup
+
+            return GCSBackup.connect(
+                bucket,
+                project=_optional_str(extras, "project"),
+                prefix=_str(extras, "prefix", "sectum-ai-backup"),
+                no_erasure=_bool(extras, "no_erasure", False),
+                soft_delete=_bool(extras, "soft_delete", False),
+            )
     raise _unsupported("backup", config.kind)
 
 

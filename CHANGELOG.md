@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **GCS backup adapter (`kind: gcs`, the `[gcs]` extra) — the erasure backup surface on
+  Google Cloud.** The Google-cloud parallel of the S3 backup: each tenant's snapshots
+  live under the object-name prefix `{prefix}/{tenant.hex}/` in one bucket, with the same
+  search / per-tenant purge / `no_erasure` (bucket-lock → *attestable-with-caveat*) /
+  `soft_delete` (residue) contract Class 11 verifies. Auth falls back to Application
+  Default Credentials; `STORAGE_EMULATOR_HOST` targets a local fake-gcs-server. The
+  add/search/delete logic is covered offline against an in-memory client, and an opt-in
+  live test runs it against fake-gcs-server (skips in CI, like the S3/MinIO test). This
+  makes the backup erasure surface attestable on GCP, not just AWS.
 - **Cohere-on-Bedrock embedding family for the Class 2 RPR sweep.** `bedrock:<model>`
   now dispatches on the model id: `cohere.embed-*` ids route to Amazon Bedrock's
   Cohere Embed models (batch of up to 96 texts per `invoke_model`, request body
