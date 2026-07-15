@@ -7,6 +7,7 @@ example is a self-contained directory with a `run.sh` script and a `README.md`.
 |---|---|---|
 | [`tenant-boundary-fetch/`](tenant-boundary-fetch/) | Class 1 | Negative-authorization check: from one tenant's session, attempts to fetch a foreign tenant's objects and canary doc IDs and expects denial. |
 | [`retrieval-pivot/`](retrieval-pivot/) | Class 2 (flagship) | Benign cross-tenant leakage on a shared vector index, carried end to end into a verified evidence pack. |
+| [`embedding-rpr-sweep/`](embedding-rpr-sweep/) | Class 2 | Per-model Retrieval-Pivot Rate sweep showing *stronger embeddings leak more* — a deterministic offline gradient, swappable for the five real providers (`st:`/`openai:`/`cohere:`/`voyage:`/`bedrock:`). |
 | [`rag-poisoning/`](rag-poisoning/) | Class 3 | One tenant plants a poison document under a lure phrase; another tenant's query of the lure retrieves the planted canary across the boundary. |
 | [`semantic-cache/`](semantic-cache/) | Class 4 | A semantic/prompt cache that is not tenant-scoped serves one tenant's cached answer (carrying a canary) to another tenant's similar query. |
 | [`kv-cache-timing/`](kv-cache-timing/) | Class 5 | A shared KV prefix cache leaks a victim tenant's prompt prefix through a measurable TTFT timing gap (confirmed by a Welch t-test). |

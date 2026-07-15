@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`examples/embedding-rpr-sweep/` walkthrough.** A runnable, deterministic example
+  reproducing the flagship Class 2 finding *stronger embeddings leak more* as a
+  per-model Retrieval-Pivot Rate sweep: at increasing hashing-embedder dimensions it
+  prints the RPR gradient (e.g. `hash-16` 58% → `hash-256` 83%) with no model download
+  or API key, and documents swapping in the five real providers
+  (`st:`/`openai:`/`cohere:`/`voyage:`/`bedrock:`) or driving it from `sectum-ai probe`
+  via `scenario.embedding_models`. `run.py` exits non-zero if the gradient is not
+  monotone, so it doubles as a smoke test.
+
 ## [0.5.1] - 2026-07-13
 
 ### Added
