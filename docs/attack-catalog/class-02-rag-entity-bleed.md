@@ -57,8 +57,10 @@ Each entry is resolved to an embedding model:
   `COHERE_API_KEY`); hosted, not BYOC-safe.
 - `voyage:<model>` — Voyage AI embeddings (opt-in extra `sectum-ai[voyage]`, key in
   `VOYAGE_API_KEY`); hosted, not BYOC-safe.
-- `bedrock:<model>` — Amazon Bedrock Titan embeddings (opt-in extra
+- `bedrock:<model>` — Amazon Bedrock embeddings (opt-in extra
   `sectum-ai[bedrock]`, region/creds from the boto3 chain); hosted, not BYOC-safe.
+  Both text-embedding families are dispatched by the model id: Titan
+  (`amazon.titan-embed-*`, the default) and Cohere-on-Bedrock (`cohere.embed-*`).
 - `hash-<dim>` — a deterministic, offline hashing embedder for CI and demos.
 - `fake-*` — the legacy recall illustration (embedding strength modelled by a
   per-model retrieval recall on the in-memory store).
