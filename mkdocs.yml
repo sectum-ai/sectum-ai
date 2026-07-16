@@ -46,6 +46,7 @@ nav:
   - Core data models: data-models.md
   - Compliance mappings: compliance-mappings.md
   - SKUs and suites: skus.md
+  - Isolation scorecard: scorecard.md
   - Adapters: adapters.md
   - Coverage: coverage.md
   - vs DeepTeam: vs-deepteam.md

@@ -53,7 +53,7 @@ verify a Sectum AI evidence pack without the project. See
 | License | Apache-2.0 | Commercial |
 | Marker substrate, attack catalog, adapters | ✓ | ✓ |
 | Evidence chain + independent `sectum-ai verify` | ✓ | ✓ |
-| `sectum-ai` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `baseline` / `calibrate` / `diff` / `adapters`) | ✓ | ✓ |
+| `sectum-ai` CLI (`init` / `seed` / `probe` / `report` / `verify` / `erasure` / `score` / `baseline` / `calibrate` / `diff` / `adapters`) | ✓ | ✓ |
 | Continuous scheduled runs against a customer stack | — | ✓ |
 | Attestation hosting and managed audit-pack delivery | — | ✓ |
 | Dashboard, alerting, and regression baselines across runs | — | ✓ |

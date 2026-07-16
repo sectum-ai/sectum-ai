@@ -1,0 +1,193 @@
+{
+  "$defs": {
+    "ClassScore": {
+      "additionalProperties": false,
+      "description": "One attack class's line in an isolation scorecard (``docs/scorecard.md``).",
+      "properties": {
+        "class_id": {
+          "minimum": 1,
+          "title": "Class Id",
+          "type": "integer"
+        },
+        "confirmed_findings": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Confirmed Findings",
+          "type": "integer"
+        },
+        "headline": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Headline"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "probe_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Probe Ids",
+          "type": "array"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ClassVerdict"
+        }
+      },
+      "required": [
+        "class_id",
+        "name",
+        "verdict",
+        "severity"
+      ],
+      "title": "ClassScore",
+      "type": "object"
+    },
+    "ClassVerdict": {
+      "description": "The per-attack-class verdict in an isolation scorecard (``sectum-ai score``).\n\nThe scorecard analogue of :class:`CoverageVerdict`, and it carries the same\nanti-over-claim guarantee: a class whose probe did not run can only ever be\n:data:`NOT_COVERED` - never :data:`PASS`. A grade must never imply the stack\npassed a check it was never asked to perform, so untested classes are excluded\nfrom the grade entirely and lower the scorecard's *confidence* instead (see\n``docs/scorecard.md``).",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NOT_COVERED"
+      ],
+      "title": "ClassVerdict",
+      "type": "string"
+    },
+    "Confidence": {
+      "description": "How much of the catalog a scorecard's grade actually rests on.\n\nCoverage-driven and reported *beside* the grade, never folded into it: a run\nthat exercised three classes and a run that exercised twelve can both grade\n``A``, and the confidence is what tells them apart honestly.",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Confidence",
+      "type": "string"
+    },
+    "Grade": {
+      "description": "The overall multi-tenant isolation grade (``sectum-ai score``).\n\nDerived from the *covered* classes only, then capped by the worst confirmed\nfailure's severity - a confirmed critical cross-tenant leak can never grade\nabove :data:`F`. The published weights, thresholds, and caps are in\n``docs/scorecard.md``, so the grade is recomputable from a signed run.",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "F"
+      ],
+      "title": "Grade",
+      "type": "string"
+    },
+    "Severity": {
+      "description": "Finding severity levels.",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.5.0/IsolationScore.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A graded multi-tenant isolation posture derived from one run.\n\nDeliberately *derived*, not asserted: every field is recomputable from the signed\n:class:`RunResult` plus the published methodology (``docs/scorecard.md``), so a\nthird party re-grades the run rather than trusting this record.\n\nThe anti-over-claim contract: ``weighted_score`` covers the **covered classes\nonly** - a class that never ran is excluded from the grade (never counted as a\npass) and lowers ``coverage``/``confidence`` instead. A grade must never imply the\nstack passed a check it was never asked to perform.",
+  "properties": {
+    "capped_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Severity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "classes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ClassScore"
+      },
+      "title": "Classes",
+      "type": "array"
+    },
+    "classes_covered": {
+      "minimum": 0,
+      "title": "Classes Covered",
+      "type": "integer"
+    },
+    "classes_total": {
+      "minimum": 0,
+      "title": "Classes Total",
+      "type": "integer"
+    },
+    "confidence": {
+      "$ref": "#/$defs/Confidence"
+    },
+    "coverage": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Coverage",
+      "type": "number"
+    },
+    "grade": {
+      "$ref": "#/$defs/Grade"
+    },
+    "methodology_version": {
+      "title": "Methodology Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "0.5.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "weighted_score": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Weighted Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "grade",
+    "confidence",
+    "weighted_score",
+    "coverage",
+    "classes_covered",
+    "classes_total",
+    "methodology_version"
+  ],
+  "title": "IsolationScore",
+  "type": "object"
+}

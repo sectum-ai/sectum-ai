@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`sectum-ai score` — the isolation scorecard.** Grades a run's multi-tenant isolation
+  posture into one letter (A–F) plus a per-class breakdown, so the catalog's depth is
+  legible to an auditor rather than a wall of findings. The grade is **derived, not
+  asserted**: every input is the signed `RunResult` (`probe_versions`, `findings`,
+  `metrics`), so a third party recomputes the letter from the evidence with the published
+  methodology (`docs/scorecard.md`, stamped as `methodology_version` on every scorecard)
+  rather than trusting it. Three honesty rules hold the letter down: (1) a class whose
+  probe did not run can only ever be `NOT_COVERED` — never `PASS`, so a grade never
+  implies a check the stack was never asked to perform; (2) untested classes lower
+  *confidence*, never the grade — coverage is reported beside the letter, so a run over
+  three classes and one over eleven can both grade `A` and the confidence is what tells
+  them apart; (3) the worst confirmed failure caps the letter, so a confirmed critical
+  cross-tenant leak can never be averaged away. A run that exercised no catalog class is
+  refused (exit 3) rather than graded. New additive `IsolationScore` / `ClassScore` models
+  + `Grade` / `ClassVerdict` / `Confidence` enums (no `SCHEMA_VERSION` change). Class 11
+  (erasure) stays out of scope — it is a control check with its own attestation.
 - **Class 13 — Multi-modal RAG entity-bleed.** The Class 2 Retrieval Pivot generalised to
   images: multi-modal RAG embeds images (and text) into one vector space, so a benign
   image query for a shared *visual* entity (a chart, a logo, a product photo) surfaces

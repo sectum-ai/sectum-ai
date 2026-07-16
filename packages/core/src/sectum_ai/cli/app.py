@@ -1,7 +1,8 @@
 """Entry point for the ``sectum-ai`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, ``init``, ``baseline``, ``calibrate``, and ``diff``.
+``verify``, ``erasure``, ``init``, ``baseline``, ``calibrate``, ``diff``, and
+``score``.
 """
 
 import functools
@@ -117,11 +118,14 @@ from sectum_ai.runner import (
     confirmed_finding_rate,
     retrieval_pivot_counts,
 )
+from sectum_ai.score import score_run
 from sectum_ai.spec import (
+    ClassVerdict,
     ConfigError,
     EvidenceError,
     EvidencePack,
     Finding,
+    IsolationScore,
     MarkerType,
     RunMetrics,
     RunResult,
@@ -2265,6 +2269,82 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
+
+
+def _render_scorecard(card: IsolationScore) -> None:
+    """Render the scorecard: the letter, its confidence, and every class - covered or not."""
+    typer.echo(
+        f"Multi-tenant isolation: GRADE {card.grade.value}"
+        f"   (confidence: {card.confidence.value} - "
+        f"{card.classes_covered}/{card.classes_total} classes covered)"
+    )
+    if card.capped_by is not None:
+        typer.echo(f"  capped by a confirmed {card.capped_by.value} failure")
+    typer.echo("")
+    for entry in card.classes:
+        detail = entry.headline or (entry.note if entry.verdict is ClassVerdict.NOT_COVERED else "")
+        typer.echo(
+            f"  Class {entry.class_id:>2}  {entry.name:<32}"
+            f"{entry.verdict.value:<12}{entry.severity.value:<9}{detail}"
+        )
+    typer.echo("")
+    typer.echo(
+        f"  Methodology: docs/scorecard.md (v{card.methodology_version}) - "
+        f"weighted {card.weighted_score:.2f} over the covered classes; "
+        f"coverage {card.coverage:.2f}."
+    )
+    typer.echo("  Untested classes lower confidence, never the grade.")
+
+
+@app.command()
+@_handle_typed_errors
+def score(
+    workdir: Annotated[
+        Path | None, typer.Option(help="Directory holding the recorded run.")
+    ] = None,
+    output: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--output",
+            help="`text` is the human-readable scorecard; `json` emits the IsolationScore.",
+            case_sensitive=False,
+        ),
+    ] = OutputFormat.TEXT,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
+    ] = None,
+) -> None:
+    """Grade the recorded run's multi-tenant isolation posture (`docs/scorecard.md`).
+
+    Renders one letter (A-F) plus a per-class breakdown, derived entirely from the
+    signed run - so a third party recomputes the grade from the evidence rather than
+    trusting it. Every catalog class appears, including the untested ones: those carry
+    `NOT_COVERED` and lower the scorecard's *confidence*, never its grade, because a
+    grade must never imply the stack passed a check it was never asked to perform. The
+    worst confirmed failure caps the letter, so a critical cross-tenant leak cannot be
+    averaged away.
+
+    Exits 3 when there is no run to grade, or when the run exercised no catalog class
+    at all - grading nothing would emit a letter that means nothing.
+    """
+    if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
+        # SARIF and OSCAL project findings; a graded posture has no rendering in
+        # either, so reject rather than silently falling through to text (the guard
+        # the diff and calibrate commands use).
+        typer.echo(
+            "--output sarif/oscal project findings; the scorecard renders text or json",
+            err=True,
+        )
+        raise typer.Exit(code=3)
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
+    card = score_run(_load_run(workdir))
+    if output is OutputFormat.JSON:
+        typer.echo(card.model_dump_json(indent=2))
+        return
+    _render_scorecard(card)
 
 
 @app.command()
