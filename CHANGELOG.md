@@ -81,10 +81,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing if no marker was planted — the latter being the more dangerous shape, since the
   probes do run and Class 2 reports a well-powered `0.0% RPR (95% CI 0.0%-13.8%, n=24)` on
   a question that could never have had an answer. Class 5's probe is likewise recorded on
-  what it *measured* rather than on having been asked to run, and the step-based
-  `probe_versions` rule is not relied on here: several probes emit setup steps
-  (`cache.set`, `model.train`, `memory.write`) before the read that could surface a leak,
-  so a step alone is weak evidence that a check happened.
+  what it *measured* rather than on having been asked to run. This refusal is a *global*
+  check — some marker is foreign to somebody — so it cannot by itself stop a class that was
+  starved of anything to find from grading `PASS`; that is the per-class job of the
+  step-based `probe_versions` rule, below.
+- **Sectum plants only what someone could steal, and a refused run no longer touches your
+  stack.** Two changes to what Sectum writes into a live system:
+    - `semantic-cache-contamination`, `memory-contamination` and `lora-cross-tenant`
+      planted their canary — a `cache.set`, a `model.train`, a `memory.write` — for every
+      marker, and only *read* it back from principals the marker was foreign to. Where a
+      class's markers were foreign to nobody they wrote, never read, and the class graded
+      **`PASS`**: a critical-band pass on a maximally-leaky memory store, off a probe that
+      wrote two notes and never tried to recall them. (The substrate refusal above cannot
+      catch this: it is global, and this starvation is per class.) They now plan nothing
+      when no principal could read back what they would plant, so the class reads
+      `NOT_COVERED` and Sectum writes less into your cache, memory and model.
+    - That refusal ran *after* the corpus was seeded into the vector store, and the seeding
+      upsert — unlike the MCP/agent/RAG provisioning beside it — was not gated to the
+      in-memory fakes. So `probe` exited `3` declining to assess a stack it had already
+      committed 24 synthetic documents to, with no run record to explain them and no
+      cleanup. It now refuses before any adapter is built.
 - **A probe that asked the stack nothing is no longer recorded as having run.**
   `probe_versions` was built from *suite membership*, while `score` reads it as "what
   actually ran" — so a probe whose plan came back empty was recorded, found nothing, and
