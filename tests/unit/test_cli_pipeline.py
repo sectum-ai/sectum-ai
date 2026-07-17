@@ -688,7 +688,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     payload = json.loads(result.output)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"]
+    assert payload["methodology_version"] == "1.0"  # pinned; see docs/scorecard.md
     assert 0.0 <= payload["coverage"] <= 1.0
     assert 0.0 <= payload["weighted_score"] <= 1.0
     # k/n-style transparency: every catalog class appears, verdicts included.
@@ -723,9 +723,24 @@ def test_score_on_an_isolated_stack_grades_well(tmp_path: Path) -> None:
     assert payload["weighted_score"] == 1.0
 
 
-def test_score_without_a_run_exits_3(tmp_path: Path) -> None:
+def test_score_without_a_run_file_exits_3(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 3
+
+
+def test_score_refuses_a_run_that_exercised_no_catalog_class(tmp_path: Path) -> None:
+    # The documented exit-3 path (docs/scorecard.md): grading nothing would emit a letter
+    # that means nothing, and F would falsely read as "failed" when the truth is "never
+    # tested". Distinct from the missing-file branch above - this reaches score_run.
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    record = json.loads(run_path.read_text())
+    record["probe_versions"] = {}
+    record["findings"] = []
+    run_path.write_text(json.dumps(record))
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3  # a ConfigError, not a ZeroDivisionError traceback
+    assert "nothing to grade" in (result.output + str(result.exception or ""))
 
 
 def test_score_rejects_sarif_and_oscal(tmp_path: Path) -> None:

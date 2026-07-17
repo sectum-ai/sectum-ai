@@ -11,7 +11,14 @@ from uuid import UUID
 
 import pytest
 
-from sectum_ai.score import CATALOG, METHODOLOGY_VERSION, SEVERITY_WEIGHTS, score_run
+from sectum_ai.score import (
+    CATALOG,
+    METHODOLOGY_VERSION,
+    SEVERITY_WEIGHTS,
+    _confidence_for,
+    _grade_for,
+    score_run,
+)
 from sectum_ai.spec import (
     ClassVerdict,
     Confidence,
@@ -104,7 +111,8 @@ def test_a_confirmed_critical_failure_caps_the_grade_at_f() -> None:
     card = score_run(_run(ran=_ALL_PROBES, findings=(_finding("tenant-boundary-fetch"),)))
     assert card.grade is Grade.F
     assert card.capped_by is Severity.CRITICAL
-    assert card.weighted_score > 0.5  # the raw average alone would have graded well
+    # the raw average alone is 36/41 - a B - so only the band cap produces the F
+    assert card.weighted_score == pytest.approx(36 / 41)
     boundary = next(c for c in card.classes if c.class_id == 1)
     assert boundary.verdict is ClassVerdict.FAIL and boundary.confirmed_findings == 1
 
@@ -195,7 +203,7 @@ def test_under_full_coverage_non_critical_failures_cannot_outweigh_the_cap() -> 
     # those failures bite, which is exactly why rule 3 exists.
     non_critical = (*_HIGH_PROBES, "kv-cache-timing")
     card = score_run(_run(ran=_ALL_PROBES, findings=tuple(_finding(p) for p in non_critical)))
-    assert card.weighted_score > 0.5  # the average alone would still grade D
+    assert card.weighted_score == pytest.approx(25 / 41)  # the criticals alone hold it up
     assert card.capped_by is Severity.HIGH
     assert card.grade is Grade.D
 
@@ -227,9 +235,17 @@ def test_coverage_drives_the_confidence_band() -> None:
     assert thin.coverage < 0.60 and thin.confidence is Confidence.LOW
 
 
-def test_scoring_is_deterministic() -> None:
-    run = _run(ran=_ALL_PROBES, findings=(_finding("rag-poisoning"),))
-    assert score_run(run).model_dump() == score_run(run).model_dump()
+def test_a_fixed_run_recomputes_to_a_fixed_letter() -> None:
+    # docs/scorecard.md promises a third party re-grading the same run lands on the same
+    # letter. Asserting score_run(x) == score_run(x) cannot fail for ANY deterministic
+    # implementation (it passes against a grader that always returns A), so pin the
+    # actual values instead - this is the recomputation contract.
+    card = score_run(_run(ran=_ALL_PROBES, findings=(_finding("rag-poisoning"),)))
+    assert card.grade is Grade.D
+    assert card.capped_by is Severity.HIGH
+    assert card.weighted_score == pytest.approx(38 / 41)
+    assert card.coverage == pytest.approx(1.0)
+    assert card.confidence is Confidence.HIGH
 
 
 def test_headlines_render_the_other_classes_rates() -> None:
@@ -346,3 +362,92 @@ def test_the_published_total_catalog_weight_is_41() -> None:
     # docs/scorecard.md publishes "Total catalog weight: 41" and derives every coverage
     # figure from it; pin it so adding a class fails CI instead of falsifying the page.
     assert sum(SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG) == 41
+
+
+def test_the_catalog_matches_the_published_methodology() -> None:
+    # docs/scorecard.md publishes these exact values, and promises that a scorecard
+    # stamped v1.0 always recomputes to the same letter. The other tests compare the
+    # output to the implementation's own constants, so both sides move together and a
+    # silent change to what a published grade MEANS stays green. This pins the contract:
+    # changing the catalog, a weight, or a threshold must break here and force a
+    # METHODOLOGY_VERSION bump (and a docs update) rather than sliding through.
+    assert METHODOLOGY_VERSION == "1.0"
+    assert [(entry.class_id, entry.severity) for entry in CATALOG] == [
+        (1, Severity.CRITICAL),
+        (2, Severity.CRITICAL),
+        (3, Severity.HIGH),
+        (4, Severity.HIGH),
+        (5, Severity.MEDIUM),
+        (6, Severity.HIGH),
+        (7, Severity.CRITICAL),
+        (8, Severity.CRITICAL),
+        (9, Severity.HIGH),
+        (10, Severity.HIGH),
+        (13, Severity.CRITICAL),
+    ]
+    assert SEVERITY_WEIGHTS[Severity.CRITICAL] == 5
+    assert SEVERITY_WEIGHTS[Severity.HIGH] == 3
+    assert SEVERITY_WEIGHTS[Severity.MEDIUM] == 1
+
+
+@pytest.mark.parametrize(
+    ("weighted", "expected"),
+    [
+        (1.0, Grade.A),
+        (0.95, Grade.A),  # the boundary is inclusive
+        (0.9499, Grade.B),
+        (0.85, Grade.B),
+        (0.8499, Grade.C),
+        (0.70, Grade.C),
+        (0.6999, Grade.D),
+        (0.50, Grade.D),
+        (0.4999, Grade.F),
+        (0.0, Grade.F),
+    ],
+)
+def test_grade_thresholds_match_the_published_table(weighted: float, expected: Grade) -> None:
+    # The A/B and B/C rows of the published table are unreachable through score_run (any
+    # weighted < 1.0 requires a failure, which caps at C or worse and swallows the base
+    # grade), so the table can only be pinned at the helper. Without this, flipping a
+    # published `>=` to `>` is invisible.
+    assert _grade_for(weighted) is expected
+
+
+@pytest.mark.parametrize(
+    ("coverage", "expected"),
+    [
+        (1.0, Confidence.HIGH),
+        (0.85, Confidence.HIGH),  # inclusive
+        (0.8499, Confidence.MEDIUM),
+        (0.60, Confidence.MEDIUM),  # inclusive
+        (0.5999, Confidence.LOW),
+        (0.0, Confidence.LOW),
+    ],
+)
+def test_confidence_thresholds_match_the_published_table(
+    coverage: float, expected: Confidence
+) -> None:
+    # Coverage is covered_weight/41 with an integer numerator, so it can never land
+    # exactly on 0.85 (34.85) or 0.60 (24.6): the published boundaries are unreachable
+    # via score_run, and the MEDIUM band is never otherwise asserted.
+    assert _confidence_for(coverage) is expected
+
+
+def test_the_d_f_grade_boundary_is_inclusive_at_exactly_0_50() -> None:
+    # The one boundary observable through the public API: four high-band classes, two
+    # failing -> 6/12 = exactly 0.50, and the high-band cap (D) is not worse than the
+    # base grade, so the threshold itself decides the letter. '>' would grade F.
+    card = score_run(
+        _run(
+            ran=(
+                "rag-poisoning",
+                "semantic-cache-contamination",
+                "embedding-inversion",
+                "lora-cross-tenant",
+            ),
+            findings=(_finding("rag-poisoning"), _finding("semantic-cache-contamination")),
+        )
+    )
+    assert card.weighted_score == pytest.approx(0.50)
+    assert card.capped_by is Severity.HIGH
+    assert card.grade is Grade.D
