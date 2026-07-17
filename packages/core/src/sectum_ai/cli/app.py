@@ -111,6 +111,7 @@ from sectum_ai.probes import (
     calibrate_threshold,
     confirmed_findings,
     dedupe_findings,
+    is_cross_principal,
 )
 from sectum_ai.runner import (
     Runner,
@@ -760,18 +761,27 @@ def probe(
         agent=bundle.agent,
     )
 
-    if len(substrate.principals()) < 2:
-        # The precondition of the whole product. Isolation is a claim about a boundary
-        # BETWEEN principals, so with fewer than two nothing is foreign to anyone and no
-        # probe can confirm a leak however broken the stack is. Probing anyway produces a
-        # genuine, signable record of nothing: the same maximally-leaky demo stack grades
-        # F on four principals and A on one, and the letter would be describing the
-        # substrate rather than the stack. Refuse rather than emit a meaningless clean run.
+    # The precondition of the whole product, tested as the probes themselves test it. Ask
+    # the real question - is any marker foreign to any principal? - rather than a proxy for
+    # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
+    # user has TWO principals but no boundary (`is_cross_principal` never crosses a tenant
+    # with its own users' data), and any principal count at all is satisfied by a substrate
+    # holding no markers to find. Both graded A against the maximally-leaky demo stack,
+    # from a genuine, signable record that `verify` passes - the letter describing the
+    # substrate while reading as a verdict on the stack.
+    if not any(
+        is_cross_principal(marker, principal)
+        for marker in substrate.manifest.markers
+        for principal in substrate.principals()
+    ):
         raise ConfigError(
-            f"this substrate holds {len(substrate.principals())} principal(s); "
-            "multi-tenant isolation cannot be verified with fewer than two, because no "
-            "data is foreign to anyone and no probe can surface a cross-principal leak. "
-            "Seed a substrate with at least two principals (the default scenario has four)."
+            f"no marker in this substrate is foreign to any of its principals "
+            f"({len(substrate.principals())} principal(s), "
+            f"{len(substrate.manifest.markers)} marker(s)), so nothing can cross an "
+            "isolation boundary and no probe can surface a leak however broken the stack "
+            "is - every clean result would be a property of the substrate, not of the "
+            "stack. Seed a substrate whose principals hold data foreign to one another "
+            "(the default scenario has four tenants)."
         )
 
     started = datetime.now(UTC)
@@ -921,7 +931,10 @@ def probe(
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
-            typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
+            # The model names come from the scenario, which `probe` reads off disk and is
+            # not entitled to trust: a newline in one forged this summary's own
+            # "ran N probes: 0 confirmed cross-tenant findings" line.
+            typer.echo(f"  retrieval-pivot rate [{untrusted(model_name)}]: {rate:.0%}")
         for label, class_rate in (
             ("poisoning bleed delta", run.metrics.poisoning_bleed_delta),
             ("inversion reconstruction rate", run.metrics.inversion_reconstruction_rate),

@@ -45,16 +45,25 @@ which reads to an auditor exactly like one we invented. Counts that cannot be tr
 (`k > n`) are refused rather than fallen back on, so a record cannot opt out of the
 recompute by corrupting them.
 
-`probe` refuses a substrate holding **fewer than two principals** (exit `3`), so no such
-run reaches the scorecard. Isolation is a claim about a boundary *between* principals, so
-below two nothing is foreign to anyone and no probe can surface a leak however broken the
-stack is — every class would read clean as a property of the substrate rather than of the
-stack, and the same deliberately-leaky demo stack that grades `F` on four principals
-grades `A` on one. The guard is at `probe` because that is where it can be enforced on
-evidence: the run record is self-reported, so a count carried in it would be worth nothing
-against a record that lies, and `scenario_hash` pins *which* substrate without saying how
-many parties it held. A grade therefore rests on the substrate being sound — check the
-scenario, not just the letter. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
+`probe` refuses a substrate in which **no marker is foreign to any principal** (exit `3`),
+so no such run reaches the scorecard. That is the precondition of the whole exercise:
+isolation is a claim about a boundary *between* principals, so where nothing is foreign to
+anybody no probe can surface a leak however broken the stack is, and every class would read
+clean as a property of the substrate rather than of the stack — the same deliberately-leaky
+demo stack that grades `F` on four tenants grades `A` on one.
+
+The guard asks that question directly rather than counting principals, because the count is
+only a proxy for it and the gap between the two is where the bad grades live: a tenant with
+one user has *two* principals but no boundary (a tenant owns its users' data), and any
+number of principals still verifies nothing if no marker was planted. That second shape is
+the more dangerous one — the probes do run and do query, so Class 2 reports a well-powered
+`0.0% RPR (95% CI 0.0%-13.8%, n=24)` on a question that could never have had an answer.
+
+The guard is at `probe` because that is where it can be enforced on evidence. The run
+record is self-reported, so a count carried inside it would be worth nothing against a
+record that lies, and `scenario_hash` pins *which* substrate without saying what was in it.
+A grade therefore rests on the substrate being sound — check the scenario, not just the
+letter. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
 (`run.json` wins when both exist: `probe` rewrites it unconditionally, while the pack is
 only as fresh as the last `report`, so preferring the pack could grade a stale record and
 flatter the letter). It prints the `run_id` and path it graded. `score` does not itself

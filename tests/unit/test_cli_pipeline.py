@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from typer.testing import CliRunner
@@ -9,7 +10,7 @@ from typer.testing import CliRunner
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum_ai.spec import RunMetrics, RunResult
+from sectum_ai.spec import RunMetrics, RunResult, SyntheticUserSpec
 
 _runner = CliRunner()
 
@@ -791,23 +792,67 @@ def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
     assert "GRADE" in result.output
 
 
-def test_probe_refuses_a_substrate_that_crosses_no_boundary(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("shape", "mutate"),
+    [
+        # One principal: the obvious case.
+        ("one tenant, no users", lambda s: {"tenants": s.tenants[:1]}),
+        # TWO principals, no boundary. The proxy this guard used to be - "fewer than two
+        # principals" - passed this: principals() counts a tenant AND each of its users,
+        # but is_cross_principal never crosses a tenant with its own users' data, so a
+        # tenant with one user has two principals and nothing foreign to anybody.
+        (
+            "one tenant, one user",
+            lambda s: {
+                "tenants": (
+                    s.tenants[0].model_copy(
+                        update={
+                            "users": (
+                                SyntheticUserSpec(user_id=UUID(int=0x101), display_name="u1"),
+                            )
+                        }
+                    ),
+                )
+            },
+        ),
+    ],
+)
+def test_probe_refuses_a_substrate_that_crosses_no_boundary(
+    tmp_path: Path, shape: str, mutate: object
+) -> None:
     # CRITICAL regression, and the precondition of the whole product: isolation is a claim
-    # about a boundary BETWEEN principals, so below two nothing is foreign to anyone and no
-    # probe can confirm a leak however broken the stack is. Probing anyway produced a
-    # GENUINE, signable record of nothing - the same maximally-leaky demo stack that grades
-    # F on four principals graded A on one, so the letter described the substrate, not the
-    # stack. `seed` builds four, so this is reachable through a supplied substrate.json,
-    # which is exactly the record `probe` is not entitled to trust.
+    # about a boundary BETWEEN principals, so where nothing is foreign to anyone no probe
+    # can confirm a leak however broken the stack is. Probing anyway produced a GENUINE,
+    # signable record of nothing - the same maximally-leaky demo stack that grades F on
+    # four tenants graded A here, so the letter described the substrate, not the stack, and
+    # `verify` passed it. `seed` builds four tenants, so this is reachable through a
+    # supplied substrate.json - exactly the record `probe` is not entitled to trust.
     from sectum_ai.substrate import build_substrate, default_scenario
 
     scenario = default_scenario(seed=2026)
-    one = build_substrate(scenario.model_copy(update={"tenants": scenario.tenants[:1]}))
-    (tmp_path / "substrate.json").write_text(one.model_dump_json())
+    degenerate = build_substrate(scenario.model_copy(update=mutate(scenario)))  # type: ignore[operator]
+    (tmp_path / "substrate.json").write_text(degenerate.model_dump_json())
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, shape
+    assert "no marker in this substrate is foreign" in result.output
+    assert not (tmp_path / "run.json").exists()  # no record of a run that proved nothing
+
+
+def test_probe_refuses_a_substrate_with_no_markers_to_find(tmp_path: Path) -> None:
+    # Principals alone are not the precondition: four tenants and 48 documents still
+    # verify nothing if no marker was planted. This shape is the more dangerous one - the
+    # probes DO run and DO query, so Class 2 reported `0.0% RPR (95% CI 0.0%-13.8%, n=24)`:
+    # a well-powered clean measurement of a question that could never have an answer.
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    unmarked = substrate.model_copy(
+        update={"manifest": substrate.manifest.model_copy(update={"markers": ()})}
+    )
+    (tmp_path / "substrate.json").write_text(unmarked.model_dump_json())
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3
-    assert "fewer than two" in result.output
-    assert not (tmp_path / "run.json").exists()  # no record of a run that proved nothing
+    assert "no marker in this substrate is foreign" in result.output
 
 
 def test_score_refuses_a_record_carrying_a_non_finite_metric(tmp_path: Path) -> None:

@@ -224,11 +224,12 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
                 f"n={metrics.retrieval_pivot_n})"
             )
         if metrics.retrieval_pivot_rate is not None:
-            rate = f"{metrics.retrieval_pivot_rate:.1%} RPR"
-            if metrics.retrieval_pivot_rate_ci is None:
-                return rate
-            low, high = metrics.retrieval_pivot_rate_ci
-            return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+            # No counts, so the rate is all the record actually has. Any interval it
+            # asserts is uncheckable - there is no sample size to compute one from, and an
+            # interval over n=0 is not an interval at all - so it is dropped rather than
+            # relayed: `12.5% RPR (95% CI 12.4%-12.6%, n=0)` is the same fabrication the
+            # counts-recompute exists to refuse, one branch over.
+            return f"{metrics.retrieval_pivot_rate:.1%} RPR"
         return None
     rates: dict[int, tuple[str, float | None]] = {
         3: ("poisoning bleed", metrics.poisoning_bleed_delta),
