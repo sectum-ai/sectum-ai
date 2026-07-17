@@ -662,3 +662,85 @@ def test_probe_with_a_serving_only_model_skips_class_9(
     versions = json.loads((tmp_path / "run.json").read_text())["probe_versions"]
     assert "lora-cross-tenant" not in versions  # gated out: a serving model can't train
     assert "tenant-boundary-fetch" in versions  # the rest of the suite still ran
+
+
+def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) -> None:
+    # The demo substrate is deliberately leaky, so the graded posture must be F - and
+    # the letter must say *why* (a confirmed critical failure), not just assert itself.
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "GRADE F" in result.output
+    assert "capped by a confirmed critical failure" in result.output
+    # Every class is listed - including the ones that never ran.
+    assert "NOT_COVERED" in result.output
+    # The methodology is cited, so a reader can recompute the letter.
+    assert "docs/scorecard.md" in result.output
+    assert "Untested classes lower confidence, never the grade." in result.output
+
+
+def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["grade"] == "F"
+    assert payload["capped_by"] == "critical"
+    assert payload["methodology_version"]
+    assert 0.0 <= payload["coverage"] <= 1.0
+    assert 0.0 <= payload["weighted_score"] <= 1.0
+    # k/n-style transparency: every catalog class appears, verdicts included.
+    assert payload["classes_total"] == len(payload["classes"])
+    assert {c["verdict"] for c in payload["classes"]} <= {"PASS", "FAIL", "NOT_COVERED"}
+
+
+def test_score_json_round_trips_into_the_isolation_score_model(tmp_path: Path) -> None:
+    from sectum_ai.spec import IsolationScore
+
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    card = IsolationScore.model_validate_json(result.output)
+    assert card.classes and card.grade.value == "F"
+
+
+def test_score_on_an_isolated_stack_grades_well(tmp_path: Path) -> None:
+    # The discriminating case: the same catalog against a per-tenant-namespace store
+    # must NOT grade F, else the scorecard is a rubber stamp.
+    config_path = tmp_path / "iso.yaml"
+    config_path.write_text(
+        f"workdir: {tmp_path}\nadapters:\n  vector_store:\n    kind: fake\n"
+        "    shared_index: false\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--config", str(config_path)])
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["grade"] == "A"
+    assert payload["capped_by"] is None
+    assert payload["weighted_score"] == 1.0
+
+
+def test_score_without_a_run_exits_3(tmp_path: Path) -> None:
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3
+
+
+def test_score_rejects_sarif_and_oscal(tmp_path: Path) -> None:
+    # SARIF/OSCAL project findings; a graded posture has no rendering in either, so the
+    # command rejects them rather than silently falling through to text.
+    _seed_and_probe(tmp_path)
+    for fmt in ("sarif", "oscal"):
+        result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", fmt])
+        assert result.exit_code == 3, fmt
+
+
+def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
+    workdir = tmp_path / "from-config"
+    workdir.mkdir()
+    config_path = tmp_path / "sectum-ai.yaml"
+    config_path.write_text(f"workdir: {workdir}\n")
+    _seed_and_probe(workdir)
+    result = _runner.invoke(app, ["score", "--config", str(config_path)])
+    assert result.exit_code == 0
+    assert "GRADE" in result.output

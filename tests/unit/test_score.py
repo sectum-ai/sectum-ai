@@ -166,3 +166,101 @@ def test_every_catalog_class_appears_and_weights_are_declared() -> None:
     assert 11 not in {c.class_id for c in card.classes}
     assert 12 not in {c.class_id for c in card.classes}
     assert all(SEVERITY_WEIGHTS[e.severity] > 0 for e in CATALOG)
+
+
+_HIGH_PROBES = (
+    "rag-poisoning",
+    "semantic-cache-contamination",
+    "embedding-inversion",
+    "lora-cross-tenant",
+    "ikea-extraction",
+)
+
+
+def test_the_final_grade_is_the_worse_of_the_weighted_grade_and_the_cap() -> None:
+    # The cap is a FLOOR, not the answer. Over a run that covered only high-band
+    # classes, failing most of them drags the weighted score under 0.50 -> a base grade
+    # of F, which is worse than the high-band cap (D), so F wins.
+    card = score_run(_run(ran=_HIGH_PROBES, findings=tuple(_finding(p) for p in _HIGH_PROBES[:4])))
+    assert card.capped_by is Severity.HIGH  # the cap alone would have said D...
+    assert card.weighted_score < 0.5
+    assert card.grade is Grade.F  # ...but the weighted grade is worse, so it governs
+
+
+def test_under_full_coverage_non_critical_failures_cannot_outweigh_the_cap() -> None:
+    # A property of the published weights worth pinning: the five critical classes carry
+    # 25 of the catalog's 41, so failing EVERY high- and medium-band class still leaves
+    # the weighted score above 0.50. The severity cap - not the average - is what makes
+    # those failures bite, which is exactly why rule 3 exists.
+    non_critical = (*_HIGH_PROBES, "kv-cache-timing")
+    card = score_run(_run(ran=_ALL_PROBES, findings=tuple(_finding(p) for p in non_critical)))
+    assert card.weighted_score > 0.5  # the average alone would still grade D
+    assert card.capped_by is Severity.HIGH
+    assert card.grade is Grade.D
+
+
+def test_a_multi_probe_class_is_covered_when_any_of_its_probes_ran() -> None:
+    # Class 2 drives two probes; running only the vector-store one still covers the
+    # class, and the record names only the probe that actually ran.
+    card = score_run(_run(ran=("rag-entity-bleed",)))
+    bleed = next(c for c in card.classes if c.class_id == 2)
+    assert bleed.verdict is ClassVerdict.PASS
+    assert bleed.probe_ids == ("rag-entity-bleed",)  # not the un-run sibling
+
+
+def test_a_failure_in_one_class_does_not_fail_another() -> None:
+    # Findings are attributed by probe id; a Class 1 leak must not tank Class 2.
+    card = score_run(_run(ran=_ALL_PROBES, findings=(_finding("tenant-boundary-fetch"),)))
+    assert next(c for c in card.classes if c.class_id == 1).verdict is ClassVerdict.FAIL
+    others = [c for c in card.classes if c.class_id != 1]
+    assert all(c.verdict is ClassVerdict.PASS for c in others)
+    assert all(c.confirmed_findings == 0 for c in others)
+
+
+def test_coverage_drives_the_confidence_band() -> None:
+    # Boundaries of the published table: >=0.85 high, >=0.60 medium, else low.
+    full = score_run(_run(ran=_ALL_PROBES))
+    assert full.coverage == pytest.approx(1.0) and full.confidence is Confidence.HIGH
+    # The two critical RAG classes plus a high one: 5+5+3 = 13/41 = 0.32 -> low.
+    thin = score_run(_run(ran=("tenant-boundary-fetch", "rag-entity-bleed", "rag-poisoning")))
+    assert thin.coverage < 0.60 and thin.confidence is Confidence.LOW
+
+
+def test_scoring_is_deterministic() -> None:
+    run = _run(ran=_ALL_PROBES, findings=(_finding("rag-poisoning"),))
+    assert score_run(run).model_dump() == score_run(run).model_dump()
+
+
+def test_headlines_render_the_other_classes_rates() -> None:
+    card = score_run(
+        _run(
+            ran=_ALL_PROBES,
+            metrics=RunMetrics(
+                poisoning_bleed_delta=0.5,
+                inversion_reconstruction_rate=0.25,
+                extraction_efficiency=0.181,
+            ),
+        )
+    )
+    by_id = {c.class_id: c for c in card.classes}
+    assert by_id[3].headline is not None and "50.0%" in by_id[3].headline
+    assert by_id[6].headline is not None and "25.0%" in by_id[6].headline
+    assert by_id[10].headline is not None and "18.1%" in by_id[10].headline
+    # A class with no headline rate simply has none - never a fabricated 0.
+    assert by_id[1].headline is None
+
+
+def test_a_class_that_did_not_run_carries_no_headline_or_findings() -> None:
+    # An untested class must not borrow the run's metrics and look measured.
+    card = score_run(
+        _run(
+            ran=("tenant-boundary-fetch",),
+            metrics=RunMetrics(
+                retrieval_pivot_rate=0.9, retrieval_pivot_rate_ci=(0.8, 0.95), retrieval_pivot_n=48
+            ),
+        )
+    )
+    bleed = next(c for c in card.classes if c.class_id == 2)
+    assert bleed.verdict is ClassVerdict.NOT_COVERED
+    assert bleed.headline is None
+    assert bleed.confirmed_findings == 0
