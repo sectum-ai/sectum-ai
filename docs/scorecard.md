@@ -186,7 +186,16 @@ into it:
 
 A class is uncovered when the configured stack cannot satisfy its probe (no adapter
 reports the capability it needs, so it is skipped rather than run into a mid-probe
-error), or when it was not in the run's suite. Class 13 is measured by its own
+error), when it was not in the run's suite, or when the substrate left its probe no step
+to take — its markers were foreign to no principal, so there was nothing to plant that
+anyone could try to steal.
+
+That last reason is **per class**, and the substrate refusal above cannot stand in for it:
+the refusal asks whether *some* marker is foreign to *somebody*, so a substrate can
+satisfy it and still starve one class of anything to find. Such a class reads
+`NOT_COVERED` rather than `PASS` — it asked the stack nothing — and the loss lands on
+confidence, so a thin `coverage` figure is worth reading as a question about the
+substrate. Class 13 is measured by its own
 [image-embedding sweep](attack-catalog/class-13-multimodal-rag-bleed.md) rather than the
 CLI probe suite, so a plain `sectum-ai probe` run records it `NOT_COVERED` — honestly
 lowering confidence rather than quietly passing.

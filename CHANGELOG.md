@@ -75,7 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   genuine, so there was no tampering to catch: it passed `verify`, in-toto and DSSE, and an
   auditor holding only the pack reproduced the `A`. `probe` now refuses (exit `3`) a
   substrate in which no marker is foreign to any principal, at the source, so the tool
-  cannot produce such a record. The check asks that question directly rather than counting
+  cannot produce such a record. It refuses on the substrate alone, before building a
+  single adapter — a refused run does not seed your vector store, prime your cache or
+  train your model. The check asks that question directly rather than counting
   principals, because the count is only a proxy: a tenant with one user has *two* principals
   and no boundary (a tenant owns its users' data), and any number of principals verifies
   nothing if no marker was planted — the latter being the more dangerous shape, since the
@@ -85,22 +87,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check — some marker is foreign to somebody — so it cannot by itself stop a class that was
   starved of anything to find from grading `PASS`; that is the per-class job of the
   step-based `probe_versions` rule, below.
-- **Sectum plants only what someone could steal, and a refused run no longer touches your
-  stack.** Two changes to what Sectum writes into a live system:
-    - `semantic-cache-contamination`, `memory-contamination` and `lora-cross-tenant`
-      planted their canary — a `cache.set`, a `model.train`, a `memory.write` — for every
-      marker, and only *read* it back from principals the marker was foreign to. Where a
-      class's markers were foreign to nobody they wrote, never read, and the class graded
-      **`PASS`**: a critical-band pass on a maximally-leaky memory store, off a probe that
-      wrote two notes and never tried to recall them. (The substrate refusal above cannot
-      catch this: it is global, and this starvation is per class.) They now plan nothing
-      when no principal could read back what they would plant, so the class reads
-      `NOT_COVERED` and Sectum writes less into your cache, memory and model.
-    - That refusal ran *after* the corpus was seeded into the vector store, and the seeding
-      upsert — unlike the MCP/agent/RAG provisioning beside it — was not gated to the
-      in-memory fakes. So `probe` exited `3` declining to assess a stack it had already
-      committed 24 synthetic documents to, with no run record to explain them and no
-      cleanup. It now refuses before any adapter is built.
 - **A probe that asked the stack nothing is no longer recorded as having run.**
   `probe_versions` was built from *suite membership*, while `score` reads it as "what
   actually ran" — so a probe whose plan came back empty was recorded, found nothing, and
