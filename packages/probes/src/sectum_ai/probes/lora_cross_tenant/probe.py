@@ -57,6 +57,13 @@ class LoraCrossTenantProbe(DetectingProbe):
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
                 continue
+            observers = [p for p in principals if is_cross_principal(marker, p)]
+            if not observers:
+                # Nobody could infer this fact across a boundary, so training on it would
+                # ask the stack nothing while still recording this probe as having run -
+                # and `score` grades a probe that ran and found nothing as PASS. Train only
+                # on what someone can try to extract.
+                continue
             steps.append(
                 ProbeStep(
                     step_id=f"{self.id}-{len(steps):04d}",
@@ -67,9 +74,7 @@ class LoraCrossTenantProbe(DetectingProbe):
                     payload={"text": f"Memorized adapter fact. Reference: {marker.plaintext}"},
                 )
             )
-            for observer in principals:
-                if not is_cross_principal(marker, observer):
-                    continue
+            for observer in observers:
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",

@@ -691,6 +691,29 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
+    # The precondition of the whole product, tested as the probes themselves test it. Ask
+    # the real question - is any marker foreign to any principal? - rather than a proxy for
+    # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
+    # user has TWO principals but no boundary (`is_cross_principal` never crosses a tenant
+    # with its own users' data), and any principal count at all is satisfied by a substrate
+    # holding no markers to find. Both graded A against the maximally-leaky demo stack,
+    # from a genuine, signable record that `verify` passes - the letter describing the
+    # substrate while reading as a verdict on the stack.
+    if not any(
+        is_cross_principal(marker, principal)
+        for marker in substrate.manifest.markers
+        for principal in substrate.principals()
+    ):
+        raise ConfigError(
+            f"no marker in this substrate is foreign to any of its principals "
+            f"({len(substrate.principals())} principal(s), "
+            f"{len(substrate.manifest.markers)} marker(s)), so nothing can cross an "
+            "isolation boundary and no probe can surface a leak however broken the stack "
+            "is - every clean result would be a property of the substrate, not of the "
+            "stack. Seed a substrate whose principals hold data foreign to one another "
+            "(the default scenario has four tenants)."
+        )
+
     suite = _build_suite(build_detection_providers(loaded.detection))
     run_kv_timing = True
     if only is not None and suite_name is not None:
@@ -761,29 +784,6 @@ def probe(
         agent=bundle.agent,
     )
 
-    # The precondition of the whole product, tested as the probes themselves test it. Ask
-    # the real question - is any marker foreign to any principal? - rather than a proxy for
-    # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
-    # user has TWO principals but no boundary (`is_cross_principal` never crosses a tenant
-    # with its own users' data), and any principal count at all is satisfied by a substrate
-    # holding no markers to find. Both graded A against the maximally-leaky demo stack,
-    # from a genuine, signable record that `verify` passes - the letter describing the
-    # substrate while reading as a verdict on the stack.
-    if not any(
-        is_cross_principal(marker, principal)
-        for marker in substrate.manifest.markers
-        for principal in substrate.principals()
-    ):
-        raise ConfigError(
-            f"no marker in this substrate is foreign to any of its principals "
-            f"({len(substrate.principals())} principal(s), "
-            f"{len(substrate.manifest.markers)} marker(s)), so nothing can cross an "
-            "isolation boundary and no probe can surface a leak however broken the stack "
-            "is - every clean result would be a property of the substrate, not of the "
-            "stack. Seed a substrate whose principals hold data foreign to one another "
-            "(the default scenario has four tenants)."
-        )
-
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
     # A single probe stays serial regardless of --max-concurrency (a pool is only
@@ -848,11 +848,15 @@ def probe(
             # whose plan comes back empty asked the stack nothing, and recording it let
             # `score` grade the class PASS - a check that never happened
             # (docs/scorecard.md, rule 1). Findings still stand on their own: score's rule
-            # 4 treats a confirmed finding as proof its probe ran. A step is only weak
-            # evidence of a real check - several probes emit setup steps (cache.set,
-            # model.train, memory.write) before the read that could actually surface a
-            # leak - so the &lt;2-principal refusal above, not this, is what keeps a probe
-            # from passing on a substrate where nothing is foreign to anyone.
+            # 4 treats a confirmed finding as proof its probe ran.
+            #
+            # This is load-bearing PER CLASS, and the substrate refusal above cannot stand
+            # in for it: that refusal is a GLOBAL existential (some marker is foreign to
+            # somebody), while a vacuous PASS is per class - so a substrate can satisfy the
+            # refusal and still starve one class of anything to find. It works only because
+            # each probe now plans nothing when no principal could read back what it would
+            # plant; they used to emit the setup step regardless (cache.set, model.train,
+            # memory.write) and land here on the strength of a write nobody could read.
             **dict.fromkeys(sorted({result[0].probe_id for result in step_results}), __version__),
             # Gated on what the KV probe MEASURED, not on having been asked to run: "we ran
             # it" and "it observed something" are different claims, and `score` reads this

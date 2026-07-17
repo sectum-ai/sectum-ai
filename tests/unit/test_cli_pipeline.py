@@ -882,6 +882,44 @@ def test_a_kv_probe_that_measured_nothing_is_not_recorded_as_having_run(tmp_path
     assert kv["verdict"] == "NOT_COVERED"
 
 
+def test_a_class_starved_of_anything_to_find_is_never_a_pass(tmp_path: Path) -> None:
+    # The substrate refusal is a GLOBAL existential - some marker is foreign to somebody -
+    # while a vacuous PASS is PER CLASS, so a substrate can satisfy the refusal and still
+    # starve one class. Demote only the HARD_CANARYs to tenant level: the entity canaries
+    # stay user-owned so the run is legitimately accepted (Class 2 is real), but Classes
+    # 4/8/9 have nothing foreign to plant. They used to write their canary anyway - a
+    # cache.set, a model.train, a memory.write - never read it back, and grade PASS,
+    # including a CRITICAL-band PASS on a maximally-leaky memory store. Rule 1 exactly:
+    # the probes now plan nothing rather than plant what nobody can steal.
+    from sectum_ai.spec import MarkerType
+
+    substrate = _one_tenant_two_users()
+    markers = tuple(
+        marker.model_copy(update={"owner_user_id": None})
+        if marker.marker_type is MarkerType.HARD_CANARY
+        else marker
+        for marker in substrate.manifest.markers  # type: ignore[attr-defined]
+    )
+    starved = substrate.model_copy(  # type: ignore[attr-defined]
+        update={"manifest": substrate.manifest.model_copy(update={"markers": markers})}  # type: ignore[attr-defined]
+    )
+    (tmp_path / "substrate.json").write_text(starved.model_dump_json())
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code in (0, 2)
+    versions = set(json.loads((tmp_path / "run.json").read_text())["probe_versions"])
+    assert not versions & {
+        "semantic-cache-contamination",
+        "memory-contamination",
+        "lora-cross-tenant",
+    }
+
+    payload = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    by_id = {c["class_id"]: c for c in payload["classes"]}
+    for class_id in (4, 8, 9):
+        assert by_id[class_id]["verdict"] == "NOT_COVERED", f"class {class_id} found nothing"
+
+
 def test_probe_reports_the_probe_count_the_record_attests(tmp_path: Path) -> None:
     # The summary said "ran 12 probes" while the signed run recorded 8 - claiming coverage
     # the evidence does not carry, in the direction rule 1 exists to prevent.
@@ -897,11 +935,18 @@ def test_probe_reports_the_probe_count_the_record_attests(tmp_path: Path) -> Non
 
 
 def test_probe_refuses_before_touching_the_stack(tmp_path: Path) -> None:
-    # A refused run must not have run. The refusal used to be checkable only by its output
-    # - exit 3, the message, no run.json - all of which a check placed AFTER the run
-    # produces identically, while having executed 39 steps including 8 MUTATING ones
-    # (vector.upsert, model.train, cache.set, memory.write) against the customer's stack.
-    # Sectum verifies and attests; it does not mutate a stack it is refusing to assess.
+    # A refused run must not have run. The refusal is checkable from its output only by
+    # exit 3, the message and the absent run.json - all of which a check placed too late
+    # produces identically, having already driven the stack. So spy on the stack itself.
+    #
+    # Both halves are load-bearing and were found the hard way. The probe steps are the
+    # obvious half. The seeding upsert is the one that bit: it ran ~40 lines BEFORE the
+    # refusal and, unlike the MCP/agent/RAG provisioning beside it, was not Fake-gated -
+    # so `probe` exited 3 saying it would not assess this stack having already committed
+    # 24 synthetic documents to the customer's real pgvector/Pinecone index, with no run
+    # record to explain them and no cleanup. An earlier version of this test spied only on
+    # the runner and was blind to it, asserting less than its own name claimed.
+    from sectum_ai.adapters import FakeVectorStore
     from sectum_ai.runner import Runner
     from sectum_ai.substrate import build_substrate, default_scenario
 
@@ -910,19 +955,27 @@ def test_probe_refuses_before_touching_the_stack(tmp_path: Path) -> None:
     (tmp_path / "substrate.json").write_text(one.model_dump_json())
 
     executed: list[str] = []
-    original = Runner.run_per_step
+    written: list[int] = []
+    run_per_step, upsert = Runner.run_per_step, FakeVectorStore.upsert
 
-    def spy(self: Runner, probe: object) -> object:
+    def spy_run(self: Runner, probe: object) -> object:
         executed.append(getattr(probe, "id", "?"))
-        return original(self, probe)  # type: ignore[arg-type]
+        return run_per_step(self, probe)  # type: ignore[arg-type]
 
-    Runner.run_per_step = spy  # type: ignore[assignment,method-assign]
+    def spy_upsert(self: FakeVectorStore, tenant_id: object, documents: object) -> object:
+        written.append(len(list(documents)))  # type: ignore[call-overload]
+        return upsert(self, tenant_id, documents)  # type: ignore[arg-type]
+
+    Runner.run_per_step = spy_run  # type: ignore[assignment,method-assign]
+    FakeVectorStore.upsert = spy_upsert  # type: ignore[assignment,method-assign]
     try:
         result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     finally:
-        Runner.run_per_step = original  # type: ignore[method-assign]
+        Runner.run_per_step = run_per_step  # type: ignore[method-assign]
+        FakeVectorStore.upsert = upsert  # type: ignore[method-assign]
     assert result.exit_code == 3
     assert not executed, f"a refused run drove probes against the stack: {executed}"
+    assert not written, f"a refused run wrote {sum(written)} documents to the stack"
 
 
 def test_probe_refuses_a_substrate_with_no_markers_to_find(tmp_path: Path) -> None:
