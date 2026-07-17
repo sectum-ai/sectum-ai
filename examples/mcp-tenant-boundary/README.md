@@ -26,10 +26,12 @@ tool-call surface.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants and their canary markers.
 2. **`sectum-ai probe --probe agent-tool-hijack`** provisions each tenant's hard
-   canary as an MCP resource, then from every other tenant issues two lookups
-   for it — a direct lookup (confused-deputy) and a lookup carrying the owner's
-   token (token-passthrough) — against an MCP server with both flaws switched
-   on.
+   canary as an MCP resource, then from every other tenant issues four sub-probes
+   for it — a direct lookup (confused-deputy), a lookup carrying the owner's
+   token (token-passthrough), a lookup routed through a downstream server
+   (cross-server confused-deputy), and a search whose attacker-authored tool
+   description smuggles the coordinate (tool-description injection) — against an
+   MCP server with the confused-deputy and token-passthrough flaws switched on.
 3. **`sectum-ai report`** assembles a tamper-evident evidence pack.
 4. **`sectum-ai verify`** independently re-checks the pack.
 

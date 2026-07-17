@@ -2,8 +2,9 @@
 
 The flagship demo is a 90-second walkthrough of the Class 2 organic-
 entity-bleed RAG probe — the one that reproduces the Retrieval Pivot
-research finding (95.4% benign-query cross-tenant leakage). It is the
-single most-linked artifact on the website, the README, and the docs.
+research finding (81.2% benign-query cross-tenant leakage on the demo
+substrate; the 2026 research reported 95.4%). It is the single
+most-linked artifact on the website, the README, and the docs.
 
 This directory ships [`record-demo.sh`](./record-demo.sh) — a one-
 shot script that wraps `asciinema rec` around the demo workflow and
@@ -14,7 +15,7 @@ and embeddable as a JS player on any page.
 
 Engineers who land on a security product's page click "watch demo"
 before they read docs. A 90-second asciinema cast is the lowest-
-friction proof that the headline number (95.4% RPR) is reproducible
+friction proof that the headline number (81.2% RPR) is reproducible
 on a real machine. It's also the only piece of the website that
 shows actual command output rather than prose.
 
