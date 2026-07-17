@@ -442,6 +442,24 @@ def test_secret_format_recovers_a_secret_wrapped_in_surrounding_bytes() -> None:
     assert any(f.marker_id == secret.marker_id for f in confirmed_findings(detected))
 
 
+def test_secret_format_detects_a_recased_foreign_secret() -> None:
+    # The exact/substring branch casefolds both sides, but the credential-shape regexes are
+    # case-sensitive, so a foreign secret a surface merely re-cased is caught only by the
+    # substring branch - the format path's `or`, per its docstring's "no foreign secret is
+    # ever missed". Every other secret test injects the value verbatim, where both branches
+    # hit; this pins the substring branch alone (the SECRET analogue of the HARD_CANARY
+    # re-case scan test above).
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = next(s for s in _foreign_secrets(substrate, observer) if s.plaintext.startswith("sk-"))
+    recased = secret.plaintext.upper()  # the shape regex misses this; the substring branch does not
+    found = confirmed_findings(
+        DetectionPipeline(substrate).detect(observer, f"leaked: {recased}", Surface.API)
+    )
+    assert [f.marker_id for f in found] == [secret.marker_id]
+    assert found[0].severity is Severity.CRITICAL
+
+
 def test_secret_shaped_string_absent_from_the_manifest_is_not_confirmed() -> None:
     # A credential-shaped string that matches no manifest marker yields no
     # confirmed finding - the zero-false-positive invariant for the format path.

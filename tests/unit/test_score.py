@@ -211,6 +211,17 @@ def test_class_2_headline_carries_its_wilson_interval_and_sample_size() -> None:
     assert "95% CI 68.1%-89.8%" in headline and "n=48" in headline
 
 
+def test_class_2_headline_keeps_its_interval_on_a_clean_zero_rate_run() -> None:
+    # k=0 of n=48 is the clean-stack success path: the flagship RPR is 0.0%, falsy but not
+    # None. A truthiness check for the recomputed rate in place of `is not None` would strip
+    # the Wilson CI and n from exactly the result whose sample size matters most, reducing an
+    # honest "0.0% over 48 tries (CI <= 7.4%)" to a bare "0.0%". Pin the interval, not just
+    # the rate; every other Class-2 headline test uses k > 0.
+    assert _bleed_headline(RunMetrics(retrieval_pivot_k=0, retrieval_pivot_n=48)) == (
+        "0.0% RPR (95% CI 0.0%-7.4%, n=48)"
+    )
+
+
 def test_class_2_headline_recomputes_the_rate_from_the_counts_not_the_records_claim() -> None:
     # Rule 4's logic applied to the headline: the counts are evidence, the rate is the
     # record's claim about itself. A record whose counts say 46 of 48 while its rate field
@@ -418,6 +429,28 @@ def test_headlines_render_the_other_classes_rates() -> None:
     assert by_id[10].headline is not None and "18.1%" in by_id[10].headline
     # A class with no headline rate simply has none - never a fabricated 0.
     assert by_id[1].headline is None
+
+
+def test_the_counts_free_classes_render_a_clean_zero_rate_headline() -> None:
+    # 0.0 is a real measured rate on a clean run - falsy but not None. A truthiness check in
+    # place of `is not None` on the rate would drop the headline on exactly the passing run,
+    # so each counts-free class must still render its 0.0%. The test above uses only non-zero
+    # rates; this pins the zero boundary (the Class-2 sibling is pinned by _bleed_headline at
+    # k=0).
+    card = score_run(
+        _run(
+            ran=_ALL_PROBES,
+            metrics=RunMetrics(
+                poisoning_bleed_delta=0.0,
+                inversion_reconstruction_rate=0.0,
+                extraction_efficiency=0.0,
+            ),
+        )
+    )
+    by_id = {c.class_id: c for c in card.classes}
+    assert by_id[3].headline == "0.0% poisoning bleed"
+    assert by_id[6].headline == "0.0% reconstruction"
+    assert by_id[10].headline == "0.0% extraction efficiency"
 
 
 def test_a_class_that_did_not_run_carries_no_headline_or_findings() -> None:

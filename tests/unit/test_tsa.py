@@ -179,6 +179,23 @@ def test_verify_pack_routes_an_rfc3161_token_through_the_tsa_path(
     assert result.passed
 
 
+def test_require_anchored_is_satisfied_by_a_single_rfc3161_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # verify.py's contract is "a real RFC 3161 timestamp OR a Rekor inclusion proof". A pack
+    # carrying just a valid TSA token (no Rekor) is genuinely anchored, so require_anchored -
+    # the `verify` command's default - must accept it. The routing test above never gates on
+    # require_anchored, so nothing pins that one real anchor suffices; requiring BOTH would
+    # reject a standard `report --tsa` pack (exit 4).
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
+    result = verify_pack(rfc_pack, manifest, require_anchored=True)
+    assert result.passed, [check.detail for check in result.checks if not check.ok]
+    assert not any(check.name == "independent-anchor" and not check.ok for check in result.checks)
+
+
 def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
