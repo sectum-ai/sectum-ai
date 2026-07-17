@@ -78,7 +78,7 @@
       "type": "string"
     },
     "Confidence": {
-      "description": "How much of the catalog a scorecard's grade actually rests on.\n\nCoverage-driven and reported *beside* the grade, never folded into it: a run\nthat exercised three classes and a run that exercised twelve can both grade\n``A``, and the confidence is what tells them apart honestly.",
+      "description": "How much of the catalog a scorecard's grade actually rests on.\n\nCoverage-driven and reported *beside* the grade, never folded into it: a run\nthat exercised three classes and a run that exercised all eleven can both grade\n``A``, and the confidence is what tells them apart honestly.",
       "enum": [
         "high",
         "medium",
@@ -88,7 +88,7 @@
       "type": "string"
     },
     "Grade": {
-      "description": "The overall multi-tenant isolation grade (``sectum-ai score``).\n\nDerived from the *covered* classes only, then capped by the worst confirmed\nfailure's severity - a confirmed critical cross-tenant leak can never grade\nabove :data:`F`. The published weights, thresholds, and caps are in\n``docs/scorecard.md``, so the grade is recomputable from a signed run.",
+      "description": "The overall multi-tenant isolation grade (``sectum-ai score``).\n\nDerived from the *covered* classes only, then capped by the worst weight *band*\namong the failing classes (the band of the class, declared by the published\nmethodology - never the severity recorded on an individual finding): a failing\ncritical-band class can never grade above :data:`F`. The published weights,\nthresholds, and caps are in ``docs/scorecard.md``, so the grade is recomputable\nfrom a run.",
       "enum": [
         "A",
         "B",

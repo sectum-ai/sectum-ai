@@ -37,6 +37,11 @@ _TENANT_B = UUID(int=0xB)
 
 
 def _finding(probe_id: str, status: FindingStatus = FindingStatus.CONFIRMED) -> Finding:
+    # Every finding is CRITICAL-severity regardless of its class's band, and that mismatch
+    # is load-bearing: rule 3 caps on the CLASS's band, so a MEDIUM-band class carrying a
+    # CRITICAL finding is what proves the cap ignores finding.severity. "Tidying" this to
+    # match each class's band would leave test_a_medium_only_failure_caps_at_c passing
+    # against the very bug it exists to catch.
     return Finding(
         finding_id=f"f-{probe_id}-{status.value}",
         probe_id=probe_id,
@@ -80,6 +85,8 @@ def test_a_clean_full_run_grades_a_at_high_confidence() -> None:
     assert card.capped_by is None
     assert all(c.verdict is ClassVerdict.PASS for c in card.classes)
     assert card.methodology_version == METHODOLOGY_VERSION
+    # The scorecard is what binds a letter to a record; a blank run_id binds it to nothing.
+    assert card.run_id == "run-test"
 
 
 def test_an_untested_class_is_never_a_pass() -> None:
@@ -124,6 +131,9 @@ def test_a_confirmed_high_failure_caps_the_grade_at_d() -> None:
 
 
 def test_a_medium_only_failure_caps_at_c() -> None:
+    # The finding is CRITICAL-severity but Class 5 is a MEDIUM-band class, so this pins
+    # what rule 3 keys on: the class's published band, never the finding's severity.
+    # Keying on finding.severity would grade this F.
     card = score_run(_run(ran=_ALL_PROBES, findings=(_finding("kv-cache-timing"),)))
     assert card.grade is Grade.C
     assert card.capped_by is Severity.MEDIUM
@@ -162,9 +172,19 @@ def test_class_2_headline_carries_its_wilson_interval_and_sample_size() -> None:
     )
     bleed = next(c for c in card.classes if c.class_id == 2)
     assert bleed.headline is not None
-    # the rate is never shown as a bare point estimate
+    # A run that computed an interval must show it beside the rate, never the rate alone.
     assert "81.2% RPR" in bleed.headline
     assert "95% CI" in bleed.headline and "n=48" in bleed.headline
+
+
+def test_class_2_without_a_ci_still_shows_its_rate() -> None:
+    # RunMetrics carries the rate and its interval independently, so a third-party or
+    # older record can hold a rate that was never given one. The flagship RPR must still
+    # reach the scorecard - dropping it would hide the headline number - and it is shown
+    # exactly as recorded rather than wearing an interval this grader invented.
+    card = score_run(_run(ran=_ALL_PROBES, metrics=RunMetrics(retrieval_pivot_rate=0.954)))
+    bleed = next(c for c in card.classes if c.class_id == 2)
+    assert bleed.headline == "95.4% RPR"
 
 
 def test_every_catalog_class_appears_and_weights_are_declared() -> None:
@@ -174,6 +194,8 @@ def test_every_catalog_class_appears_and_weights_are_declared() -> None:
     # evidence chain) are deliberately not isolation-catalog classes.
     assert 11 not in {c.class_id for c in card.classes}
     assert 12 not in {c.class_id for c in card.classes}
+    # No class carries the zero-weight INFO band - the invariant that keeps score_run's
+    # zero-covered-weight refusal an unreachable guard rather than a live path.
     assert all(SEVERITY_WEIGHTS[e.severity] > 0 for e in CATALOG)
 
 
@@ -227,9 +249,25 @@ def test_a_failure_in_one_class_does_not_fail_another() -> None:
 
 
 def test_coverage_drives_the_confidence_band() -> None:
-    # Boundaries of the published table: >=0.85 high, >=0.60 medium, else low.
+    # All three bands as they are reachable through score_run. The published boundaries
+    # themselves (0.85, 0.60) cannot land exactly - coverage is an integer over 41 - so
+    # they are pinned at the helper by test_confidence_thresholds_match_the_published_table.
     full = score_run(_run(ran=_ALL_PROBES))
     assert full.coverage == pytest.approx(1.0) and full.confidence is Confidence.HIGH
+    # The five critical classes and nothing else: 25/41 = 0.61 -> medium.
+    criticals = score_run(
+        _run(
+            ran=(
+                "tenant-boundary-fetch",
+                "rag-entity-bleed",
+                "agent-tool-hijack",
+                "memory-contamination",
+                "multimodal-rag-bleed",
+            )
+        )
+    )
+    assert criticals.coverage == pytest.approx(25 / 41)
+    assert criticals.confidence is Confidence.MEDIUM
     # The two critical RAG classes plus a high one: 5+5+3 = 13/41 = 0.32 -> low.
     thin = score_run(_run(ran=("tenant-boundary-fetch", "rag-entity-bleed", "rag-poisoning")))
     assert thin.coverage < 0.60 and thin.confidence is Confidence.LOW
@@ -429,7 +467,7 @@ def test_confidence_thresholds_match_the_published_table(
 ) -> None:
     # Coverage is covered_weight/41 with an integer numerator, so it can never land
     # exactly on 0.85 (34.85) or 0.60 (24.6): the published boundaries are unreachable
-    # via score_run, and the MEDIUM band is never otherwise asserted.
+    # via score_run and can only be pinned here.
     assert _confidence_for(coverage) is expected
 
 

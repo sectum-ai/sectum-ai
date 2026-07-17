@@ -679,6 +679,11 @@ def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) 
     # The methodology is cited, so a reader can recompute the letter.
     assert "docs/scorecard.md" in result.output
     assert "Untested classes lower confidence, never the grade." in result.output
+    # The rendered numbers ARE the scorecard, and docs/scorecard.md reproduces this block
+    # verbatim. Greping only for the letter let a swapped covered/total or
+    # weighted/coverage print a plausible, wrong posture, so pin the exact strings.
+    assert "10/11 classes covered" in result.output  # Class 13 needs a multimodal adapter
+    assert "weighted 0.00 over the covered classes; coverage 0.88." in result.output
 
 
 def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> None:

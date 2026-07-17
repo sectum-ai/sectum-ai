@@ -181,7 +181,10 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
     """The class's headline rate rendered with its uncertainty, when it has one.
 
     Class 2's Retrieval-Pivot Rate carries a Wilson interval and its sample size, so the
-    scorecard shows the rate the way the run records it - never a bare point estimate.
+    scorecard shows the rate the way the run records it: with its interval when the run
+    computed one, bare when it did not. A record carrying no interval is never dressed in
+    one - re-grading a record you did not produce is this module's purpose, and an
+    invented interval would be exactly the over-claim the scorecard exists to prevent.
     """
     if entry.class_id == 2 and metrics.retrieval_pivot_rate is not None:
         rate = f"{metrics.retrieval_pivot_rate:.1%} RPR"
@@ -209,9 +212,7 @@ def _confirmed_probe_ids(run: RunResult) -> set[str]:
     this command's whole purpose) hide a confirmed leak behind a PASS.
     """
     return {
-        finding.probe_id
-        for finding in run.findings
-        if finding.status is FindingStatus.CONFIRMED
+        finding.probe_id for finding in run.findings if finding.status is FindingStatus.CONFIRMED
     }
 
 
