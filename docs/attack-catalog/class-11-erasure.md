@@ -1,9 +1,19 @@
 # Class 11 — GDPR Article 17 erasure verification
 
-**OWASP:** LLM08:2025 · **ATLAS:** — (a control check, not an attack technique) · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune, search index, eval set, backup · **Probe id:** `gdpr-erasure-verification`
+**OWASP:** LLM08:2025 · **ATLAS:** — (a control check, not an attack technique) · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune, search index, eval set, backup · **Probe ids:** `gdpr-erasure-verification`, `gdpr-subject-erasure-verification`
 
 Proving a tenant's data has actually left an AI system after a right-to-erasure
 request.
+
+Two probes verify erasure at two granularities. `gdpr-erasure-verification`
+verifies **tenant-level** erasure — none of a tenant's markers remain after the
+tenant's data is erased. `gdpr-subject-erasure-verification` verifies a **data
+subject's** erasure (a GDPR Article 17 DSR for one user *within* a tenant) as a
+post-deletion check: after the customer's own deletion has run, it confirms the
+subject's records are gone by id and by content fingerprint, without a
+plant/erase flow of its own. The method and coverage model below are the tenant
+probe's; the subject probe applies the same anti-over-claim verdicts at
+data-subject granularity.
 
 ## Goal
 
