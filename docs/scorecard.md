@@ -10,6 +10,7 @@ sectum-ai score --workdir .sectum-ai            # or: --output json
 
 ```
 Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
+  run run-sectum-ai-demo-2026 (.sectum-ai/run.json)
   capped by a failing critical-band class
 
   Class  1  Direct tenant boundary fetch    FAIL        critical
@@ -25,9 +26,12 @@ The grade is **derived, not asserted**. Every input is the
 [`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`, and
 `metrics` — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
 `score` also accepts and unwraps) recomputes the letter with this page's rules rather
-than trusting it. `score` grades the record it is given and does not itself check the
-pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that, then `score` to
-re-derive the letter from the verified record. The methodology revision (`methodology_version`) is
+than trusting it. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
+(`run.json` wins when both exist: `probe` rewrites it unconditionally, while the pack is
+only as fresh as the last `report`, so preferring the pack could grade a stale record and
+flatter the letter). It prints the `run_id` and path it graded. `score` does not itself
+check the pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that, then
+`score` to re-derive the letter from the verified record. The methodology revision (`methodology_version`) is
 stamped on every scorecard, so a recompute uses the same rules and lands on the same
 letter.
 
@@ -105,6 +109,12 @@ folding it in would conflate two different claims. Class 12 is the
     | ≥ 0.50 | D |
     | < 0.50 | F |
 
+    In practice the reachable letters are **A, C, D, F**: a weighted score below 1.0
+    requires a failing class, which caps at C or worse (step 4) and therefore always
+    swallows a base grade of B. So **A means a clean sweep of everything covered**, and
+    `B` exists only to make the base-grade arithmetic complete — the cap governs whenever
+    anything failed.
+
 4. **Band cap** — the worst **weight band among the failing classes** caps the letter.
    This keys on the *class's* band from the table above — **not** on the `severity`
    recorded on any individual finding. (Those differ in practice: `kv-cache-timing` is a
@@ -119,9 +129,9 @@ folding it in would conflate two different claims. Class 12 is the
     | `medium` | C |
     | none failing | uncapped |
 
-    (`SEVERITY_WEIGHTS` and the cap table in code also carry `low`/`info` entries for
-    completeness, but no catalog class currently carries those bands, so they are
-    unreachable today.)
+    (In code, the cap table also carries a `low` row and `SEVERITY_WEIGHTS` also carries
+    `low`/`info` weights, for completeness. No catalog class carries those bands today, so
+    both are unreachable.)
 
 5. **Final grade** — the **worse** of the base grade and the cap. So one failing
    `high`-band class floors the grade at D, and many failures can still push it below.
@@ -157,7 +167,9 @@ carrying a confirmed finding the catalog cannot attribute (rule 4), and for
 
 The catalog, weights, thresholds, and caps above mirror `sectum_ai.score.CATALOG`,
 `SEVERITY_WEIGHTS`, and the threshold/cap tables in the same module (which additionally
-carry the currently-unreachable `low`/`info` bands).
+carry the currently-unreachable `low`/`info` weight bands).
+`tests/unit/test_score.py::test_the_catalog_matches_the_published_methodology` pins every
+value on this page, so changing one fails CI until this page and the version move too.
 Any change to them is a change to what a published grade means, so bump
 `METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.0` must always
 recompute to the same letter.

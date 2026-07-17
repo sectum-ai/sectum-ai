@@ -132,8 +132,9 @@ _GRADE_THRESHOLDS: tuple[tuple[float, Grade], ...] = (
     (0.50, Grade.D),
 )
 
-# The worst confirmed failure caps the letter: a confirmed critical leak can never grade
-# above F, however much else passed.
+# The worst failing class's weight BAND caps the letter: a failing critical-band class
+# can never grade above F, however much else passed. Keyed on the class's band (above),
+# never on a finding's severity - bands are declared and stable.
 _SEVERITY_CAPS: dict[Severity, Grade] = {
     Severity.CRITICAL: Grade.F,
     Severity.HIGH: Grade.D,
@@ -295,6 +296,14 @@ def score_run(run: RunResult) -> IsolationScore:
             "run 'sectum-ai probe' against a configured stack first"
         )
     covered_weight = sum(weight[c.class_id] for c in covered)
+    if not covered_weight:
+        # Only reachable if the catalog gains a zero-weight (info) band; refuse rather
+        # than divide by zero. test_the_catalog_matches_the_published_methodology pins
+        # the bands, so this is a guard against a future edit, not a live path.
+        raise ConfigError(
+            "every class this run exercised carries zero weight, so the weighted score "
+            "is undefined; sectum_ai.score.CATALOG is misconfigured"
+        )
     passed_weight = sum(weight[c.class_id] for c in covered if c.verdict is ClassVerdict.PASS)
     weighted_score = passed_weight / covered_weight
     coverage = covered_weight / total_weight

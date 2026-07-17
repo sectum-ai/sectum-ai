@@ -15,14 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asserted**: every input is the signed `RunResult` (`probe_versions`, `findings`,
   `metrics`), so a third party recomputes the letter from the evidence with the published
   methodology (`docs/scorecard.md`, stamped as `methodology_version` on every scorecard)
-  rather than trusting it. Three honesty rules hold the letter down: (1) a class whose
+  rather than trusting it. Four honesty rules hold the letter down: (1) a class whose
   probe did not run can only ever be `NOT_COVERED` — never `PASS`, so a grade never
   implies a check the stack was never asked to perform; (2) untested classes lower
   *confidence*, never the grade — coverage is reported beside the letter, so a run over
   three classes and one over eleven can both grade `A` and the confidence is what tells
-  them apart; (3) the worst confirmed failure caps the letter, so a confirmed critical
-  cross-tenant leak can never be averaged away. A run that exercised no catalog class is
-  refused (exit 3) rather than graded. New additive `IsolationScore` / `ClassScore` models
+  them apart; (3) the worst failing class's weight *band* caps the letter (the band of the
+  class, never the severity of an individual finding), so a critical cross-tenant leak can
+  never be averaged away; (4) every confirmed finding lands in a class or the run is not
+  graded — a confirmed finding is itself proof its probe ran, and one the catalog cannot
+  attribute refuses rather than being silently dropped. A run that exercised no catalog
+  class is likewise refused (exit 3) rather than graded. New additive `IsolationScore` / `ClassScore` models
   + `Grade` / `ClassVerdict` / `Confidence` enums (no `SCHEMA_VERSION` change). Class 11
   (erasure) stays out of scope — it is a control check with its own attestation.
 - **Class 13 — Multi-modal RAG entity-bleed.** The Class 2 Retrieval Pivot generalised to

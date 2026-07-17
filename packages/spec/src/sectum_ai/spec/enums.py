@@ -130,10 +130,12 @@ class ClassVerdict(StrEnum):
 class Grade(StrEnum):
     """The overall multi-tenant isolation grade (``sectum-ai score``).
 
-    Derived from the *covered* classes only, then capped by the worst confirmed
-    failure's severity - a confirmed critical cross-tenant leak can never grade
-    above :data:`F`. The published weights, thresholds, and caps are in
-    ``docs/scorecard.md``, so the grade is recomputable from a signed run.
+    Derived from the *covered* classes only, then capped by the worst weight *band*
+    among the failing classes (the band of the class, declared by the published
+    methodology - never the severity recorded on an individual finding): a failing
+    critical-band class can never grade above :data:`F`. The published weights,
+    thresholds, and caps are in ``docs/scorecard.md``, so the grade is recomputable
+    from a run.
     """
 
     A = "A"

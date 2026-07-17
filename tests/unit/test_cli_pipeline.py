@@ -761,3 +761,42 @@ def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["score", "--config", str(config_path)])
     assert result.exit_code == 0
     assert "GRADE" in result.output
+
+
+def test_score_grades_an_evidence_pack_when_only_the_pack_is_present(tmp_path: Path) -> None:
+    # The pack is the artifact an auditor actually holds, so it must be re-gradable.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    (tmp_path / "run.json").unlink()  # auditor received the pack only
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["grade"] == "F"
+
+
+def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) -> None:
+    # REGRESSION: `probe` rewrites run.json unconditionally, but evidence.json is only as
+    # fresh as the last `report`. Preferring the pack graded the STALE record - so after
+    # probe/report/probe, a clean pack from the last good release hid today's regression,
+    # printing an A over a failing run. run.json must win when both exist.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    # Rewrite the pack's embedded run as a clean, passing record from "last release".
+    pack_path = tmp_path / "evidence.json"
+    pack = json.loads(pack_path.read_text())
+    pack["run_result"]["run_id"] = "run-LAST-GOOD-RELEASE"
+    pack["run_result"]["findings"] = []
+    pack_path.write_text(json.dumps(pack))
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["run_id"] != "run-LAST-GOOD-RELEASE"  # the stale pack was not graded
+    assert payload["grade"] == "F"  # today's leaky run governs
+
+
+def test_score_names_the_record_it_graded(tmp_path: Path) -> None:
+    # A letter with no provenance invites grading the wrong run silently.
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "run-sectum-ai-demo-2026" in result.output
+    assert "run.json" in result.output

@@ -2271,13 +2271,15 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo(json.dumps(payload, indent=2))
 
 
-def _render_scorecard(card: IsolationScore) -> None:
+def _render_scorecard(card: IsolationScore, source: Path) -> None:
     """Render the scorecard: the letter, its confidence, and every class - covered or not."""
     typer.echo(
         f"Multi-tenant isolation: GRADE {card.grade.value}"
         f"   (confidence: {card.confidence.value} - "
         f"{card.classes_covered}/{card.classes_total} classes covered)"
     )
+    # Name the graded record: a letter with no provenance invites grading the wrong run.
+    typer.echo(f"  run {card.run_id} ({source})")
     if card.capped_by is not None:
         typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")
@@ -2322,11 +2324,14 @@ def score(
     trusting it. Every catalog class appears, including the untested ones: those carry
     `NOT_COVERED` and lower the scorecard's *confidence*, never its grade, because a
     grade must never imply the stack passed a check it was never asked to perform. The
-    worst confirmed failure caps the letter, so a critical cross-tenant leak cannot be
-    averaged away.
+    worst failing class's weight band caps the letter (the band of the class, not the
+    severity of any one finding), so a critical cross-tenant leak cannot be averaged away.
 
-    Exits 3 when there is no run to grade, or when the run exercised no catalog class
-    at all - grading nothing would emit a letter that means nothing.
+    Grades `run.json`, falling back to an `evidence.json` pack when only the pack is
+    present. Exits 3 when there is no run to grade; when the run exercised no catalog
+    class at all (grading nothing would emit a letter that means nothing); when the run
+    carries a confirmed finding the catalog cannot attribute (a stale catalog); or for
+    `--output sarif/oscal`, which project findings and cannot render a graded posture.
     """
     if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
         # SARIF and OSCAL project findings; a graded posture has no rendering in
@@ -2340,15 +2345,26 @@ def score(
     loaded = load_config(config) if config is not None else SectumConfig()
     if workdir is None:
         workdir = loaded.workdir
-    # Grade the run record, or the evidence pack of one: the pack is the artifact an
-    # auditor actually holds, so it must be re-gradable (the same unwrap `diff` uses).
-    pack = workdir / "evidence.json"
-    run = _load_run_artifact(pack) if pack.exists() else _load_run(workdir)
+    # Grade the run record, falling back to the evidence pack of one (the pack is the
+    # artifact an auditor actually holds, so it must be re-gradable - the same unwrap
+    # `diff` uses). run.json wins when both exist: `probe` rewrites it unconditionally
+    # while `evidence.json` is only as fresh as the last `report`, so preferring the pack
+    # would silently grade a stale record - after `probe`/`report`/`probe`, an A from the
+    # last good release could hide today's regressed F.
+    run_path = workdir / "run.json"
+    pack_path = workdir / "evidence.json"
+    if run_path.exists():
+        source, run = run_path, _load_run(workdir)
+    elif pack_path.exists():
+        source, run = pack_path, _load_run_artifact(pack_path)
+    else:
+        run = _load_run(workdir)  # raises the canonical "no run at ..." exit-3
+        source = run_path
     card = score_run(run)
     if output is OutputFormat.JSON:
         typer.echo(card.model_dump_json(indent=2))
         return
-    _render_scorecard(card)
+    _render_scorecard(card, source)
 
 
 @app.command()
