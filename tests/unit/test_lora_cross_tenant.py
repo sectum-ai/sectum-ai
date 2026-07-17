@@ -20,6 +20,19 @@ _USER_A = UUID(int=0xA)
 _USER_B = UUID(int=0xB)
 
 
+class _RoutingBlindModel(FakeModel):
+    """A trainable model that cannot introspect routing: served_by is the base ``None``.
+
+    A real adapter that does not report which tenant's adapter served a request - the
+    shipped HuggingFace LoRA backend does not - inherits ``ModelAdapter.served_by``, which
+    returns ``None`` (unknown routing, never a finding). ``FakeModel`` overrides it to a
+    concrete tenant, so no other test drives the ``None`` routing path through the runner.
+    """
+
+    def served_by(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> UUID | None:
+        return None
+
+
 def _users_substrate() -> Substrate:
     scenario = Scenario(
         scenario_id="lora-users",
@@ -54,6 +67,22 @@ def test_isolated_adapters_have_no_cross_tenant_influence() -> None:
     model = FakeModel(adapter_bleed=False)
     findings = Runner(substrate, model=model).run(LoraCrossTenantProbe())
     assert confirmed_findings(findings) == []
+
+
+def test_a_routing_blind_model_reports_weight_bleed_but_no_routing_finding() -> None:
+    # A model that cannot introspect routing returns served_by=None (the ModelAdapter
+    # default the HuggingFace LoRA backend inherits). Under weight bleed the probe still
+    # confirms the canary, but with no server attribution it raises NO routing finding, and
+    # the run completes. The runner records served_by_tenant only when served_by is a real
+    # foreign tenant; dropping its `is not None` guard would build {"served_by_tenant":
+    # "None"} and crash the probe's detect on UUID("None") - a real backend path no
+    # FakeModel-based test exercises.
+    substrate = build_substrate(default_scenario(seed=2026))
+    findings = Runner(substrate, model=_RoutingBlindModel(adapter_bleed=True)).run(
+        LoraCrossTenantProbe()
+    )
+    assert confirmed_findings(findings), "weight bleed still surfaces the foreign canary"
+    assert all(not f.finding_id.startswith("routing-") for f in findings)
 
 
 def test_weight_bleed_also_raises_a_routing_finding() -> None:
