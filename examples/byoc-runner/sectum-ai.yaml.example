@@ -40,9 +40,9 @@ adapters:
   agent:
     kind: http
     url: https://your-agent.example.com/run
-    # If your agent supports a per-call tenant header, name it here so
-    # the Class 7 probes can faithfully transmit tenant context.
-    tenant_argument: x-tenant-id
+    # The HTTP agent adapter sends the tenant in the request body
+    # ({"tenant": ..., "task": ...}) on every call; there is no
+    # tenant_argument knob here (only the MCP adapter consumes it).
 
   mcp:
     kind: http
@@ -64,7 +64,9 @@ adapters:
   rag:
     kind: http
     url: https://your-rag.example.com/ask
-    tenant_argument: tenant_id
+    # The HTTP RAG adapter sends the tenant in the request body
+    # ({"tenant": ..., "query": ...}) on every call; it has no
+    # tenant_argument knob (only the MCP adapter consumes it).
 
 # Evidence-chain anchoring. Production runs use a real RFC 3161 TSA
 # and (optionally) record the attested (whole-pack) digest in a Sigstore Rekor

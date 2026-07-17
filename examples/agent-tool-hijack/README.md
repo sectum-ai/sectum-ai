@@ -35,9 +35,12 @@ in-memory leaky MCP server:
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
 2. **`sectum-ai probe --probe agent-tool-hijack`** issues, per hard
-   canary, a direct lookup and a token-bearing lookup from every
-   *foreign* principal — both the confused-deputy and the
-   token-passthrough patterns.
+   canary, four sub-probes from every *foreign* principal — a direct
+   lookup (confused-deputy), a token-bearing lookup (token-passthrough),
+   a lookup routed through a downstream server (cross-server
+   confused-deputy), and a search whose attacker-authored tool
+   description smuggles the foreign coordinate (tool-description
+   injection).
 3. **`sectum-ai report`** assembles a tamper-evident evidence pack
    (JSON + PDF).
 4. **`sectum-ai verify`** independently re-checks the pack.
@@ -55,9 +58,9 @@ their customers actually run.
 ./run.sh
 ```
 
-You'll see four confirmed leaks per canary across the configured
-principals: two `confused-deputy` results, two `token-passthrough`
-results. The PDF page-3 findings table itemises each.
+You'll see three confirmed leaks per canary — one per foreign
+principal — for 24 confirmed cross-tenant findings in total. The PDF
+page-3 findings table itemises each.
 
 ## Swap the agent caller
 

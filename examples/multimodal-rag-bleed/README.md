@@ -20,11 +20,11 @@ entity, and sweeps the deterministic `imagehash-<dim>` embedder at increasing
 resolutions:
 
 ```
-  image model          image-RPR      k/n
-  ------------------  ----------  -------
-  imagehash-16             45.8%    11/24
-  imagehash-64             95.8%    23/24
-  imagehash-256           100.0%    24/24
+  image model (proxy)    image-RPR      k/n
+  --------------------  ----------  -------
+  imagehash-16               45.8%    11/24
+  imagehash-64               95.8%    23/24
+  imagehash-256             100.0%    24/24
 ```
 
 Benign cross-tenant image queries surface foreign tenants' images — the Retrieval Pivot

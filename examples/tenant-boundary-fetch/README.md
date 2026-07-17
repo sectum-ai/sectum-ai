@@ -47,8 +47,9 @@ condition Class 1 is built to catch):
 ./run.sh
 ```
 
-Expect one confirmed finding per (owner, observer) cross-tenant
-pair (12 pairs on the 4-tenant demo with `shared_index: true`).
+Expect two confirmed findings per (owner, observer) cross-tenant
+pair (one per hard canary; 12 pairs, 24 findings, on the 4-tenant
+demo with `shared_index: true`).
 
 ## What the report tells you
 

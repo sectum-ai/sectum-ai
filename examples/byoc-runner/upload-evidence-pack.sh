@@ -3,7 +3,7 @@
 #
 # The Snapshot tier ships the OSS `sectum-ai` CLI as the probe runner; this
 # script is the missing piece: it takes a completed run's evidence pack
-# (the three files produced by `sectum-ai report`) and POSTs them to the
+# (three of the four files `sectum-ai report` produces) and POSTs them to the
 # Sectum Cloud delivery API. Sectum Cloud then writes the pack to its
 # S3 bucket and emails the customer + the operator a download link.
 #
