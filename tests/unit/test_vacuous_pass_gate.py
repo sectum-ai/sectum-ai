@@ -13,20 +13,33 @@ target, so each must plan zero steps - and its class then reads ``NOT_COVERED`` 
 each probe's own ``test_probe_plans_...`` against the stock scenario.
 """
 
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
 
-from sectum_ai.probes import (
-    IkeaExtractionProbe,
-    MultimodalRagBleedProbe,
-    Probe,
-    RagEntityBleedProbe,
-    RagPipelineBleedProbe,
-    RagPoisoningProbe,
-)
+import sectum_ai.probes as probes
+from sectum_ai.probes import Probe
 from sectum_ai.spec import Substrate, SyntheticUserSpec
 from sectum_ai.substrate import build_substrate, default_scenario
+
+
+def _plannable_probes() -> list[Probe]:
+    """Every probe in the registry that plans steps - enumerated so a future one is covered.
+
+    Hardcoding the list is what let round 8 gate three probes and miss the rest, so this
+    guard is over the registry itself: a probe added without the cross-principal gate fails
+    here rather than shipping a vacuous PASS for its class.
+    """
+    found: list[Probe] = []
+    for name in probes.__all__:
+        obj = getattr(probes, name)
+        if isinstance(obj, type) and getattr(obj, "id", None) and hasattr(obj, "plan"):
+            try:
+                found.append(cast(Any, obj)())
+            except TypeError:
+                continue  # a probe needing constructor args is covered by its own suite
+    return found
 
 
 def _starved_substrate() -> Substrate:
@@ -55,16 +68,6 @@ def _starved_substrate() -> Substrate:
     )
 
 
-@pytest.mark.parametrize(
-    "probe",
-    [
-        RagPoisoningProbe(),  # Class 3 - plants a poison, missed by round 8 (grade-inflating)
-        RagEntityBleedProbe(),  # Class 2 - vector-index query
-        RagPipelineBleedProbe(),  # Class 2 - full RAG pipeline
-        IkeaExtractionProbe(),  # Class 10 - multi-turn extraction
-        MultimodalRagBleedProbe(),  # Class 13 - image query
-    ],
-    ids=lambda p: p.id,
-)
+@pytest.mark.parametrize("probe", _plannable_probes(), ids=lambda p: p.id)
 def test_a_probe_with_no_cross_principal_target_plans_nothing(probe: Probe) -> None:
     assert probe.plan(_starved_substrate()) == []
