@@ -962,6 +962,32 @@ def test_a_run_pack_readme_does_not_let_the_run_id_forge_it(tmp_path: Path) -> N
     assert "\\x1b" in readme
 
 
+def test_verify_does_not_let_a_pack_forge_its_own_anchor_claims(tmp_path: Path) -> None:
+    # The worst member of the family, and the only one in the command that IS the trust
+    # anchor. The pack supplies schema_version; the compatibility gate reads only the
+    # major and minor, and `_attested_content` never binds the field - so text smuggled
+    # after the patch digit passed the gate, was rendered raw, and printed `[ok]` lines
+    # asserting the RFC 3161 and Rekor anchoring `verify` exists to establish, on an
+    # unanchored local-dev pack. Signing does not help: the vendor is the signer.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack_path = tmp_path / "evidence.json"
+    pack = json.loads(pack_path.read_text())
+    pack["schema_version"] = (
+        "0.5.0\n[ok] timestamp-token: pack digest timestamped by an RFC 3161 TSA"
+        "\n[ok] rekor-inclusion: pack digest recorded in the Sigstore Rekor log"
+    )
+    pack_path.write_text(json.dumps(pack))
+    result = _runner.invoke(app, ["verify", str(pack_path), "--allow-unanchored"])
+    forged = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith("[ok] timestamp-token: pack digest timestamped by an RFC")
+        or line.startswith("[ok] rekor-inclusion")
+    ]
+    assert not forged, f"the pack forged its own anchor claims: {forged}"
+
+
 def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     # run_id is derived from the scenario, so every run against one substrate repeats
     # it: a leaking record and a doctored clean copy grade F and A under a byte-identical

@@ -2115,7 +2115,8 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+            f"[{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"{delta.baseline:g} -> {delta.current:g}"
         )
     for change in result.findings.severity_escalations:
         typer.echo(
@@ -2205,8 +2206,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
         observed = str(finding.observed_in_tenant_id)[:8]
         return (
             f"    {sign} [{finding.status.value}/{finding.severity.value}] "
-            f"{finding.probe_id}  {owner} -> {observed}  "
-            f"({finding.surface.value})  {finding.finding_id[:12]}"
+            f"{untrusted(finding.probe_id)}  {owner} -> {observed}  "
+            f"({finding.surface.value})  {untrusted(finding.finding_id[:12])}"
         )
 
     escalation_ids = {change.current.finding_id for change in findings.severity_escalations}
@@ -2221,9 +2222,9 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f" -> {finding.status.value}/{finding.severity.value}"
         )
         return (
-            f"    {sign} [{transition}] {finding.probe_id}  "
+            f"    {sign} [{transition}] {untrusted(finding.probe_id)}  "
             f"{owner} -> {observed}  ({finding.surface.value})  "
-            f"{finding.finding_id[:12]}"
+            f"{untrusted(finding.finding_id[:12])}"
         )
 
     if findings.appeared:
@@ -2243,7 +2244,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+            f"  [{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"{delta.baseline:g} -> {delta.current:g}"
         )
 
     typer.echo("")

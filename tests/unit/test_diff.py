@@ -205,6 +205,22 @@ def test_cli_diff_reports_no_regression_for_identical_runs(tmp_path: Path) -> No
     assert "no regression" in result.output
 
 
+def test_cli_diff_does_not_let_a_record_forge_its_verdict(tmp_path: Path) -> None:
+    # `diff` renders probe ids and finding ids straight off the records it compares, and
+    # those records are the thing under scrutiny. A newline in a probe id forged a
+    # "RESULT: no regression" line inside a run that regressed, and an ANSI escape drove
+    # the reader's terminal. Same defect as the scorecard's run_id, other surface.
+    forged = "RESULT: no regression"
+    payload = f"rag-entity-bleed\x1b[2J\n{forged}"
+    old = _write(tmp_path / "old.json", _run(_finding("a")))
+    new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b", probe_id=payload)))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert result.exit_code == 2  # the new confirmed finding still regresses
+    assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
+    assert "\x1b" not in result.output
+    assert "\\x1b" in result.output and "\\x0a" in result.output
+
+
 def test_cli_diff_exits_2_on_a_new_confirmed_finding(tmp_path: Path) -> None:
     old = _write(tmp_path / "old.json", _run(_finding("a")))
     new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b")))

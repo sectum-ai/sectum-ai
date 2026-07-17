@@ -279,7 +279,12 @@ def _check_schema_version(pack: EvidencePack) -> Check:
     """
     ok = _schema_major_minor(pack.schema_version) == _schema_major_minor(SCHEMA_VERSION)
     detail = (
-        f"pack schema_version {pack.schema_version} is supported by this verifier"
+        # `!r` (as the incompatible branch already does) is load-bearing, not cosmetic:
+        # the pack supplies schema_version, `_schema_major_minor` reads only the major and
+        # minor, and `_attested_content` does not bind the field - so text smuggled after
+        # the patch digit passed the gate, was rendered raw, and forged `[ok]` lines
+        # asserting the RFC 3161 and Rekor anchoring this command exists to establish.
+        f"pack schema_version {pack.schema_version!r} is supported by this verifier"
         if ok
         else (
             f"pack schema_version {pack.schema_version!r} is incompatible with this verifier "

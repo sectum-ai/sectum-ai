@@ -78,14 +78,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now records only probes that took at least one step; those classes read `NOT_COVERED`
   and the loss lands on *confidence*, where rule 2 puts it. A confirmed finding still
   stands on its own (rule 4: the finding is proof its probe ran).
-- **A run record can no longer forge the output that reports on it.** `run_id` is carried
-  by the record under scrutiny — the party Sectum exists in order *not* to trust — and it
-  was interpolated raw into a run pack's `README.md` (and, before release, the scorecard).
-  A newline in it forges whole lines of Sectum's own output, and an ANSI escape
-  (`ESC[2J`) wipes the real result off an auditor's terminal and reprints a passing one.
-  Control characters are now escaped, not stripped, so tampering is visible rather than
-  silently swallowed. `run_id` reaches a pack via `scenario_id`, so no hand-editing is
-  needed, and a validly signed pack carries the payload — the vendor is the signer.
+- **A record can no longer forge the output that reports on it — across every command.**
+  Sectum reports on records it does not trust, so every string a record carries is hostile
+  input the moment it reaches our output. Raw interpolation let a newline forge whole lines
+  of Sectum's own reporting and an ANSI escape (`ESC[2J`) wipe the real result off an
+  auditor's terminal and reprint a passing one. Every affected surface is now escaped —
+  not stripped, so tampering stays visible — via the new `sectum_ai.spec.untrusted`:
+    - **`verify`** — the worst of them, and the command that *is* the trust anchor. The
+      pack supplies `schema_version`; the compatibility gate reads only its major and
+      minor and the attested digest never binds it, so text smuggled after the patch digit
+      passed the gate, rendered raw, and printed `[ok]` lines asserting the RFC 3161 and
+      Rekor anchoring `verify` exists to establish — on an unanchored pack.
+    - **`diff` / `baseline --compare`** — probe ids, finding ids and metric-delta names
+      forged a `RESULT: no regression` line inside a run that regressed.
+    - **`pack`** — `run_id` in the run pack's `README.md`.
+    - **`score`** — `run_id` in the scorecard, and record-supplied probe ids inside the
+      rule-4 refusal message (both before release).
+  No hand-editing is needed — `run_id` reaches a pack via `scenario_id` — and a validly
+  signed pack carries the payload, because the vendor is the signer.
 
 ## [0.6.0] - 2026-07-15
 

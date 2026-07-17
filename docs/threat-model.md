@@ -59,6 +59,14 @@ A verification run crosses these boundaries:
    from inline configuration. `sectum-ai.yaml` holds references, not secrets.
 3. **Sectum AI → the evidence consumer.** An auditor or DPO receives an evidence
    pack and verifies it with `sectum-ai verify`, independently of Sectum AI.
+4. **A record → the report about it.** `verify`, `diff`, `score` and `pack` all report on
+   a record they did not necessarily produce — re-grading a vendor's record is the point —
+   so every string the record carries (`run_id`, probe ids, finding ids, metric names,
+   `schema_version`) is untrusted input by the time it reaches our output. It is escaped
+   at the point of rendering (`sectum_ai.spec.untrusted`), because a newline in it
+   otherwise forges whole lines of Sectum's own reporting and an ANSI escape rewrites the
+   reader's terminal. Signing does not help here: the vendor is the signer, so a validly
+   signed pack carries whatever its author put in those fields.
 
 ## Assets
 
