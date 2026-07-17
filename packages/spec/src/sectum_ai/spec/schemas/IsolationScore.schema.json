@@ -162,6 +162,10 @@
       "title": "Methodology Version",
       "type": "string"
     },
+    "run_digest": {
+      "title": "Run Digest",
+      "type": "string"
+    },
     "run_id": {
       "title": "Run Id",
       "type": "string"
@@ -180,6 +184,7 @@
   },
   "required": [
     "run_id",
+    "run_digest",
     "grade",
     "confidence",
     "weighted_score",

@@ -420,6 +420,12 @@ class IsolationScore(SectumModel):
     """
 
     run_id: str
+    # SHA-256 of the graded record's canonical form - the same run identifier the
+    # in-toto attestation and the audit PDF bind. ``run_id`` is derived from the
+    # scenario, so every run against one substrate repeats it: two records over the
+    # same substrate can grade F and A while carrying an identical ``run_id``. This is
+    # the field that ties the letter to one exact record.
+    run_digest: str
     grade: Grade
     confidence: Confidence
     # Weighted pass fraction over the COVERED classes only, in [0, 1].

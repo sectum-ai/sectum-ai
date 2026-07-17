@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   class is likewise refused (exit 3) rather than graded. New additive `IsolationScore` / `ClassScore` models
   + `Grade` / `ClassVerdict` / `Confidence` enums (no `SCHEMA_VERSION` change). Class 11
   (erasure) stays out of scope — it is a control check with its own attestation.
+  The scorecard carries the graded record's `run_digest` (the SHA-256 the in-toto
+  attestation and the audit PDF already bind): `run_id` comes from the scenario, so every
+  run against one substrate repeats it and two records can grade `F` and `A` under an
+  identical `run_id` — the digest is what ties a letter to one exact record, and a third
+  party recomputes it from the record they hold.
 - **Class 13 — Multi-modal RAG entity-bleed.** The Class 2 Retrieval Pivot generalised to
   images: multi-modal RAG embeds images (and text) into one vector space, so a benign
   image query for a shared *visual* entity (a chart, a logo, a product photo) surfaces
@@ -45,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `imagehash-256` 100% offline). The image-RPR is measured by its per-model sweep, as
   Class 2's embedding-strength gradient is; live multi-modal vector-store adapters and
   generic-suite / CLI wiring are a follow-on.
+
+### Fixed
+
+- **A run record can no longer forge the output that reports on it.** `run_id` is carried
+  by the record under scrutiny — the party Sectum exists in order *not* to trust — and it
+  was interpolated raw into a run pack's `README.md` (and, before release, the scorecard).
+  A newline in it forges whole lines of Sectum's own output, and an ANSI escape
+  (`ESC[2J`) wipes the real result off an auditor's terminal and reprints a passing one.
+  Control characters are now escaped, not stripped, so tampering is visible rather than
+  silently swallowed. `run_id` reaches a pack via `scenario_id`, so no hand-editing is
+  needed, and a validly signed pack carries the payload — the vendor is the signer.
 
 ## [0.6.0] - 2026-07-15
 

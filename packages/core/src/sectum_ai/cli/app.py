@@ -1148,6 +1148,18 @@ def _redact_config_text(text: str) -> str:
     return str(dumped)
 
 
+def _untrusted(text: str) -> str:
+    """Neutralize control characters in a string the graded record controls.
+
+    ``run_id`` comes out of the record under scrutiny - the party this tool exists in
+    order *not* to trust. Rendered raw, a newline in it forges whole lines of our own
+    output (a second, passing scorecard printed under the real one) and an ANSI escape
+    rewrites the auditor's terminal. Escape rather than strip, so tampering shows up
+    instead of quietly vanishing.
+    """
+    return "".join(ch if ch.isprintable() else f"\\x{ord(ch):02x}" for ch in text)
+
+
 def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) -> str:
     """The human-readable, secret-free README placed at the top of a run pack."""
     config_line = (
@@ -1161,7 +1173,7 @@ def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) ->
         else ""
     )
     return (
-        f"# Sectum AI run pack - {run_id}\n\n"
+        f"# Sectum AI run pack - {_untrusted(run_id)}\n\n"
         "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
         "Sectum AI verification run. It carries the run details (`run.json`, including\n"
         "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
@@ -2279,7 +2291,8 @@ def _render_scorecard(card: IsolationScore, source: Path) -> None:
         f"{card.classes_covered}/{card.classes_total} classes covered)"
     )
     # Name the graded record: a letter with no provenance invites grading the wrong run.
-    typer.echo(f"  run {card.run_id} ({source})")
+    # run_id is the record's own claim about itself, so it is escaped, not trusted.
+    typer.echo(f"  run {_untrusted(card.run_id)} ({source})")
     if card.capped_by is not None:
         typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")

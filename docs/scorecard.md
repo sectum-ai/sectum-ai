@@ -4,8 +4,9 @@
 confidence, and a per-class breakdown.
 
 ```sh
-sectum-ai probe --workdir .sectum-ai
-sectum-ai score --workdir .sectum-ai            # or: --output json
+sectum-ai seed   --workdir .sectum-ai
+sectum-ai probe  --workdir .sectum-ai
+sectum-ai score  --workdir .sectum-ai           # or: --output json
 ```
 
 ```
@@ -168,8 +169,11 @@ carrying a confirmed finding the catalog cannot attribute (rule 4), and for
 The catalog, weights, thresholds, and caps above mirror `sectum_ai.score.CATALOG`,
 `SEVERITY_WEIGHTS`, and the threshold/cap tables in the same module (which additionally
 carry the currently-unreachable `low`/`info` weight bands).
-`tests/unit/test_score.py::test_the_catalog_matches_the_published_methodology` pins every
-value on this page, so changing one fails CI until this page and the version move too.
+`tests/unit/test_score.py` pins every value on this page — the catalog and weights in
+`test_the_catalog_matches_the_published_methodology`, the total in
+`test_the_published_total_catalog_weight_is_41`, and the thresholds and caps in the
+grade/confidence/cap tests beside them — so changing one fails CI until this page and the
+version move too.
 Any change to them is a change to what a published grade means, so bump
 `METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.0` must always
 recompute to the same letter.

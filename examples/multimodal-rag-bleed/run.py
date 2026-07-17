@@ -69,6 +69,15 @@ def main() -> int:
         "multi-modal index.\n     imagehash is a deterministic offline PROXY (this curve is a "
         "substrate\n     artifact); the real strength gradient is the CLIP path (see the README)."
     )
+    # Assert the leak the sentence above claims: with every rate at 0 the demo printed
+    # "surface foreign tenants' images (0% of them)" and still exited 0, because [0,0,0]
+    # is monotone. A demo of a leak must fail when there is no leak.
+    if ordered[-1] <= 0:
+        print(
+            "\n  ! no cross-tenant image leak at the strongest model — the demo is broken",
+            file=sys.stderr,
+        )
+        return 1
     # The demo ladder is deliberately monotone; the check is a determinism smoke test, not
     # a claim that a stronger imagehash leaks more (see the module + README caveats).
     if not monotone:

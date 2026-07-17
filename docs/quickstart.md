@@ -56,11 +56,15 @@ pack, and verifies it.
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
 | `sectum-ai adapters` | List installed adapters and their capabilities. |
 
-Exit codes: `0` no confirmed leaks; `2` a gating result — confirmed leaks
-(`sectum-ai probe`), a regression (`sectum-ai diff` / `baseline --compare`), or
-residual / attestable-with-caveat data on an erased surface (`sectum-ai erasure`,
-where data is presumed retained); `3` config or adapter error; `4` evidence
-verification failure.
+Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
+result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
+`baseline --compare`), or residual / attestable-with-caveat data on an erased surface
+(`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error;
+`4` evidence verification failure.
+
+`0` means "nothing this command gates on", not "no leaks": the reporting commands do
+not gate, so `sectum-ai score` exits `0` whatever the letter — a grade of `F` on a run
+riddled with confirmed leaks still exits `0`. `sectum-ai probe` is the CI gate.
 
 ## Verify a real data subject's erasure (by id and by content)
 

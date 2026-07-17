@@ -674,7 +674,9 @@ def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) 
     # The cap keys on the failing CLASS's weight band, never on a finding's severity -
     # the wording must not invite the reader to recompute from finding.severity.
     assert "capped by a failing critical-band class" in result.output
-    # Every class is listed - including the ones that never ran.
+    # Every class is listed - including the ones that never ran. (The per-row content is
+    # pinned by test_score_renders_a_row_per_class_with_its_verdict_and_band; a bare
+    # substring check here left 10 of 11 rows droppable.)
     assert "NOT_COVERED" in result.output
     # The methodology is cited, so a reader can recompute the letter.
     assert "docs/scorecard.md" in result.output
@@ -694,11 +696,12 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
     assert payload["methodology_version"] == "1.0"  # pinned; see docs/scorecard.md
-    assert 0.0 <= payload["coverage"] <= 1.0
-    assert 0.0 <= payload["weighted_score"] <= 1.0
+    # The demo leaks on every surface it exercised, so the covered classes all fail.
+    assert payload["weighted_score"] == 0.0
+    assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
     # k/n-style transparency: every catalog class appears, verdicts included.
     assert payload["classes_total"] == len(payload["classes"])
-    assert {c["verdict"] for c in payload["classes"]} <= {"PASS", "FAIL", "NOT_COVERED"}
+    assert {c["verdict"] for c in payload["classes"]} == {"FAIL", "NOT_COVERED"}
 
 
 def test_score_json_round_trips_into_the_isolation_score_model(tmp_path: Path) -> None:
@@ -768,6 +771,96 @@ def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
     assert "GRADE" in result.output
 
 
+def test_score_explicit_workdir_overrides_a_config_value(tmp_path: Path) -> None:
+    # docs/configuration.md promises an explicit flag always beats the config. `seed`
+    # pins that; `score` did not, and it is the command where losing lets the config
+    # silently redirect the grade to a different run - a clean workdir printing A over
+    # the leaky one the operator named.
+    config_workdir = tmp_path / "from-config"
+    explicit_workdir = tmp_path / "from-flag"
+    _seed_and_probe(config_workdir)  # clean of findings only because we never probe it
+    (config_workdir / "run.json").write_text(
+        json.dumps({**json.loads((config_workdir / "run.json").read_text()), "findings": []})
+    )
+    _seed_and_probe(explicit_workdir)
+    config_path = tmp_path / "sectum-ai.yaml"
+    config_path.write_text(f"workdir: {config_workdir}\n")
+    result = _runner.invoke(
+        app,
+        ["score", "--config", str(config_path), "--workdir", str(explicit_workdir)],
+    )
+    assert result.exit_code == 0
+    assert "GRADE F" in result.output  # the workdir named on the command line governs
+    assert str(explicit_workdir) in result.output
+
+
+def test_score_renders_a_row_per_class_with_its_verdict_and_band(tmp_path: Path) -> None:
+    # The breakdown IS the evidence behind the letter, and only the letter was asserted.
+    # Dropping every failing row, or rendering every band as a constant, left GRADE F,
+    # "10/11 classes covered" and the capped-by line all intact - a scorecard that reads
+    # whole while the evidence under it is gone.
+    _seed_and_probe(tmp_path)
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    rows = [line for line in result.output.splitlines() if line.lstrip().startswith("Class ")]
+    payload = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    assert len(rows) == payload["classes_total"] == 11
+    # The text table and the JSON agree on which classes, in which order.
+    assert [int(r.split()[1]) for r in rows] == [c["class_id"] for c in payload["classes"]]
+    # A failing class carries its name, verdict and DECLARED band on its own row...
+    boundary = next(r for r in rows if "Direct tenant boundary fetch" in r)
+    assert "FAIL" in boundary and "critical" in boundary
+    # ...and each band is the class's own, not one constant repeated down the column.
+    assert "medium" in next(r for r in rows if "KV-cache timing" in r)
+    assert "high" in next(r for r in rows if "Adversarial RAG poisoning" in r)
+    # An untested class explains the gap rather than rendering an empty cell.
+    assert "probe did not run" in next(r for r in rows if "NOT_COVERED" in r)
+
+
+def test_score_renders_the_confidence_of_a_thin_run_as_low(tmp_path: Path) -> None:
+    # Rule 2 lives or dies in the render: a run covering one class and a full sweep both
+    # grade A, and the confidence beside the letter is the only thing telling them apart.
+    # Hardcoding it to `high` over-claims exactly what rule 2 exists to prevent.
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["probe_versions"] = {"tenant-boundary-fetch": "1.0"}
+    run["findings"] = []
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "GRADE A" in result.output  # the letter is clean...
+    assert "confidence: low" in result.output  # ...and says how little it rests on
+    assert "1/11 classes covered" in result.output
+
+
+def test_score_names_the_pack_when_it_graded_the_pack(tmp_path: Path) -> None:
+    # The pack-only path is the auditor's case, and it was only ever exercised through
+    # --output json, which returns before the render - so the text path could cite
+    # run.json, a file that is not even present, while grading evidence.json.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    (tmp_path / "run.json").unlink()
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "evidence.json" in result.output
+    assert "run.json" not in result.output
+
+
+def test_score_json_explains_every_not_covered_class(tmp_path: Path) -> None:
+    # The note is *why* a class is NOT_COVERED. A machine consumer that loses it sees an
+    # unexplained gap and cannot tell "no adapter satisfies it" from "nobody ran it".
+    _seed_and_probe(tmp_path)
+    payload = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    untested = [c for c in payload["classes"] if c["verdict"] == "NOT_COVERED"]
+    assert untested
+    assert all(c["note"] for c in untested)
+
+
 def test_score_grades_an_evidence_pack_when_only_the_pack_is_present(tmp_path: Path) -> None:
     # The pack is the artifact an auditor actually holds, so it must be re-gradable.
     _seed_and_probe(tmp_path)
@@ -796,6 +889,72 @@ def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) ->
     payload = json.loads(result.output)
     assert payload["run_id"] != "run-LAST-GOOD-RELEASE"  # the stale pack was not graded
     assert payload["grade"] == "F"  # today's leaky run governs
+
+
+def test_score_does_not_let_the_graded_record_forge_the_scorecard(tmp_path: Path) -> None:
+    # The run_id is the record's own claim about itself, and the record is the thing
+    # under scrutiny. Echoed raw it forged our output: a newline in run_id printed a
+    # second "GRADE A" card under the real one, and \x1b[2J wiped the real letter off
+    # an auditor's terminal - for a run with 229 confirmed cross-tenant leaks, at exit 0.
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["run_id"] = "run-acme\x1b[2J\x1b[H\n\nMulti-tenant isolation: GRADE A   (confidence: high)"
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "GRADE F" in result.output  # the real letter still governs
+    # The payload cannot open a line of its own, and cannot drive the terminal.
+    assert not any(
+        line.lstrip().startswith("Multi-tenant isolation: GRADE A")
+        for line in result.output.splitlines()
+    )
+    assert "\x1b" not in result.output
+    # Escaped, not stripped: the tampering is visible rather than silently swallowed.
+    assert "\\x1b" in result.output and "\\x0a" in result.output
+
+
+def test_a_run_pack_readme_does_not_let_the_run_id_forge_it(tmp_path: Path) -> None:
+    # Same defect, same fix, other surface: the pack README interpolates the record's
+    # run_id into markdown an auditor reads.
+    from sectum_ai.cli.app import _run_pack_readme
+
+    readme = _run_pack_readme(
+        "run-acme\n\n## Verified: no cross-tenant leaks",
+        sealed_manifest=False,
+        has_config=False,
+    )
+    # `##` is only a heading at the start of a line; escaped, the payload stays inline
+    # on the title line and renders as text, so assert it cannot open a line of its own.
+    assert not any(line.startswith("## Verified") for line in readme.splitlines())
+    assert "\\x0a" in readme
+
+
+def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
+    # run_id is derived from the scenario, so every run against one substrate repeats
+    # it: a leaking record and a doctored clean copy grade F and A under a byte-identical
+    # run_id. The digest is what identifies WHICH record earned the letter - and it is
+    # the same run identifier the attestation and the audit PDF bind.
+    from sectum_ai.cli.app import _load_run
+    from sectum_ai.evidence import run_digest
+
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    leaking = json.loads(run_path.read_text())
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    leaking_card = json.loads(result.output)
+    assert leaking_card["grade"] == "F"
+
+    doctored = {**leaking, "findings": []}
+    run_path.write_text(json.dumps(doctored))
+    clean_card = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    assert clean_card["grade"] == "A"
+    assert clean_card["run_id"] == leaking_card["run_id"]  # provenance run_id cannot tell...
+    assert clean_card["run_digest"] != leaking_card["run_digest"]  # ...but the digest does
+    # A third party recomputes the digest from the record they hold and confirms the match.
+    assert clean_card["run_digest"] == run_digest(_load_run(tmp_path))
 
 
 def test_score_names_the_record_it_graded(tmp_path: Path) -> None:

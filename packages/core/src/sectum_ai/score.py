@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sectum_ai.evidence import run_digest
 from sectum_ai.spec import (
     ClassScore,
     ClassVerdict,
@@ -321,6 +322,10 @@ def score_run(run: RunResult) -> IsolationScore:
 
     return IsolationScore(
         run_id=run.run_id,
+        # Bind the letter to the exact record: run_id repeats across every run of a
+        # scenario, so it cannot tell two records apart (and the record itself supplies
+        # it). The digest is computed from the content we actually graded.
+        run_digest=run_digest(run),
         grade=grade,
         # Rule 2: coverage drives confidence, and never the letter.
         confidence=_confidence_for(coverage),
