@@ -31,14 +31,16 @@ prefer to remain anonymous, and agree a disclosure timeline with you.
 
 ## Supported versions
 
-Sectum AI's first public release is `v0.1.0` (the `0.x` series — the API may
-still change before `1.0`). Security fixes land on `main` and ship in the
-`0.1.x` line.
+Sectum AI is pre-alpha in the `0.x` series, where the API may still change before
+`1.0`. Security fixes land on `main` and ship in the latest minor release; there is
+no long-term support for earlier `0.x` lines, so run the current release to stay
+covered.
 
 | Version | Supported |
 |---|---|
 | `main` | Yes |
-| `0.1.x` | Yes |
+| Latest `0.x` minor (currently `0.6.x`) | Yes |
+| Earlier `0.x` minors | No — upgrade to the latest |
 
 This table will be updated as the project matures toward a `1.0` release.
 
