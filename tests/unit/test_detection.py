@@ -17,7 +17,9 @@ from sectum_ai.probes.detection import (
     _canonical_embedding_model,
     _token_windows,
     _tokenize,
+    cross_principal_observers,
     is_cross_principal,
+    markers_naming_entity,
 )
 from sectum_ai.spec import (
     FindingStatus,
@@ -912,3 +914,50 @@ def test_span_traceable_falls_back_to_the_marker_for_a_tokenless_span() -> None:
     assert DetectionPipeline._span_traceable(text, "", marker) is True
     # But a marker genuinely absent from the text still does not trace.
     assert DetectionPipeline._span_traceable("unrelated text", "   ", marker) is False
+
+
+# --- planning gates: cross_principal_observers / markers_naming_entity -------------
+
+
+def test_cross_principal_observers_returns_only_the_foreign_principals() -> None:
+    # The predicate a probe gates its steps on: issue a step from a principal only when the
+    # target is foreign to it. A marker owned by _TB is foreign to _TA (another tenant) but
+    # not to its own owner, so the owner is excluded - a step from it tests nothing.
+    marker = _hard("secret", owner=_TB)
+    principals = [Principal(tenant_id=_TA), Principal(tenant_id=_TB)]
+    observers = cross_principal_observers([marker], principals)
+    assert observers == [Principal(tenant_id=_TA)]
+
+
+def test_cross_principal_observers_is_empty_when_nothing_is_foreign() -> None:
+    # The vacuous case the gate exists for: every marker is owned by the observer's own
+    # tenant, so no step could surface a cross-principal leak and the probe plans nothing.
+    marker = _hard("secret", owner=_TB)
+    assert cross_principal_observers([marker], [Principal(tenant_id=_TB)]) == []
+    assert cross_principal_observers([], [Principal(tenant_id=_TA)]) == []
+
+
+def test_markers_naming_entity_maps_a_shared_entity_to_its_canaries() -> None:
+    # The organic-bleed probes gate on the entity's foreignness, which is the foreignness
+    # of the canaries in the documents that name it. Every shared entity in the demo owns
+    # pivot documents carrying markers, so the map is non-empty and every returned marker
+    # sits in a document that actually names the entity.
+    substrate = build_substrate(default_scenario(seed=2026))
+    entity = substrate.scenario.shared_entities[0]
+    markers = markers_naming_entity(substrate, entity)
+    assert markers
+    ids_in_entity_docs = {
+        marker_id
+        for document in substrate.documents
+        if entity.value in document.content
+        for marker_id in document.marker_ids
+    }
+    assert {marker.marker_id for marker in markers} == ids_in_entity_docs
+
+
+def test_markers_naming_entity_is_empty_for_an_unmentioned_entity() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    from sectum_ai.spec import SharedEntity
+
+    absent = SharedEntity(kind="person", value="Nobody Mentioned Anywhere 9Z9Z")
+    assert markers_naming_entity(substrate, absent) == []

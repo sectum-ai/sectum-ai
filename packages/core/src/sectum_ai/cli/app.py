@@ -854,9 +854,10 @@ def probe(
             # in for it: that refusal is a GLOBAL existential (some marker is foreign to
             # somebody), while a vacuous PASS is per class - so a substrate can satisfy the
             # refusal and still starve one class of anything to find. It works only because
-            # each probe now plans nothing when no principal could read back what it would
-            # plant; they used to emit the setup step regardless (cache.set, model.train,
-            # memory.write) and land here on the strength of a write nobody could read.
+            # every planting and querying probe issues a step solely from a principal the
+            # target is foreign to (`detection.cross_principal_observers`), so a probe with
+            # no cross-principal target plans nothing and never lands here - a write or
+            # query nobody foreign could read is not a check the stack was asked to perform.
             **dict.fromkeys(sorted({result[0].probe_id for result in step_results}), __version__),
             # Gated on what the KV probe MEASURED, not on having been asked to run: "we ran
             # it" and "it observed something" are different claims, and `score` reads this

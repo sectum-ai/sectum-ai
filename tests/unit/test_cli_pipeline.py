@@ -906,17 +906,21 @@ def test_a_class_starved_of_anything_to_find_is_never_a_pass(tmp_path: Path) -> 
     (tmp_path / "substrate.json").write_text(starved.model_dump_json())
     assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code in (0, 2)
     versions = set(json.loads((tmp_path / "run.json").read_text())["probe_versions"])
+    # rag-poisoning also plants against hard canaries; round 8 gated the other three
+    # planters and missed it, so its Class 3 graded a vacuous PASS that lifted the letter a
+    # full band (D->F). All four planters are now starved here.
     assert not versions & {
         "semantic-cache-contamination",
         "memory-contamination",
         "lora-cross-tenant",
+        "rag-poisoning",
     }
 
     payload = json.loads(
         _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
     )
     by_id = {c["class_id"]: c for c in payload["classes"]}
-    for class_id in (4, 8, 9):
+    for class_id in (3, 4, 8, 9):
         assert by_id[class_id]["verdict"] == "NOT_COVERED", f"class {class_id} found nothing"
 
 

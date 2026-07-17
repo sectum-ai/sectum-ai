@@ -31,6 +31,7 @@ from sectum_ai.spec import (
     MarkerType,
     Principal,
     Severity,
+    SharedEntity,
     Substrate,
     Surface,
     get_logger,
@@ -215,6 +216,43 @@ def is_cross_principal(marker: Marker, observer: Principal) -> bool:
     if observer.user_id is None or marker.owner_user_id is None:
         return False
     return marker.owner_user_id != observer.user_id
+
+
+def cross_principal_observers(
+    markers: Iterable[Marker], principals: Iterable[Principal]
+) -> list[Principal]:
+    """The principals to whom at least one of ``markers`` is foreign.
+
+    A probe issues its attack, query, or read step from these principals and no
+    others. A step from a principal the target secret is not foreign to tests
+    nothing that principal could not already see, so it can neither surface a leak
+    nor honestly count as a cross-principal check - recording a probe on the
+    strength of such steps grades its class a vacuous PASS (``docs/scorecard.md``,
+    rule 1). When no principal is foreign to any target, this is empty and the
+    probe should plant and query nothing, leaving its class ``NOT_COVERED``.
+    """
+    target = list(markers)
+    return [p for p in principals if any(is_cross_principal(m, p) for m in target)]
+
+
+def markers_naming_entity(substrate: Substrate, entity: SharedEntity) -> list[Marker]:
+    """The manifest markers carried by corpus documents that name ``entity``.
+
+    The organic-bleed probes query for a shared entity, not a specific marker, so
+    the entity's foreignness to an observer is the foreignness of the canaries
+    planted in the documents that mention it. ``SharedEntity`` carries no owner, so
+    the link runs through the corpus: a pivot document names its entity in its body
+    and carries its marker, and the document maps back to the manifest via
+    ``marker_ids``. Pair with :func:`cross_principal_observers` to gate a query on a
+    foreign canary for the entity actually existing.
+    """
+    named = {
+        marker_id
+        for document in substrate.documents
+        if entity.value in document.content
+        for marker_id in document.marker_ids
+    }
+    return [marker for marker in substrate.manifest.markers if marker.marker_id in named]
 
 
 class EmbeddingProvider(Protocol):

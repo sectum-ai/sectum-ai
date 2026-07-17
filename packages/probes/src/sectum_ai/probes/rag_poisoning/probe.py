@@ -6,7 +6,7 @@ shared index the poison document is retrieved into other tenants' benign
 queries, pivoting the canary across the tenant boundary.
 """
 
-from sectum_ai.probes.detection import DetectingProbe
+from sectum_ai.probes.detection import DetectingProbe, cross_principal_observers, is_cross_principal
 from sectum_ai.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
 _POISON_LURE = "quarterly operations digest"
@@ -34,10 +34,20 @@ class RagPoisoningProbe(DetectingProbe):
         With no users declared the principals are the tenants and this is the
         original per-tenant plan.
         """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
-        for marker in substrate.manifest.markers:
-            if marker.marker_type is not MarkerType.HARD_CANARY:
-                continue
+        # Plant a poison only where someone foreign could retrieve it. A poison whose
+        # canary is foreign to no principal cannot be surfaced by any query, so planting
+        # it asks the stack nothing while still recording this probe as having run - and
+        # `score` grades a probe that ran and found nothing as PASS (docs/scorecard.md,
+        # rule 1). Poison only what someone can steal.
+        planted = [
+            marker
+            for marker in substrate.manifest.markers
+            if marker.marker_type is MarkerType.HARD_CANARY
+            and cross_principal_observers([marker], principals)
+        ]
+        for marker in planted:
             steps.append(
                 ProbeStep(
                     step_id=f"{self.id}-{len(steps):04d}",
@@ -51,17 +61,21 @@ class RagPoisoningProbe(DetectingProbe):
                     },
                 )
             )
-        for observer in substrate.principals():
-            steps.append(
-                ProbeStep(
-                    step_id=f"{self.id}-{len(steps):04d}",
-                    probe_id=self.id,
-                    actor_tenant_id=observer.tenant_id,
-                    actor_user_id=observer.user_id,
-                    action="vector.query",
-                    payload={"query": _POISON_LURE, "k": "10"},
+        # Query the lure only from a principal foreign to at least one planted poison:
+        # the shared lure retrieves every poison, so such a principal can surface a
+        # cross-principal leak, and no other principal can.
+        for observer in principals:
+            if any(is_cross_principal(marker, observer) for marker in planted):
+                steps.append(
+                    ProbeStep(
+                        step_id=f"{self.id}-{len(steps):04d}",
+                        probe_id=self.id,
+                        actor_tenant_id=observer.tenant_id,
+                        actor_user_id=observer.user_id,
+                        action="vector.query",
+                        payload={"query": _POISON_LURE, "k": "10"},
+                    )
                 )
-            )
         return steps
 
     def detect(
