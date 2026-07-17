@@ -106,7 +106,11 @@ def test_the_digest_binds_every_field_of_the_record() -> None:
         "adapter_versions": {"adapter_versions": {"fake-vector": "9.9"}},
         "probe_versions": {"probe_versions": {**base.probe_versions, "extra-probe": "1.0"}},
         "findings": {"findings": (_finding("rag-poisoning", FindingStatus.UNVERIFIED),)},
-        "metrics": {"metrics": RunMetrics(retrieval_pivot_rate=0.954, retrieval_pivot_k=46)},
+        "metrics": {
+            "metrics": RunMetrics(
+                retrieval_pivot_rate=0.958, retrieval_pivot_k=46, retrieval_pivot_n=48
+            )
+        },
     }
     for field, update in variants.items():
         assert score_run(base.model_copy(update=update)).run_digest != baseline, (
@@ -183,23 +187,82 @@ def test_grading_a_run_that_exercised_nothing_is_refused() -> None:
         score_run(_run(ran=()))
 
 
+def _bleed_headline(metrics: RunMetrics) -> str:
+    card = score_run(_run(ran=_ALL_PROBES, metrics=metrics))
+    headline = next(c for c in card.classes if c.class_id == 2).headline
+    assert headline is not None
+    return headline
+
+
 def test_class_2_headline_carries_its_wilson_interval_and_sample_size() -> None:
-    card = score_run(
-        _run(
-            ran=_ALL_PROBES,
-            metrics=RunMetrics(
-                retrieval_pivot_rate=0.812,
-                retrieval_pivot_rate_ci=(0.681, 0.898),
-                retrieval_pivot_n=48,
-                retrieval_pivot_k=39,
-            ),
+    # The record's asserted rate and interval AGREE with its counts here, so this pins the
+    # honest case only. Anything that distinguishes recompute-from-counts from
+    # relay-the-claim belongs in the two tests below - this fixture deliberately cannot,
+    # and said so falsely until they existed: 39/48 = 0.8125 renders 81.2% either way.
+    headline = _bleed_headline(
+        RunMetrics(
+            retrieval_pivot_rate=0.8125,
+            retrieval_pivot_rate_ci=(0.681, 0.898),
+            retrieval_pivot_n=48,
+            retrieval_pivot_k=39,
         )
     )
-    bleed = next(c for c in card.classes if c.class_id == 2)
-    assert bleed.headline is not None
-    # A run that computed an interval must show it beside the rate, never the rate alone.
-    assert "81.2% RPR" in bleed.headline
-    assert "95% CI" in bleed.headline and "n=48" in bleed.headline
+    assert "81.2% RPR" in headline
+    assert "95% CI 68.1%-89.8%" in headline and "n=48" in headline
+
+
+def test_class_2_headline_recomputes_the_rate_from_the_counts_not_the_records_claim() -> None:
+    # Rule 4's logic applied to the headline: the counts are evidence, the rate is the
+    # record's claim about itself. A record whose counts say 46 of 48 while its rate field
+    # says 0.1% must be reported at 95.8% - the alternative prints a rate that its own
+    # interval excludes, sourced from the party under scrutiny.
+    headline = _bleed_headline(
+        RunMetrics(
+            retrieval_pivot_rate=0.001,
+            retrieval_pivot_rate_ci=(0.0009, 0.0011),
+            retrieval_pivot_k=46,
+            retrieval_pivot_n=48,
+        )
+    )
+    assert headline.startswith("95.8% RPR")  # the counts win, not the asserted 0.1%
+
+
+def test_class_2_recomputes_its_interval_rather_than_relaying_the_records() -> None:
+    # The attack _headline's docstring names: truthful counts, a fabricated interval. A
+    # relayed (0.9579, 0.9581) prints as a ~200x-too-tight `95% CI 95.8%-95.8%` and reads
+    # exactly like an interval we computed. Wilson on 46/48 is 86.0%-98.8%; assert the
+    # VALUES, since asserting the substring "95% CI" is what let this survive.
+    headline = _bleed_headline(
+        RunMetrics(
+            retrieval_pivot_rate=0.958,
+            retrieval_pivot_rate_ci=(0.9579, 0.9581),
+            retrieval_pivot_k=46,
+            retrieval_pivot_n=48,
+        )
+    )
+    assert "95% CI 86.0%-98.8%" in headline
+    assert "95.8%-95.8%" not in headline
+
+
+def test_an_incoherent_count_is_refused_not_quietly_believed() -> None:
+    # A record could opt OUT of the counts-recompute by corrupting its own counts: k > n
+    # made _rate_from_counts give up, falling back to the rate and interval the record
+    # asserts - so a doctored run printed a 94x-too-tight interval as fact, over an n=48
+    # that lent it plausibility, and k=99 was never shown. The incoherent record must not
+    # get to choose being believed; refuse it the way rule 4 refuses an unattributable
+    # finding.
+    with pytest.raises(ConfigError, match="incoherent"):
+        score_run(
+            _run(
+                ran=_ALL_PROBES,
+                metrics=RunMetrics(
+                    retrieval_pivot_rate=0.125,
+                    retrieval_pivot_rate_ci=(0.124, 0.126),
+                    retrieval_pivot_k=99,
+                    retrieval_pivot_n=48,
+                ),
+            )
+        )
 
 
 def test_class_2_without_a_ci_still_shows_its_rate() -> None:

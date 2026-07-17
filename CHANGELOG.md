@@ -67,6 +67,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A run that crosses no isolation boundary is refused instead of graded `A`.** Isolation
+  is a claim about a boundary *between* principals, so with fewer than two nothing is
+  foreign to anyone and no probe can surface a leak however broken the stack is. Nothing
+  enforced that: the same maximally-leaking demo stack that grades `F` on four principals
+  graded **`A`** on one, and `A` on a substrate with *no principals at all* — the letter
+  describing the substrate while reading as a verdict on the stack. The record was genuine,
+  so there was no tampering to catch: it passed `verify`, in-toto and DSSE, and an auditor
+  holding only the pack reproduced the `A`. `probe` now refuses a substrate with fewer than
+  two principals (exit `3`), at the source, so the tool cannot produce such a record.
+  Class 5's probe is also now recorded on what it *measured* rather than on having been
+  asked to run, and the step-based `probe_versions` rule is no longer relied on to catch
+  this: several probes emit setup steps (`cache.set`, `model.train`, `memory.write`) before
+  the read that could surface a leak, so a step alone is weak evidence of a real check.
 - **A probe that asked the stack nothing is no longer recorded as having run.**
   `probe_versions` was built from *suite membership*, while `score` reads it as "what
   actually ran" — so a probe whose plan came back empty was recorded, found nothing, and

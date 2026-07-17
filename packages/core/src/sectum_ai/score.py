@@ -181,8 +181,22 @@ def _confidence_for(coverage: float) -> Confidence:
 
 
 def _rate_from_counts(metrics: RunMetrics) -> float | None:
-    """Class 2's rate as its own counts give it, or ``None`` if the record has no counts."""
-    if not metrics.retrieval_pivot_n or metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+    """Class 2's rate as its own counts give it, or ``None`` if the record has no counts.
+
+    Raises:
+        ConfigError: If the counts are incoherent (``k > n``). Falling back to the rate
+            the record asserts would let it opt OUT of the recompute by corrupting its own
+            counts - the incoherent record choosing to be believed - so an impossible
+            ``k of n`` is refused the way rule 4 refuses an unattributable finding.
+    """
+    if metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+        raise ConfigError(
+            f"this run reports {metrics.retrieval_pivot_k} of {metrics.retrieval_pivot_n} "
+            "benign cross-tenant queries surfacing a foreign marker, which is impossible; "
+            "the record's Retrieval-Pivot counts are incoherent, so its headline rate "
+            "cannot be trusted and the run is not graded."
+        )
+    if not metrics.retrieval_pivot_n:
         return None
     return metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
 

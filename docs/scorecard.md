@@ -41,7 +41,20 @@ Where the record states both a rate and the counts behind it, the counts win: Cl
 headline is recomputed from `retrieval_pivot_k`/`_n` rather than read from the
 `retrieval_pivot_rate` and interval the record asserts about itself. Relaying an asserted
 interval faithfully would let a doctored record print a far-too-tight interval as fact,
-which reads to an auditor exactly like one we invented. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
+which reads to an auditor exactly like one we invented. Counts that cannot be true
+(`k > n`) are refused rather than fallen back on, so a record cannot opt out of the
+recompute by corrupting them.
+
+`probe` refuses a substrate holding **fewer than two principals** (exit `3`), so no such
+run reaches the scorecard. Isolation is a claim about a boundary *between* principals, so
+below two nothing is foreign to anyone and no probe can surface a leak however broken the
+stack is — every class would read clean as a property of the substrate rather than of the
+stack, and the same deliberately-leaky demo stack that grades `F` on four principals
+grades `A` on one. The guard is at `probe` because that is where it can be enforced on
+evidence: the run record is self-reported, so a count carried in it would be worth nothing
+against a record that lies, and `scenario_hash` pins *which* substrate without saying how
+many parties it held. A grade therefore rests on the substrate being sound — check the
+scenario, not just the letter. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
 (`run.json` wins when both exist: `probe` rewrites it unconditionally, while the pack is
 only as fresh as the last `report`, so preferring the pack could grade a stale record and
 flatter the letter). It prints the `run_id` and path it graded. `score` does not itself

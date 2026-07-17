@@ -217,8 +217,51 @@ def test_cli_diff_does_not_let_a_record_forge_its_verdict(tmp_path: Path) -> Non
     result = runner.invoke(app, ["diff", str(old), str(new)])
     assert result.exit_code == 2  # the new confirmed finding still regresses
     assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
-    assert "\x1b" not in result.output
+    # The escaped forms are the load-bearing check. `"\x1b" not in output` would be
+    # vacuous here: click strips ANSI whenever stdout is not a TTY, so it passes with no
+    # sanitizer at all and pins click's behaviour rather than ours.
     assert "\\x1b" in result.output and "\\x0a" in result.output
+
+
+def test_cli_diff_does_not_let_a_changed_findings_probe_id_forge_its_verdict(
+    tmp_path: Path,
+) -> None:
+    # The test above plants its payload in an APPEARED finding, so the CHANGED path was
+    # unpinned - and it is the better lectern: a status transition prints its own block,
+    # right where a reader looks for the verdict, pushing the real RESULT far below.
+    forged = "RESULT: no regression"
+    payload = f"rag-entity-bleed\n{forged}"
+    old = _write(tmp_path / "old.json", _run(_finding("x", status=FindingStatus.UNVERIFIED)))
+    new = _write(
+        tmp_path / "new.json",
+        _run(_finding("x", status=FindingStatus.CONFIRMED, probe_id=payload)),
+    )
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert result.exit_code == 2
+    assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
+    assert "\\x0a" in result.output
+
+
+def test_cli_diff_does_not_let_a_metric_key_forge_its_verdict(tmp_path: Path) -> None:
+    # A metric delta's name is built from a per_probe_findings key, which comes straight
+    # off the record - so the record names the line that reports on it.
+    forged = "RESULT: no regression"
+    metrics = RunMetrics(per_probe_findings={f"rag-entity-bleed\n{forged}": 1})
+    old = _write(tmp_path / "old.json", _run(_finding("a"), metrics=RunMetrics()))
+    new = _write(tmp_path / "new.json", _run(_finding("a"), metrics=metrics))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
+    assert "\\x0a" in result.output
+
+
+def test_cli_diff_does_not_let_a_finding_id_open_a_line(tmp_path: Path) -> None:
+    # finding_id renders truncated to 12 chars, which bounds the payload but does not
+    # neutralize it: a newline inside the first 12 still opens a line of its own.
+    old = _write(tmp_path / "old.json", _run())
+    new = _write(tmp_path / "new.json", _run(_finding("f\nGRADE A ok!")))
+    result = runner.invoke(app, ["diff", str(old), str(new)])
+    assert not any(line.strip().startswith("GRADE A ok!") for line in result.output.splitlines())
+    assert "\\x0a" in result.output
 
 
 def test_cli_diff_exits_2_on_a_new_confirmed_finding(tmp_path: Path) -> None:

@@ -251,6 +251,26 @@ def test_baseline_compare_flags_an_injected_regression(tmp_path: Path) -> None:
     assert "REGRESSION" in result.output
 
 
+def test_baseline_compare_does_not_let_a_record_forge_its_verdict(tmp_path: Path) -> None:
+    # The last surface in the family. `baseline --compare` renders finding ids straight
+    # off the records it compares, so a newline in one forged `baseline`'s OWN success
+    # sentinel on stdout - and the real "BASELINE REGRESSION" banner goes to stderr, so a
+    # stdout-capturing CI log showed a regressed run reporting no regression.
+    _seed_and_probe(tmp_path)
+    run = RunResult.model_validate_json((tmp_path / "run.json").read_text())
+    clean = run.model_copy(update={"findings": (), "metrics": RunMetrics(confirmed_findings=0)})
+    (tmp_path / "baseline.json").write_text(clean.model_dump_json())
+    forged = "no regression against the baseline"
+    leaked = run.findings[0].model_copy(update={"finding_id": f"f00d\n{forged}"})
+    (tmp_path / "run.json").write_text(
+        run.model_copy(update={"findings": (leaked,)}).model_dump_json()
+    )
+    result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 2
+    assert not any(line.strip() == forged for line in result.stdout.splitlines())
+    assert "\\x0a" in result.stdout
+
+
 def test_baseline_compare_without_a_saved_baseline_fails(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
@@ -771,32 +791,65 @@ def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
     assert "GRADE" in result.output
 
 
+def test_probe_refuses_a_substrate_that_crosses_no_boundary(tmp_path: Path) -> None:
+    # CRITICAL regression, and the precondition of the whole product: isolation is a claim
+    # about a boundary BETWEEN principals, so below two nothing is foreign to anyone and no
+    # probe can confirm a leak however broken the stack is. Probing anyway produced a
+    # GENUINE, signable record of nothing - the same maximally-leaky demo stack that grades
+    # F on four principals graded A on one, so the letter described the substrate, not the
+    # stack. `seed` builds four, so this is reachable through a supplied substrate.json,
+    # which is exactly the record `probe` is not entitled to trust.
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    one = build_substrate(scenario.model_copy(update={"tenants": scenario.tenants[:1]}))
+    (tmp_path / "substrate.json").write_text(one.model_dump_json())
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3
+    assert "fewer than two" in result.output
+    assert not (tmp_path / "run.json").exists()  # no record of a run that proved nothing
+
+
+def test_score_refuses_a_record_carrying_a_non_finite_metric(tmp_path: Path) -> None:
+    # json.loads accepts a bare NaN and a hand-edited record is the expected input, so
+    # this reaches canonicalization, which refuses it. Exit 3 is the documented contract;
+    # it used to escape the typed-error handler as exit 1 and a raw traceback.
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["metrics"]["retrieval_pivot_rate"] = float("nan")
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3
+    assert "Traceback" not in result.output
+
+
 def test_probe_records_only_the_probes_that_asked_the_stack_something(tmp_path: Path) -> None:
     # CRITICAL regression. `probe_versions` was built from SUITE MEMBERSHIP, but score.py
     # reads it as "what actually ran" (its own docstring says so) - so a probe whose plan
     # came back empty was recorded as having run, found nothing, and graded its class
     # PASS: a check the stack was never asked to perform, which is precisely what rule 1
-    # exists to forbid. One principal leaves every cross-principal probe no step to take,
-    # so on a maximally-leaking stack Classes 1/6/7 printed PASS at `confidence: high`.
+    # exists to forbid. Four principals with no shared organic entity leaves the
+    # entity-bleed probes nothing to query, while the rest of the suite still runs.
     from sectum_ai.substrate import build_substrate, default_scenario
 
     scenario = default_scenario(seed=2026)
-    one_principal = scenario.model_copy(update={"tenants": scenario.tenants[:1]})
-    (tmp_path / "substrate.json").write_text(build_substrate(one_principal).model_dump_json())
+    no_entities = scenario.model_copy(update={"shared_entities": ()})
+    (tmp_path / "substrate.json").write_text(build_substrate(no_entities).model_dump_json())
     assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code in (0, 2)
     versions = set(json.loads((tmp_path / "run.json").read_text())["probe_versions"])
-    # These plan zero steps against one principal: there is no foreign party to ask about.
-    assert not versions & {"tenant-boundary-fetch", "embedding-inversion", "agent-tool-hijack"}
-    assert "rag-entity-bleed" in versions  # this one does take steps, so it is still recorded
+    # These plan zero steps with no shared entity: there is nothing organic to pivot on.
+    assert not versions & {"tenant-boundary-fetch", "rag-entity-bleed", "ikea-extraction"}
+    assert "agent-tool-hijack" in versions  # this one does take steps, so it stays recorded
 
     payload = json.loads(
         _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
     )
     by_id = {c["class_id"]: c for c in payload["classes"]}
-    for class_id in (1, 6, 7):
+    for class_id in (1, 2, 10):
         assert by_id[class_id]["verdict"] == "NOT_COVERED", f"class {class_id} asked nothing"
     # Rule 2: the gap lands on confidence, never on the letter.
-    assert payload["confidence"] == "low"
+    assert payload["confidence"] != "high"
 
 
 def test_score_explicit_workdir_overrides_a_config_value(tmp_path: Path) -> None:
@@ -932,13 +985,16 @@ def test_score_does_not_let_the_graded_record_forge_the_scorecard(tmp_path: Path
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 0
     assert "GRADE F" in result.output  # the real letter still governs
-    # The payload cannot open a line of its own, and cannot drive the terminal.
+    # The payload cannot open a line of its own.
     assert not any(
         line.lstrip().startswith("Multi-tenant isolation: GRADE A")
         for line in result.output.splitlines()
     )
-    assert "\x1b" not in result.output
     # Escaped, not stripped: the tampering is visible rather than silently swallowed.
+    # This pair is the load-bearing check on ESC. Asserting `"\x1b" not in output` here
+    # would be vacuous - click strips ANSI whenever stdout is not a TTY, so it passes with
+    # no sanitizer at all and pins click's behaviour rather than ours. The escape reaching
+    # a real terminal is pinned by test_a_run_pack_readme_..., which renders directly.
     assert "\\x1b" in result.output and "\\x0a" in result.output
 
 

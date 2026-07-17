@@ -5,6 +5,36 @@ build or test gate (see `internal/README.md`). Newest first.
 
 ---
 
+## `RunResult` cannot grow a field without breaking every pack already issued
+
+**Status:** a constraint to design around, not a task. Recorded because it is invisible
+until it bites, and it cost a designed-and-reverted change in the PR #252 review loop.
+
+`canonical_hash` serializes with `model_dump(mode="json")` — every field, defaults
+included — so **adding any field to `RunResult` (or `RunMetrics`) changes the canonical
+form of every record that already exists**, including ones written by older versions. The
+digest changes; the RFC 3161 token and Rekor entry over the old digest no longer match;
+and `verify` reports **"the timestamp token attests a different digest; the evidence pack
+was altered"** — accusing an untouched pack of tampering. `tests/invariants/
+test_sample_packs_verify.py` is the guard that catches this (it did), because the shipped
+sample packs carry real anchors.
+
+Consequences for anyone adding a field here:
+- It is a **breaking** change for existing evidence, not an additive one, whatever the
+  pydantic default says. It needs a `SCHEMA_VERSION` minor bump so the version gate
+  rejects old packs honestly ("verify with a matching sectum version") rather than
+  libelling them — and old packs then need the old verifier.
+- `exclude_none` / `exclude_unset` is not an escape: changing canonicalization changes
+  every digest too.
+- So weigh the field against that cost. The reverted case: a `principal_count` on
+  `RunResult` so `score` could refuse a run that crossed no boundary. It was dropped
+  because the record is **self-reported** — a vendor whose substrate held one principal
+  simply writes `4` and the guard waves it through, and an older honest record carries no
+  count at all. It bought nothing that `probe`'s refusal does not already give at the
+  source, and would have broken every pack in the wild to buy it.
+
+---
+
 ## Full OWASP LLM08:2025 coverage — wire Class 13 into the `owasp-llm08` framing
 
 **Status:** on hold — blocked on multi-modal retrieval wiring.

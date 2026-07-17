@@ -760,6 +760,20 @@ def probe(
         agent=bundle.agent,
     )
 
+    if len(substrate.principals()) < 2:
+        # The precondition of the whole product. Isolation is a claim about a boundary
+        # BETWEEN principals, so with fewer than two nothing is foreign to anyone and no
+        # probe can confirm a leak however broken the stack is. Probing anyway produces a
+        # genuine, signable record of nothing: the same maximally-leaky demo stack grades
+        # F on four principals and A on one, and the letter would be describing the
+        # substrate rather than the stack. Refuse rather than emit a meaningless clean run.
+        raise ConfigError(
+            f"this substrate holds {len(substrate.principals())} principal(s); "
+            "multi-tenant isolation cannot be verified with fewer than two, because no "
+            "data is foreign to anyone and no probe can surface a cross-principal leak. "
+            "Seed a substrate with at least two principals (the default scenario has four)."
+        )
+
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
     # A single probe stays serial regardless of --max-concurrency (a pool is only
@@ -820,14 +834,23 @@ def probe(
             bundle.agent.name: _ADAPTERS_VERSION,
         },
         probe_versions={
-            # What actually INTERROGATED the stack, not what the suite contained. A probe
-            # whose plan comes back empty asked the stack nothing - a substrate with one
-            # principal leaves every cross-principal probe no step to take - and recording
-            # it as having run let `score` grade the class PASS, claiming a check that
-            # never happened (docs/scorecard.md, rule 1). Findings still stand on their
-            # own: score's rule 4 treats a confirmed finding as proof its probe ran.
+            # What actually INTERROGATED the stack, not what the suite contained: a probe
+            # whose plan comes back empty asked the stack nothing, and recording it let
+            # `score` grade the class PASS - a check that never happened
+            # (docs/scorecard.md, rule 1). Findings still stand on their own: score's rule
+            # 4 treats a confirmed finding as proof its probe ran. A step is only weak
+            # evidence of a real check - several probes emit setup steps (cache.set,
+            # model.train, memory.write) before the read that could actually surface a
+            # leak - so the &lt;2-principal refusal above, not this, is what keeps a probe
+            # from passing on a substrate where nothing is foreign to anyone.
             **dict.fromkeys(sorted({result[0].probe_id for result in step_results}), __version__),
-            **({KvCacheTimingProbe.id: __version__} if run_kv_timing else {}),
+            # Gated on what the KV probe MEASURED, not on having been asked to run, because
+            # "we ran it" and "it observed something" are different claims and `score`
+            # reads this as the second. The <2-principal refusal above already makes a
+            # zero-signal report unreachable (two principals measure two signals), so this
+            # guards that refusal being weakened rather than a live path - it graded Class
+            # 5 PASS off a probe that measured nothing on a substrate with no principals.
+            **({KvCacheTimingProbe.id: __version__} if kv_report and kv_report.signals else {}),
         },
         findings=findings,
         metrics=RunMetrics(
@@ -2120,11 +2143,11 @@ def baseline(
         )
     for change in result.findings.severity_escalations:
         typer.echo(
-            f"[REGRESSED] severity escalated: {change.previous.finding_id} "
+            f"[REGRESSED] severity escalated: {untrusted(change.previous.finding_id)} "
             f"{change.previous.severity.value} -> {change.current.severity.value}"
         )
     for finding in result.findings.newly_confirmed:
-        typer.echo(f"[REGRESSED] newly confirmed leak: {finding.finding_id}")
+        typer.echo(f"[REGRESSED] newly confirmed leak: {untrusted(finding.finding_id)}")
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
