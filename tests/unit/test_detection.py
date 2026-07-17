@@ -670,6 +670,34 @@ def test_a_collided_codename_stays_distinctive_and_a_genuine_leak_confirms() -> 
     assert confirmed, "a genuine leak of a collided codename must still confirm"
 
 
+def test_a_codename_in_exactly_half_the_markers_stays_distinctive_and_confirms() -> None:
+    # Boundary of the majority-demotion test (detection.py: strict `2*count >
+    # entity_marker_count`): a codename shared by EXACTLY HALF the entity markers is not a
+    # majority, so it must stay distinctive and a genuine leak of it must still CONFIRM. The
+    # collided-codename test above is a minority (2 of 5); this pins the 2-of-4 boundary,
+    # where an `>=` (at-least-half) demotion would wrongly boilerplate the codename and miss
+    # the leak. "Halcyon" is in 2 of 4 markers (2*2 == 4), and the leak names only the
+    # codename - no serial - so confirmation rests solely on it staying distinctive.
+    substrate = _entity_substrate(
+        "Project Halcyon 00001",
+        "Project Halcyon 00002",
+        "Project Zephyr 00003",
+        "Project Lodestar 00004",
+    )
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project Halcyon"), 0.0
+    )
+    text = "the retrieved competitor record names Project Halcyon as the account owner"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [
+        f
+        for f in findings
+        if f.marker_id in {"e-Project Halcyon 00001", "e-Project Halcyon 00002"}
+        and f.status is FindingStatus.CONFIRMED
+    ]
+    assert confirmed, "a codename in exactly half the markers must stay distinctive and confirm"
+
+
 def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() -> None:
     # Root-fix regression (review round 7): the FP-control backstop ties a leak to
     # its marker by a distinctive shared token. When the entity codename was a bare
