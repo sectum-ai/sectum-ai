@@ -771,6 +771,34 @@ def test_score_reads_its_workdir_from_a_config(tmp_path: Path) -> None:
     assert "GRADE" in result.output
 
 
+def test_probe_records_only_the_probes_that_asked_the_stack_something(tmp_path: Path) -> None:
+    # CRITICAL regression. `probe_versions` was built from SUITE MEMBERSHIP, but score.py
+    # reads it as "what actually ran" (its own docstring says so) - so a probe whose plan
+    # came back empty was recorded as having run, found nothing, and graded its class
+    # PASS: a check the stack was never asked to perform, which is precisely what rule 1
+    # exists to forbid. One principal leaves every cross-principal probe no step to take,
+    # so on a maximally-leaking stack Classes 1/6/7 printed PASS at `confidence: high`.
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    one_principal = scenario.model_copy(update={"tenants": scenario.tenants[:1]})
+    (tmp_path / "substrate.json").write_text(build_substrate(one_principal).model_dump_json())
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code in (0, 2)
+    versions = set(json.loads((tmp_path / "run.json").read_text())["probe_versions"])
+    # These plan zero steps against one principal: there is no foreign party to ask about.
+    assert not versions & {"tenant-boundary-fetch", "embedding-inversion", "agent-tool-hijack"}
+    assert "rag-entity-bleed" in versions  # this one does take steps, so it is still recorded
+
+    payload = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    by_id = {c["class_id"]: c for c in payload["classes"]}
+    for class_id in (1, 6, 7):
+        assert by_id[class_id]["verdict"] == "NOT_COVERED", f"class {class_id} asked nothing"
+    # Rule 2: the gap lands on confidence, never on the letter.
+    assert payload["confidence"] == "low"
+
+
 def test_score_explicit_workdir_overrides_a_config_value(tmp_path: Path) -> None:
     # docs/configuration.md promises an explicit flag always beats the config. `seed`
     # pins that; `score` did not, and it is the command where losing lets the config
@@ -920,7 +948,7 @@ def test_a_run_pack_readme_does_not_let_the_run_id_forge_it(tmp_path: Path) -> N
     from sectum_ai.cli.app import _run_pack_readme
 
     readme = _run_pack_readme(
-        "run-acme\n\n## Verified: no cross-tenant leaks",
+        "run-acme\x1b[2J\n\n## Verified: no cross-tenant leaks",
         sealed_manifest=False,
         has_config=False,
     )
@@ -928,6 +956,10 @@ def test_a_run_pack_readme_does_not_let_the_run_id_forge_it(tmp_path: Path) -> N
     # on the title line and renders as text, so assert it cannot open a line of its own.
     assert not any(line.startswith("## Verified") for line in readme.splitlines())
     assert "\\x0a" in readme
+    # Parity with the scorecard, asserted rather than assumed: escaping only the newline
+    # and letting ESC through passed this test until it checked for it.
+    assert "\x1b" not in readme
+    assert "\\x1b" in readme
 
 
 def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
@@ -935,9 +967,6 @@ def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     # it: a leaking record and a doctored clean copy grade F and A under a byte-identical
     # run_id. The digest is what identifies WHICH record earned the letter - and it is
     # the same run identifier the attestation and the audit PDF bind.
-    from sectum_ai.cli.app import _load_run
-    from sectum_ai.evidence import run_digest
-
     _seed_and_probe(tmp_path)
     run_path = tmp_path / "run.json"
     leaking = json.loads(run_path.read_text())
@@ -953,8 +982,10 @@ def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     assert clean_card["grade"] == "A"
     assert clean_card["run_id"] == leaking_card["run_id"]  # provenance run_id cannot tell...
     assert clean_card["run_digest"] != leaking_card["run_digest"]  # ...but the digest does
-    # A third party recomputes the digest from the record they hold and confirms the match.
-    assert clean_card["run_digest"] == run_digest(_load_run(tmp_path))
+    # What the digest must COVER is pinned by test_the_digest_binds_every_field_of_the_record;
+    # recomputing it here with run_digest itself could not catch a digest that stopped
+    # covering a field, since both sides would move together.
+    assert len(clean_card["run_digest"]) == 64  # sha256 hex
 
 
 def test_score_names_the_record_it_graded(tmp_path: Path) -> None:

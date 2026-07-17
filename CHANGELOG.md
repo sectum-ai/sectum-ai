@@ -44,15 +44,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   substrate artifact, not a strength measurement) and `clip:<model>` (real CLIP via
   sentence-transformers, the `[clip]` extra, BYOC-safe — sweeping two or more CLIP models
   measures the genuine "stronger embedders leak more" gradient) — and
-  `multimodal_provider_sweep`, which reports the per-model **image Retrieval-Pivot Rate**
-  with the binomial counts behind a Wilson interval. Runnable, self-asserting example at
+  `multimodal_provider_sweep`, which reports the per-model **image Retrieval-Pivot Rate**,
+  with `multimodal_pivot_counts` reporting the binomial counts (`k` of `n`) a Wilson
+  interval can be formed from. Unlike Class 2's rate, these are **not** carried in the
+  evidence pack: `RunMetrics` has no multi-modal field and the probe is in no named suite,
+  so the counts come from the sweep API rather than a signed record until the CLI wiring
+  lands. Runnable, self-asserting example at
   `examples/multimodal-rag-bleed/` (a fixed demo ladder `imagehash-16` ~46% →
   `imagehash-256` 100% offline). The image-RPR is measured by its per-model sweep, as
   Class 2's embedding-strength gradient is; live multi-modal vector-store adapters and
   generic-suite / CLI wiring are a follow-on.
 
+### Changed
+
+- **The `owasp-llm08` suite claim is narrowed to what it runs.** It described itself as
+  the full adversarial catalog; Class 13 carries `owasp_llm: LLM08:2025` but runs in
+  neither the default CLI suite nor this one, so shipping Class 13 *reduced* the SKU's
+  relative LLM08 coverage rather than adding to it. The suite description, `docs/skus.md`
+  and `docs/coverage.md` now say "every adversarial probe in the default CLI suite" and
+  name Class 13's sweep as the separate path. Nothing about the probes it runs changed —
+  only the claim, which had stopped being true.
+
 ### Fixed
 
+- **A probe that asked the stack nothing is no longer recorded as having run.**
+  `probe_versions` was built from *suite membership*, while `score` reads it as "what
+  actually ran" — so a probe whose plan came back empty was recorded, found nothing, and
+  graded its class **PASS**: a check the stack was never asked to perform, which is
+  exactly what the scorecard's rule 1 exists to forbid. A substrate with one principal
+  leaves every cross-principal probe no step to take, so on a maximally-leaking stack
+  Classes 1 / 6 / 7 printed `PASS` at `confidence: high`, and the run was then signed into
+  an evidence pack that verifies — the tool attesting its own over-claim. `probe_versions`
+  now records only probes that took at least one step; those classes read `NOT_COVERED`
+  and the loss lands on *confidence*, where rule 2 puts it. A confirmed finding still
+  stands on its own (rule 4: the finding is proof its probe ran).
 - **A run record can no longer forge the output that reports on it.** `run_id` is carried
   by the record under scrutiny — the party Sectum exists in order *not* to trust — and it
   was interpolated raw into a run pack's `README.md` (and, before release, the scorecard).

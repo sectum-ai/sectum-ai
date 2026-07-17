@@ -47,6 +47,7 @@ from sectum_ai.spec.models import (
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, wilson_interval
+from sectum_ai.spec.text import untrusted
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -94,6 +95,7 @@ __all__ = [
     "redact_sensitive",
     "sha256_hex",
     "to_canonical_json",
+    "untrusted",
     "wilson_interval",
     "write_json_schemas",
 ]

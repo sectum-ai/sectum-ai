@@ -12,6 +12,7 @@ sectum-ai score  --workdir .sectum-ai           # or: --output json
 ```
 Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   run run-sectum-ai-demo-2026 (.sectum-ai/run.json)
+  record 3b4338ec5a375e02 (sha256, the run identifier)
   capped by a failing critical-band class
 
   Class  1  Direct tenant boundary fetch    FAIL        critical
@@ -27,7 +28,20 @@ The grade is **derived, not asserted**. Every input is the
 [`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`, and
 `metrics` — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
 `score` also accepts and unwraps) recomputes the letter with this page's rules rather
-than trusting it. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
+than trusting it.
+
+The `record` line is the SHA-256 of the graded record — the same
+[run digest](evidence-chain.md) the in-toto attestation and the audit PDF bind, and it
+differs for every run. It is there because `run_id` cannot identify a record: `run_id` is
+derived from the scenario, so every run against one substrate repeats it, and two records
+that grade `F` and `A` can carry an identical `run_id`. The digest says *which* record
+earned this letter, and a third party recomputes it from the record they hold.
+
+Where the record states both a rate and the counts behind it, the counts win: Class 2's
+headline is recomputed from `retrieval_pivot_k`/`_n` rather than read from the
+`retrieval_pivot_rate` and interval the record asserts about itself. Relaying an asserted
+interval faithfully would let a doctored record print a far-too-tight interval as fact,
+which reads to an auditor exactly like one we invented. `score` grades `run.json`, falling back to `evidence.json` when only the pack is present
 (`run.json` wins when both exist: `probe` rewrites it unconditionally, while the pack is
 only as fresh as the last `report`, so preferring the pack could grade a stale record and
 flatter the letter). It prints the `run_id` and path it graded. `score` does not itself

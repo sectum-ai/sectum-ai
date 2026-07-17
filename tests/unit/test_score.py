@@ -6,7 +6,8 @@ worst failing class's weight band caps the letter; and every confirmed finding l
 class or the run is refused.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -87,6 +88,30 @@ def test_a_clean_full_run_grades_a_at_high_confidence() -> None:
     assert card.methodology_version == METHODOLOGY_VERSION
     # The scorecard is what binds a letter to a record; a blank run_id binds it to nothing.
     assert card.run_id == "run-test"
+
+
+def test_the_digest_binds_every_field_of_the_record() -> None:
+    # The binding is only worth what it covers, and the CLI test that checks it recomputes
+    # with run_digest ITSELF - so it cannot notice the digest quietly ceasing to cover a
+    # field. A digest over everything-but-metrics passed that assertion while two records
+    # whose flagship RPR differed 47x carried an identical digest, and a third party
+    # comparing digests would conclude "same record". Compare scorecards, never recompute.
+    base = _run(ran=_ALL_PROBES)
+    baseline = score_run(base).run_digest
+    variants: dict[str, dict[str, Any]] = {
+        "run_id": {"run_id": "run-other"},
+        "scenario_hash": {"scenario_hash": "z" * 8},
+        "manifest_hash": {"manifest_hash": "z" * 8},
+        "finished_at": {"finished_at": base.finished_at + timedelta(seconds=1)},
+        "adapter_versions": {"adapter_versions": {"fake-vector": "9.9"}},
+        "probe_versions": {"probe_versions": {**base.probe_versions, "extra-probe": "1.0"}},
+        "findings": {"findings": (_finding("rag-poisoning", FindingStatus.UNVERIFIED),)},
+        "metrics": {"metrics": RunMetrics(retrieval_pivot_rate=0.954, retrieval_pivot_k=46)},
+    }
+    for field, update in variants.items():
+        assert score_run(base.model_copy(update=update)).run_digest != baseline, (
+            f"run_digest does not bind {field}: two different records share one identifier"
+        )
 
 
 def test_an_untested_class_is_never_a_pass() -> None:

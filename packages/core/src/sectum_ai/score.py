@@ -52,6 +52,8 @@ from sectum_ai.spec import (
     RunMetrics,
     RunResult,
     Severity,
+    untrusted,
+    wilson_interval,
 )
 
 __all__ = [
@@ -178,21 +180,42 @@ def _confidence_for(coverage: float) -> Confidence:
     return Confidence.LOW
 
 
+def _rate_from_counts(metrics: RunMetrics) -> float | None:
+    """Class 2's rate as its own counts give it, or ``None`` if the record has no counts."""
+    if not metrics.retrieval_pivot_n or metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+        return None
+    return metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
+
+
 def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
     """The class's headline rate rendered with its uncertainty, when it has one.
 
-    Class 2's Retrieval-Pivot Rate carries a Wilson interval and its sample size, so the
-    scorecard shows the rate the way the run records it: with its interval when the run
-    computed one, bare when it did not. A record carrying no interval is never dressed in
-    one - re-grading a record you did not produce is this module's purpose, and an
-    invented interval would be exactly the over-claim the scorecard exists to prevent.
+    Class 2's Retrieval-Pivot Rate is recomputed from the record's binomial *counts*
+    (``k`` of ``n``) rather than read from the rate and interval the record asserts about
+    itself - the same reasoning as rule 4. The counts are the evidence; the rate and
+    interval are bookkeeping, and a record that disagrees with its own counts must not
+    have its claim relayed as fact. Refusing to *invent* an interval while faithfully
+    *relaying* a fabricated one reads identically to the auditor: a doctored record can
+    print a 200x-too-tight interval over truthful counts.
+
+    A record carrying no counts is shown as it recorded itself - that is all there is -
+    and one carrying no interval is never dressed in one.
     """
-    if entry.class_id == 2 and metrics.retrieval_pivot_rate is not None:
-        rate = f"{metrics.retrieval_pivot_rate:.1%} RPR"
-        if metrics.retrieval_pivot_rate_ci is None:
-            return rate
-        low, high = metrics.retrieval_pivot_rate_ci
-        return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+    if entry.class_id == 2:
+        counts_rate = _rate_from_counts(metrics)
+        if counts_rate is not None:
+            low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
+            return (
+                f"{counts_rate:.1%} RPR (95% CI {low:.1%}-{high:.1%}, "
+                f"n={metrics.retrieval_pivot_n})"
+            )
+        if metrics.retrieval_pivot_rate is not None:
+            rate = f"{metrics.retrieval_pivot_rate:.1%} RPR"
+            if metrics.retrieval_pivot_rate_ci is None:
+                return rate
+            low, high = metrics.retrieval_pivot_rate_ci
+            return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+        return None
     rates: dict[int, tuple[str, float | None]] = {
         3: ("poisoning bleed", metrics.poisoning_bleed_delta),
         6: ("reconstruction", metrics.inversion_reconstruction_rate),
@@ -239,8 +262,8 @@ def _score_class(entry: _CatalogClass, run: RunResult, proven: set[str]) -> Clas
             severity=entry.severity,
             probe_ids=entry.probe_ids,
             note=(
-                "probe did not run - no configured adapter satisfies it, "
-                "or it was not in this run's suite"
+                "probe did not run - no configured adapter satisfies it, it was not in "
+                "this run's suite, or the substrate left it no step to take"
             ),
         )
     return ClassScore(
@@ -258,9 +281,10 @@ def score_run(run: RunResult) -> IsolationScore:
     """Grade a run's multi-tenant isolation posture (``docs/scorecard.md``).
 
     Args:
-        run: The run to grade. Only its ``probe_versions`` (what actually ran),
-            ``findings``, and ``metrics`` are read, so the grade is reproducible from
-            the evidence pack alone.
+        run: The run to grade. The *letter* is a function of ``probe_versions`` (what
+            actually ran), ``findings``, and ``metrics`` alone, so it is reproducible
+            from the evidence pack; the whole record is additionally hashed into
+            ``run_digest`` to bind that letter to this exact record.
 
     Returns:
         The scorecard: a letter, its confidence, and a per-class breakdown in which
@@ -281,12 +305,23 @@ def score_run(run: RunResult) -> IsolationScore:
     proven = _confirmed_probe_ids(run)
     unattributable = sorted(proven - catalog_probes)
     if unattributable:
+        # The probe ids come from the record, so escape them: raw, this very guard - the
+        # one that refuses to flatter a letter - forged a passing scorecard in its own
+        # refusal message.
         raise ConfigError(
             "this run carries confirmed findings from probe(s) the scorecard catalog "
-            f"does not cover: {', '.join(unattributable)}. The catalog is stale, so "
-            "grading would silently drop a confirmed leak; update sectum_ai.score.CATALOG "
-            "(and docs/scorecard.md) instead."
+            f"does not cover: {', '.join(untrusted(p) for p in unattributable)}. The "
+            "catalog is stale, so grading would silently drop a confirmed leak; update "
+            "sectum_ai.score.CATALOG (and docs/scorecard.md) instead."
         )
+
+    try:
+        digest = run_digest(run)
+    except ValueError as exc:
+        # A hand-edited record is the expected input here, and json.loads accepts a bare
+        # NaN, which canonicalization refuses. Fail as a config error (exit 3) rather than
+        # a traceback: the record cannot be graded, and saying so is the whole answer.
+        raise ConfigError(f"this run cannot be identified, so it is not graded: {exc}") from exc
 
     classes = tuple(_score_class(entry, run, proven) for entry in CATALOG)
     weight = {entry.class_id: SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG}
@@ -325,7 +360,7 @@ def score_run(run: RunResult) -> IsolationScore:
         # Bind the letter to the exact record: run_id repeats across every run of a
         # scenario, so it cannot tell two records apart (and the record itself supplies
         # it). The digest is computed from the content we actually graded.
-        run_digest=run_digest(run),
+        run_digest=digest,
         grade=grade,
         # Rule 2: coverage drives confidence, and never the letter.
         confidence=_confidence_for(coverage),

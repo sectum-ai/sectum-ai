@@ -99,4 +99,6 @@ security reviewer, auditor, or DPO, not a hand-written summary:
 
 Named suites bundle the classes for a specific buyer: `--suite soc2-tenant-isolation`
 (the direct cross-tenant checks — SOC 2 CC6.1 / CC6.6 / CC6.7, ISO 27001) and
-`--suite owasp-llm08` (the full adversarial catalog). See [SKUs and suites](skus.md).
+`--suite owasp-llm08` (every adversarial probe in the default CLI suite; Class 13's
+multi-modal bleed is measured by its own image-embedding sweep, not this run). See
+[SKUs and suites](skus.md).
