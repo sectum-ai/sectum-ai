@@ -16,7 +16,7 @@ the classes below are implemented today.
 | [8 — Persistent memory contamination](class-08-memory-contamination.md) | `memory-contamination` | `AML.T0057` | agent memory |
 | [9 — LoRA cross-tenant influence](class-09-lora-cross-tenant.md) | `lora-cross-tenant` | `AML.T0024`, `AML.T0024.000`, `AML.T0057` | model / adapter |
 | [10 — IKEA-style benign extraction](class-10-ikea-extraction.md) | `ikea-extraction` | `AML.T0024`, `AML.T0057` | vector DB |
-| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification` | — (control check) | all configured surfaces |
+| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification`, `gdpr-subject-erasure-verification` | — (control check) | all configured surfaces |
 | [13 — Multi-modal RAG entity-bleed](class-13-multimodal-rag-bleed.md) | `multimodal-rag-bleed` | `AML.T0024`, `AML.T0057` | vector DB (multi-modal) |
 
 Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses** and

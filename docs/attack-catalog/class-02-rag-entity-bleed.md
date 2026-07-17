@@ -1,9 +1,17 @@
 # Class 2 — Organic entity-bleed RAG
 
-**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0057 · **NIST:** MEASURE 2.7 · **Surface:** vector DB · **Probe id:** `rag-entity-bleed`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0057 · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, RAG pipeline · **Probe ids:** `rag-entity-bleed`, `rag-pipeline-bleed`
 
 The flagship probe. It reproduces the Retrieval Pivot: benign, non-adversarial
 queries surface another tenant's content through shared organic entities.
+
+Two probes measure the same Retrieval Pivot at two points in the stack.
+`rag-entity-bleed` reads the retrieval directly at the **vector index** — the
+purest measurement, isolating the store's tenant scoping. `rag-pipeline-bleed`
+measures it at the **end of a real RAG pipeline** (retriever + generator), where
+a foreign canary reaching the generated answer confirms the leak survives the
+full pipeline, not just the raw retrieval. The method and detection below apply to
+both; they differ only in where the retrieval is observed.
 
 ## Goal
 
