@@ -1,8 +1,9 @@
 """Tests for the isolation scorecard (``sectum-ai score``, docs/scorecard.md).
 
 The honesty rules are the point of this feature, so they are asserted directly: an
-untested class can never be a PASS, coverage drives confidence and never the grade, and
-the worst confirmed failure caps the letter.
+untested class can never be a PASS; coverage drives confidence and never the grade; the
+worst failing class's weight band caps the letter; and every confirmed finding lands in a
+class or the run is refused.
 """
 
 from datetime import UTC, datetime
@@ -264,3 +265,84 @@ def test_a_class_that_did_not_run_carries_no_headline_or_findings() -> None:
     assert bleed.verdict is ClassVerdict.NOT_COVERED
     assert bleed.headline is None
     assert bleed.confirmed_findings == 0
+
+
+def test_a_confirmed_finding_fails_its_class_even_if_probe_versions_omits_the_probe() -> None:
+    # RULE 4 (regression): a confirmed finding is itself proof its probe ran. Trusting
+    # probe_versions alone let a run whose bookkeeping disagreed with its own findings
+    # grade A while printing PASS for the class that leaked - the grader was throwing
+    # away contradicting evidence it already held. Re-grading a record you did not
+    # produce is this command's purpose, so the findings are the authority.
+    run = _run(
+        # every probe recorded EXCEPT the one that leaked; the class stays "covered"
+        # through its sibling probe, which is what made the old bug print PASS.
+        ran=tuple(p for p in _ALL_PROBES if p != "rag-pipeline-bleed"),
+        findings=(_finding("rag-pipeline-bleed"),),
+    )
+    card = score_run(run)
+    bleed = next(c for c in card.classes if c.class_id == 2)
+    assert bleed.verdict is ClassVerdict.FAIL
+    assert bleed.confirmed_findings == 1
+    assert card.grade is Grade.F
+    assert card.capped_by is Severity.CRITICAL
+
+
+def test_a_confirmed_finding_alone_covers_an_otherwise_unrecorded_class() -> None:
+    # The same rule at the extreme: probe_versions is empty, but a confirmed finding
+    # proves its probe ran - so the class is FAIL (not NOT_COVERED) and is graded.
+    card = score_run(_run(ran=(), findings=(_finding("tenant-boundary-fetch"),)))
+    boundary = next(c for c in card.classes if c.class_id == 1)
+    assert boundary.verdict is ClassVerdict.FAIL
+    assert card.grade is Grade.F
+
+
+def test_a_confirmed_finding_the_catalog_cannot_attribute_is_refused() -> None:
+    # RULE 4 (regression): a probe added or renamed without updating CATALOG must fail
+    # loudly. Dropping the finding silently graded A on a confirmed critical leak.
+    with pytest.raises(ConfigError, match="catalog is stale"):
+        score_run(_run(ran=_ALL_PROBES, findings=(_finding("prompt-log-bleed"),)))
+
+
+def test_an_unattributable_unverified_finding_does_not_block_grading() -> None:
+    # Only CONFIRMED findings are load-bearing; an unverified candidate from an unknown
+    # probe must not refuse a whole run.
+    card = score_run(
+        _run(
+            ran=_ALL_PROBES,
+            findings=(_finding("prompt-log-bleed", FindingStatus.UNVERIFIED),),
+        )
+    )
+    assert card.grade is Grade.A
+
+
+def test_the_catalog_covers_every_adversarial_probe_in_the_registry() -> None:
+    # Pins CATALOG against the LIVE probe registry, so adding/renaming a probe fails
+    # here instead of silently making its class permanently NOT_COVERED (or, worse,
+    # dropping its findings). The two erasure workflows are deliberately out of scope:
+    # they are control checks with their own attestation, not isolation classes.
+    from typing import Any, cast
+
+    from sectum_ai import probes
+
+    registry_ids = {
+        str(cast(Any, obj).id)
+        for name in probes.__all__
+        if isinstance(obj := getattr(probes, name), type)
+        and getattr(obj, "id", None)
+        and hasattr(obj, "owasp_llm")
+    }
+    catalog_ids = {probe_id for entry in CATALOG for probe_id in entry.probe_ids}
+    out_of_scope = {"gdpr-erasure-verification", "gdpr-subject-erasure-verification"}
+    assert catalog_ids <= registry_ids, (
+        f"catalog names probes that do not exist: {catalog_ids - registry_ids}"
+    )
+    assert registry_ids - out_of_scope == catalog_ids, (
+        "every adversarial probe must be scored: "
+        f"missing from CATALOG={registry_ids - out_of_scope - catalog_ids}"
+    )
+
+
+def test_the_published_total_catalog_weight_is_41() -> None:
+    # docs/scorecard.md publishes "Total catalog weight: 41" and derives every coverage
+    # figure from it; pin it so adding a class fails CI instead of falsifying the page.
+    assert sum(SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG) == 41

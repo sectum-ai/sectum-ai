@@ -671,7 +671,9 @@ def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) 
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 0
     assert "GRADE F" in result.output
-    assert "capped by a confirmed critical failure" in result.output
+    # The cap keys on the failing CLASS's weight band, never on a finding's severity -
+    # the wording must not invite the reader to recompute from finding.severity.
+    assert "capped by a failing critical-band class" in result.output
     # Every class is listed - including the ones that never ran.
     assert "NOT_COVERED" in result.output
     # The methodology is cited, so a reader can recompute the letter.

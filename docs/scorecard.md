@@ -10,7 +10,7 @@ sectum-ai score --workdir .sectum-ai            # or: --output json
 
 ```
 Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
-  capped by a confirmed critical failure
+  capped by a failing critical-band class
 
   Class  1  Direct tenant boundary fetch    FAIL        critical
   Class  2  Organic entity-bleed RAG        FAIL        critical 12.5% RPR (95% CI 5.9%-24.7%, n=48)
@@ -21,17 +21,20 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   Untested classes lower confidence, never the grade.
 ```
 
-The grade is **derived, not asserted**. Every input is the signed
+The grade is **derived, not asserted**. Every input is the
 [`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`, and
-`metrics` — so anyone holding the evidence pack recomputes the letter with this page's
-rules rather than trusting it. The methodology revision (`methodology_version`) is
+`metrics` — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
+`score` also accepts and unwraps) recomputes the letter with this page's rules rather
+than trusting it. `score` grades the record it is given and does not itself check the
+pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that, then `score` to
+re-derive the letter from the verified record. The methodology revision (`methodology_version`) is
 stamped on every scorecard, so a recompute uses the same rules and lands on the same
 letter.
 
-## The three honesty rules
+## The four honesty rules
 
 This page exists because a single letter is the easiest place in the product to
-over-claim. Three rules prevent it:
+over-claim. Four rules prevent it:
 
 1. **A class that did not run can only ever be `NOT_COVERED` — never `PASS`.** A grade
    must never imply the stack passed a check it was never asked to perform. Untested
@@ -40,9 +43,16 @@ over-claim. Three rules prevent it:
 2. **Untested classes lower *confidence*, not the grade.** Coverage is reported beside
    the letter and never folded into it: a run that exercised three classes and one that
    exercised eleven can both grade `A` — the confidence is what tells them apart.
-3. **The worst confirmed failure caps the letter.** A confirmed critical cross-tenant
-   leak can never grade above `F`, however many other classes passed. A weighted average
-   must not average away a hole.
+3. **The worst failing class's band caps the letter.** A failing critical-band class can
+   never grade above `F`, however many other classes passed. A weighted average must not
+   average away a hole.
+4. **Every confirmed finding lands in a class, or the run is not graded.** A confirmed
+   finding is itself proof its probe ran, so it fails its class even if the run's
+   `probe_versions` bookkeeping disagrees — re-grading a record you did not produce is
+   the whole point, so the record's *findings* are the authority on what leaked, not its
+   bookkeeping. A confirmed finding this catalog cannot attribute at all (a probe added
+   or renamed without updating the catalog) makes `score` **refuse** (exit 3) rather than
+   silently drop a leak.
 
 ## The catalog and its weights
 
@@ -80,7 +90,8 @@ folding it in would conflate two different claims. Class 12 is the
 ## How the letter is computed
 
 1. **Per class** — a class is *covered* when at least one of its probes appears in the
-   run's `probe_versions`. A covered class is `FAIL` if any of its probes produced a
+   run's `probe_versions`, **or** produced a confirmed finding (a finding is itself proof
+   its probe ran — rule 4). A covered class is `FAIL` if any of its probes produced a
    **confirmed** finding, else `PASS`. An uncovered class is `NOT_COVERED`.
 2. **Weighted score** — `sum(weight of PASS) / sum(weight of covered)`, over the
    **covered classes only**.
@@ -94,18 +105,26 @@ folding it in would conflate two different claims. Class 12 is the
     | ≥ 0.50 | D |
     | < 0.50 | F |
 
-4. **Severity cap** — the worst confirmed failure caps the letter:
+4. **Band cap** — the worst **weight band among the failing classes** caps the letter.
+   This keys on the *class's* band from the table above — **not** on the `severity`
+   recorded on any individual finding. (Those differ in practice: `kv-cache-timing` is a
+   `medium`-band class but emits `high`-severity findings. Bands are declared and stable;
+   a finding's severity varies with which marker happened to leak, so grading on it would
+   make the letter depend on an accident.)
 
-    | Worst confirmed failure | Cap |
+    | Worst failing class's band | Cap |
     |---|---|
     | `critical` | F |
     | `high` | D |
     | `medium` | C |
-    | `low` | B |
-    | none | uncapped |
+    | none failing | uncapped |
 
-5. **Final grade** — the **worse** of the base grade and the cap. So one confirmed
-   `high` failure floors the grade at D, and many failures can still push it below.
+    (`SEVERITY_WEIGHTS` and the cap table in code also carry `low`/`info` entries for
+    completeness, but no catalog class currently carries those bands, so they are
+    unreachable today.)
+
+5. **Final grade** — the **worse** of the base grade and the cap. So one failing
+   `high`-band class floors the grade at D, and many failures can still push it below.
 
 ## Coverage and confidence
 
@@ -127,12 +146,18 @@ lowering confidence rather than quietly passing.
 
 **A run that exercised no catalog class at all is not graded.** `sectum-ai score` exits
 `3` instead: grading nothing would emit a letter that means nothing, and `F` would
-falsely read as "failed" when the truth is "never tested".
+falsely read as "failed" when the truth is "never tested". It also exits `3` for a run
+carrying a confirmed finding the catalog cannot attribute (rule 4), and for
+`--output sarif/oscal`, which project findings and have no rendering for a graded posture.
+
+`score` itself exits `0` whatever the letter — it reports a posture, it does not gate.
+`sectum-ai probe` is the CI gate (exit `2` on a confirmed leak).
 
 ## Changing the methodology
 
-The weights, thresholds, and caps above are mirrored exactly by
-`sectum_ai.score.CATALOG` / `SEVERITY_WEIGHTS` and the thresholds in the same module.
+The catalog, weights, thresholds, and caps above mirror `sectum_ai.score.CATALOG`,
+`SEVERITY_WEIGHTS`, and the threshold/cap tables in the same module (which additionally
+carry the currently-unreachable `low`/`info` bands).
 Any change to them is a change to what a published grade means, so bump
 `METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.0` must always
 recompute to the same letter.

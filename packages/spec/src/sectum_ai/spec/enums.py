@@ -147,7 +147,7 @@ class Confidence(StrEnum):
     """How much of the catalog a scorecard's grade actually rests on.
 
     Coverage-driven and reported *beside* the grade, never folded into it: a run
-    that exercised three classes and a run that exercised twelve can both grade
+    that exercised three classes and a run that exercised all eleven can both grade
     ``A``, and the confidence is what tells them apart honestly.
     """
 

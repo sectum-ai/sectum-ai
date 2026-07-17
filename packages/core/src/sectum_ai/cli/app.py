@@ -1,8 +1,8 @@
 """Entry point for the ``sectum-ai`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, ``init``, ``baseline``, ``calibrate``, ``diff``, and
-``score``.
+``verify``, ``erasure``, ``pack``, ``init``, ``baseline``, ``calibrate``, ``diff``,
+and ``score``.
 """
 
 import functools
@@ -2279,7 +2279,7 @@ def _render_scorecard(card: IsolationScore) -> None:
         f"{card.classes_covered}/{card.classes_total} classes covered)"
     )
     if card.capped_by is not None:
-        typer.echo(f"  capped by a confirmed {card.capped_by.value} failure")
+        typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")
     for entry in card.classes:
         detail = entry.headline or (entry.note if entry.verdict is ClassVerdict.NOT_COVERED else "")
@@ -2340,7 +2340,11 @@ def score(
     loaded = load_config(config) if config is not None else SectumConfig()
     if workdir is None:
         workdir = loaded.workdir
-    card = score_run(_load_run(workdir))
+    # Grade the run record, or the evidence pack of one: the pack is the artifact an
+    # auditor actually holds, so it must be re-gradable (the same unwrap `diff` uses).
+    pack = workdir / "evidence.json"
+    run = _load_run_artifact(pack) if pack.exists() else _load_run(workdir)
+    card = score_run(run)
     if output is OutputFormat.JSON:
         typer.echo(card.model_dump_json(indent=2))
         return

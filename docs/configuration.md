@@ -1,9 +1,9 @@
 # Configuration
 
 `sectum-ai init` scaffolds a `sectum-ai.yaml` configuration file; every CLI command
-that runs a workflow (`seed`, `probe`, `report`, `erasure`, `baseline`,
-`calibrate`) accepts `--config sectum-ai.yaml` to read its defaults from that
-file. Explicit CLI flags — for example `--seed` or `--workdir` — always
+that runs a workflow (`seed`, `probe`, `report`, `pack`, `erasure`, `score`,
+`baseline`, `calibrate`) accepts `--config sectum-ai.yaml` to read its defaults from
+that file. Explicit CLI flags — for example `--seed` or `--workdir` — always
 override the values the config supplies.
 
 ## Top-level shape

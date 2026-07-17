@@ -6,7 +6,7 @@ attack catalog into one letter plus a per-class breakdown, from a signed
 run rather than trusting the grade. The published methodology (``docs/scorecard.md``)
 pins the weights, thresholds, and caps that :data:`METHODOLOGY_VERSION` stamps.
 
-Three rules keep the letter honest (the same anti-over-claim discipline as the Class 11
+Four rules keep the letter honest (the same anti-over-claim discipline as the Class 11
 coverage block):
 
 1. **A class that did not run can only ever be NOT_COVERED - never PASS.** A grade must
@@ -16,9 +16,19 @@ coverage block):
    :class:`~sectum_ai.spec.Confidence` derived from it) is reported *beside* the letter:
    a run that exercised three classes and one that exercised eleven can both grade ``A``,
    and the confidence is what tells them apart.
-3. **The worst confirmed failure caps the letter.** A confirmed critical cross-tenant
-   leak can never grade above ``F``, however many other classes passed - a weighted
-   average must not average away a hole.
+3. **The worst failing class's weight band caps the letter.** A failing critical-band
+   class can never grade above ``F``, however many other classes passed - a weighted
+   average must not average away a hole. The cap keys on the *class's* band (declared by
+   this catalog and published in ``docs/scorecard.md``), never on the severity recorded
+   on an individual finding: bands are stable and published, whereas a finding's severity
+   varies with which marker happened to leak.
+4. **Every confirmed finding lands in a class, or we refuse to grade.** A confirmed
+   finding is itself proof its probe ran, so it fails its class even if the run's
+   ``probe_versions`` bookkeeping disagrees; and a confirmed finding this catalog cannot
+   attribute at all (a probe added or renamed without updating :data:`CATALOG`) raises
+   rather than being silently dropped. Re-grading a record you did not produce is this
+   module's whole purpose, so the record's own findings - not its bookkeeping - are the
+   authority on what leaked.
 
 Class 11 (GDPR Article 17 erasure) is deliberately out of scope here: it is a control
 check with its own attestation (``sectum-ai erasure``), not an adversarial isolation
@@ -189,8 +199,34 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
     return None
 
 
-def _score_class(entry: _CatalogClass, run: RunResult) -> ClassScore:
-    ran = [probe_id for probe_id in entry.probe_ids if probe_id in run.probe_versions]
+def _confirmed_probe_ids(run: RunResult) -> set[str]:
+    """The probes a confirmed finding proves ran, whatever ``probe_versions`` claims.
+
+    A confirmed finding *is* evidence its probe executed. Trusting ``probe_versions``
+    alone would let a run whose bookkeeping disagrees with its own findings (a
+    hand-edited or third-party record - and re-grading a record you did not produce is
+    this command's whole purpose) hide a confirmed leak behind a PASS.
+    """
+    return {
+        finding.probe_id
+        for finding in run.findings
+        if finding.status is FindingStatus.CONFIRMED
+    }
+
+
+def _score_class(entry: _CatalogClass, run: RunResult, proven: set[str]) -> ClassScore:
+    ran = [
+        probe_id
+        for probe_id in entry.probe_ids
+        if probe_id in run.probe_versions or probe_id in proven
+    ]
+    # A confirmed finding fails the class it belongs to, whether or not the run's
+    # bookkeeping recorded that probe as having run - never drop contradicting evidence.
+    confirmed = sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+    )
     if not ran:
         # Rule 1: a class whose probe never ran can only be NOT_COVERED - never PASS.
         return ClassScore(
@@ -204,11 +240,6 @@ def _score_class(entry: _CatalogClass, run: RunResult) -> ClassScore:
                 "or it was not in this run's suite"
             ),
         )
-    confirmed = sum(
-        1
-        for finding in run.findings
-        if finding.probe_id in ran and finding.status is FindingStatus.CONFIRMED
-    )
     return ClassScore(
         class_id=entry.class_id,
         name=entry.name,
@@ -224,7 +255,7 @@ def score_run(run: RunResult) -> IsolationScore:
     """Grade a run's multi-tenant isolation posture (``docs/scorecard.md``).
 
     Args:
-        run: The signed run to grade. Only its ``probe_versions`` (what actually ran),
+        run: The run to grade. Only its ``probe_versions`` (what actually ran),
             ``findings``, and ``metrics`` are read, so the grade is reproducible from
             the evidence pack alone.
 
@@ -234,31 +265,49 @@ def score_run(run: RunResult) -> IsolationScore:
         ``NOT_COVERED``.
 
     Raises:
-        ConfigError: If the run exercised no catalog class at all. Grading nothing
+        ConfigError: If the run exercised no catalog class at all (grading nothing
             would emit a letter that means nothing, and ``F`` would falsely read as
-            "failed" when the truth is "never tested" - so this refuses instead.
+            "failed" when the truth is "never tested"), or if it carries a confirmed
+            finding this catalog cannot attribute to any class (rule 4).
     """
-    classes = tuple(_score_class(entry, run) for entry in CATALOG)
+    # Rule 4: every confirmed finding must land in a catalog class, or refuse to grade.
+    # Dropping an unattributable confirmed leak would silently flatter the letter, which
+    # is exactly the failure this scorecard exists to prevent; a probe added or renamed
+    # without updating CATALOG must fail loudly, not grade well.
+    catalog_probes = {probe_id for entry in CATALOG for probe_id in entry.probe_ids}
+    proven = _confirmed_probe_ids(run)
+    unattributable = sorted(proven - catalog_probes)
+    if unattributable:
+        raise ConfigError(
+            "this run carries confirmed findings from probe(s) the scorecard catalog "
+            f"does not cover: {', '.join(unattributable)}. The catalog is stale, so "
+            "grading would silently drop a confirmed leak; update sectum_ai.score.CATALOG "
+            "(and docs/scorecard.md) instead."
+        )
+
+    classes = tuple(_score_class(entry, run, proven) for entry in CATALOG)
     weight = {entry.class_id: SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG}
     total_weight = sum(weight.values())
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
-    covered_weight = sum(weight[c.class_id] for c in covered)
-    if not covered_weight:
+    if not covered:
         raise ConfigError(
             "no catalog class was exercised by this run, so there is nothing to grade; "
             "run 'sectum-ai probe' against a configured stack first"
         )
+    covered_weight = sum(weight[c.class_id] for c in covered)
     passed_weight = sum(weight[c.class_id] for c in covered if c.verdict is ClassVerdict.PASS)
     weighted_score = passed_weight / covered_weight
     coverage = covered_weight / total_weight
 
     failed = [c for c in covered if c.verdict is ClassVerdict.FAIL]
     capped_by = max((c.severity for c in failed), key=_SEVERITY_ORDER.index) if failed else None
-    # Rule 3: the letter is the WORSE of the weighted grade and the severity cap, so a
-    # confirmed critical leak floors it at F and many failures can still push it lower.
+    # Rule 3: the letter is the WORSE of the weighted grade and the band cap, so a
+    # failing critical-band class floors it at F and many failures can still push lower.
     grade = _grade_for(weighted_score)
     if capped_by is not None:
-        grade = _worse(grade, _SEVERITY_CAPS[capped_by])
+        capped = _SEVERITY_CAPS.get(capped_by)
+        if capped is not None:
+            grade = _worse(grade, capped)
 
     return IsolationScore(
         run_id=run.run_id,

@@ -429,8 +429,10 @@ class IsolationScore(SectumModel):
     coverage: float = Field(ge=0.0, le=1.0)
     classes_covered: int = Field(ge=0)
     classes_total: int = Field(ge=0)
-    # The worst confirmed failure's severity, which capped the grade; ``None`` when no
-    # covered class failed. Makes the grade explainable rather than an opaque letter.
+    # The worst weight BAND among the failing classes, which capped the grade; ``None``
+    # when no covered class failed. This is the band of the failing *class* (declared by
+    # the published methodology), never the severity recorded on an individual finding.
+    # Makes the grade explainable rather than an opaque letter.
     capped_by: Severity | None = None
     classes: tuple[ClassScore, ...] = ()
     # The methodology revision (weights, thresholds, caps) the grade was computed

@@ -50,6 +50,8 @@ pack, and verifies it.
 | `sectum-ai pack` | Bundle a portable, **sensitive** run pack (evidence + run + redacted config) for an auditor. |
 | `sectum-ai verify` | Independently verify an evidence pack (or a bundle / run pack). |
 | `sectum-ai erasure` | Run the GDPR Article 17 erasure-verification workflow. |
+| `sectum-ai score` | Grade the run's multi-tenant isolation posture (A–F) — see the [scorecard](scorecard.md). |
+| `sectum-ai calibrate` | Calibrate the semantic-detection threshold for your embedder. |
 | `sectum-ai baseline` | Save a regression baseline, or compare a run against it. |
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
 | `sectum-ai adapters` | List installed adapters and their capabilities. |
