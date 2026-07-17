@@ -244,6 +244,33 @@ def test_class_2_recomputes_its_interval_rather_than_relaying_the_records() -> N
     assert "95.8%-95.8%" not in headline
 
 
+def test_a_total_leak_is_graded_not_refused_as_incoherent() -> None:
+    # The boundary the incoherence check must NOT cross. k == n is the worst possible
+    # stack - every benign cross-tenant query surfaced a foreign marker - and it is a
+    # perfectly coherent record. Refusing it (exit 3, "impossible") would let the very
+    # worst result escape its F by having the tool blame the record instead of grading it.
+    headline = _bleed_headline(
+        RunMetrics(retrieval_pivot_k=48, retrieval_pivot_n=48, retrieval_pivot_rate=1.0)
+    )
+    assert headline.startswith("100.0% RPR")
+    assert "95% CI 92.6%-100.0%" in headline
+
+
+def test_a_count_of_one_of_zero_is_refused_not_believed() -> None:
+    # The other side of that boundary, and the case a loosened check walks straight past:
+    # 1 of 0 is impossible, and the record pairs it with a clean 0.0% rate it wants
+    # believed. Refuse, rather than fall through to the record's own claim.
+    with pytest.raises(ConfigError, match="incoherent"):
+        score_run(
+            _run(
+                ran=_ALL_PROBES,
+                metrics=RunMetrics(
+                    retrieval_pivot_k=1, retrieval_pivot_n=0, retrieval_pivot_rate=0.0
+                ),
+            )
+        )
+
+
 def test_an_incoherent_count_is_refused_not_quietly_believed() -> None:
     # A record could opt OUT of the counts-recompute by corrupting its own counts: k > n
     # made _rate_from_counts give up, falling back to the rate and interval the record

@@ -838,6 +838,93 @@ def test_probe_refuses_a_substrate_that_crosses_no_boundary(
     assert not (tmp_path / "run.json").exists()  # no record of a run that proved nothing
 
 
+def _one_tenant_two_users() -> object:
+    """A substrate with a genuine USER-level boundary but only one tenant (ADR-0006)."""
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    users = (
+        SyntheticUserSpec(user_id=UUID(int=0x101), display_name="u1"),
+        SyntheticUserSpec(user_id=UUID(int=0x102), display_name="u2"),
+    )
+    return build_substrate(
+        scenario.model_copy(
+            update={"tenants": (scenario.tenants[0].model_copy(update={"users": users}),)}
+        )
+    )
+
+
+def test_probe_accepts_a_single_tenant_that_declares_users(tmp_path: Path) -> None:
+    # The positive direction of the guard, and ADR-0006's whole point: a user IS an
+    # isolation boundary. One tenant with two users has real boundaries to verify (each
+    # user's markers are foreign to the other), so refusing it would silently drop
+    # user-granularity verification - the guard must not over-refuse to be safe.
+    (tmp_path / "substrate.json").write_text(_one_tenant_two_users().model_dump_json())  # type: ignore[attr-defined]
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code in (0, 2)
+    assert (tmp_path / "run.json").exists()
+
+
+def test_a_kv_probe_that_measured_nothing_is_not_recorded_as_having_run(tmp_path: Path) -> None:
+    # A live path, not a hypothetical: the KV probe iterates TENANTS while the substrate
+    # guard asks about PRINCIPALS, so one tenant with two users is rightly accepted (a real
+    # user-level boundary) yet leaves the KV probe no cross-tenant pair to time. It measures
+    # nothing. Recording it graded Class 5 PASS off zero measurements - rule 1 exactly.
+    (tmp_path / "substrate.json").write_text(_one_tenant_two_users().model_dump_json())  # type: ignore[attr-defined]
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code in (0, 2)
+    versions = json.loads((tmp_path / "run.json").read_text())["probe_versions"]
+    assert "kv-cache-timing" not in versions
+
+    payload = json.loads(
+        _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"]).output
+    )
+    kv = next(c for c in payload["classes"] if c["class_id"] == 5)
+    assert kv["verdict"] == "NOT_COVERED"
+
+
+def test_probe_reports_the_probe_count_the_record_attests(tmp_path: Path) -> None:
+    # The summary said "ran 12 probes" while the signed run recorded 8 - claiming coverage
+    # the evidence does not carry, in the direction rule 1 exists to prevent.
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    (tmp_path / "substrate.json").write_text(
+        build_substrate(scenario.model_copy(update={"shared_entities": ()})).model_dump_json()
+    )
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    recorded = len(json.loads((tmp_path / "run.json").read_text())["probe_versions"])
+    assert json.loads(result.stdout)["probe_count"] == recorded
+
+
+def test_probe_refuses_before_touching_the_stack(tmp_path: Path) -> None:
+    # A refused run must not have run. The refusal used to be checkable only by its output
+    # - exit 3, the message, no run.json - all of which a check placed AFTER the run
+    # produces identically, while having executed 39 steps including 8 MUTATING ones
+    # (vector.upsert, model.train, cache.set, memory.write) against the customer's stack.
+    # Sectum verifies and attests; it does not mutate a stack it is refusing to assess.
+    from sectum_ai.runner import Runner
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    one = build_substrate(scenario.model_copy(update={"tenants": scenario.tenants[:1]}))
+    (tmp_path / "substrate.json").write_text(one.model_dump_json())
+
+    executed: list[str] = []
+    original = Runner.run_per_step
+
+    def spy(self: Runner, probe: object) -> object:
+        executed.append(getattr(probe, "id", "?"))
+        return original(self, probe)  # type: ignore[arg-type]
+
+    Runner.run_per_step = spy  # type: ignore[assignment,method-assign]
+    try:
+        result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    finally:
+        Runner.run_per_step = original  # type: ignore[method-assign]
+    assert result.exit_code == 3
+    assert not executed, f"a refused run drove probes against the stack: {executed}"
+
+
 def test_probe_refuses_a_substrate_with_no_markers_to_find(tmp_path: Path) -> None:
     # Principals alone are not the precondition: four tenants and 48 documents still
     # verify nothing if no marker was planted. This shape is the more dangerous one - the

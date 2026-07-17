@@ -854,12 +854,14 @@ def probe(
             # leak - so the &lt;2-principal refusal above, not this, is what keeps a probe
             # from passing on a substrate where nothing is foreign to anyone.
             **dict.fromkeys(sorted({result[0].probe_id for result in step_results}), __version__),
-            # Gated on what the KV probe MEASURED, not on having been asked to run, because
-            # "we ran it" and "it observed something" are different claims and `score`
-            # reads this as the second. The <2-principal refusal above already makes a
-            # zero-signal report unreachable (two principals measure two signals), so this
-            # guards that refusal being weakened rather than a live path - it graded Class
-            # 5 PASS off a probe that measured nothing on a substrate with no principals.
+            # Gated on what the KV probe MEASURED, not on having been asked to run: "we ran
+            # it" and "it observed something" are different claims, and `score` reads this
+            # as the second. This is a LIVE path, not a belt-and-braces guard - the probe
+            # iterates tenants while the refusal above asks about principals, so a single
+            # tenant declaring two users has a genuine user-level boundary to verify (and
+            # is rightly accepted) yet gives the KV probe no cross-tenant pair to time. It
+            # measures nothing, and recording it would grade Class 5 PASS off zero
+            # measurements.
             **({KvCacheTimingProbe.id: __version__} if kv_report and kv_report.signals else {}),
         },
         findings=findings,
@@ -888,7 +890,10 @@ def probe(
     )
     path = effective_workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
-    probe_count = len(suite) + (1 if run_kv_timing else 0)
+    # What the record attests, not what the suite contained: a probe whose plan came back
+    # empty asked the stack nothing, so "ran 12 probes" over the 8 the signed run records
+    # claims coverage the evidence does not carry - the direction rule 1 exists to prevent.
+    probe_count = len(run.probe_versions)
     if output is OutputFormat.JSON:
         # Single-shot JSON object so the consumer can `jq .` it. The full run
         # is still on disk at `run_path`; this is the summary CI dashboards read.
