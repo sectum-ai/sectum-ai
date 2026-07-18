@@ -130,12 +130,16 @@ After the merge lands on `main`:
 
 ```sh
 git checkout main && git pull
-git tag -s v0.1.0 -m "v0.1.0"
+git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
 
-The tag must be **signed** (the `-s` flag). Repository policy requires signed
-commits on `main` and signed tags by extension.
+The tag must be **annotated** (the `-a` flag) so it carries a tagger and a
+message; the workflow keys off the tag name. Every shipped tag from `v0.5.0`
+onward is annotated and unsigned, and the pipeline accepts them — the release's
+authenticity comes from Sigstore signing the *artifacts* in the workflow (OIDC,
+no long-lived key), not from a signature on the tag. Add `-s` as well if you
+have a key configured.
 
 ### 6. Watch the pipeline
 

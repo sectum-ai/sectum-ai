@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sectum-ai-adapters"
-version = "0.6.0"
+version = "0.7.0"
 description = "Sectum AI - adapters connecting the substrate and probes to real systems."
 readme = "README.md"
 requires-python = ">=3.12"
