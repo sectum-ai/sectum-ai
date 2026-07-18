@@ -76,3 +76,19 @@ def test_a_corpus_one_short_of_the_marker_count_is_rejected() -> None:
     markers_per_tenant = sum(1 for m in healthy.manifest.markers if m.owner_tenant_id == tenant_id)
     with pytest.raises(ConfigError, match="markers-per-tenant"):
         build_substrate(default_scenario(seed=1, corpus_size=markers_per_tenant - 1))
+
+
+def test_a_corpus_exactly_the_marker_count_is_accepted() -> None:
+    """The guard is inclusive at the accept boundary: corpus_size == markers succeeds.
+
+    corpus_size must be at least the markers-per-tenant count, so exactly the count is the
+    minimal valid corpus - every marker still gets its own pivot document. The reject sibling
+    above pins one short; this pins the exact-equality accept point, which a guard tightened to
+    ``size <= markers`` would wrongly refuse with a self-contradictory error. The count is
+    measured, not hardcoded.
+    """
+    healthy = build_substrate(default_scenario(seed=1, corpus_size=24))
+    tenant_id = healthy.tenants[0].tenant_id
+    markers_per_tenant = sum(1 for m in healthy.manifest.markers if m.owner_tenant_id == tenant_id)
+    minimal = build_substrate(default_scenario(seed=1, corpus_size=markers_per_tenant))
+    assert all(marker.planted_locations for marker in minimal.manifest.markers)

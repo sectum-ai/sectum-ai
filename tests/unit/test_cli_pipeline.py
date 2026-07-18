@@ -1113,6 +1113,12 @@ def test_score_renders_a_row_per_class_with_its_verdict_and_band(tmp_path: Path)
     assert "high" in next(r for r in rows if "Adversarial RAG poisoning" in r)
     # An untested class explains the gap rather than rendering an empty cell.
     assert "probe did not run" in next(r for r in rows if "NOT_COVERED" in r)
+    # A COVERED class carries its measured headline rate in its own row - the quantitative
+    # evidence behind the verdict. Only the NOT_COVERED note arm of the row's `detail` was
+    # pinned; dropping the headline arm would blank these while the verdicts and coverage line
+    # still read whole.
+    assert "RPR" in next(r for r in rows if "Organic entity-bleed RAG" in r)
+    assert "poisoning bleed" in next(r for r in rows if "Adversarial RAG poisoning" in r)
 
 
 def test_score_renders_the_confidence_of_a_thin_run_as_low(tmp_path: Path) -> None:

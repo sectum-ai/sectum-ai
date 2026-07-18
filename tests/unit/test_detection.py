@@ -366,6 +366,7 @@ def test_cosine_is_a_true_cosine_bounded_by_one() -> None:
     assert _cosine((1.0, 0.0), (0.0, 1.0)) == 0.0  # orthogonal
     assert abs(_cosine((1.0, 0.0), (-1.0, 0.0)) + 1.0) < 1e-9  # opposite direction
     assert _cosine((0.0, 0.0), (1.0, 1.0)) == 0.0  # a zero vector has no direction
+    assert _cosine((1.0, 1.0), (0.0, 0.0)) == 0.0  # symmetric: the other operand zero (no div-by-0)
 
 
 def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
