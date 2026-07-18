@@ -486,12 +486,16 @@ def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> No
     # the credential-format regex still recovers the token, so dropping the shape arm would let
     # the secret leak evade detection under Unicode-composition evasion.
     owner, observer = UUID(int=1), UUID(int=2)
+    # Built by concatenation, never written as one literal, so it does not trip secret
+    # scanning (the module note above these tests). AKIA + 16 chars, ending in a letter that
+    # composes with a following accent.
+    akia = "AKIA" + "IOSFODNN7EXAMPLY"
     secret = Marker(
         marker_id="s-akia",
         marker_type=MarkerType.SECRET_CANARY,
         owner_tenant_id=owner,
         owner_user_id=None,
-        plaintext="AKIAIOSFODNN7EXAMPLY",  # AKIA + 16 chars, ending in a composable letter
+        plaintext=akia,
     )
     base = build_substrate(default_scenario(seed=1))
     manifest = base.manifest.model_copy(update={"markers": (secret,)})
@@ -500,7 +504,7 @@ def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> No
     # "Ý" -> "Y-acute" in the normalized text, so the plaintext is no longer a substring
     # there, but the credential regex (which sees the plain ASCII Y) still recovers the token -
     # so only the shape arm catches it.
-    evasive = "dumped key AKIAIOSFODNN7EXAMPLY\u0301 to the other tenant"
+    evasive = f"dumped key {akia}\u0301 to the other tenant"
     found = confirmed_findings(pipeline.detect(observer, evasive, Surface.API))
     assert [f.marker_id for f in found] == ["s-akia"]
     assert found[0].severity is Severity.CRITICAL
