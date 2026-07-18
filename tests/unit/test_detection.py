@@ -392,6 +392,23 @@ def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
     assert all(0.0 <= finding.confidence <= 1.0 for finding in findings)
 
 
+def test_a_semantic_findings_confidence_is_its_true_similarity_not_a_ceiling() -> None:
+    # confidence is a signed evidence field (the audit PDF findings table and evidence.json), so
+    # it must carry the match's real strength. The clamp is `min(1.0, similarity)` - a ceiling,
+    # not a floor: a paraphrase leak matching at 0.6667 must report 0.6667. The bounded-ness test
+    # above asserts only <= 1.0, which a `max(1.0, ...)` regression trivially satisfies while
+    # inflating every sub-1.0 semantic finding to certainty in the signed artifact.
+    substrate = _entity_substrate("Project Onyx-00002")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project (internal) Onyx-00002"), 0.0
+    )
+    text = "leak: Project (internal) Onyx-00002 surfaced"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    [finding] = [f for f in findings if f.marker_id == "e-Project Onyx-00002"]
+    assert finding.status is FindingStatus.CONFIRMED
+    assert finding.confidence == 0.6667
+
+
 # --- SECRET_CANARY format detector (the spec, section 6.3: "exact + format") --
 #
 # Every secret value used below is generated at runtime from the seeded
@@ -743,6 +760,23 @@ def test_a_codename_in_exactly_half_the_markers_stays_distinctive_and_confirms()
         and f.status is FindingStatus.CONFIRMED
     ]
     assert confirmed, "a codename in exactly half the markers must stay distinctive and confirm"
+
+
+def test_a_codename_in_every_marker_is_demoted_and_does_not_confirm() -> None:
+    # The other conjunct of the majority-demotion rule (`count >= 2 and 2*count > n`). A codename
+    # shared by ALL the entity markers (2 of 2) is a strict majority, so it is template
+    # boilerplate and cannot tie a leak to any one marker: a lying judge citing only it must yield
+    # UNVERIFIED, never a fabricated CONFIRMED. The exactly-half test above pins the second
+    # conjunct; this pins the `>= 2` edge, which a `> 2` regression skips - leaving the shared
+    # codename distinctive and inventing two cross-tenant leaks.
+    substrate = _entity_substrate("Project Halcyon 00001", "Project Halcyon 00002")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project Halcyon"), 0.0
+    )
+    text = "the record names Project Halcyon as the account owner"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    assert findings, "the candidates are retained as UNVERIFIED evidence"
+    assert all(finding.status is FindingStatus.UNVERIFIED for finding in findings)
 
 
 def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() -> None:

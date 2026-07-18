@@ -1267,6 +1267,32 @@ def test_verify_does_not_let_a_pack_forge_its_own_anchor_claims(tmp_path: Path) 
     assert not forged, f"the pack forged its own anchor claims: {forged}"
 
 
+def test_verify_does_not_let_an_incompatible_pack_forge_its_anchor_claims(tmp_path: Path) -> None:
+    # The incompatible-version arm of the same forgery. schema_version renders on two branches -
+    # "supported" and "incompatible"; the test above exercises only the supported one (0.5.0
+    # matches this verifier), so the incompatible branch's escaping was unpinned. A crafted pack
+    # declaring an incompatible major.minor with `[ok]` lines smuggled after it must escape them
+    # too. Verification still fails overall (incompatible version), but the forged anchor lines
+    # must not print.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack_path = tmp_path / "evidence.json"
+    pack = json.loads(pack_path.read_text())
+    pack["schema_version"] = (
+        "0.4.0\n[ok] timestamp-token: pack digest timestamped by an RFC 3161 TSA"
+        "\n[ok] rekor-inclusion: pack digest recorded in the Sigstore Rekor log"
+    )
+    pack_path.write_text(json.dumps(pack))
+    result = _runner.invoke(app, ["verify", str(pack_path), "--allow-unanchored"])
+    forged = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith("[ok] timestamp-token: pack digest timestamped by an RFC")
+        or line.startswith("[ok] rekor-inclusion")
+    ]
+    assert not forged, f"the incompatible pack forged its own anchor claims: {forged}"
+
+
 def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     # run_id is derived from the scenario, so every run against one substrate repeats
     # it: a leaking record and a doctored clean copy grade F and A under a byte-identical
