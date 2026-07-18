@@ -461,6 +461,34 @@ def test_secret_format_detects_a_recased_foreign_secret() -> None:
     assert found[0].severity is Severity.CRITICAL
 
 
+def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> None:
+    # _secret_format matches on `needle in haystack or needle in shaped` - the normalized
+    # substring OR the credential-SHAPE recovery. The re-case test above pins the substring
+    # arm; this pins the shape arm ALONE. A foreign AKIA secret whose final letter is composed
+    # with an accent in the observation is no longer a normalized substring of the text, but
+    # the credential-format regex still recovers the token, so dropping the shape arm would let
+    # the secret leak evade detection under Unicode-composition evasion.
+    owner, observer = UUID(int=1), UUID(int=2)
+    secret = Marker(
+        marker_id="s-akia",
+        marker_type=MarkerType.SECRET_CANARY,
+        owner_tenant_id=owner,
+        owner_user_id=None,
+        plaintext="AKIAIOSFODNN7EXAMPLY",  # AKIA + 16 chars, ending in a composable letter
+    )
+    base = build_substrate(default_scenario(seed=1))
+    manifest = base.manifest.model_copy(update={"markers": (secret,)})
+    pipeline = DetectionPipeline(base.model_copy(update={"manifest": manifest}))
+    # The observation's final Y is followed by a combining acute accent (U+0301); NFKC folds
+    # "Ý" -> "Y-acute" in the normalized text, so the plaintext is no longer a substring
+    # there, but the credential regex (which sees the plain ASCII Y) still recovers the token -
+    # so only the shape arm catches it.
+    evasive = "dumped key AKIAIOSFODNN7EXAMPLY\u0301 to the other tenant"
+    found = confirmed_findings(pipeline.detect(observer, evasive, Surface.API))
+    assert [f.marker_id for f in found] == ["s-akia"]
+    assert found[0].severity is Severity.CRITICAL
+
+
 def test_secret_shaped_string_absent_from_the_manifest_is_not_confirmed() -> None:
     # A credential-shaped string that matches no manifest marker yields no
     # confirmed finding - the zero-false-positive invariant for the format path.

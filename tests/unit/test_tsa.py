@@ -207,6 +207,27 @@ def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     assert not result.passed
 
 
+def test_verify_pack_fails_gracefully_on_a_non_object_tsa_token() -> None:
+    # tsa_token is an unconstrained str; a hand-edited pack can set it to a JSON scalar or
+    # list. The local-token path must reject it via a failing check, never crash on `.get()`
+    # of a non-dict - `verify` promises a clean VERIFICATION FAILED (exit 4) on any malformed
+    # pack, not a traceback. (If verify_pack raised, this test would error, not just fail.)
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    malformed = pack.model_copy(update={"tsa_token": "42"})  # valid JSON, but a scalar not a dict
+    assert not verify_pack(malformed, manifest).passed
+
+
+def test_verify_pack_fails_gracefully_on_a_dotless_schema_version() -> None:
+    # schema_version is an unconstrained str; a hand-edited pack can set it dot-less ("1").
+    # _schema_major_minor must not index parts[1] out of range - the pack is refused via a
+    # failing check, never a crash.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    malformed = pack.model_copy(update={"schema_version": "1"})
+    assert not verify_pack(malformed, manifest).passed
+
+
 @pytest.mark.live
 @pytest.mark.skipif(
     not os.environ.get("SECTUM_RUN_LIVE_TSA"),

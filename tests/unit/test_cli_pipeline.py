@@ -202,6 +202,8 @@ def test_probe_can_run_a_single_probe(tmp_path: Path) -> None:
         app, ["probe", "--workdir", str(tmp_path), "--probe", "agent-tool-hijack"]
     )
     assert result.exit_code == 2
+    # A single-probe run says "probe", not "probes" - the plural keys on the count.
+    assert "ran 1 probe:" in result.output
     run = json.loads((tmp_path / "run.json").read_text())
     assert set(run["probe_versions"]) == {"agent-tool-hijack"}
     # the Retrieval-Pivot Rate is a Class 2 metric; it is unset when Class 2 did not run
