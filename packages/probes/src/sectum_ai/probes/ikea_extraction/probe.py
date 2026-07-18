@@ -6,7 +6,11 @@ turn is an unremarkable follow-up question seeded on a shared entity; the
 extraction is confirmed when the sequence surfaces a foreign canary.
 """
 
-from sectum_ai.probes.detection import DetectingProbe
+from sectum_ai.probes.detection import (
+    DetectingProbe,
+    cross_principal_observers,
+    markers_naming_entity,
+)
 from sectum_ai.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 _TURNS: tuple[str, ...] = (
@@ -35,9 +39,17 @@ class IkeaExtractionProbe(DetectingProbe):
         surfaces a foreign principal's canary. With no users declared the
         principals are the tenants and this is the original per-tenant plan.
         """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
-            for observer in substrate.principals():
+            # The multi-turn sequence is only a genuine extraction attempt from a principal
+            # to whom one of the entity's canaries is foreign; run from anyone else it can
+            # only surface that principal's own data, so recording it would grade Class 10
+            # a vacuous PASS (docs/scorecard.md, rule 1).
+            observers = cross_principal_observers(
+                markers_naming_entity(substrate, entity), principals
+            )
+            for observer in observers:
                 for turn in _TURNS:
                     steps.append(
                         ProbeStep(

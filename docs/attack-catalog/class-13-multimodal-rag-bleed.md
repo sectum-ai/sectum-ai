@@ -33,10 +33,20 @@ images stay near each other without being identical.
 
 A foreign canary in the retrieved image's payload is a confirmed leak — the same
 detection pipeline as Class 2. The headline metric is the **image Retrieval-Pivot Rate**
-— the fraction of benign cross-tenant image queries that surfaced a foreign marker. The
-sweep reports the binomial counts (`multimodal_pivot_counts`, `k` of `n`) behind the
-rate, so a 95% Wilson score confidence interval can be formed from the signed evidence
-rather than reading the rate as a precise number without its sample size (as in Class 2).
+— the fraction of benign cross-tenant image queries that surfaced a foreign marker.
+`multimodal_pivot_counts` reports the binomial counts (`k` of `n`) behind the rate, so a
+95% Wilson score confidence interval can be formed rather than reading the rate as a
+precise number without its sample size.
+
+!!! warning "The image-RPR is not yet carried in the evidence pack"
+
+    Unlike Class 2 — whose rate, counts, and Wilson interval are fields on `RunMetrics`
+    and are therefore signed and recomputable from an evidence pack — the image-RPR and
+    its counts exist only in the sweep API and the example. `RunMetrics` carries no
+    multi-modal field, and `multimodal-rag-bleed` is in no named suite, so nothing
+    multi-modal reaches `run.json` or a signed pack. Forming the interval means calling
+    `multimodal_pivot_counts` yourself. The CLI/suite wiring that would make these counts
+    signed evidence is a follow-on.
 
 ## Image-embedding-model sweep
 

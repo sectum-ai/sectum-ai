@@ -73,8 +73,8 @@ The probe exercises the in-memory `FakeMemory` adapter with its
 `shared_memory` knob switched on — a deliberately broken substrate that
 collapses every tenant into one keyspace. Real engagements point the same
 probe at the customer's actual long-term-memory store via a `MemoryAdapter`
-implementation. `FakeMemory` is the only memory adapter shipped today;
-live adapters for the popular agent-framework memory plugins
-(LangGraph checkpointers, AutoGen memory, CrewAI memory, Mem0, Letta, Zep)
-are future work — the Class 8 probe and `MemoryAdapter` interface are the
-SDK piece those adapters will plug into.
+implementation. Two live memory adapters ship — Redis and Mem0 (see
+[adapters](../../docs/adapters.md)); the remaining agent-framework memory plugins
+(LangGraph checkpointers, AutoGen memory, CrewAI memory, Letta, Zep) are future
+work — the Class 8 probe and `MemoryAdapter` interface are the SDK piece those
+adapters plug into.

@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "ClassVerdict": {
+      "description": "The per-attack-class verdict in an isolation scorecard (``sectum-ai score``).\n\nThe scorecard analogue of :class:`CoverageVerdict`, and it carries the same\nanti-over-claim guarantee: a class whose probe did not run can only ever be\n:data:`NOT_COVERED` - never :data:`PASS`. A grade must never imply the stack\npassed a check it was never asked to perform, so untested classes are excluded\nfrom the grade entirely and lower the scorecard's *confidence* instead (see\n``docs/scorecard.md``).",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NOT_COVERED"
+      ],
+      "title": "ClassVerdict",
+      "type": "string"
+    },
+    "Severity": {
+      "description": "Finding severity levels.",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.sectum.ai/0.5.0/ClassScore.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One attack class's line in an isolation scorecard (``docs/scorecard.md``).",
+  "properties": {
+    "class_id": {
+      "minimum": 1,
+      "title": "Class Id",
+      "type": "integer"
+    },
+    "confirmed_findings": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Confirmed Findings",
+      "type": "integer"
+    },
+    "headline": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Headline"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "probe_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Probe Ids",
+      "type": "array"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "verdict": {
+      "$ref": "#/$defs/ClassVerdict"
+    }
+  },
+  "required": [
+    "class_id",
+    "name",
+    "verdict",
+    "severity"
+  ],
+  "title": "ClassScore",
+  "type": "object"
+}

@@ -104,3 +104,55 @@ class CoverageVerdict(StrEnum):
 
     NOT_COVERED = "NOT_COVERED"
     """Out of scope, not scanned, or no pre-erasure baseline - never ``ERASED``."""
+
+
+class ClassVerdict(StrEnum):
+    """The per-attack-class verdict in an isolation scorecard (``sectum-ai score``).
+
+    The scorecard analogue of :class:`CoverageVerdict`, and it carries the same
+    anti-over-claim guarantee: a class whose probe did not run can only ever be
+    :data:`NOT_COVERED` - never :data:`PASS`. A grade must never imply the stack
+    passed a check it was never asked to perform, so untested classes are excluded
+    from the grade entirely and lower the scorecard's *confidence* instead (see
+    ``docs/scorecard.md``).
+    """
+
+    PASS = "PASS"
+    """Covered and clean: the probe ran and confirmed no cross-tenant leak."""
+
+    FAIL = "FAIL"
+    """Covered and failed: the probe ran and confirmed at least one leak."""
+
+    NOT_COVERED = "NOT_COVERED"
+    """Not run - the stack could not satisfy the probe, or it was not in the run."""
+
+
+class Grade(StrEnum):
+    """The overall multi-tenant isolation grade (``sectum-ai score``).
+
+    Derived from the *covered* classes only, then capped by the worst weight *band*
+    among the failing classes (the band of the class, declared by the published
+    methodology - never the severity recorded on an individual finding): a failing
+    critical-band class can never grade above :data:`F`. The published weights,
+    thresholds, and caps are in ``docs/scorecard.md``, so the grade is recomputable
+    from a run.
+    """
+
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+    F = "F"
+
+
+class Confidence(StrEnum):
+    """How much of the catalog a scorecard's grade actually rests on.
+
+    Coverage-driven and reported *beside* the grade, never folded into it: a run
+    that exercised three classes and a run that exercised all eleven can both grade
+    ``A``, and the confidence is what tells them apart honestly.
+    """
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"

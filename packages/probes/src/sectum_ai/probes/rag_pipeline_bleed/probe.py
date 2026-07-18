@@ -13,7 +13,11 @@ the retriever, this probe verifies the pipeline that wraps it. Run both
 in the same suite when verifying a stack with a real RAG pipeline.
 """
 
-from sectum_ai.probes.detection import DetectingProbe
+from sectum_ai.probes.detection import (
+    DetectingProbe,
+    cross_principal_observers,
+    markers_naming_entity,
+)
 from sectum_ai.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 
@@ -30,9 +34,17 @@ class RagPipelineBleedProbe(DetectingProbe):
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan one benign shared-entity query per principal, dispatched via ``rag.ask``."""
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
-            for observer in substrate.principals():
+            # Query the entity only from principals foreign to one of its planted canaries;
+            # otherwise the pipeline answer can only draw on the querying principal's own
+            # data, so it tests nothing and recording the probe would grade Class 2 a
+            # vacuous PASS (docs/scorecard.md, rule 1).
+            observers = cross_principal_observers(
+                markers_naming_entity(substrate, entity), principals
+            )
+            for observer in observers:
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",

@@ -1,7 +1,8 @@
 """Entry point for the ``sectum-ai`` command-line interface (the engineering spec, section 10).
 
 Implemented: ``--version``, ``adapters``, ``seed``, ``probe``, ``report``,
-``verify``, ``erasure``, ``init``, ``baseline``, ``calibrate``, and ``diff``.
+``verify``, ``erasure``, ``pack``, ``init``, ``baseline``, ``calibrate``, ``diff``,
+and ``score``.
 """
 
 import functools
@@ -110,6 +111,7 @@ from sectum_ai.probes import (
     calibrate_threshold,
     confirmed_findings,
     dedupe_findings,
+    is_cross_principal,
 )
 from sectum_ai.runner import (
     Runner,
@@ -117,11 +119,14 @@ from sectum_ai.runner import (
     confirmed_finding_rate,
     retrieval_pivot_counts,
 )
+from sectum_ai.score import score_run
 from sectum_ai.spec import (
+    ClassVerdict,
     ConfigError,
     EvidenceError,
     EvidencePack,
     Finding,
+    IsolationScore,
     MarkerType,
     RunMetrics,
     RunResult,
@@ -130,6 +135,7 @@ from sectum_ai.spec import (
     Surface,
     canonical_hash,
     configure_logging,
+    untrusted,
     wilson_interval,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -685,6 +691,29 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
+    # The precondition of the whole product, tested as the probes themselves test it. Ask
+    # the real question - is any marker foreign to any principal? - rather than a proxy for
+    # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
+    # user has TWO principals but no boundary (`is_cross_principal` never crosses a tenant
+    # with its own users' data), and any principal count at all is satisfied by a substrate
+    # holding no markers to find. Both graded A against the maximally-leaky demo stack,
+    # from a genuine, signable record that `verify` passes - the letter describing the
+    # substrate while reading as a verdict on the stack.
+    if not any(
+        is_cross_principal(marker, principal)
+        for marker in substrate.manifest.markers
+        for principal in substrate.principals()
+    ):
+        raise ConfigError(
+            f"no marker in this substrate is foreign to any of its principals "
+            f"({len(substrate.principals())} principal(s), "
+            f"{len(substrate.manifest.markers)} marker(s)), so nothing can cross an "
+            "isolation boundary and no probe can surface a leak however broken the stack "
+            "is - every clean result would be a property of the substrate, not of the "
+            "stack. Seed a substrate whose principals hold data foreign to one another "
+            "(the default scenario has four tenants)."
+        )
+
     suite = _build_suite(build_detection_providers(loaded.detection))
     run_kv_timing = True
     if only is not None and suite_name is not None:
@@ -815,8 +844,30 @@ def probe(
             bundle.agent.name: _ADAPTERS_VERSION,
         },
         probe_versions={
-            **{instance.id: __version__ for instance in suite},
-            **({KvCacheTimingProbe.id: __version__} if run_kv_timing else {}),
+            # What actually INTERROGATED the stack, not what the suite contained: a probe
+            # whose plan comes back empty asked the stack nothing, and recording it let
+            # `score` grade the class PASS - a check that never happened
+            # (docs/scorecard.md, rule 1). Findings still stand on their own: score's rule
+            # 4 treats a confirmed finding as proof its probe ran.
+            #
+            # This is load-bearing PER CLASS, and the substrate refusal above cannot stand
+            # in for it: that refusal is a GLOBAL existential (some marker is foreign to
+            # somebody), while a vacuous PASS is per class - so a substrate can satisfy the
+            # refusal and still starve one class of anything to find. It works only because
+            # every planting and querying probe issues a step solely from a principal the
+            # target is foreign to (`detection.cross_principal_observers`), so a probe with
+            # no cross-principal target plans nothing and never lands here - a write or
+            # query nobody foreign could read is not a check the stack was asked to perform.
+            **dict.fromkeys(sorted({result[0].probe_id for result in step_results}), __version__),
+            # Gated on what the KV probe MEASURED, not on having been asked to run: "we ran
+            # it" and "it observed something" are different claims, and `score` reads this
+            # as the second. This is a LIVE path, not a belt-and-braces guard - the probe
+            # iterates tenants while the refusal above asks about principals, so a single
+            # tenant declaring two users has a genuine user-level boundary to verify (and
+            # is rightly accepted) yet gives the KV probe no cross-tenant pair to time. It
+            # measures nothing, and recording it would grade Class 5 PASS off zero
+            # measurements.
+            **({KvCacheTimingProbe.id: __version__} if kv_report and kv_report.signals else {}),
         },
         findings=findings,
         metrics=RunMetrics(
@@ -844,7 +895,10 @@ def probe(
     )
     path = effective_workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
-    probe_count = len(suite) + (1 if run_kv_timing else 0)
+    # What the record attests, not what the suite contained: a probe whose plan came back
+    # empty asked the stack nothing, so "ran 12 probes" over the 8 the signed run records
+    # claims coverage the evidence does not carry - the direction rule 1 exists to prevent.
+    probe_count = len(run.probe_versions)
     if output is OutputFormat.JSON:
         # Single-shot JSON object so the consumer can `jq .` it. The full run
         # is still on disk at `run_path`; this is the summary CI dashboards read.
@@ -887,7 +941,10 @@ def probe(
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         for model_name, rate in run.metrics.retrieval_pivot_rate_by_model.items():
-            typer.echo(f"  retrieval-pivot rate [{model_name}]: {rate:.0%}")
+            # The model names come from the scenario, which `probe` reads off disk and is
+            # not entitled to trust: a newline in one forged this summary's own
+            # "ran N probes: 0 confirmed cross-tenant findings" line.
+            typer.echo(f"  retrieval-pivot rate [{untrusted(model_name)}]: {rate:.0%}")
         for label, class_rate in (
             ("poisoning bleed delta", run.metrics.poisoning_bleed_delta),
             ("inversion reconstruction rate", run.metrics.inversion_reconstruction_rate),
@@ -1157,7 +1214,7 @@ def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) ->
         else ""
     )
     return (
-        f"# Sectum AI run pack - {run_id}\n\n"
+        f"# Sectum AI run pack - {untrusted(run_id)}\n\n"
         "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
         "Sectum AI verification run. It carries the run details (`run.json`, including\n"
         "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
@@ -2104,15 +2161,16 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+            f"[{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"{delta.baseline:g} -> {delta.current:g}"
         )
     for change in result.findings.severity_escalations:
         typer.echo(
-            f"[REGRESSED] severity escalated: {change.previous.finding_id} "
+            f"[REGRESSED] severity escalated: {untrusted(change.previous.finding_id)} "
             f"{change.previous.severity.value} -> {change.current.severity.value}"
         )
     for finding in result.findings.newly_confirmed:
-        typer.echo(f"[REGRESSED] newly confirmed leak: {finding.finding_id}")
+        typer.echo(f"[REGRESSED] newly confirmed leak: {untrusted(finding.finding_id)}")
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
@@ -2194,8 +2252,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
         observed = str(finding.observed_in_tenant_id)[:8]
         return (
             f"    {sign} [{finding.status.value}/{finding.severity.value}] "
-            f"{finding.probe_id}  {owner} -> {observed}  "
-            f"({finding.surface.value})  {finding.finding_id[:12]}"
+            f"{untrusted(finding.probe_id)}  {owner} -> {observed}  "
+            f"({finding.surface.value})  {untrusted(finding.finding_id[:12])}"
         )
 
     escalation_ids = {change.current.finding_id for change in findings.severity_escalations}
@@ -2210,9 +2268,9 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f" -> {finding.status.value}/{finding.severity.value}"
         )
         return (
-            f"    {sign} [{transition}] {finding.probe_id}  "
+            f"    {sign} [{transition}] {untrusted(finding.probe_id)}  "
             f"{owner} -> {observed}  ({finding.surface.value})  "
-            f"{finding.finding_id[:12]}"
+            f"{untrusted(finding.finding_id[:12])}"
         )
 
     if findings.appeared:
@@ -2232,7 +2290,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_delta_verdict(delta)}] {delta.name}: {delta.baseline:g} -> {delta.current:g}"
+            f"  [{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"{delta.baseline:g} -> {delta.current:g}"
         )
 
     typer.echo("")
@@ -2265,6 +2324,106 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
+
+
+def _render_scorecard(card: IsolationScore, source: Path) -> None:
+    """Render the scorecard: the letter, its confidence, and every class - covered or not."""
+    typer.echo(
+        f"Multi-tenant isolation: GRADE {card.grade.value}"
+        f"   (confidence: {card.confidence.value} - "
+        f"{card.classes_covered}/{card.classes_total} classes covered)"
+    )
+    # Name the graded record: a letter with no provenance invites grading the wrong run.
+    # run_id is the record's own claim about itself, so it is escaped, not trusted - and
+    # it repeats across every run of a scenario, so the digest (computed from the content
+    # actually graded) is what identifies WHICH record earned this letter.
+    typer.echo(f"  run {untrusted(card.run_id)} ({source})")
+    typer.echo(f"  record {card.run_digest[:16]} (sha256, the run identifier)")
+    if card.capped_by is not None:
+        typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
+    typer.echo("")
+    for entry in card.classes:
+        detail = entry.headline or (entry.note if entry.verdict is ClassVerdict.NOT_COVERED else "")
+        typer.echo(
+            f"  Class {entry.class_id:>2}  {entry.name:<32}"
+            f"{entry.verdict.value:<12}{entry.severity.value:<9}{detail}"
+        )
+    typer.echo("")
+    typer.echo(
+        f"  Methodology: docs/scorecard.md (v{card.methodology_version}) - "
+        f"weighted {card.weighted_score:.2f} over the covered classes; "
+        f"coverage {card.coverage:.2f}."
+    )
+    typer.echo("  Untested classes lower confidence, never the grade.")
+
+
+@app.command()
+@_handle_typed_errors
+def score(
+    workdir: Annotated[
+        Path | None, typer.Option(help="Directory holding the recorded run.")
+    ] = None,
+    output: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--output",
+            help="`text` is the human-readable scorecard; `json` emits the IsolationScore.",
+            case_sensitive=False,
+        ),
+    ] = OutputFormat.TEXT,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Read defaults from this sectum-ai.yaml file."),
+    ] = None,
+) -> None:
+    """Grade the recorded run's multi-tenant isolation posture (`docs/scorecard.md`).
+
+    Renders one letter (A-F) plus a per-class breakdown, derived entirely from the
+    signed run - so a third party recomputes the grade from the evidence rather than
+    trusting it. Every catalog class appears, including the untested ones: those carry
+    `NOT_COVERED` and lower the scorecard's *confidence*, never its grade, because a
+    grade must never imply the stack passed a check it was never asked to perform. The
+    worst failing class's weight band caps the letter (the band of the class, not the
+    severity of any one finding), so a critical cross-tenant leak cannot be averaged away.
+
+    Grades `run.json`, falling back to an `evidence.json` pack when only the pack is
+    present. Exits 3 when there is no run to grade; when the run exercised no catalog
+    class at all (grading nothing would emit a letter that means nothing); when the run
+    carries a confirmed finding the catalog cannot attribute (a stale catalog); or for
+    `--output sarif/oscal`, which project findings and cannot render a graded posture.
+    """
+    if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
+        # SARIF and OSCAL project findings; a graded posture has no rendering in
+        # either, so reject rather than silently falling through to text (the guard
+        # the diff and calibrate commands use).
+        typer.echo(
+            "--output sarif/oscal project findings; the scorecard renders text or json",
+            err=True,
+        )
+        raise typer.Exit(code=3)
+    loaded = load_config(config) if config is not None else SectumConfig()
+    if workdir is None:
+        workdir = loaded.workdir
+    # Grade the run record, falling back to the evidence pack of one (the pack is the
+    # artifact an auditor actually holds, so it must be re-gradable - the same unwrap
+    # `diff` uses). run.json wins when both exist: `probe` rewrites it unconditionally
+    # while `evidence.json` is only as fresh as the last `report`, so preferring the pack
+    # would silently grade a stale record - after `probe`/`report`/`probe`, an A from the
+    # last good release could hide today's regressed F.
+    run_path = workdir / "run.json"
+    pack_path = workdir / "evidence.json"
+    if run_path.exists():
+        source, run = run_path, _load_run(workdir)
+    elif pack_path.exists():
+        source, run = pack_path, _load_run_artifact(pack_path)
+    else:
+        run = _load_run(workdir)  # raises the canonical "no run at ..." exit-3
+        source = run_path
+    card = score_run(run)
+    if output is OutputFormat.JSON:
+        typer.echo(card.model_dump_json(indent=2))
+        return
+    _render_scorecard(card, source)
 
 
 @app.command()

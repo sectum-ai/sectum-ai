@@ -179,6 +179,23 @@ def test_verify_pack_routes_an_rfc3161_token_through_the_tsa_path(
     assert result.passed
 
 
+def test_require_anchored_is_satisfied_by_a_single_rfc3161_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # verify.py's contract is "a real RFC 3161 timestamp OR a Rekor inclusion proof". A pack
+    # carrying just a valid TSA token (no Rekor) is genuinely anchored, so require_anchored -
+    # the `verify` command's default - must accept it. The routing test above never gates on
+    # require_anchored, so nothing pins that one real anchor suffices; requiring BOTH would
+    # reject a standard `report --tsa` pack (exit 4).
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    rfc_pack = pack.model_copy(update={"tsa_token": _FIXTURE_TOKEN})
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
+    result = verify_pack(rfc_pack, manifest, require_anchored=True)
+    assert result.passed, [check.detail for check in result.checks if not check.ok]
+    assert not any(check.name == "independent-anchor" and not check.ok for check in result.checks)
+
+
 def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -188,6 +205,27 @@ def test_verify_pack_fails_an_rfc3161_token_when_the_digest_was_altered(
     monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: "f" * 64)
     result = verify_pack(rfc_pack, manifest)
     assert not result.passed
+
+
+def test_verify_pack_fails_gracefully_on_a_non_object_tsa_token() -> None:
+    # tsa_token is an unconstrained str; a hand-edited pack can set it to a JSON scalar or
+    # list. The local-token path must reject it via a failing check, never crash on `.get()`
+    # of a non-dict - `verify` promises a clean VERIFICATION FAILED (exit 4) on any malformed
+    # pack, not a traceback. (If verify_pack raised, this test would error, not just fail.)
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    malformed = pack.model_copy(update={"tsa_token": "42"})  # valid JSON, but a scalar not a dict
+    assert not verify_pack(malformed, manifest).passed
+
+
+def test_verify_pack_fails_gracefully_on_a_dotless_schema_version() -> None:
+    # schema_version is an unconstrained str; a hand-edited pack can set it dot-less ("1").
+    # _schema_major_minor must not index parts[1] out of range - the pack is refused via a
+    # failing check, never a crash.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    malformed = pack.model_copy(update={"schema_version": "1"})
+    assert not verify_pack(malformed, manifest).passed
 
 
 @pytest.mark.live

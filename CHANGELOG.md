@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`sectum-ai score` — the isolation scorecard.** Grades a run's multi-tenant isolation
+  posture into one letter (A–F) plus a per-class breakdown, so the catalog's depth is
+  legible to an auditor rather than a wall of findings. The grade is **derived, not
+  asserted**: every input is the signed `RunResult` (`probe_versions`, `findings`,
+  `metrics`), so a third party recomputes the letter from the evidence with the published
+  methodology (`docs/scorecard.md`, stamped as `methodology_version` on every scorecard)
+  rather than trusting it. Four honesty rules hold the letter down: (1) a class whose
+  probe did not run can only ever be `NOT_COVERED` — never `PASS`, so a grade never
+  implies a check the stack was never asked to perform; (2) untested classes lower
+  *confidence*, never the grade — coverage is reported beside the letter, so a run over
+  three classes and one over eleven can both grade `A` and the confidence is what tells
+  them apart; (3) the worst failing class's weight *band* caps the letter (the band of the
+  class, never the severity of an individual finding), so a critical cross-tenant leak can
+  never be averaged away; (4) every confirmed finding lands in a class or the run is not
+  graded — a confirmed finding is itself proof its probe ran, and one the catalog cannot
+  attribute refuses rather than being silently dropped. A run that exercised no catalog
+  class is likewise refused (exit 3) rather than graded. New additive `IsolationScore` / `ClassScore` models
+  + `Grade` / `ClassVerdict` / `Confidence` enums (no `SCHEMA_VERSION` change). Class 11
+  (erasure) stays out of scope — it is a control check with its own attestation.
+  The scorecard carries the graded record's `run_digest` (the SHA-256 the in-toto
+  attestation and the audit PDF already bind): `run_id` comes from the scenario, so every
+  run against one substrate repeats it and two records can grade `F` and `A` under an
+  identical `run_id` — the digest is what ties a letter to one exact record, and a third
+  party recomputes it from the record they hold.
 - **Class 13 — Multi-modal RAG entity-bleed.** The Class 2 Retrieval Pivot generalised to
   images: multi-modal RAG embeds images (and text) into one vector space, so a benign
   image query for a shared *visual* entity (a chart, a logo, a product photo) surfaces
@@ -20,12 +44,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   substrate artifact, not a strength measurement) and `clip:<model>` (real CLIP via
   sentence-transformers, the `[clip]` extra, BYOC-safe — sweeping two or more CLIP models
   measures the genuine "stronger embedders leak more" gradient) — and
-  `multimodal_provider_sweep`, which reports the per-model **image Retrieval-Pivot Rate**
-  with the binomial counts behind a Wilson interval. Runnable, self-asserting example at
+  `multimodal_provider_sweep`, which reports the per-model **image Retrieval-Pivot Rate**,
+  with `multimodal_pivot_counts` reporting the binomial counts (`k` of `n`) a Wilson
+  interval can be formed from. Unlike Class 2's rate, these are **not** carried in the
+  evidence pack: `RunMetrics` has no multi-modal field and the probe is in no named suite,
+  so the counts come from the sweep API rather than a signed record until the CLI wiring
+  lands. Runnable, self-asserting example at
   `examples/multimodal-rag-bleed/` (a fixed demo ladder `imagehash-16` ~46% →
   `imagehash-256` 100% offline). The image-RPR is measured by its per-model sweep, as
   Class 2's embedding-strength gradient is; live multi-modal vector-store adapters and
   generic-suite / CLI wiring are a follow-on.
+
+### Changed
+
+- **The `owasp-llm08` suite claim is narrowed to what it runs.** It described itself as
+  the full adversarial catalog; Class 13 carries `owasp_llm: LLM08:2025` but runs in
+  neither the default CLI suite nor this one, so shipping Class 13 *reduced* the SKU's
+  relative LLM08 coverage rather than adding to it. The suite description, `docs/skus.md`
+  and `docs/coverage.md` now say "every adversarial probe in the default CLI suite" and
+  name Class 13's sweep as the separate path. Nothing about the probes it runs changed —
+  only the claim, which had stopped being true.
+
+### Fixed
+
+- **A run that crosses no isolation boundary is refused instead of graded `A`.** Isolation
+  is a claim about a boundary *between* principals, so where nothing is foreign to anybody
+  no probe can surface a leak however broken the stack is. Nothing enforced that: the same
+  maximally-leaking demo stack that grades `F` on four tenants graded **`A`** on one — the
+  letter describing the substrate while reading as a verdict on the stack. The record was
+  genuine, so there was no tampering to catch: it passed `verify`, in-toto and DSSE, and an
+  auditor holding only the pack reproduced the `A`. `probe` now refuses (exit `3`) a
+  substrate in which no marker is foreign to any principal, at the source, so the tool
+  cannot produce such a record. It refuses on the substrate alone, before building a
+  single adapter — a refused run does not seed your vector store, prime your cache or
+  train your model. The check asks that question directly rather than counting
+  principals, because the count is only a proxy: a tenant with one user has *two* principals
+  and no boundary (a tenant owns its users' data), and any number of principals verifies
+  nothing if no marker was planted — the latter being the more dangerous shape, since the
+  probes do run and Class 2 reports a well-powered `0.0% RPR (95% CI 0.0%-13.8%, n=24)` on
+  a question that could never have had an answer. Class 5's probe is likewise recorded on
+  what it *measured* rather than on having been asked to run. This refusal is a *global*
+  check — some marker is foreign to somebody — so it cannot by itself stop a class that was
+  starved of anything to find from grading `PASS`; that is the per-class job of the
+  step-based `probe_versions` rule, below.
+- **A probe that asked the stack nothing is no longer recorded as having run.**
+  `probe_versions` was built from *suite membership*, while `score` reads it as "what
+  actually ran" — so a probe whose plan came back empty was recorded, found nothing, and
+  graded its class **PASS**: a check the stack was never asked to perform, which is
+  exactly what the scorecard's rule 1 exists to forbid. A substrate with one principal
+  leaves every cross-principal probe no step to take, so on a maximally-leaking stack
+  Classes 1 / 6 / 7 printed `PASS` at `confidence: high`, and the run was then signed into
+  an evidence pack that verifies — the tool attesting its own over-claim. `probe_versions`
+  now records only probes that took at least one step; those classes read `NOT_COVERED`
+  and the loss lands on *confidence*, where rule 2 puts it. A confirmed finding still
+  stands on its own (rule 4: the finding is proof its probe ran).
+- **A record can no longer forge the output that reports on it — across every command.**
+  Sectum reports on records it does not trust, so every string a record carries is hostile
+  input the moment it reaches our output. Raw interpolation let a newline forge whole lines
+  of Sectum's own reporting and an ANSI escape (`ESC[2J`) wipe the real result off an
+  auditor's terminal and reprint a passing one. Every affected surface is now escaped —
+  not stripped, so tampering stays visible — via the new `sectum_ai.spec.untrusted`:
+    - **`verify`** — the worst of them, and the command that *is* the trust anchor. The
+      pack supplies `schema_version`; the compatibility gate reads only its major and
+      minor and the attested digest never binds it, so text smuggled after the patch digit
+      passed the gate, rendered raw, and printed `[ok]` lines asserting the RFC 3161 and
+      Rekor anchoring `verify` exists to establish — on an unanchored pack.
+    - **`diff` / `baseline --compare`** — probe ids, finding ids and metric-delta names
+      forged a `RESULT: no regression` line inside a run that regressed.
+    - **`pack`** — `run_id` in the run pack's `README.md`.
+    - **`score`** — `run_id` in the scorecard, and record-supplied probe ids inside the
+      rule-4 refusal message (both before release).
+  No hand-editing is needed — `run_id` reaches a pack via `scenario_id` — and a validly
+  signed pack carries the payload, because the vendor is the signer.
 
 ## [0.6.0] - 2026-07-15
 

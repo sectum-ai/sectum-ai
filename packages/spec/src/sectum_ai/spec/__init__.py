@@ -3,8 +3,11 @@
 from sectum_ai.spec._logging import configure_logging, get_logger, redact_sensitive
 from sectum_ai.spec.enums import (
     AccessOutcome,
+    ClassVerdict,
+    Confidence,
     CoverageVerdict,
     FindingStatus,
+    Grade,
     MarkerType,
     PrincipalKind,
     Severity,
@@ -21,11 +24,13 @@ from sectum_ai.spec.errors import (
 from sectum_ai.spec.hashing import canonical_hash, sha256_hex, to_canonical_json
 from sectum_ai.spec.models import (
     SCHEMA_VERSION,
+    ClassScore,
     ControlMapping,
     CorpusDocument,
     EvidencePack,
     Finding,
     GroundTruthManifest,
+    IsolationScore,
     Marker,
     Observation,
     PlantedLocation,
@@ -42,11 +47,15 @@ from sectum_ai.spec.models import (
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, wilson_interval
+from sectum_ai.spec.text import untrusted
 
 __all__ = [
     "SCHEMA_VERSION",
     "AccessOutcome",
     "AdapterError",
+    "ClassScore",
+    "ClassVerdict",
+    "Confidence",
     "ConfigError",
     "ControlMapping",
     "CorpusDocument",
@@ -57,7 +66,9 @@ __all__ = [
     "EvidencePack",
     "Finding",
     "FindingStatus",
+    "Grade",
     "GroundTruthManifest",
+    "IsolationScore",
     "Marker",
     "MarkerType",
     "Observation",
@@ -84,6 +95,7 @@ __all__ = [
     "redact_sensitive",
     "sha256_hex",
     "to_canonical_json",
+    "untrusted",
     "wilson_interval",
     "write_json_schemas",
 ]

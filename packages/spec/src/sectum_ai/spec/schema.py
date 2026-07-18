@@ -36,6 +36,8 @@ _EXPORTED: tuple[type[BaseModel], ...] = (
     models.RunResult,
     models.ControlMapping,
     models.EvidencePack,
+    models.ClassScore,
+    models.IsolationScore,
 )
 
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"

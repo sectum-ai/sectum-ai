@@ -13,7 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 from sectum_ai.spec.enums import (
     AccessOutcome,
+    ClassVerdict,
+    Confidence,
     FindingStatus,
+    Grade,
     MarkerType,
     PrincipalKind,
     Severity,
@@ -378,4 +381,67 @@ class EvidencePack(SectumModel):
     # token for a local-dev JSON one to drop the independent timestamp (a downgrade)
     # no longer passes verification.
     anchored_with_timestamp: bool = False
+    schema_version: str = SCHEMA_VERSION
+
+
+class ClassScore(SectumModel):
+    """One attack class's line in an isolation scorecard (``docs/scorecard.md``)."""
+
+    class_id: int = Field(ge=1)
+    name: str
+    verdict: ClassVerdict
+    # The class's weight band: how bad a confirmed cross-tenant leak *in this class*
+    # is. A property of the class (declared by the published methodology), not of the
+    # findings - a class needs a weight even when it passes with no findings.
+    severity: Severity
+    probe_ids: tuple[str, ...] = ()
+    confirmed_findings: int = Field(default=0, ge=0)
+    # The class's headline metric rendered with its uncertainty (e.g. the Class 2
+    # Retrieval-Pivot Rate with its Wilson interval and n). ``None`` when the class
+    # has no headline rate, or did not run.
+    headline: str | None = None
+    # Why a class is NOT_COVERED (probe skipped for want of an adapter capability, not
+    # in the run's suite, ...). Always set for NOT_COVERED so the gap is explained
+    # rather than silently absent.
+    note: str | None = None
+
+
+class IsolationScore(SectumModel):
+    """A graded multi-tenant isolation posture derived from one run.
+
+    Deliberately *derived*, not asserted: every field is recomputable from the signed
+    :class:`RunResult` plus the published methodology (``docs/scorecard.md``), so a
+    third party re-grades the run rather than trusting this record.
+
+    The anti-over-claim contract: ``weighted_score`` covers the **covered classes
+    only** - a class that never ran is excluded from the grade (never counted as a
+    pass) and lowers ``coverage``/``confidence`` instead. A grade must never imply the
+    stack passed a check it was never asked to perform.
+    """
+
+    run_id: str
+    # SHA-256 of the graded record's canonical form - the same run identifier the
+    # in-toto attestation and the audit PDF bind. ``run_id`` is derived from the
+    # scenario, so every run against one substrate repeats it: two records over the
+    # same substrate can grade F and A while carrying an identical ``run_id``. This is
+    # the field that ties the letter to one exact record.
+    run_digest: str
+    grade: Grade
+    confidence: Confidence
+    # Weighted pass fraction over the COVERED classes only, in [0, 1].
+    weighted_score: float = Field(ge=0.0, le=1.0)
+    # Covered weight / total catalog weight, in [0, 1] - what ``confidence`` derives
+    # from. Reported beside the grade and never folded into it.
+    coverage: float = Field(ge=0.0, le=1.0)
+    classes_covered: int = Field(ge=0)
+    classes_total: int = Field(ge=0)
+    # The worst weight BAND among the failing classes, which capped the grade; ``None``
+    # when no covered class failed. This is the band of the failing *class* (declared by
+    # the published methodology), never the severity recorded on an individual finding.
+    # Makes the grade explainable rather than an opaque letter.
+    capped_by: Severity | None = None
+    classes: tuple[ClassScore, ...] = ()
+    # The methodology revision (weights, thresholds, caps) the grade was computed
+    # under, so a recompute uses the same rules and lands on the same letter.
+    methodology_version: str
     schema_version: str = SCHEMA_VERSION

@@ -39,6 +39,13 @@ class SemanticCacheProbe(DetectingProbe):
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:
                 continue
+            observers = [p for p in principals if is_cross_principal(marker, p)]
+            if not observers:
+                # Nobody could read this entry back across a boundary, so priming it would
+                # ask the stack nothing while still recording this probe as having run -
+                # and `score` grades a probe that ran and found nothing as PASS. Plant only
+                # what someone can try to steal.
+                continue
             key = f"cache-probe:{marker.marker_id}"
             steps.append(
                 ProbeStep(
@@ -53,9 +60,7 @@ class SemanticCacheProbe(DetectingProbe):
                     },
                 )
             )
-            for observer in principals:
-                if not is_cross_principal(marker, observer):
-                    continue
+            for observer in observers:
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",

@@ -80,9 +80,9 @@ scanning adapter yet, so it is out of scope, not fake; see the
   (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
 - **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
   (local, BYOC-safe) plus the hosted `openai`, `cohere`, `voyage`, and `bedrock`
-  (all opt-in live and key/region-gated). The Bedrock adapter is the **Titan** family
-  (`amazon.titan-embed-text-v2:0`), which embeds one text per request; Cohere-on-Bedrock
-  (a different invoke-body shape) is not wired.
+  (all opt-in live and key/region-gated). The Bedrock adapter covers both invoke-body
+  shapes: the **Titan** family (`amazon.titan-embed-text-v2:0`), which embeds one text per
+  request, and **Cohere-on-Bedrock** (`cohere.embed-*`), which batches up to 96.
 
 ## What a run delivers
 
@@ -99,4 +99,6 @@ security reviewer, auditor, or DPO, not a hand-written summary:
 
 Named suites bundle the classes for a specific buyer: `--suite soc2-tenant-isolation`
 (the direct cross-tenant checks — SOC 2 CC6.1 / CC6.6 / CC6.7, ISO 27001) and
-`--suite owasp-llm08` (the full adversarial catalog). See [SKUs and suites](skus.md).
+`--suite owasp-llm08` (every adversarial probe in the default CLI suite; Class 13's
+multi-modal bleed is measured by its own image-embedding sweep, not this run). See
+[SKUs and suites](skus.md).

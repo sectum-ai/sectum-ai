@@ -25,8 +25,10 @@ from sectum_ai.probes.detection import (
     Judge,
     JudgeVerdict,
     confirmed_findings,
+    cross_principal_observers,
     dedupe_findings,
     is_cross_principal,
+    markers_naming_entity,
     resolve_semantic_threshold,
 )
 from sectum_ai.probes.embedding_inversion import EmbeddingInversionProbe
@@ -103,8 +105,10 @@ __all__ = [
     "TimingSignal",
     "calibrate_threshold",
     "confirmed_findings",
+    "cross_principal_observers",
     "dedupe_findings",
     "is_cross_principal",
     "load_probe_manifest",
+    "markers_naming_entity",
     "resolve_semantic_threshold",
 ]

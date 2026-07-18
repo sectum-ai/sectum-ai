@@ -77,7 +77,7 @@ not a per-PR enforcement.
   CHANGELOG entry for the release), and note any ID added, retired, or
   renamed. The sweep is cheap — under ten minutes for the twelve
   attack classes the catalog currently covers.
-- A future addition of an attack class (a Class 12, a sub-probe) inherits
+- A future addition of an attack class (a Class 14, a sub-probe) inherits
   the same gate: the probe ships with both an ATLAS assignment **and** a
   one-line comment justifying it.
 - An empty `atlas_techniques: tuple[str, ...] = ()` is a valid outcome and

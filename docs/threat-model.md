@@ -53,12 +53,26 @@ Sectum AI deliberately does not:
 A verification run crosses these boundaries:
 
 1. **Operator → Sectum AI.** The operator runs the `sectum-ai` CLI. The CLI is
-   trusted to generate the substrate and execute probes deterministically.
+   trusted to generate the substrate and execute probes deterministically. The
+   `substrate.json` it later reads is *not* covered by that trust: `probe` loads it from
+   disk, and the party preparing a pack for an auditor is the party that supplies it. A
+   substrate in which no marker is foreign to any principal makes every clean result a
+   property of the substrate rather than of the stack, so `probe` refuses one (exit `3`)
+   instead of producing a genuine, signable record of nothing.
 2. **Sectum AI → the system under test.** Sectum AI connects through adapters.
    Adapters resolve credentials from the environment or a secret manager — never
    from inline configuration. `sectum-ai.yaml` holds references, not secrets.
 3. **Sectum AI → the evidence consumer.** An auditor or DPO receives an evidence
    pack and verifies it with `sectum-ai verify`, independently of Sectum AI.
+4. **A record → the report about it.** `verify`, `diff`, `score`, `pack` and `probe` all
+   report on a record they did not necessarily produce — re-grading a vendor's record is
+   the point, and `probe`'s own substrate comes off disk (boundary 1) — so every string a
+   record carries (`run_id`, probe ids, finding ids, metric names, embedding-model names,
+   `schema_version`) is untrusted input by the time it reaches our output. It is escaped
+   at the point of rendering (`sectum_ai.spec.untrusted`), because a newline in it
+   otherwise forges whole lines of Sectum's own reporting and an ANSI escape rewrites the
+   reader's terminal. Signing does not help here: the vendor is the signer, so a validly
+   signed pack carries whatever its author put in those fields.
 
 ## Assets
 

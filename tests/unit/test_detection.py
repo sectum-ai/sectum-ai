@@ -17,7 +17,9 @@ from sectum_ai.probes.detection import (
     _canonical_embedding_model,
     _token_windows,
     _tokenize,
+    cross_principal_observers,
     is_cross_principal,
+    markers_naming_entity,
 )
 from sectum_ai.spec import (
     FindingStatus,
@@ -364,6 +366,7 @@ def test_cosine_is_a_true_cosine_bounded_by_one() -> None:
     assert _cosine((1.0, 0.0), (0.0, 1.0)) == 0.0  # orthogonal
     assert abs(_cosine((1.0, 0.0), (-1.0, 0.0)) + 1.0) < 1e-9  # opposite direction
     assert _cosine((0.0, 0.0), (1.0, 1.0)) == 0.0  # a zero vector has no direction
+    assert _cosine((1.0, 1.0), (0.0, 0.0)) == 0.0  # symmetric: the other operand zero (no div-by-0)
 
 
 def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
@@ -387,6 +390,23 @@ def test_semantic_confidence_stays_bounded_with_a_non_unit_embedder() -> None:
     findings = pipeline.detect(observer, f"context {entity.plaintext} trailer", Surface.VECTOR_DB)
     assert findings  # threshold 0.0 lets the candidate through to the judge
     assert all(0.0 <= finding.confidence <= 1.0 for finding in findings)
+
+
+def test_a_semantic_findings_confidence_is_its_true_similarity_not_a_ceiling() -> None:
+    # confidence is a signed evidence field (the audit PDF findings table and evidence.json), so
+    # it must carry the match's real strength. The clamp is `min(1.0, similarity)` - a ceiling,
+    # not a floor: a paraphrase leak matching at 0.6667 must report 0.6667. The bounded-ness test
+    # above asserts only <= 1.0, which a `max(1.0, ...)` regression trivially satisfies while
+    # inflating every sub-1.0 semantic finding to certainty in the signed artifact.
+    substrate = _entity_substrate("Project Onyx-00002")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project (internal) Onyx-00002"), 0.0
+    )
+    text = "leak: Project (internal) Onyx-00002 surfaced"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    [finding] = [f for f in findings if f.marker_id == "e-Project Onyx-00002"]
+    assert finding.status is FindingStatus.CONFIRMED
+    assert finding.confidence == 0.6667
 
 
 # --- SECRET_CANARY format detector (the spec, section 6.3: "exact + format") --
@@ -438,6 +458,52 @@ def test_secret_format_recovers_a_secret_wrapped_in_surrounding_bytes() -> None:
     blob = f'{{"provider":"x","api_key":"{secret.plaintext}","rotated":false}}'
     detected = DetectionPipeline(substrate).detect(observer, blob, Surface.PROMPT_LOGS)
     assert any(f.marker_id == secret.marker_id for f in confirmed_findings(detected))
+
+
+def test_secret_format_detects_a_recased_foreign_secret() -> None:
+    # The exact/substring branch casefolds both sides, but the credential-shape regexes are
+    # case-sensitive, so a foreign secret a surface merely re-cased is caught only by the
+    # substring branch - the format path's `or`, per its docstring's "no foreign secret is
+    # ever missed". Every other secret test injects the value verbatim, where both branches
+    # hit; this pins the substring branch alone (the SECRET analogue of the HARD_CANARY
+    # re-case scan test above).
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = next(s for s in _foreign_secrets(substrate, observer) if s.plaintext.startswith("sk-"))
+    recased = secret.plaintext.upper()  # the shape regex misses this; the substring branch does not
+    found = confirmed_findings(
+        DetectionPipeline(substrate).detect(observer, f"leaked: {recased}", Surface.API)
+    )
+    assert [f.marker_id for f in found] == [secret.marker_id]
+    assert found[0].severity is Severity.CRITICAL
+
+
+def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> None:
+    # _secret_format matches on `needle in haystack or needle in shaped` - the normalized
+    # substring OR the credential-SHAPE recovery. The re-case test above pins the substring
+    # arm; this pins the shape arm ALONE. A foreign AKIA secret whose final letter is composed
+    # with an accent in the observation is no longer a normalized substring of the text, but
+    # the credential-format regex still recovers the token, so dropping the shape arm would let
+    # the secret leak evade detection under Unicode-composition evasion.
+    owner, observer = UUID(int=1), UUID(int=2)
+    secret = Marker(
+        marker_id="s-akia",
+        marker_type=MarkerType.SECRET_CANARY,
+        owner_tenant_id=owner,
+        owner_user_id=None,
+        plaintext="AKIAIOSFODNN7EXAMPLY",  # AKIA + 16 chars, ending in a composable letter
+    )
+    base = build_substrate(default_scenario(seed=1))
+    manifest = base.manifest.model_copy(update={"markers": (secret,)})
+    pipeline = DetectionPipeline(base.model_copy(update={"manifest": manifest}))
+    # The observation's final Y is followed by a combining acute accent (U+0301); NFKC folds
+    # "Ý" -> "Y-acute" in the normalized text, so the plaintext is no longer a substring
+    # there, but the credential regex (which sees the plain ASCII Y) still recovers the token -
+    # so only the shape arm catches it.
+    evasive = "dumped key AKIAIOSFODNN7EXAMPLY\u0301 to the other tenant"
+    found = confirmed_findings(pipeline.detect(observer, evasive, Surface.API))
+    assert [f.marker_id for f in found] == ["s-akia"]
+    assert found[0].severity is Severity.CRITICAL
 
 
 def test_secret_shaped_string_absent_from_the_manifest_is_not_confirmed() -> None:
@@ -666,6 +732,51 @@ def test_a_collided_codename_stays_distinctive_and_a_genuine_leak_confirms() -> 
         and f.status is FindingStatus.CONFIRMED
     ]
     assert confirmed, "a genuine leak of a collided codename must still confirm"
+
+
+def test_a_codename_in_exactly_half_the_markers_stays_distinctive_and_confirms() -> None:
+    # Boundary of the majority-demotion test (detection.py: strict `2*count >
+    # entity_marker_count`): a codename shared by EXACTLY HALF the entity markers is not a
+    # majority, so it must stay distinctive and a genuine leak of it must still CONFIRM. The
+    # collided-codename test above is a minority (2 of 5); this pins the 2-of-4 boundary,
+    # where an `>=` (at-least-half) demotion would wrongly boilerplate the codename and miss
+    # the leak. "Halcyon" is in 2 of 4 markers (2*2 == 4), and the leak names only the
+    # codename - no serial - so confirmation rests solely on it staying distinctive.
+    substrate = _entity_substrate(
+        "Project Halcyon 00001",
+        "Project Halcyon 00002",
+        "Project Zephyr 00003",
+        "Project Lodestar 00004",
+    )
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project Halcyon"), 0.0
+    )
+    text = "the retrieved competitor record names Project Halcyon as the account owner"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [
+        f
+        for f in findings
+        if f.marker_id in {"e-Project Halcyon 00001", "e-Project Halcyon 00002"}
+        and f.status is FindingStatus.CONFIRMED
+    ]
+    assert confirmed, "a codename in exactly half the markers must stay distinctive and confirm"
+
+
+def test_a_codename_in_every_marker_is_demoted_and_does_not_confirm() -> None:
+    # The other conjunct of the majority-demotion rule (`count >= 2 and 2*count > n`). A codename
+    # shared by ALL the entity markers (2 of 2) is a strict majority, so it is template
+    # boilerplate and cannot tie a leak to any one marker: a lying judge citing only it must yield
+    # UNVERIFIED, never a fabricated CONFIRMED. The exactly-half test above pins the second
+    # conjunct; this pins the `>= 2` edge, which a `> 2` regression skips - leaving the shared
+    # codename distinctive and inventing two cross-tenant leaks.
+    substrate = _entity_substrate("Project Halcyon 00001", "Project Halcyon 00002")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Project Halcyon"), 0.0
+    )
+    text = "the record names Project Halcyon as the account owner"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    assert findings, "the candidates are retained as UNVERIFIED evidence"
+    assert all(finding.status is FindingStatus.UNVERIFIED for finding in findings)
 
 
 def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() -> None:
@@ -912,3 +1023,50 @@ def test_span_traceable_falls_back_to_the_marker_for_a_tokenless_span() -> None:
     assert DetectionPipeline._span_traceable(text, "", marker) is True
     # But a marker genuinely absent from the text still does not trace.
     assert DetectionPipeline._span_traceable("unrelated text", "   ", marker) is False
+
+
+# --- planning gates: cross_principal_observers / markers_naming_entity -------------
+
+
+def test_cross_principal_observers_returns_only_the_foreign_principals() -> None:
+    # The predicate a probe gates its steps on: issue a step from a principal only when the
+    # target is foreign to it. A marker owned by _TB is foreign to _TA (another tenant) but
+    # not to its own owner, so the owner is excluded - a step from it tests nothing.
+    marker = _hard("secret", owner=_TB)
+    principals = [Principal(tenant_id=_TA), Principal(tenant_id=_TB)]
+    observers = cross_principal_observers([marker], principals)
+    assert observers == [Principal(tenant_id=_TA)]
+
+
+def test_cross_principal_observers_is_empty_when_nothing_is_foreign() -> None:
+    # The vacuous case the gate exists for: every marker is owned by the observer's own
+    # tenant, so no step could surface a cross-principal leak and the probe plans nothing.
+    marker = _hard("secret", owner=_TB)
+    assert cross_principal_observers([marker], [Principal(tenant_id=_TB)]) == []
+    assert cross_principal_observers([], [Principal(tenant_id=_TA)]) == []
+
+
+def test_markers_naming_entity_maps_a_shared_entity_to_its_canaries() -> None:
+    # The organic-bleed probes gate on the entity's foreignness, which is the foreignness
+    # of the canaries in the documents that name it. Every shared entity in the demo owns
+    # pivot documents carrying markers, so the map is non-empty and every returned marker
+    # sits in a document that actually names the entity.
+    substrate = build_substrate(default_scenario(seed=2026))
+    entity = substrate.scenario.shared_entities[0]
+    markers = markers_naming_entity(substrate, entity)
+    assert markers
+    ids_in_entity_docs = {
+        marker_id
+        for document in substrate.documents
+        if entity.value in document.content
+        for marker_id in document.marker_ids
+    }
+    assert {marker.marker_id for marker in markers} == ids_in_entity_docs
+
+
+def test_markers_naming_entity_is_empty_for_an_unmentioned_entity() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+    from sectum_ai.spec import SharedEntity
+
+    absent = SharedEntity(kind="person", value="Nobody Mentioned Anywhere 9Z9Z")
+    assert markers_naming_entity(substrate, absent) == []

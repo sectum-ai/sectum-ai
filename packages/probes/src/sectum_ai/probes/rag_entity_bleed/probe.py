@@ -6,7 +6,11 @@ person, a vendor, compliance terms, amounts, dates - surface another tenant's
 content. No prompt injection is used.
 """
 
-from sectum_ai.probes.detection import DetectingProbe
+from sectum_ai.probes.detection import (
+    DetectingProbe,
+    cross_principal_observers,
+    markers_naming_entity,
+)
 from sectum_ai.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 
@@ -30,9 +34,19 @@ class RagEntityBleedProbe(DetectingProbe):
         the same tenant. With no users declared this reduces to one query per
         tenant, exactly as before.
         """
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
-            for observer in substrate.principals():
+            # Query the entity only from principals to whom one of its planted canaries is
+            # foreign. Against an entity owned by no foreign principal, a query surfaces
+            # only the querying principal's own data, so it tests nothing and cannot leak -
+            # recording the probe on the strength of it would grade Class 2 a vacuous PASS
+            # (docs/scorecard.md, rule 1). On a real shared index every tenant owns a pivot
+            # for the entity, so every foreign principal still queries.
+            observers = cross_principal_observers(
+                markers_naming_entity(substrate, entity), principals
+            )
+            for observer in observers:
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",

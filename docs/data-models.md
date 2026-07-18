@@ -25,6 +25,8 @@ without running Sectum.
 | `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `findings[]`, `metrics`. |
 | `EvidencePack` | The signed bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, and `schema_version`. |
 | `ControlMapping` | A finding's mapped compliance control (framework, control id, assertion) — see the [compliance mappings](compliance-mappings.md). |
+| `ClassScore` | One attack class's line in an isolation scorecard: `class_id`, `name`, `verdict` (`PASS`/`FAIL`/`NOT_COVERED`), weight `severity` band, `probe_ids`, `confirmed_findings`, `headline?`, `note?`. |
+| `IsolationScore` | A graded isolation posture derived from a run: `grade` (A–F), `confidence`, `weighted_score`, `coverage`, `capped_by?`, per-class `classes[]`, `methodology_version` — see the [scorecard](scorecard.md). |
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
@@ -49,9 +51,9 @@ from its model, so the published schema always matches the code.
 
 The committed schemas are: `Scenario`, `Marker`, `CorpusDocument`,
 `GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`, `Finding`,
-`RunMetrics`, `RunResult`, `EvidencePack`, and `ControlMapping`. (`Scenario`
-embeds `SyntheticTenantSpec` inline, so that nested model has no standalone
-schema file.)
+`RunMetrics`, `RunResult`, `EvidencePack`, `ControlMapping`, `ClassScore`, and
+`IsolationScore`. (`Scenario` embeds `SyntheticTenantSpec` inline, so that nested
+model has no standalone schema file.)
 
 ## Canonical hashing
 

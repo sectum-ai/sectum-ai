@@ -23,7 +23,8 @@ Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses** and
 **NIST AI RMF MEASURE 2.7** (security/resilience measurement). The MITRE ATLAS
 technique IDs vary by class — see each page for the rationale.
 
-All twelve adversarial attack classes (1–11 and 13) are implemented. Class 12 — the
+All twelve attack-catalog classes (1–11 and 13) are implemented (Class 11 is a
+control check rather than an adversarial probe). Class 12 — the
 tamper-evident audit chain — is the cross-cutting
 [evidence chain](../evidence-chain.md), which is why the attack-class numbering skips
 it.

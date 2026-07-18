@@ -171,8 +171,14 @@ def test_the_flagship_probe_plans_per_user_when_users_are_declared() -> None:
     substrate = build_substrate(_users_scenario())
     steps = RagEntityBleedProbe().plan(substrate)
     actor_users = {step.actor_user_id for step in steps}
-    # one tenant-level principal plus the two users
-    assert actor_users == {None, _USER_A, _USER_B}
+    # Both users query - each is foreign to the other's entity canary, which is the
+    # user-granularity boundary this verifies. The tenant-level principal does NOT query:
+    # this scenario has a single tenant, which owns all its users' data (ADR-0006), so a
+    # tenant-level query could surface nothing foreign to it - the vacuous kind of step the
+    # probe no longer issues. In a multi-tenant substrate the tenant-level principal is
+    # foreign to other tenants' canaries and does query (test_..._is_tenant_level_without_users
+    # and the stock scenario both exercise that).
+    assert actor_users == {_USER_A, _USER_B}
 
 
 def test_the_flagship_probe_is_tenant_level_without_users() -> None:

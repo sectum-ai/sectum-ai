@@ -13,7 +13,7 @@ plan/detect over deterministic synthetic images (the ``imagehash-<dim>`` CI prox
 CLIP; on real embedders a stronger model leaks more, the multi-modal echo of Class 2.
 """
 
-from sectum_ai.probes.detection import DetectingProbe
+from sectum_ai.probes.detection import DetectingProbe, cross_principal_observers
 from sectum_ai.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
 # A fixed catalog of shared visual entities. Each name keys a deterministic synthetic
@@ -48,9 +48,17 @@ class MultimodalRagBleedProbe(DetectingProbe):
         the visual entity; the multi-modal store (or the sweep) renders/embeds its
         canonical image and retrieves by image similarity.
         """
+        # Query only from principals to whom some marker is foreign. The multi-modal
+        # corpus round-robins every one of a tenant's markers onto a visual entity's pivot
+        # image (:func:`sectum_ai.multimodal._multimodal_corpus`), and filler images carry
+        # no marker, so a foreign marker is always reachable through its entity and a
+        # principal foreign to none can surface nothing - querying from it would grade
+        # Class 13 a vacuous PASS (docs/scorecard.md, rule 1). On a real multi-tenant index
+        # every principal is foreign to another tenant's markers, so all still query.
+        observers = cross_principal_observers(substrate.manifest.markers, substrate.principals())
         steps: list[ProbeStep] = []
         for entity in VISUAL_ENTITIES:
-            for observer in substrate.principals():
+            for observer in observers:
                 steps.append(
                     ProbeStep(
                         step_id=f"{self.id}-{len(steps):04d}",
