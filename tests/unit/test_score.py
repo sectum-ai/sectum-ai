@@ -222,6 +222,14 @@ def test_class_2_headline_keeps_its_interval_on_a_clean_zero_rate_run() -> None:
     )
 
 
+def test_class_2_counts_free_headline_renders_a_clean_zero_rate() -> None:
+    # The no-counts branch (n=0): a record carrying a rate but no binomial counts - an older
+    # pre-counts record `score` re-grades - is shown as it recorded itself. A clean 0.0 rate is
+    # falsy but not None, so a truthiness check would drop the flagship RPR headline entirely.
+    # This is a distinct branch from the k=0 counts path pinned just above (which recomputes).
+    assert _bleed_headline(RunMetrics(retrieval_pivot_rate=0.0)) == "0.0% RPR"
+
+
 def test_class_2_headline_recomputes_the_rate_from_the_counts_not_the_records_claim() -> None:
     # Rule 4's logic applied to the headline: the counts are evidence, the rate is the
     # record's claim about itself. A record whose counts say 46 of 48 while its rate field
@@ -435,8 +443,8 @@ def test_the_counts_free_classes_render_a_clean_zero_rate_headline() -> None:
     # 0.0 is a real measured rate on a clean run - falsy but not None. A truthiness check in
     # place of `is not None` on the rate would drop the headline on exactly the passing run,
     # so each counts-free class must still render its 0.0%. The test above uses only non-zero
-    # rates; this pins the zero boundary (the Class-2 sibling is pinned by _bleed_headline at
-    # k=0).
+    # rates; this pins the zero boundary (Class 2's two arms - the k=0 counts path and the
+    # counts-free rate path - are pinned by the two _bleed_headline tests above).
     card = score_run(
         _run(
             ran=_ALL_PROBES,

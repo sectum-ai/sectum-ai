@@ -165,6 +165,32 @@ def test_probe_with_an_isolated_config_yields_no_findings(tmp_path: Path) -> Non
     assert run["metrics"]["confirmed_findings"] == 0
 
 
+def test_probe_text_output_renders_a_clean_zero_rate_on_an_isolated_stack(tmp_path: Path) -> None:
+    # On an isolated stack the bleed probes still run (n=48) but confirm nothing (k=0), so the
+    # flagship RPR is a measured 0.0% - falsy but not None. The text summary must still show it
+    # (with its CI and n) and the Class-3/6/10 rates; a truthiness guard would drop exactly the
+    # passing-run headline, rendering a proven-isolated stack the same as one Class 2 never ran
+    # on. The other text-output test uses the leaky demo (RPR > 0), so nothing else pins 0.0.
+    config_path = tmp_path / "sectum-ai.yaml"
+    config_path.write_text(
+        "adapters:\n"
+        "  vector_store: {kind: fake, shared_index: false}\n"
+        "  cache: {kind: fake, tenant_scoped: true}\n"
+        "  model: {kind: fake}\n"
+        "  mcp: {kind: fake}\n"
+        "  memory: {kind: fake}\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["probe", "--config", str(config_path), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 0
+    assert "retrieval-pivot rate: 0.0% (95% CI 0.0%-7.4%, n=48)" in result.output
+    assert "poisoning bleed delta: 0%" in result.output
+    assert "inversion reconstruction rate: 0%" in result.output
+    assert "extraction efficiency: 0%" in result.output
+
+
 def test_probe_without_a_seeded_substrate_fails_cleanly(tmp_path: Path) -> None:
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3

@@ -282,6 +282,27 @@ def test_verify_pack_checks_a_rekor_proof(monkeypatch: pytest.MonkeyPatch) -> No
     assert result.passed
 
 
+def test_require_anchored_is_satisfied_by_a_rekor_proof_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The Rekor arm of verify.py's "a real RFC 3161 timestamp OR a Rekor inclusion proof"
+    # contract. A pack with only a local-dev timestamp but a valid Rekor proof is genuinely
+    # anchored, so require_anchored - the `verify` default - must accept it. This is the
+    # symmetric case to the TSA-only test in test_tsa.py; the test above never gates on
+    # require_anchored, so nothing pins that a Rekor proof alone suffices (dropping the
+    # disjunct would reject a `report --rekor` pack with exit 4).
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest)
+    local_token = json.dumps({"tsa": "local-dev", "digest": _FIXTURE_DIGEST})
+    rekor_pack = pack.model_copy(update={"rekor_proof": _PROOF, "tsa_token": local_token})
+    monkeypatch.setattr("sectum_ai.evidence.verify.attested_digest", lambda _run: _FIXTURE_DIGEST)
+    result = verify_pack(
+        rekor_pack, manifest, rekor_keyring=_STAGING_KEYRING, require_anchored=True
+    )
+    assert result.anchored
+    assert result.passed, [check.detail for check in result.checks if not check.ok]
+
+
 def test_verify_pack_fails_a_rekor_proof_when_the_digest_was_altered(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
