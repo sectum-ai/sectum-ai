@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than the probe's whole footprint. `agent-framework-hijack` is unchanged (it has no
   injection sub-probe). Auditors re-verifying a pre-0.8 pack will see the older, narrower
   Class 7 stamps; nothing about the leaks those packs record has changed.
+### Fixed
+
+- **`gdpr-subject-erasure-verification`'s manifest declared two of its three surfaces.**
+  `probe.yaml` is the declarative catalog external tooling consumes, and this one had lost
+  `tracing` — so a consumer under-reported which surfaces the subject-erasure probe actually
+  scans. The manifest is regenerated, and the parity test that should have caught it is
+  fixed: it guarded surface and adapter comparison behind `if hasattr(cls, "surfaces")`,
+  which skipped exactly the workflow probes whose manifest values come from the generator's
+  fallback table rather than a class attribute — a guard that silently passed the only
+  probes it needed to check. Those are now asserted against the canonical sets the probe
+  scans (`ERASURE_SURFACES` / `SUBJECT_VERIFIABLE_SURFACES`), and the same skip shape in the
+  `example` check is pinned too.
 
 ## [0.7.0] - 2026-07-18
 
