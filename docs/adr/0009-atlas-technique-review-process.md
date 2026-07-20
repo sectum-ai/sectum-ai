@@ -106,3 +106,30 @@ not a per-PR enforcement.
   fit. `AML.T0024.000` is confirmed valid — ATLAS sub-techniques are numbered
   from `.000`, unlike MITRE ATT&CK. This verified set is pinned in
   `tests/unit/test_atlas_ids.py`.
+
+- **2026-07-18** (at v0.7.0) — swept every probe's `atlas_techniques` against the
+  MISP galaxy ATLAS mirror (cluster *MITRE ATLAS Attack Pattern*, version 14, 91
+  techniques). All six assigned IDs are present under **unchanged** canonical
+  names — `AML.T0020`, `AML.T0024`, `AML.T0024.000`, `AML.T0024.001`,
+  `AML.T0053`, `AML.T0057` — and none carries a deprecation, revocation or
+  supersession marker. No rename, no retirement.
+
+  Fit review of the techniques we do *not* use: the only family touching this
+  domain is `AML.T0051` LLM Prompt Injection (`.000` Direct, `.001` Indirect).
+  It was **not adopted**, deliberately:
+
+  - Class 3 rag-poisoning plants a document that ranks highly and carries a
+    canary; it smuggles no instruction the model is meant to obey, so poisoning
+    plus retrieval exfiltration (`AML.T0020` + `AML.T0024`) stays the accurate
+    pair — indirect *prompt injection* would overstate what the probe does.
+  - Class 7's tool-description-injection sub-probe is the closest candidate for
+    `AML.T0051.001`, but `AML.T0053` (LLM Plugin Compromise) already names the
+    surface it attacks, and `atlas_techniques` is declared per probe rather than
+    per sub-probe. That makes it a refinement, not a correction — left to a
+    deliberate decision rather than folded into a sweep.
+  - The Class 2/10/13 organic-bleed probes are explicitly non-adversarial (no
+    injection is used), so `AML.T0051` would misdescribe them.
+
+  Classes 5 (kv-cache-timing) and 11 (erasure, subject-erasure) remain
+  intentionally unmapped: ATLAS carries no timing-side-channel technique, and
+  erasure is a control check rather than an adversary technique.
