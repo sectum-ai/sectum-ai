@@ -47,7 +47,7 @@ openai = ["openai>=1.40"]
 # hosted embedding providers for the RPR sweep (cohere:<model> / voyage:<model>).
 # Pinned below the next major: both SDKs are fast-moving and reshape their embed
 # response, which would silently break the sweep's vector extraction.
-cohere = ["cohere>=5,<6"]
+cohere = ["cohere>=7.0.5,<8"]
 voyage = ["voyageai>=0.2,<1"]
 # Amazon Bedrock Titan embeddings via boto3's bedrock-runtime client.
 bedrock = ["boto3>=1.43.51"]
