@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Class 7 findings from the tool-description-injection sub-probe now carry
+  `AML.T0051.001`** (LLM Prompt Injection: *Indirect*). That sub-probe delivers its
+  coordinate through tool metadata the agent ingests rather than through the call, which
+  is exactly what the technique describes; the id was verified against the MISP galaxy
+  mirror in the 2026-07-18 ADR-0009 sweep. The mapping is scoped **per sub-probe**: the
+  three `lookup` sub-probes reach the resource by naming it — a plugin-scope failure
+  (`AML.T0053`), not an injection — so their findings are unchanged. `atlas` is a signed
+  evidence field, so a finding is stamped with what its own sub-probe demonstrates rather
+  than the probe's whole footprint. `agent-framework-hijack` is unchanged (it has no
+  injection sub-probe). Auditors re-verifying a pre-0.8 pack will see the older, narrower
+  Class 7 stamps; nothing about the leaks those packs record has changed.
+
 ## [0.7.0] - 2026-07-18
 
 ### Added

@@ -69,7 +69,11 @@ def test_atlas_assignments_match_the_domain_review() -> None:
     # poisoning technique (T0020), agent-tool-hijack a plugin compromise (T0053),
     # and lora-cross-tenant carries the membership-inference angle (T0024.000).
     assert RagPoisoningProbe.atlas_techniques == ("AML.T0020", "AML.T0024")
-    assert AgentToolHijackProbe.atlas_techniques == ("AML.T0024", "AML.T0053")
+    # agent-tool-hijack's class tuple is its full footprint: plugin compromise for the three
+    # lookup sub-probes, plus T0051.001 (indirect prompt injection) which ONLY the
+    # tool-description-injection sub-probe demonstrates. Findings carry the narrower subset -
+    # pinned by test_only_the_injection_sub_probe_is_stamped_as_indirect_prompt_injection.
+    assert AgentToolHijackProbe.atlas_techniques == ("AML.T0024", "AML.T0051.001", "AML.T0053")
     assert LoraCrossTenantProbe.atlas_techniques == ("AML.T0024", "AML.T0024.000", "AML.T0057")
 
 

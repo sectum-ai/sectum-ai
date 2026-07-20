@@ -9,6 +9,7 @@ owasp_secondary:
 - LLM06:2025
 atlas_techniques:
 - AML.T0024
+- AML.T0051.001
 - AML.T0053
 nist_rmf:
 - MEASURE 2.7

@@ -133,3 +133,20 @@ not a per-PR enforcement.
   Classes 5 (kv-cache-timing) and 11 (erasure, subject-erasure) remain
   intentionally unmapped: ATLAS carries no timing-side-channel technique, and
   erasure is a control check rather than an adversary technique.
+
+- **2026-07-20** — the deliberate decision the entry above deferred: `AML.T0051.001`
+  (LLM Prompt Injection: *Indirect*) **is adopted**, scoped to Class 7's
+  tool-description-injection sub-probe. That sub-probe delivers its coordinate through
+  tool metadata the agent ingests rather than through the call, which is what the
+  technique describes; the id was verified against the mirror in the 2026-07-18 sweep
+  (canonical name `Indirect` — the catalog does not repeat the parent's name on the
+  sub-technique) and is now pinned in `_VERIFIED_ATLAS_IDS`.
+
+  It is scoped **per sub-probe, not per probe**. `AgentToolHijackProbe.atlas_techniques`
+  is the probe's full footprint and is what the manifest and the catalog page publish,
+  but `detect()` stamps each finding with the subset its own sub-probe demonstrates: the
+  three `lookup` sub-probes reach the resource by naming it — a plugin-scope failure
+  (`AML.T0053`), not an injection — and their findings are stamped without T0051.001.
+  Stamping them with it would claim an attack the probe never performed, in a field that
+  ships as signed evidence. `agent-framework-hijack` is unchanged: it has only the
+  confused-deputy and token-passthrough sub-probes, so no injection to describe.

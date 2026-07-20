@@ -32,9 +32,16 @@ class AgentToolHijackProbe(DetectingProbe):
     name = "Cross-tenant agent tool-call hijacking"
     owasp_llm = "LLM08:2025"
     owasp_secondary: tuple[str, ...] = ("LLM06:2025",)
-    # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough
-    # technique; T0024 Exfiltration via AI Inference API is the leak it causes.
-    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0053")
+    # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough /
+    # cross-server technique; T0024 Exfiltration via AI Inference API is the leak it
+    # causes. The tool-description-injection sub-probe additionally demonstrates
+    # T0051.001 (LLM Prompt Injection: Indirect) - the coordinate arrives through tool
+    # metadata the agent ingests rather than through the call. This tuple is the probe's
+    # full ATLAS footprint; each finding is stamped with the subset its own sub-probe
+    # demonstrates (`_LOOKUP_ATLAS` below), so a confused-deputy leak is never labelled
+    # an injection it did not perform.
+    atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0051.001", "AML.T0053")
+    _LOOKUP_ATLAS: tuple[str, ...] = ("AML.T0024", "AML.T0053")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MCP,)
     requires_adapters: tuple[str, ...] = ("mcp",)
@@ -118,8 +125,16 @@ class AgentToolHijackProbe(DetectingProbe):
     def detect(
         self, step: ProbeStep, observation: Observation, substrate: Substrate
     ) -> list[Finding]:
-        """Scan an MCP tool result for a foreign-principal canary via the pipeline."""
+        """Scan an MCP tool result for a foreign-principal canary via the pipeline.
+
+        The ATLAS stamp is the sub-probe's own, not the probe's whole footprint: only the
+        tool-description-injection sub-probe (the ``search`` tool) smuggles its coordinate
+        through ingested tool metadata, so only its findings carry T0051.001. The three
+        ``lookup`` sub-probes reach the resource by naming it, which is a plugin-scope
+        failure and not an injection.
+        """
         pipeline = self._providers.pipeline(substrate)
+        injected = step.payload.get("tool") == "search"
         return pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
@@ -127,7 +142,7 @@ class AgentToolHijackProbe(DetectingProbe):
             probe_id=self.id,
             observed_user=step.actor_user_id,
             owasp_llm=self.owasp_llm,
-            atlas=self.atlas_techniques,
+            atlas=self.atlas_techniques if injected else self._LOOKUP_ATLAS,
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
         )
