@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-25
+
 ### Changed
 
 - **Class 7 findings from the tool-description-injection sub-probe now carry
@@ -18,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`AML.T0053`), not an injection — so their findings are unchanged. `atlas` is a signed
   evidence field, so a finding is stamped with what its own sub-probe demonstrates rather
   than the probe's whole footprint. `agent-framework-hijack` is unchanged (it has no
-  injection sub-probe). Auditors re-verifying a pre-0.8 pack will see the older, narrower
+  injection sub-probe). Auditors re-verifying a pre-0.7.1 pack will see the older, narrower
   Class 7 stamps; nothing about the leaks those packs record has changed.
 ### Fixed
 
