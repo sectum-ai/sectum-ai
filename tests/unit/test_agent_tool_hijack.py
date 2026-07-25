@@ -7,9 +7,12 @@ from sectum_ai.probes import AgentToolHijackProbe, confirmed_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
     MarkerType,
+    Observation,
+    ProbeStep,
     Scenario,
     SharedEntity,
     Substrate,
+    Surface,
     SyntheticTenantSpec,
     SyntheticUserSpec,
 )
@@ -196,3 +199,42 @@ def test_scoped_server_ignores_a_poisoned_tool_description() -> None:
     mcp = _seeded_injection_mcp(substrate, vulnerable=False)
     findings = Runner(substrate, mcp=mcp).run(AgentToolHijackProbe())
     assert confirmed_findings(findings) == []
+
+
+def test_only_the_injection_sub_probe_is_stamped_as_indirect_prompt_injection() -> None:
+    # The probe's class tuple is its full ATLAS footprint, but a finding must carry only what
+    # its own sub-probe demonstrates. The tool-description-injection `search` delivers its
+    # coordinate through tool metadata the agent ingests - that is T0051.001 (Indirect). The
+    # three `lookup` sub-probes name the resource outright: a plugin-scope failure, not an
+    # injection, so stamping them with T0051.001 would claim an attack they never performed.
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = AgentToolHijackProbe()
+    marker = next(m for m in substrate.manifest.markers if m.marker_type is MarkerType.HARD_CANARY)
+    observer = next(t.tenant_id for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
+    leak = Observation(
+        step_id="s", surface=Surface.MCP, raw_response=f"tool result: {marker.plaintext}"
+    )
+
+    def stamp(payload: dict[str, str]) -> tuple[str, ...]:
+        step = ProbeStep(
+            step_id="s",
+            probe_id=probe.id,
+            actor_tenant_id=observer,
+            action="mcp.invoke",
+            payload=payload,
+        )
+        found = [f for f in probe.detect(step, leak, substrate) if f.marker_id == marker.marker_id]
+        assert found, "the seeded leak must be detected for the stamp to mean anything"
+        return found[0].atlas
+
+    assert stamp({"tool": "search", "desc_key": marker.marker_id}) == (
+        "AML.T0024",
+        "AML.T0051.001",
+        "AML.T0053",
+    )
+    for payload in (
+        {"tool": "lookup", "key": marker.marker_id},
+        {"tool": "lookup", "key": marker.marker_id, "token": str(marker.owner_tenant_id)},
+        {"tool": "lookup", "key": marker.marker_id, "via": "downstream"},
+    ):
+        assert stamp(payload) == ("AML.T0024", "AML.T0053")

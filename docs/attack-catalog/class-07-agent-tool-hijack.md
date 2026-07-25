@@ -1,6 +1,6 @@
 # Class 7 — Cross-tenant agent tool-call hijacking
 
-**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0053 · **NIST:** MEASURE 2.7 · **Surfaces:** MCP, Agent framework · **Probe ids:** `agent-tool-hijack`, `agent-framework-hijack`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0051.001, AML.T0053 · **NIST:** MEASURE 2.7 · **Surfaces:** MCP, Agent framework · **Probe ids:** `agent-tool-hijack`, `agent-framework-hijack`
 
 ## Goal
 
@@ -26,6 +26,14 @@ tenant's session the probe issues four sub-probes:
   server-side scope enforcement when tool metadata supplies an out-of-band
   coordinate — a deliberate simplification of the LLM-agent-level
   description-poisoning attack.
+
+`AML.T0051.001` (LLM Prompt Injection: *Indirect*) is carried **only** by findings
+from that last sub-probe: it is the one that delivers its coordinate through tool
+metadata the agent ingests rather than through the call. The three lookup
+sub-probes reach the resource by naming it — a plugin-scope failure
+(`AML.T0053`), not an injection — so their findings are stamped without it. The
+class tuple above is the probe's full footprint; each finding carries the subset
+its own sub-probe demonstrates.
 
 **Agent end (`agent-framework-hijack`)** — verifies the *agent caller* itself.
 Each tenant's hard canary is provisioned as a resolvable resource the agent's

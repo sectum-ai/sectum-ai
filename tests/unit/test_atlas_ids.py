@@ -13,14 +13,17 @@ from typing import Any, cast
 
 import sectum_ai.probes as probes
 
-# The ids verified against the MISP galaxy ATLAS mirror on 2026-06-01
-# (docs/adr/0009-atlas-technique-review-process.md, "Validation log"). Adding an
-# id here REQUIRES re-running that sweep and recording the result in the ADR.
+# The ids verified against the MISP galaxy ATLAS mirror, most recently on
+# 2026-07-18 (docs/adr/0009-atlas-technique-review-process.md, "Validation log").
+# Adding an id here REQUIRES re-running that sweep and recording the result in the
+# ADR. `AML.T0051.001` is named just "Indirect" upstream - it is a sub-technique of
+# `AML.T0051` LLM Prompt Injection, and the catalog does not repeat the parent name.
 _VERIFIED_ATLAS_IDS: dict[str, str] = {
     "AML.T0020": "Poison Training Data",
     "AML.T0024": "Exfiltration via ML Inference API",
     "AML.T0024.000": "Infer Training Data Membership",
     "AML.T0024.001": "Invert ML Model",
+    "AML.T0051.001": "Indirect",
     "AML.T0053": "LLM Plugin Compromise",
     "AML.T0057": "LLM Data Leakage",
 }
