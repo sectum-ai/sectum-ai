@@ -13,6 +13,7 @@ nist_rmf:
 surfaces:
 - vector_db
 - semantic_cache
+- tracing
 requires_adapters:
 - vector_store
 - cache
