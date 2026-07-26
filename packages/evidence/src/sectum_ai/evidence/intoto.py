@@ -85,11 +85,19 @@ def to_in_toto_statement(pack: EvidencePack) -> dict[str, Any]:
 
 
 def verify_in_toto_statement(statement: Mapping[str, Any], pack: EvidencePack) -> None:
-    """Verify an in-toto Statement binds ``pack``'s run digest.
+    """Verify an in-toto Statement binds ``pack``'s run digest *and* its result.
 
-    Checks the statement is a Sectum v1 attestation whose subject digest equals
-    the pack's recomputed run digest. Raises :class:`~sectum_ai.spec.EvidenceError`
-    if the statement is the wrong type or attests a different run.
+    Checks the statement is a Sectum v1 attestation whose subject digest equals the
+    pack's recomputed run digest, and whose predicate equals the one this pack
+    produces. Raises :class:`~sectum_ai.spec.EvidenceError` otherwise.
+
+    The predicate check is not redundant with the subject check. The predicate IS
+    the verification result - finding count, metrics, control mappings, and which
+    anchors are present - and it is the part a downstream policy engine reads. The
+    subject digest covers only the run record, so a sidecar keeping a truthful
+    subject while rewriting its predicate to "0 findings, fully anchored" was
+    itemized as binding this pack. Every predicate field is recomputable from the
+    pack, so the honest check is equality against a freshly built one.
     """
     if statement.get("_type") != STATEMENT_TYPE:
         raise EvidenceError(f"not an in-toto v1 statement: {statement.get('_type')!r}")
@@ -99,6 +107,17 @@ def verify_in_toto_statement(statement: Mapping[str, Any], pack: EvidencePack) -
     subjects = statement.get("subject", [])
     if not isinstance(subjects, list) or not _subject_binds_digest(subjects, digest):
         raise EvidenceError("the attestation subject does not match the pack's run digest")
+    expected = to_in_toto_statement(pack)["predicate"]
+    if _canonical(statement.get("predicate")) != _canonical(expected):
+        raise EvidenceError(
+            "the attestation predicate does not match this pack: the sidecar asserts a "
+            "verification result the pack does not support"
+        )
+
+
+def _canonical(value: Any) -> str:
+    """A stable JSON rendering, so a round-tripped sidecar compares equal."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _subject_binds_digest(subjects: list[Any], digest: str) -> bool:

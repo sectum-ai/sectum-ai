@@ -7,6 +7,7 @@ open source; see docs/adr/0002-evidence-layer-oss-boundary.md.
 from sectum_ai.evidence.bundle import (
     EVIDENCE_MEMBER,
     MANIFEST_MEMBER,
+    RUN_MEMBER,
     build_bundle,
     verify_bundle,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "OSCAL_VERSION",
     "PAYLOAD_TYPE",
     "PREDICATE_TYPE",
+    "RUN_MEMBER",
     "SARIF_VERSION",
     "STATEMENT_TYPE",
     "Check",

@@ -1047,7 +1047,7 @@ def report(
     run = _load_run(workdir)
     timestamper = _resolve_timestamper(loaded.evidence, tsa)
     transparency_log = _resolve_transparency_log(loaded.evidence, rekor)
-    controls = control_mappings()
+    controls = control_mappings(run)
     # Render the audit PDF first and bind its hash as pdf_ref so the signed
     # attested digest covers the PDF; the PDF renders only digest-stable content,
     # so the on-disk file re-hashes to this pdf_ref and `sectum-ai verify` catches a
@@ -1582,7 +1582,7 @@ def _emit_erasure_attestation(
             },
         ),
     )
-    controls = control_mappings()
+    controls = control_mappings(run)
     pdf_path = workdir / "erasure-attestation.pdf"
     pdf_ref = render_audit_pack_and_hash(
         run, canonical_hash(substrate.manifest), controls, pdf_path

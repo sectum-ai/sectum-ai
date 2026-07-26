@@ -3,9 +3,17 @@
 These map a Sectum AI verification run to the specific framework controls its
 evidence speaks to. They are assertions of test coverage, not a legal
 certification of compliance - see ``COVERAGE_DISCLAIMER``.
+
+Each mapping declares the *evidence it requires*, and :func:`control_mappings`
+filters by what a given run actually produced. A run only asserts a control it
+earned: the deletion controls (GDPR Article 17, CCPA 1798.105) need erasure
+coverage, which the isolation probes structurally cannot produce - they are the
+separate ``sectum-ai erasure`` workflow's output. Without that filter a run of a
+single probe emitted the same fully-satisfied 9-framework assessment as a full
+suite, which is the over-claim this product exists to refuse.
 """
 
-from sectum_ai.spec import ControlMapping
+from sectum_ai.spec import ControlMapping, RunResult
 
 COVERAGE_DISCLAIMER = (
     "These control mappings assert that Sectum AI produced test-coverage "
@@ -14,63 +22,107 @@ COVERAGE_DISCLAIMER = (
     "Assessment."
 )
 
+# What a mapping needs before a run may assert it.
+_ISOLATION = "isolation"  # at least one isolation probe ran
+_ERASURE = "erasure"  # the run carries erasure coverage (the `erasure` workflow)
+
 # Framework -> control IDs -> what a Sectum AI verification run asserts about
-# them (the engineering spec, section 18).
-_CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str], ...] = (
+# them -> the evidence required to assert it (the engineering spec, section 18).
+_CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
     (
         "SOC 2 (TSC)",
         ("CC6.1", "CC6.6", "CC6.7"),
         "Tenant logical separation tested by benign and adversarial probing "
         "across the AI surfaces.",
+        _ISOLATION,
     ),
     (
         "ISO/IEC 27001:2022",
         ("A.5.15", "A.8.3", "A.8.12"),
         "Cross-tenant information leakage tested; residual leakage itemized.",
+        _ISOLATION,
     ),
     (
         "ISO/IEC 42001:2023",
         ("A.6.2.6", "A.7.2", "A.7.5"),
         "Per-tenant data management and provenance in the AI system tested; "
         "isolation verified under AI system operation and monitoring.",
+        _ISOLATION,
     ),
     (
         "GDPR",
-        ("Article 17", "Article 25", "Article 32"),
-        "Erasure across the AI surfaces verified; tenant isolation tested.",
+        ("Article 25", "Article 32"),
+        "Tenant isolation tested across the AI surfaces.",
+        _ISOLATION,
+    ),
+    (
+        "GDPR",
+        ("Article 17",),
+        "Erasure across the AI surfaces verified.",
+        _ERASURE,
     ),
     (
         "CCPA/CPRA",
-        ("1798.105", "1798.100", "1798.150"),
-        "Deletion of a consumer's personal information across the AI surfaces "
-        "verified; segregation of consumer data tested.",
+        ("1798.100", "1798.150"),
+        "Segregation of consumer data tested across the AI surfaces.",
+        _ISOLATION,
+    ),
+    (
+        "CCPA/CPRA",
+        ("1798.105",),
+        "Deletion of a consumer's personal information across the AI surfaces verified.",
+        _ERASURE,
     ),
     (
         "EU AI Act",
         ("Article 15",),
         "Robustness of tenant isolation tested under benign and adversarial conditions.",
+        _ISOLATION,
     ),
     (
         "HIPAA",
         ("164.312(a)(1)", "164.312(c)(1)", "164.312(e)(1)"),
         "Segregation of regulated tenant data verified across the AI surfaces.",
+        _ISOLATION,
     ),
     (
         "NIST AI RMF",
         ("MEASURE 2.7", "MANAGE 2.x"),
         "Documented measurement of multi-tenant security risk.",
+        _ISOLATION,
     ),
     (
         "OWASP LLM Top 10",
         ("LLM08:2025",),
         "Direct test coverage of vector and embedding multi-tenant weaknesses.",
+        _ISOLATION,
     ),
 )
 
 
-def control_mappings() -> tuple[ControlMapping, ...]:
-    """Return the framework control mappings a Sectum AI verification run speaks to."""
+def _run_supports(run: RunResult, requirement: str) -> bool:
+    """Whether ``run`` produced the evidence ``requirement`` names.
+
+    Isolation evidence counts a finding as well as ``probe_versions``: a finding is
+    itself proof its probe executed, the same reasoning ``score._confirmed_probe_ids``
+    applies, so a record whose bookkeeping disagrees with its own findings cannot
+    drop a control it demonstrably tested.
+    """
+    if requirement == _ERASURE:
+        return bool(run.metrics.erasure_coverage)
+    return bool(run.probe_versions or run.findings)
+
+
+def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:
+    """Return the framework control mappings a Sectum AI run speaks to.
+
+    With ``run``, only the mappings that run's evidence supports: a control is
+    asserted because the run produced evidence for it, never by default. With no
+    ``run`` this is the full table - what Sectum can attest to in principle -
+    which is what the docs and the catalog describe.
+    """
     return tuple(
         ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
-        for framework, control_ids, assertion in _CONTROL_TABLE
+        for framework, control_ids, assertion, requirement in _CONTROL_TABLE
+        if run is None or _run_supports(run, requirement)
     )

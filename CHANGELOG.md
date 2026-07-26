@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The OSCAL export and the audit PDF asserted framework controls the run never
+  earned.** Control state was derived from "did this run confirm a leak" alone,
+  never from which probes ran, so a run of a single probe emitted the same
+  fully-satisfied 22-control, 9-framework assessment as a full suite — including
+  GDPR Article 17 and CCPA §1798.105 *deletion*, which the isolation probes
+  structurally cannot test (erasure is the separate `sectum-ai erasure` workflow).
+  Each mapping now declares the evidence it requires and `control_mappings(run)`
+  filters by what the run actually produced: a probe run asserts 20 isolation
+  controls and no deletion control, an erasure run asserts both. `score` already
+  reported coverage honestly on the same record; the compliance outputs now agree
+  with it.
+- **The in-toto / DSSE attestation predicate was never verified.** Verification
+  checked the statement type and the subject digest only, so a sidecar that kept a
+  truthful subject while rewriting its predicate — `finding_count` to 0, every
+  metric to 0, `anchors` to timestamped-and-logged, a fabricated control assertion —
+  was reported as binding the pack. The predicate *is* the verification result a
+  downstream policy engine reads, and every field is recomputable from the pack, so
+  it is now compared against a freshly built one. `verify_dsse_envelope` delegates
+  here, so both sidecars are covered.
+- **A bundled `run.json` was not bound to the signed pack.** `verify_bundle` proved
+  each member matched `bundle-manifest.json` — which a forger rebuilds along with
+  it — so a run pack whose findings were deleted verified clean, printing an
+  affirmative `[ok] digest matches` for the very file the auditor reads. The pack
+  already carries the same record, so the binding was free.
+
 ## [0.7.1] - 2026-07-25
 
 ### Changed
