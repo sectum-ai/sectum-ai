@@ -1,7 +1,9 @@
 """Tests for the regression-baseline engine."""
 
-from sectum_ai.baseline import compare_metrics
-from sectum_ai.spec import RunMetrics
+from datetime import UTC, datetime
+
+from sectum_ai.baseline import compare_metrics, diff_runs
+from sectum_ai.spec import RunMetrics, RunResult
 
 
 def test_no_regression_when_metrics_are_unchanged() -> None:
@@ -177,3 +179,54 @@ def test_severity_rank_covers_every_severity() -> None:
     from sectum_ai.spec import Severity
 
     assert set(_SEVERITY_RANK) == set(Severity)
+
+
+def _run_for(probes: dict[str, str], *, poisoning: float | None = None) -> RunResult:
+    moment = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
+    return RunResult(
+        run_id="run-1",
+        scenario_hash="s",
+        manifest_hash="m",
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(
+            per_probe_findings={"rag-poisoning": 24} if poisoning else {},
+            poisoning_bleed_delta=poisoning,
+        ),
+        probe_versions=probes,
+    )
+
+
+def test_a_probe_the_baseline_covered_but_this_run_skipped_fails_the_gate() -> None:
+    # A narrowed --suite (or a probe skipped for a missing adapter) drops every
+    # metric that probe fed to zero, which read as an improvement: the gate printed
+    # `[ok] per_probe_findings[rag-poisoning]: 24 -> 0` and "no regression", exit 0,
+    # for a run that simply stopped testing Class 3. Nothing got worse - but the
+    # guarantee the baseline established is no longer being checked.
+    baseline = _run_for({"rag-poisoning": "0.7.1", "tenant-boundary-fetch": "0.7.1"}, poisoning=1.0)
+    narrowed = _run_for({"tenant-boundary-fetch": "0.7.1"})
+    result = diff_runs(baseline, narrowed)
+    assert result.coverage_lost == ("rag-poisoning",)
+    assert result.regressed  # the gate must not go green
+    # ...and it is NOT reported as a leakage regression, because nothing worsened.
+    assert not result.metrics.regressed
+
+
+def test_re_running_the_same_probes_is_not_a_coverage_loss() -> None:
+    # The complement: an identical run must still pass cleanly, or the gate is
+    # useless. Coverage is compared by probe id, not by finding counts.
+    baseline = _run_for({"rag-poisoning": "0.7.1"}, poisoning=1.0)
+    again = _run_for({"rag-poisoning": "0.7.1"}, poisoning=1.0)
+    result = diff_runs(baseline, again)
+    assert result.coverage_lost == ()
+    assert not result.regressed
+
+
+def test_a_probe_that_ran_and_found_nothing_is_not_a_coverage_loss() -> None:
+    # per_probe_findings counts FINDINGS, so a probe that ran clean is absent from
+    # it. Keying coverage on that dict would have called every clean run a coverage
+    # loss; coverage comes from probe_versions.
+    baseline = _run_for({"rag-poisoning": "0.7.1"}, poisoning=1.0)
+    clean = _run_for({"rag-poisoning": "0.7.1"})
+    assert clean.metrics.per_probe_findings == {}
+    assert diff_runs(baseline, clean).coverage_lost == ()

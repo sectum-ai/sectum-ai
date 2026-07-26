@@ -8,7 +8,7 @@ and ``score``.
 import functools
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
@@ -1314,6 +1314,33 @@ def pack(
     )
 
 
+# Each writer emits its own sibling set, and one workdir routinely holds BOTH: the
+# `report` pack and the `erasure` attestation. Resolving a sibling by scanning a
+# global preference order therefore verified an erasure attestation against the
+# probe pack's PDF and sidecars - reported to the operator as "altered or replaced
+# after signing" on evidence written seconds earlier. Siblings are resolved from
+# the pack they belong to; an unrecognised pack name keeps the old scan.
+_PACK_SIBLINGS: dict[str, tuple[str, str, str]] = {
+    "evidence.json": ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json"),
+    "erasure-evidence.json": (
+        "erasure-attestation.pdf",
+        "erasure-attestation.intoto.json",
+        "erasure-evidence.dsse.json",
+    ),
+}
+_SIBLING_FALLBACK: tuple[tuple[str, ...], ...] = (
+    ("audit-pack.pdf", "erasure-attestation.pdf"),
+    ("attestation.intoto.json", "erasure-attestation.intoto.json"),
+    ("evidence.dsse.json",),
+)
+
+
+def _sibling_names(pack_path: Path, slot: int) -> tuple[str, ...]:
+    """Candidate sibling filenames for ``pack_path`` (0=pdf, 1=in-toto, 2=DSSE)."""
+    known = _PACK_SIBLINGS.get(pack_path.name)
+    return (known[slot],) if known is not None else _SIBLING_FALLBACK[slot]
+
+
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
     """Return the bytes of the audit PDF written beside ``pack_path``, if present.
 
@@ -1322,7 +1349,7 @@ def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
     present, ``sectum-ai verify`` re-hashes it against the pack's bound ``pdf_ref``;
     when absent, verification still proceeds from the json alone.
     """
-    for name in ("audit-pack.pdf", "erasure-attestation.pdf"):
+    for name in _sibling_names(pack_path, 0):
         candidate = pack_path.parent / name
         if candidate.exists():
             return candidate.read_bytes()
@@ -1337,7 +1364,7 @@ def _sibling_intoto(pack_path: Path) -> Path | None:
     ``sectum-ai verify`` re-checks that it binds this pack's run digest; when absent,
     verification proceeds from the json alone (the pack is self-sufficient).
     """
-    for name in ("attestation.intoto.json", "erasure-attestation.intoto.json"):
+    for name in _sibling_names(pack_path, 1):
         candidate = pack_path.parent / name
         if candidate.exists():
             return candidate
@@ -1351,8 +1378,11 @@ def _sibling_dsse(pack_path: Path) -> Path | None:
     present, ``sectum-ai verify`` re-checks that its in-toto statement binds this
     pack's run digest, so a swapped envelope is caught.
     """
-    candidate = pack_path.parent / "evidence.dsse.json"
-    return candidate if candidate.exists() else None
+    for name in _sibling_names(pack_path, 2):
+        candidate = pack_path.parent / name
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _echo_verdict(anchored: bool, *, what: str) -> None:
@@ -2103,8 +2133,15 @@ def calibrate(
         _render_calibration_text(result)
 
 
-def _delta_verdict(delta: MetricDelta) -> str:
-    """The status tag for a metric delta line: regression, informational, or ok."""
+def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str:
+    """The status tag for a metric delta line: regression, informational, or ok.
+
+    A metric fed by a probe this run did not exercise reads "not measured", never
+    "ok": its drop to zero is missing coverage, not a fixed leak, and `[ok]
+    per_probe_findings[rag-poisoning]: 24 -> 0` positively asserts the opposite.
+    """
+    if any(f"[{probe_id}]" in delta.name for probe_id in coverage_lost):
+        return "not measured"
     if delta.informational:
         return "info"
     return "REGRESSED" if delta.regressed else "ok"
@@ -2161,7 +2198,7 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"[{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
             f"{delta.baseline:g} -> {delta.current:g}"
         )
     for change in result.findings.severity_escalations:
@@ -2171,10 +2208,16 @@ def baseline(
         )
     for finding in result.findings.newly_confirmed:
         typer.echo(f"[REGRESSED] newly confirmed leak: {untrusted(finding.finding_id)}")
+    for probe_id in result.coverage_lost:
+        typer.echo(
+            f"[COVERAGE LOST] {untrusted(probe_id)}: the baseline exercised this probe "
+            "and this run did not; its metrics read as 0, not as improved"
+        )
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
-            "or a confirmed leak escalated in severity.",
+            "a confirmed leak escalated in severity, or a probe the baseline "
+            "covered was not run.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -2295,6 +2338,11 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
         )
 
     typer.echo("")
+    for probe_id in result.coverage_lost:
+        typer.echo(
+            f"[COVERAGE LOST] {untrusted(probe_id)}: exercised by the earlier run, "
+            "not by this one; its metrics read as 0, not as improved"
+        )
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -2321,6 +2369,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
             }
             for delta in result.metrics.deltas
         ],
+        "coverage_lost": list(result.coverage_lost),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))

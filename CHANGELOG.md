@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The regression gate read "not measured" as "improved".** A narrowed `--suite`
+  (or a probe skipped for a missing adapter) dropped every metric that probe fed to
+  zero, so `baseline --compare` / `diff` printed `[ok]
+  per_probe_findings[rag-poisoning]: 24 -> 0`, `no regression against the baseline`,
+  and exited 0 — positively asserting leaks were *fixed* for a run that simply
+  stopped testing Class 3 and Class 10. A probe the baseline exercised and the later
+  run did not is now reported `[COVERAGE LOST]`, its metrics read `[not measured]`
+  rather than `[ok]`, and the gate fails (exit 2). Coverage is compared by probe id,
+  never by `per_probe_findings` — that counts findings, so a probe that ran clean is
+  absent from it and every clean run would have read as a coverage loss.
+- **`verify` false-accused a genuine erasure attestation of tampering.** `report` and
+  `erasure` each write their own PDF and sidecars, and one workdir routinely holds
+  both; siblings were resolved by scanning a global preference order, so verifying
+  `erasure-evidence.json` re-hashed the *probe* pack's `audit-pack.pdf` and
+  `attestation.intoto.json` and reported `altered or replaced after signing`
+  (exit 4) on evidence written seconds earlier — the worst possible false alarm for a
+  tamper-evidence product. Siblings now resolve from the pack they belong to.
+  Tamper detection is unchanged: a forged erasure PDF or a re-pointed sidecar still
+  fails.
+
+
 - **The OSCAL export and the audit PDF asserted framework controls the run never
   earned.** Control state was derived from "did this run confirm a leak" alone,
   never from which probes ran, so a run of a single probe emitted the same

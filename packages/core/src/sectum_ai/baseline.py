@@ -243,6 +243,11 @@ class RunDiff:
 
     metrics: BaselineComparison
     findings: FindingDiff
+    # Probes the earlier run exercised that the later one did not. Not a leakage
+    # regression - nothing got worse - but the guarantee the baseline established
+    # is no longer being checked, and every metric those probes fed reads as an
+    # improvement to zero.
+    coverage_lost: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -256,11 +261,19 @@ class RunDiff:
         unchanged when another confirmed leak resolves in the same run; and a
         known leak growing more severe (low -> critical) is a worse posture the
         counts do not see at all.
+
+        A probe the baseline exercised and this run did not also fails the gate.
+        Nothing got worse, but every metric that probe fed reads as an improvement
+        to zero - ``per_probe_findings[rag-poisoning]: 24 -> 0`` - so a gate that
+        passed here would report "no regression" for a run that quietly stopped
+        testing whole attack classes, via a narrowed ``--suite`` or a probe skipped
+        for a missing adapter. Re-baseline deliberately to change what is covered.
         """
         return (
             self.metrics.regressed
             or bool(self.findings.newly_confirmed)
             or bool(self.findings.severity_escalations)
+            or bool(self.coverage_lost)
         )
 
 
@@ -327,4 +340,30 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     return RunDiff(
         metrics=compare_metrics(earlier.metrics, later.metrics),
         findings=diff_findings(earlier.findings, later.findings),
+        coverage_lost=_coverage_lost(earlier, later),
     )
+
+
+def _exercised_probes(run: RunResult) -> set[str]:
+    """The probe ids a run demonstrably exercised.
+
+    ``probe_versions`` is the record's own bookkeeping; a finding is independent
+    proof its probe ran, so a record whose bookkeeping is missing still reports the
+    coverage its findings demonstrate.
+
+    ANY finding counts, not just a confirmed one. ``score._confirmed_probe_ids``
+    takes confirmed-only because it asks a different question - "did this probe
+    prove a leak?" - whereas coverage asks "did this probe run?", and an unverified
+    candidate answers that just as well. Confirmed-only would read a leak downgraded
+    confirmed -> unverified (an improvement) as the probe disappearing.
+
+    ``per_probe_findings`` is NOT usable here: it counts findings, so a probe that
+    ran and found nothing is absent from it, and absence there would read as "did
+    not run" on every clean run.
+    """
+    return set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+
+
+def _coverage_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
+    """Probes the baseline exercised that the later run did not."""
+    return tuple(sorted(_exercised_probes(earlier) - _exercised_probes(later)))
