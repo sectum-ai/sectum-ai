@@ -1326,3 +1326,42 @@ def test_score_names_the_record_it_graded(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "run-sectum-ai-demo-2026" in result.output
     assert "run.json" in result.output
+
+
+def test_verify_binds_the_erasure_attestation_to_its_own_siblings(tmp_path: Path) -> None:
+    # `report` and `erasure` each write their own PDF and sidecars, and one workdir
+    # routinely holds BOTH. Resolving a sibling by scanning a global preference
+    # order verified the erasure attestation against the PROBE pack's audit-pack.pdf
+    # and attestation.intoto.json, so a genuine attestation written seconds earlier
+    # was reported "altered or replaced after signing" (exit 4) - the worst possible
+    # false alarm for a tamper-evidence product.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)]).exit_code == 0
+    # premise: both sibling sets are present, which is what made the scan ambiguous
+    assert (tmp_path / "audit-pack.pdf").exists()
+    assert (tmp_path / "erasure-attestation.pdf").exists()
+
+    erasure = _runner.invoke(
+        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+    )
+    assert erasure.exit_code == 0, erasure.output
+    assert "altered or replaced" not in erasure.output
+    # the probe pack still verifies against its own siblings
+    probe = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    assert probe.exit_code == 0, probe.output
+
+
+def test_verify_still_catches_a_tampered_erasure_pdf(tmp_path: Path) -> None:
+    # The counter-check for the fix above: selecting the RIGHT sibling must not mean
+    # checking less. A forged erasure PDF is still caught.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    pdf = tmp_path / "erasure-attestation.pdf"
+    pdf.write_bytes(pdf.read_bytes() + b"FORGED ZERO LEAKAGE")
+    result = _runner.invoke(
+        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+    )
+    assert result.exit_code == 4
+    assert "altered or replaced after signing" in result.output
