@@ -274,7 +274,7 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
 
     findings: list[dict[str, Any]] = []
     reviewed_control_ids: list[str] = []
-    for mapping in control_mappings():
+    for mapping in control_mappings(run):
         for control_id in mapping.control_ids:
             if control_id not in reviewed_control_ids:
                 reviewed_control_ids.append(control_id)

@@ -9,6 +9,7 @@ import pytest
 
 from sectum_ai.evidence import (
     EVIDENCE_MEMBER,
+    RUN_MEMBER,
     Check,
     VerificationResult,
     build_bundle,
@@ -195,3 +196,25 @@ def test_bundle_result_reports_unanchored_for_a_local_pack() -> None:
     assert result.passed
     assert not result.anchored
     assert not verify_bundle(bundle, require_anchored=True).passed
+
+
+def test_a_forged_bundled_run_record_fails_verification() -> None:
+    # run.json is the detailed record the auditor reads - findings and evidence
+    # spans - and the member-digest loop only proves it matches
+    # bundle-manifest.json, which a forger rebuilds along with it. The pack already
+    # carries the same record, so the binding is free: without it a run pack whose
+    # findings were deleted verified clean, printing an affirmative "digest matches".
+    pack = _pack()
+    members = dict(_members(pack))
+    members[RUN_MEMBER] = pack.run_result.model_dump_json(indent=2).encode("utf-8")
+    honest = json.loads(members[RUN_MEMBER])
+    assert honest == json.loads(pack.run_result.model_dump_json())  # premise
+    assert verify_bundle(build_bundle(members)).passed
+
+    forged_run = dict(honest)
+    forged_run["run_id"] = "forged-run"
+    forged = {**members, RUN_MEMBER: json.dumps(forged_run, indent=2).encode("utf-8")}
+    result = verify_bundle(build_bundle(forged))
+    assert not result.passed
+    check = next(c for c in result.checks if c.name == "bundled-run")
+    assert not check.ok and "altered or replaced" in check.detail

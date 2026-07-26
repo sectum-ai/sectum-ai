@@ -40,6 +40,9 @@ MANIFEST_MEMBER = "bundle-manifest.json"
 _PDF_MEMBERS = ("audit-pack.pdf", "erasure-attestation.pdf")
 _INTOTO_MEMBERS = ("attestation.intoto.json", "erasure-attestation.intoto.json")
 DSSE_MEMBER = "evidence.dsse.json"
+# The detailed run record a run pack ships beside the evidence. Bound to the pack
+# in `verify_bundle`, so it cannot be edited independently of what was signed.
+RUN_MEMBER = "run.json"
 
 # ZIP's epoch floor (1980-01-01). Fixing the member timestamps makes a bundle
 # byte-reproducible for identical inputs instead of embedding the build time.
@@ -194,6 +197,32 @@ def verify_bundle(
     # leakage" PDF (its digest re-recorded in bundle-manifest.json) - or whose
     # sidecar attests a different run - would pass on the member-digest checks
     # alone, breaking the tamper-evidence guarantee (the spec, section 8.1; ADR-0016).
+    # Bind the bundled run record to the attested pack. run.json is the detailed
+    # record the auditor actually reads - findings and evidence spans - and the
+    # member-digest loop above only proves it matches bundle-manifest.json, which a
+    # forger rebuilds along with it. The pack already carries the same record, so
+    # the binding is free: a run.json whose findings were deleted no longer earns
+    # an affirmative "digest matches" (the spec, section 8.1).
+    run_raw = member_bytes.get(RUN_MEMBER)
+    if run_raw is not None:
+        try:
+            bundled_run = json.loads(run_raw)
+        except ValueError as error:
+            checks.append(Check("bundled-run", False, f"unparsable {RUN_MEMBER}: {error}"))
+        else:
+            attested_run = json.loads(pack.run_result.model_dump_json())
+            if bundled_run == attested_run:
+                checks.append(Check("bundled-run", True, f"{RUN_MEMBER} matches the attested run"))
+            else:
+                checks.append(
+                    Check(
+                        "bundled-run",
+                        False,
+                        f"{RUN_MEMBER} does not match the run this pack attests; it was "
+                        "altered or replaced after signing",
+                    )
+                )
+
     pdf_bytes = _first_member(member_bytes, _PDF_MEMBERS)
     pack_result = verify_pack(
         pack,

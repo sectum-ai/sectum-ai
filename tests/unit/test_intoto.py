@@ -10,6 +10,7 @@ from sectum_ai.evidence import (
     PREDICATE_TYPE,
     STATEMENT_TYPE,
     build_evidence_pack,
+    control_mappings,
     run_digest,
     to_in_toto_statement,
     verify_in_toto_statement,
@@ -165,3 +166,28 @@ def test_a_malformed_statement_is_rejected_not_crashed(statement: dict[str, obje
     # must raise a typed error, never an uncaught exception.
     with pytest.raises(EvidenceError):
         verify_in_toto_statement(statement, _pack())
+
+
+def test_a_rewritten_predicate_does_not_bind_the_pack() -> None:
+    # The predicate IS the verification result a downstream policy engine reads:
+    # finding count, metrics, control mappings, and which anchors are present. The
+    # subject digest covers only the run record, so a sidecar that keeps a truthful
+    # subject while rewriting its predicate to "0 findings, fully anchored" was
+    # itemized as binding this pack. Every predicate field is recomputable from the
+    # pack, so any divergence must be rejected.
+    manifest = _manifest()
+    pack = build_evidence_pack(_run_result(manifest), manifest, control_mappings=control_mappings())
+    honest = json.loads(json.dumps(to_in_toto_statement(pack)))
+    verify_in_toto_statement(honest, pack)  # premise: the honest sidecar verifies
+
+    forgeries: tuple[tuple[str, object], ...] = (
+        ("finding_count", 0),
+        ("anchors", {"timestamp": True, "transparency_log": True}),
+        ("metrics", dict.fromkeys(honest["predicate"]["metrics"], 0)),
+        ("scenario_hash", "forged"),
+    )
+    for key, value in forgeries:
+        forged = json.loads(json.dumps(honest))
+        forged["predicate"][key] = value
+        with pytest.raises(EvidenceError, match="predicate"):
+            verify_in_toto_statement(forged, pack)

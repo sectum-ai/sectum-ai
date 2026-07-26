@@ -54,6 +54,9 @@ def _run(*findings: Finding, run_id: str = "run-1") -> RunResult:
         finished_at=moment,
         findings=tuple(findings),
         metrics=RunMetrics(),
+        # A real run always records which probes ran; the control mappings are
+        # gated on that evidence, so a fixture without it would assert nothing.
+        probe_versions={"tenant-boundary-fetch": "0.7.1"},
     )
 
 
@@ -122,12 +125,15 @@ def test_one_observation_per_finding_with_marker_grounded_evidence() -> None:
 def test_findings_cover_every_mapped_control_and_link_observations() -> None:
     (result,) = _doc(_run(_finding("f-1")))["results"]
     findings = result["findings"]
-    # One OSCAL finding per (framework, control id) from control_mappings().
-    expected = sum(len(m.control_ids) for m in control_mappings())
+    # One OSCAL finding per (framework, control id) the RUN's evidence supports.
+    expected = sum(len(m.control_ids) for m in control_mappings(_run(_finding("f-1"))))
     assert len(findings) == expected
     target_ids = {f["target"]["target-id"] for f in findings}
     assert "CC6.1" in target_ids  # SOC 2
-    assert "Article 17" in target_ids  # GDPR erasure
+    assert "Article 25" in target_ids  # GDPR isolation
+    # The deletion controls are NOT asserted: this run carries no erasure evidence.
+    assert "Article 17" not in target_ids
+    assert "1798.105" not in target_ids
     # Every control finding links back to the lone observation.
     observation_uuid = result["observations"][0]["uuid"]
     for finding in findings:
@@ -161,7 +167,7 @@ def test_zero_findings_run_is_a_valid_tested_clean_attestation() -> None:
     (result,) = _doc(_run())["results"]
     assert result["observations"] == []
     # Controls are still present (the run tested them) and read satisfied.
-    assert len(result["findings"]) == sum(len(m.control_ids) for m in control_mappings())
+    assert len(result["findings"]) == sum(len(m.control_ids) for m in control_mappings(_run()))
     states = {f["target"]["status"]["state"] for f in result["findings"]}
     assert states == {"satisfied"}
     assert "no cross-tenant leakage was confirmed" in result["description"].lower()
