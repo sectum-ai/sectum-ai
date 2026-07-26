@@ -658,6 +658,71 @@ def test_a_judge_yes_with_a_paraphrase_span_sharing_a_marker_token_confirms() ->
     assert confirmed, "a paraphrase span tied to the marker by a shared token must confirm"
 
 
+class _DenyingJudge:
+    """A judge that always answers "no leak".
+
+    Models the cautious, flaky, or adversarially-served model - the verdict that
+    must not be able to unmake a canary which is literally present.
+    """
+
+    def judge(self, observed_text: str, marker: Marker) -> JudgeVerdict:
+        return JudgeVerdict(leak=False, rationale="denied", evidence_span="")
+
+
+def test_a_verbatim_foreign_entity_confirms_even_when_the_judge_says_no() -> None:
+    # `_exact` applies the "plaintext literally present == leak by observation"
+    # standard to HARD_CANARY only, so an ENTITY_CANARY reached the judge alone
+    # and a "no" silently downgraded a real cross-tenant leak to a candidate.
+    # A foreign entity sitting in the text is evidence, not a matter of opinion.
+    substrate = _entity_substrate("Project Zephyr 00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DenyingJudge(), 0.0)
+    text = "retrieved context: Project Zephyr 00002 renewal is at risk"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    assert confirmed, "a literally present foreign canary is a leak by observation"
+    assert confirmed[0].evidence_span == "Project Zephyr 00002"
+    assert confirmed[0].confidence == 1.0  # certainty, as _exact reports
+
+
+def test_a_verbatim_foreign_entity_survives_an_unreachable_threshold() -> None:
+    # The similarity gate ran BEFORE the judge, so a threshold above any
+    # achievable score (mis-calibration, or a hostile config) could `continue`
+    # past a verbatim canary before anything examined it. The verbatim check has
+    # to sit in front of that gate, not behind it.
+    substrate = _entity_substrate("Project Zephyr 00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DenyingJudge(), 1.5)
+    text = "retrieved context: Project Zephyr 00002 renewal is at risk"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    assert [f for f in findings if f.status is FindingStatus.CONFIRMED]
+
+
+def test_a_verbatim_match_confirms_without_quoting_a_hallucinated_span() -> None:
+    # Where the two rules meet: the canary IS present (so the finding confirms on
+    # observation), but the judge affirms citing a span it made up. The anti-
+    # fabrication backstop still governs what gets QUOTED - the signed pack shows
+    # the marker, never the invented quotation.
+    substrate = _entity_substrate("Project Zephyr 00002")
+    pipeline = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="a fabricated quotation"), 0.0
+    )
+    text = "retrieved context: Project Zephyr 00002 renewal is at risk"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    assert confirmed, "a literally present canary confirms regardless of the judge"
+    assert confirmed[0].evidence_span == "Project Zephyr 00002"
+
+
+def test_the_verbatim_rule_does_not_confirm_a_near_miss() -> None:
+    # The zero-FP premise the two tests above rest on: the rule fires on the
+    # marker being LITERALLY present, not on text that merely resembles it. A
+    # judge "no" over an observation without the canary must still not confirm.
+    substrate = _entity_substrate("Project Zephyr 00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DenyingJudge(), 0.0)
+    text = "retrieved context: the Zephyr programme renewal is at risk"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    assert not [f for f in findings if f.status is FindingStatus.CONFIRMED]
+
+
 def test_a_judge_yes_sharing_only_template_boilerplate_is_not_confirmed() -> None:
     # Zero-FP: every entity canary is "Project <codename>-<serial>", so "project"
     # is shared template boilerplate (in >=2 markers) - NOT distinctive evidence.

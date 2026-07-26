@@ -7,13 +7,14 @@ against in-memory stand-ins. The live HTTP path is exercised only opt-in.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import UUID
 
 import pytest
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
-from sectum_ai.adapters.observability.datadog import DatadogObservability
+from sectum_ai.adapters.observability.datadog import DatadogObservability, _HttpDatadogClient
 from sectum_ai.adapters.observability.helicone import HeliconeObservability
 from sectum_ai.spec import ErasureUnsupported
 
@@ -239,3 +240,107 @@ def test_datadog_http_client_wraps_a_transport_error(monkeypatch: pytest.MonkeyP
     client = _HttpDatadogClient("k", "app", base_url="http://x", tenant_tag="tenant")
     with pytest.raises(AdapterError, match="datadog request"):
         client._post("@tenant:tenant-a")
+
+
+# --- Datadog search window (the false-ERASED bound) --------------------------
+
+_AGED_SPAN: dict[str, Any] = {
+    "id": "span-1",
+    "attributes": {"custom": {"tenant": _TENANT_A.hex}, "meta": {"prompt": "hello"}},
+}
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def _window_minutes(expression: str) -> float:
+    amount = expression.removeprefix("now-")
+    return float(amount[:-1]) * {"m": 1.0, "h": 60.0, "d": 1440.0}[amount[-1]]
+
+
+def _datadog_server(
+    monkeypatch: pytest.MonkeyPatch, spans: tuple[tuple[float, dict[str, Any]], ...]
+) -> list[str]:
+    """Mock the spans-search API, honouring ``filter.from`` as the real one does.
+
+    ``spans`` pairs each span with its age in minutes. Returns the list of window
+    expressions the client actually sent, so a test can pin the request too.
+    """
+    windows: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: float) -> _FakeResponse:
+        window = json.loads(request.data)["data"]["attributes"]["filter"]["from"]
+        windows.append(str(window))
+        horizon = _window_minutes(str(window))
+        return _FakeResponse({"data": [span for age, span in spans if age <= horizon]})
+
+    monkeypatch.setattr(
+        "sectum_ai.adapters.observability.datadog.urllib.request.urlopen", fake_urlopen
+    )
+    return windows
+
+
+def test_a_span_older_than_fifteen_minutes_is_still_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The A3 erasure check reads `fetch_trace(...) is None` as "the span is gone".
+    # Datadog's own default search window is now-15m, so every span older than a
+    # quarter hour read back absent and a still-retained subject attested ERASED.
+    # Datadog erasure is retention-driven (`delete` raises ErasureUnsupported), so
+    # the horizon is inherently days: the window must outlive the data.
+    windows = _datadog_server(monkeypatch, ((60.0, _AGED_SPAN),))
+    client = _HttpDatadogClient("k", "app", base_url="http://x", tenant_tag="tenant")
+
+    hit = DatadogObservability(client).fetch_trace(_TENANT_A, "span-1")
+
+    assert hit is not None  # not erased - it is right there
+    assert windows == ["now-15d"]  # and the request says so
+
+
+def test_a_fifteen_minute_window_is_what_made_a_present_span_read_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The mechanism itself, pinned: the SAME still-present span searched with the
+    # old hardcoded window is invisible. This also proves the test above is not
+    # vacuous - the mock genuinely enforces the window rather than always
+    # returning the span.
+    _datadog_server(monkeypatch, ((60.0, _AGED_SPAN),))
+    client = _HttpDatadogClient(
+        "k", "app", base_url="http://x", tenant_tag="tenant", search_window="now-15m"
+    )
+
+    assert DatadogObservability(client).fetch_trace(_TENANT_A, "span-1") is None
+
+
+def test_the_window_widens_for_an_account_retaining_longer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 15 days is Datadog's default retention, not a universal one; an account
+    # keeping 90 days needs a window that reaches its oldest span.
+    windows = _datadog_server(monkeypatch, ((45.0 * 1440.0, _AGED_SPAN),))
+    client = _HttpDatadogClient(
+        "k", "app", base_url="http://x", tenant_tag="tenant", search_window="now-90d"
+    )
+
+    assert DatadogObservability(client).fetch_trace(_TENANT_A, "span-1") is not None
+    assert windows == ["now-90d"]
+
+
+def test_an_empty_search_window_is_rejected() -> None:
+    # An empty window would let Datadog apply its own now-15m default, silently
+    # restoring the false-ERASED bound.
+    from sectum_ai.spec import AdapterError
+
+    with pytest.raises(AdapterError, match="search_window"):
+        _HttpDatadogClient("k", "app", base_url="http://x", tenant_tag="tenant", search_window="  ")
