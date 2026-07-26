@@ -11,6 +11,13 @@ Read path (the documented Datadog spans-search API):
 tenant tag; the response is ``{"data": [{span events}]}`` whose
 ``attributes`` carry the span name + custom attributes.
 
+Every search is bounded by a time window (``search_window``, default
+``now-15d`` to match Datadog's default span retention). The bound is a
+correctness concern, not a tuning knob: a span *outside* the window reads
+back as absent, and the A3 erasure check treats an absent span as erased, so
+a window narrower than the data's age turns still-present spans into a false
+ERASED. Widen it to cover the retention actually configured on the account.
+
 Erasure: Datadog governs deletion through retention policies, not a
 programmatic per-tenant span-delete API, so ``delete`` raises
 :class:`~sectum_ai.spec.ErasureUnsupported`. The Class 11 probe records the
@@ -39,6 +46,18 @@ _SPAN_LIMIT = 1000
 
 _HTTP_TIMEOUT_S = 30.0
 """Socket timeout for a Datadog HTTP call - without it a hung server blocks the run."""
+
+DEFAULT_SEARCH_WINDOW = "now-15d"
+"""How far back a span search looks, as a Datadog relative-time expression.
+
+Datadog's search API defaults this to ``now-15m``; that default is unsafe here.
+A span older than the window returns no data, ``fetch_trace`` reports it gone,
+and the erasure probe records the tracing surface as ERASED - a still-retained
+subject attested as deleted. Datadog's own erasure is retention-driven (see
+``delete``), so the horizon is inherently days, never minutes. The default
+matches Datadog's default 15-day span retention; accounts retaining longer must
+widen it, since absence outside the window is not evidence of erasure.
+"""
 
 
 class _DatadogClient(Protocol):
@@ -79,13 +98,20 @@ class DatadogObservability(ObservabilityAdapter):
         base_url: str = "https://api.datadoghq.com",
         tenant_tag: str = "tenant",
         name: str = "datadog",
+        search_window: str = DEFAULT_SEARCH_WINDOW,
     ) -> Self:
-        """Build the live Datadog HTTP client and return the adapter."""
+        """Build the live Datadog HTTP client and return the adapter.
+
+        ``search_window`` must cover the account's span retention: spans older
+        than it read back as absent, which the erasure check cannot distinguish
+        from erased. See :data:`DEFAULT_SEARCH_WINDOW`.
+        """
         client = _HttpDatadogClient(
             api_key,
             application_key,
             base_url=base_url,
             tenant_tag=tenant_tag,
+            search_window=search_window,
         )
         return cls(client, name=name, tenant_tag=tenant_tag)
 
@@ -113,6 +139,10 @@ class DatadogObservability(ObservabilityAdapter):
         Lists the tenant's own spans (like ``search_traces``) and matches the span
         id, so another tenant's - or an erased - id returns ``None``: the by-id
         existence primitive for the A3 subject-erasure check.
+
+        ``None`` means "not found *within the configured search window*". A span
+        older than that window is indistinguishable from an erased one, so the
+        window must cover the account's retention or this reports a false ERASED.
         """
         for event in self._client.search_spans(tenant.hex):
             if str(event.get("id") or "") == trace_id:
@@ -147,10 +177,21 @@ class _HttpDatadogClient:
     """Datadog spans-search client backed by the standard-library HTTP client."""
 
     def __init__(
-        self, api_key: str, application_key: str, *, base_url: str, tenant_tag: str
+        self,
+        api_key: str,
+        application_key: str,
+        *,
+        base_url: str,
+        tenant_tag: str,
+        search_window: str = DEFAULT_SEARCH_WINDOW,
     ) -> None:
         if not api_key or not application_key:
             raise AdapterError("datadog api_key and application_key must not be empty")
+        if not search_window.strip():
+            # An empty window would let Datadog fall back to its own now-15m
+            # default, silently reintroducing the false-ERASED bound.
+            raise AdapterError("datadog search_window must not be empty")
+        self._search_window = search_window
         self._url = base_url.rstrip("/") + "/api/v2/spans/events/search"
         self._headers = {
             "DD-API-KEY": api_key,
@@ -163,7 +204,7 @@ class _HttpDatadogClient:
         body = {
             "data": {
                 "attributes": {
-                    "filter": {"query": query, "from": "now-15m", "to": "now"},
+                    "filter": {"query": query, "from": self._search_window, "to": "now"},
                     "page": {"limit": _SPAN_LIMIT},
                 },
                 "type": "search_request",

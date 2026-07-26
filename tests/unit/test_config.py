@@ -638,6 +638,28 @@ def test_build_observability_datadog_builds_from_api_and_application_keys() -> N
     assert isinstance(adapter, DatadogObservability)
 
 
+def test_build_observability_datadog_plumbs_the_search_window() -> None:
+    # The window bounds what the A3 erasure check can see: a span older than it
+    # reads back absent and attests ERASED. An account retaining longer than the
+    # default must be able to widen it from sectum-ai.yaml, so the resolver has
+    # to carry the field through to the HTTP client rather than drop it.
+    from sectum_ai.adapters.observability.datadog import DEFAULT_SEARCH_WINDOW
+
+    default = build_observability(
+        AdapterConfig(kind="datadog", api_key="dd-test-key", application_key="dd-app-key")
+    )
+    widened = build_observability(
+        AdapterConfig(
+            kind="datadog",
+            api_key="dd-test-key",
+            application_key="dd-app-key",
+            search_window="now-90d",
+        )
+    )
+    assert default._client._search_window == DEFAULT_SEARCH_WINDOW  # type: ignore[attr-defined]
+    assert widened._client._search_window == "now-90d"  # type: ignore[attr-defined]
+
+
 def test_build_model_huggingface_requires_a_base_model_id() -> None:
     # The huggingface branch validates its required fields before importing the
     # heavy transformers/peft stack, so this is deterministic in CI (where the

@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A judge's "no" could veto a cross-tenant leak that was sitting in the text.**
+  `_exact` applies the "the canary is literally present, so it leaked" standard to
+  `HARD_CANARY` only; an `ENTITY_CANARY` went through the semantic path, where the
+  LLM judge alone decided. A cautious, flaky, or hostile judge answering "no" over an
+  observation that verbatim contained another tenant's entity silently downgraded a
+  real leak to an unverified candidate, and a mis-calibrated `semantic_threshold`
+  could skip it before the judge was ever consulted. A foreign entity whose plaintext
+  is present is now confirmed on observation — ahead of the threshold gate and
+  independent of the verdict — reported at confidence `1.0`, exactly as `_exact`
+  reports a hard canary. The zero-FP rule is unchanged: near-misses and paraphrases
+  still require the judge.
+- **A hallucinated quotation could reach the signed audit pack.** `_span_traceable`
+  confirms either when the judge's cited span is traceable *or* when the marker
+  itself is present in the observation, so for a verbatim leak it returned `True`
+  whatever the judge quoted — and that unchecked span was then written to
+  `evidence_span` and rendered into the audit-pack PDF. The judge's span is now
+  quoted only when the span itself is traceable in the observation; otherwise the
+  marker plaintext is. Confirmation is unaffected — only what gets quoted.
+- **Datadog attested a still-retained subject as ERASED.** The spans-search client
+  hardcoded a 15-minute window (`"from": "now-15m"`), so any span older than that
+  read back absent — and `fetch_trace` returning `None` is exactly how the A3
+  erasure check concludes a trace is gone. Datadog erasure is retention-driven
+  (`delete` raises `ErasureUnsupported`), so the real horizon is days: a 15-minute
+  bound made the false ERASED the normal case, not an edge case. The window is now
+  configurable (`search_window` in `sectum-ai.yaml`) and defaults to `now-15d`, matching
+  Datadog's default span retention; accounts retaining longer must widen it, since
+  absence outside the window is not evidence of erasure.
+
 - **The regression gate read "not measured" as "improved".** A narrowed `--suite`
   (or a probe skipped for a missing adapter) dropped every metric that probe fed to
   zero, so `baseline --compare` / `diff` printed `[ok]

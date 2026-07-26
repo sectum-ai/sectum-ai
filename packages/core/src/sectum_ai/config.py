@@ -914,14 +914,21 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
             api_key, base_url=base_url, tenant_property=tenant_property
         )
     if config.kind == "datadog":
-        from sectum_ai.adapters.observability.datadog import DatadogObservability
+        from sectum_ai.adapters.observability.datadog import (
+            DEFAULT_SEARCH_WINDOW,
+            DatadogObservability,
+        )
 
         api_key = _resolve_secret(extras, "api_key", "api_key_env")
         application_key = _resolve_secret(extras, "application_key", "application_key_env")
         base_url = _str(extras, "base_url", "https://api.datadoghq.com")
         tenant_tag = _str(extras, "tenant_tag", "tenant")
         return DatadogObservability.connect(
-            api_key, application_key, base_url=base_url, tenant_tag=tenant_tag
+            api_key,
+            application_key,
+            base_url=base_url,
+            tenant_tag=tenant_tag,
+            search_window=_str(extras, "search_window", DEFAULT_SEARCH_WINDOW),
         )
     raise _unsupported("observability", config.kind)
 

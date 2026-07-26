@@ -726,13 +726,24 @@ class DetectionPipeline:
         # is re-embedded once per foreign marker (~Nx the HTTP calls on a real
         # embedder). The cache makes each window embed exactly once per observation.
         window_cache: dict[str, tuple[float, ...]] = {}
+        haystack = _normalize_for_match(text)
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
+            # A foreign entity whose plaintext is literally present is a leak by
+            # observation, not a judgement: the text contains another principal's
+            # canary. `_exact` applies exactly this standard to HARD_CANARY, but it
+            # does not cover ENTITY_CANARY, so a verbatim entity reached the judge
+            # alone - and a judge answering "no" (a cautious, flaky, or hostile
+            # model) silently downgraded a real cross-tenant leak to a candidate.
+            # The threshold could also skip it before the judge ever saw it.
+            needle = _normalize_for_match(marker.plaintext)
+            verbatim = bool(needle) and needle in haystack
             similarity = self._best_window_similarity(observation_tokens, marker, window_cache)
-            # The threshold gates which candidates reach the judge. With the
-            # deterministic fake providers the judge (a full marker-phrase
+            # The threshold gates which *semantic* candidates reach the judge. With
+            # the deterministic fake providers the judge (a full marker-phrase
             # match) is the binding test; the threshold becomes the real
-            # calibration knob once a production embedding model is configured.
-            if similarity < self._threshold:
+            # calibration knob once a production embedding model is configured. A
+            # verbatim match is never gated by it.
+            if not verbatim and similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
             # FP-control backstop (the engineering spec, section 6.4): a judge
@@ -743,14 +754,24 @@ class DetectionPipeline:
             # judge is primed with the marker plaintext, so a parroting or
             # hallucinating verdict would otherwise put a fabricated CONFIRMED
             # finding (and a fabricated quoted span) into the signed audit pack.
-            confirmed = leak.leak and self._span_traceable(
+            judged = leak.leak and self._span_traceable(
                 text, leak.evidence_span, marker, self._entity_boilerplate
             )
+            confirmed = verbatim or judged
+            # `_span_traceable` also confirms via the MARKER being present
+            # (branch 1), whatever the judge quoted - so it cannot decide what to
+            # QUOTE: a judge affirming a verbatim leak while citing a fabricated
+            # span would put that fabrication in the signed pack. A span is
+            # quotable only when the span itself is in the observation.
+            quotable = bool(leak.evidence_span) and _ordered_within_span(
+                _tokenize(text), _tokenize(leak.evidence_span), _MAX_INTERPOSED_TOKENS
+            )
             if confirmed:
-                # The audit pack renders the span (the PDF renderer); fall back
-                # to the marker plaintext when the judge cited none, so a
-                # confirmed leak always shows the foreign entity to the auditor.
-                evidence = leak.evidence_span or marker.plaintext
+                # The audit pack renders this span (the PDF renderer), so a
+                # confirmed leak always shows the auditor text that was really
+                # observed: the judge's quotation when it is genuinely there
+                # (richer context), otherwise the marker plaintext.
+                evidence = leak.evidence_span if judged and quotable else marker.plaintext
             elif leak.leak:
                 evidence = (
                     "judge affirmed a leak but its cited evidence is not traceable "
@@ -765,10 +786,12 @@ class DetectionPipeline:
                     surface,
                     probe_id,
                     severity=Severity.HIGH if confirmed else Severity.INFO,
-                    # Clamp defensively: a true cosine is already <= 1.0, but float
-                    # rounding can nudge it just past 1.0, which would violate
-                    # Finding.confidence's 0..1 bound.
-                    confidence=round(min(1.0, similarity), 4),
+                    # A verbatim match is certain, exactly as `_exact` reports 1.0
+                    # for a hard canary; a semantic match reports its true
+                    # similarity. Clamp defensively: a true cosine is already
+                    # <= 1.0, but float rounding can nudge it just past 1.0, which
+                    # would violate Finding.confidence's 0..1 bound.
+                    confidence=1.0 if verbatim else round(min(1.0, similarity), 4),
                     status=FindingStatus.CONFIRMED if confirmed else FindingStatus.UNVERIFIED,
                     evidence=evidence,
                 )
