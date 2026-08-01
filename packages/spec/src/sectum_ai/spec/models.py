@@ -309,6 +309,13 @@ class RunMetrics(SectumModel):
     # over-claims precision at small ``n``. ``None`` exactly when the rate is
     # ``None`` (no Class 2 steps ran). The Wilson bounds always lie in [0, 1].
     retrieval_pivot_rate_ci: tuple[float, float] | None = None
+    # A MODELLED comparison, not a measurement of the configured vector store:
+    # the sweep builds its own index and ranks by cosine over one index shared by
+    # every tenant, so it reports how much cross-tenant content each embedding
+    # model surfaces under an assumed shared-index condition. The store's real
+    # isolation is bypassed by construction. ``retrieval_pivot_rate`` above is the
+    # measured metric; a reader who conflates the two reads a simulation as a leak
+    # rate, so every renderer must label this one as modelled.
     retrieval_pivot_rate_by_model: dict[str, float] = Field(default_factory=dict)
     # Genuine residual: markers still present on a surface that *was* erased (an
     # erasure failure). Caveat counts are tracked separately so a backend with

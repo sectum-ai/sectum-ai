@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The signed audit pack promised zero false positives.** Its scope/methodology
+  narrative told the auditor that "confirmed findings carry no false positives" —
+  a guarantee the pipeline cannot make. Marker-traceability bounds confirmations
+  to the manifest's own markers; it does not prove each one correct. An exact
+  canary match is decided by the observation itself, but a semantic confirmation
+  also rests on the configured judge, so an absolute claim overstated the weaker
+  of the two paths. The paragraph now states the basis — confirmation requires the
+  observed content to trace back to a specific manifest marker, anything
+  untraceable is recorded as unverified — and describes confirmed findings as
+  manifest-grounded rather than error-free. Both PDF engines share this text, and
+  a test now fails if the absolute claim returns. `docs/glossary.md` carried the
+  same conflation, plus a second inaccuracy: it said unverified findings "come
+  from the semantic or judge step", which stopped being true when a semantic match
+  that traces to a marker began confirming. The distinction is traceability, not
+  which step fired.
+- **A modelled retrieval gradient printed as a measured leak rate.** The
+  per-embedding-model sweep builds its *own* index and ranks by cosine over one
+  index shared by every tenant — it never queries the configured vector store, so
+  the store's real isolation (namespaces, filters, ACLs) is bypassed by
+  construction. It nonetheless printed as an indented `retrieval-pivot rate
+  [model]: 87%` directly under the genuinely measured `retrieval-pivot rate`,
+  reading as that metric broken down by model. It now prints under its own
+  heading naming the condition, and `RunMetrics.retrieval_pivot_rate_by_model` —
+  which travels inside the signed pack and is diffed by the regression gate — is
+  documented as modelled, the one metric there that carried no such caveat. The
+  number is unchanged and still useful: it measures the embedding model, not the
+  store.
+
+### Fixed
+
 - **A judge's "no" could veto a cross-tenant leak that was sitting in the text.**
   `_exact` applies the "the canary is literally present, so it leaked" standard to
   `HARD_CANARY` only; an `ENTITY_CANARY` went through the semantic path, where the

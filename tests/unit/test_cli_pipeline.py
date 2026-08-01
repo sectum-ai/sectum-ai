@@ -44,6 +44,15 @@ def test_full_cli_sweep_records_per_model_rpr(tmp_path: Path) -> None:
     assert set(rates) == {"hash-32", "hash-256"}
     # the stronger (higher-dim, fewer-collision) model surfaces more cross-tenant pivots
     assert rates["hash-32"] < rates["hash-256"]
+    # The gradient is MODELLED - the sweep builds its own index and ranks by cosine
+    # over one index shared by every tenant, never touching the configured store.
+    # It printed as an indented "retrieval-pivot rate [model]", which reads as the
+    # measured rate broken down by model. It must be labelled as modelled, and must
+    # not reuse the measured metric's label.
+    assert "embedding-model gradient (modelled shared index, not the configured store):" in (
+        probe.output
+    )
+    assert "retrieval-pivot rate [" not in probe.output
 
 
 def test_seed_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:

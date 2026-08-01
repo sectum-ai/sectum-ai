@@ -106,10 +106,14 @@ _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "tenant's session against the configured surfaces; this pack attests the "
     "isolation of those surfaces under the run's scenario.",
     "Each observation passes a layered detector - exact canary match, then "
-    "semantic similarity, then a calibrated judge. A confirmed finding is a "
-    "marker owned by one tenant observed in another, traceable to the manifest, "
-    "so confirmed findings carry no false positives; a candidate that cannot be "
-    "tied to a manifest marker is recorded as unverified rather than confirmed.",
+    "semantic similarity, then a calibrated judge. Confirmation requires the "
+    "observed content to trace back to a specific marker in the ground-truth "
+    "manifest, so a candidate that cannot be tied to a manifest marker is "
+    "recorded as unverified rather than confirmed. An exact canary match is "
+    "decided by the observation itself; a semantic match also depends on the "
+    "configured judge. Confirmed findings are therefore manifest-grounded - "
+    "they are not asserted to be free of error, and this pack does not rate "
+    "their exploitability.",
     "Scope is limited to the probes and surfaces exercised in this run, against "
     "the test condition fixed by the manifest hash below. Sectum verifies and "
     "attests; it does not remediate - findings carry remediation pointers, not "
