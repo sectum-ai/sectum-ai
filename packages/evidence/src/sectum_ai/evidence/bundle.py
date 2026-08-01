@@ -53,6 +53,15 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _refused(name: str, detail: str) -> VerificationResult:
+    """A bundle refused outright, before any member could be checked.
+
+    Refusals happen before the pack is read, so ``anchored`` keeps its default:
+    a refused bundle asserts nothing about anchoring.
+    """
+    return VerificationResult(passed=False, checks=(Check(name, False, detail),))
+
+
 def _first_member(member_bytes: Mapping[str, bytes], names: tuple[str, ...]) -> bytes | None:
     """Return the bytes of the first present member among ``names``, else ``None``."""
     for name in names:
@@ -129,25 +138,36 @@ def verify_bundle(
                 # A hostile ZIP can carry two members with the same name; readers
                 # disagree on which wins, so a duplicate-name archive cannot
                 # attest "exactly the manifest's member set" - refuse it outright.
-                return VerificationResult(
-                    passed=False,
-                    checks=(
-                        Check(
-                            "bundle-members",
-                            False,
-                            "the archive contains duplicate member names; readers "
-                            "disagree on which copy wins, so the bundle is refused",
-                        ),
-                    ),
+                return _refused(
+                    "bundle-members",
+                    "the archive contains duplicate member names; readers "
+                    "disagree on which copy wins, so the bundle is refused",
                 )
             if MANIFEST_MEMBER not in names:
-                return VerificationResult(
-                    passed=False,
-                    checks=(Check("bundle-manifest", False, f"missing {MANIFEST_MEMBER}"),),
-                )
+                return _refused("bundle-manifest", f"missing {MANIFEST_MEMBER}")
             manifest = json.loads(archive.read(MANIFEST_MEMBER))
+            # Every field below is attacker-controlled JSON, so its SHAPE is a
+            # claim to check, not a fact to assume. Reading them unchecked let a
+            # hostile bundle crash verification - `[1,2,3]` reached `.get`,
+            # `"members": null` reached `sorted`, a list `evidence` reached a dict
+            # lookup - so `verify` exited 1 on a traceback instead of 4
+            # (VERIFICATION FAILED). A tamper-evidence tool that crashes on a
+            # hostile artifact has not refused it: a caller keying on exit 4 reads
+            # the crash as the tool breaking, not as the bundle being bad.
+            if not isinstance(manifest, dict):
+                return _refused("bundle-manifest", f"{MANIFEST_MEMBER} is not a JSON object")
             evidence_member = manifest.get("evidence", EVIDENCE_MEMBER)
-            member_digests: dict[str, str] = manifest.get("members", {})
+            if not isinstance(evidence_member, str):
+                return _refused(
+                    "bundle-manifest",
+                    f"{MANIFEST_MEMBER} names a non-string evidence member",
+                )
+            member_digests = manifest.get("members", {})
+            if not isinstance(member_digests, dict):
+                return _refused(
+                    "bundle-manifest",
+                    f"{MANIFEST_MEMBER} carries a non-object member-digest map",
+                )
             member_bytes = {name: archive.read(name) for name in names if name != MANIFEST_MEMBER}
     except (zipfile.BadZipFile, KeyError, ValueError) as error:
         return VerificationResult(
