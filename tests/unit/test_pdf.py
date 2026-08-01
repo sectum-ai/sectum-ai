@@ -208,6 +208,23 @@ def test_scope_methodology_states_limits() -> None:
     assert "test coverage, not legal certification" in text
 
 
+def test_scope_methodology_does_not_promise_zero_false_positives() -> None:
+    # This narrative is rendered into the SIGNED pack an auditor reads. It stated
+    # "confirmed findings carry no false positives" - a guarantee the pipeline
+    # cannot make: an exact canary match is decided by the observation, but a
+    # semantic confirmation also rests on the configured judge, and the
+    # marker-traceability control bounds confirmations to the manifest's own
+    # markers rather than proving each one correct. State the basis, claim no more.
+    text = " ".join(_SCOPE_METHODOLOGY).lower()
+    assert "no false positives" not in text
+    assert "carry no false" not in text
+    # ...and the honest basis is still stated, so the paragraph did not simply
+    # lose the FP-control story it exists to explain.
+    assert "trace back to a specific marker" in text
+    assert "manifest-grounded" in text
+    assert "unverified rather than confirmed" in text
+
+
 # --- Retrieval-Pivot Rate confidence interval (Class 2 headline metric) -------
 
 

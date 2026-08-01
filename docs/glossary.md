@@ -63,9 +63,11 @@ See the [attack catalog overview](attack-catalog/index.md).
 A single recorded leak: `{finding_id, probe_id, severity, confidence,
 status, owner_principal, observed_in_principal, marker_id, evidence_span,
 surface, owasp_llm, atlas[], nist[], remediation_pointer}`. **Confirmed**
-findings are manifest-traceable (zero false positives); **unverified**
-findings come from the semantic or judge step and are not tied to a
-manifest marker.
+findings trace back to a specific manifest marker; **unverified** findings
+are candidates the detector could not tie to one, recorded as evidence
+rather than asserted as leaks. The distinction is traceability, not which
+detection step fired — a semantic match that traces to a marker confirms,
+and an exact match is decided by the observation alone.
 
 ## Evidence pack
 The deliverable of a Sectum AI run: a tamper-evident bundle that an auditor
