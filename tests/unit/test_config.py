@@ -134,6 +134,42 @@ def test_load_config_rejects_an_unknown_evidence_timestamper(tmp_path: Path) -> 
         load_config(path)
 
 
+@pytest.mark.parametrize("raw", ["1.5", "99", "-5", "-1.0", ".nan", ".inf", "-.inf"])
+def test_load_config_rejects_a_semantic_threshold_outside_the_cosine_range(
+    tmp_path: Path, raw: str
+) -> None:
+    # A cosine similarity lives in [0, 1] here, so a threshold above 1.0 is
+    # unsatisfiable: it switches the semantic detector OFF. Every candidate is
+    # skipped BEFORE the judge, so a paraphrased cross-tenant leak is not recorded
+    # even as an unverified candidate - and the run still signs a pack asserting
+    # isolation. NaN is worse than unsatisfiable: every `<` against it is False,
+    # so the gate inverts and admits everything. Unbounded, one mistyped digit
+    # silently disabled a detector with no trace in the evidence.
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_text(f"detection:\n  semantic_threshold: {raw}\n")
+    with pytest.raises(ConfigError, match="invalid config"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("raw,expected", [("0.0", 0.0), ("1.0", 1.0), ("0.62", 0.62)])
+def test_load_config_keeps_every_in_range_semantic_threshold(
+    tmp_path: Path, raw: str, expected: float
+) -> None:
+    # The bound must not cost a legitimate setting. 0.0 admits every candidate to
+    # the judge (erring toward surfacing), 1.0 demands an exact match, and the
+    # endpoints are inclusive.
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_text(f"detection:\n  semantic_threshold: {raw}\n")
+    assert load_config(path).detection.semantic_threshold == expected
+
+
+def test_load_config_still_accepts_the_auto_semantic_threshold(tmp_path: Path) -> None:
+    # The bound is applied to the float arm only; the `auto` literal still parses.
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_text("detection:\n  semantic_threshold: auto\n")
+    assert load_config(path).detection.semantic_threshold == "auto"
+
+
 # --- adapter resolver -------------------------------------------------------
 
 

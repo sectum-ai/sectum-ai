@@ -29,7 +29,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
@@ -180,7 +180,18 @@ class DetectionConfig(BaseModel):
     # conservative 0.62 default with a logged warning for an unknown model. The
     # default suits the fake embedder; raise it (or set "auto") once a real
     # embedding model is configured - a stronger model surfaces more (the spec §7).
-    semantic_threshold: float | Literal["auto"] = 0.62
+    #
+    # Bounded to the range a cosine similarity can actually occupy. Unbounded, a
+    # threshold above 1.0 was accepted and silently switched the semantic detector
+    # OFF: no similarity can clear it, so every candidate was skipped before the
+    # judge, a paraphrased cross-tenant leak was not recorded even as an unverified
+    # candidate, and the run still signed a pack asserting isolation. NaN was worse
+    # than unsatisfiable - it inverted the gate, since every `<` against NaN is
+    # False - and inf/-inf were accepted too. A gate the operator can disable by
+    # typo, with no trace in the evidence, is the anti-over-claim guarantee's
+    # blind spot. 0.0 stays legal: it admits every candidate to the judge, which
+    # errs toward surfacing rather than away from it.
+    semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)] | Literal["auto"] = 0.62
     # Detection deployment mode. "hosted" (default) permits hosted embedder/judge
     # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC / "no data
     # leaves the box" guarantee: it fails fast if any configured embedder or judge

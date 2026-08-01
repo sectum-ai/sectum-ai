@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A one-digit config typo could silently switch the semantic detector off.**
+  `detection.semantic_threshold` accepted any float — `1.5`, `99`, `-5`, and even
+  `nan`/`inf`. A cosine similarity lives in `[0, 1]`, so anything above `1.0` is
+  unsatisfiable: every candidate was skipped *before* the judge, a paraphrased
+  cross-tenant leak was not recorded even as an unverified candidate, and the run
+  still signed a pack asserting isolation. `nan` was worse than unsatisfiable — every
+  `<` against it is False, so the gate inverted and admitted everything. The field is
+  now bounded to `[0.0, 1.0]` and out-of-range values are rejected at config load.
+  `0.0` stays legal (it admits every candidate to the judge, erring toward
+  surfacing), as does `auto`. Related to the fix in #270, which made a *verbatim*
+  canary bypass this gate entirely — that mitigation does not cover the semantic
+  path, which is precisely what the gate governs.
+
 - **A hostile evidence bundle crashed `verify` instead of being refused.** Every
   field of `bundle-manifest.json` is attacker-controlled JSON, but its *shape* was
   assumed rather than checked: a manifest that was a JSON array reached `.get`, a
