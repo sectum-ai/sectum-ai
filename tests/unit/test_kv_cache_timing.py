@@ -283,3 +283,48 @@ def test_welch_handles_a_single_sample_group() -> None:
     # crash.
     t_one, df_one, se_one = _welch([5.0], [9.0])
     assert math.isinf(t_one) and df_one == 0.0 and se_one == 0.0
+
+
+class _DriftingModel(FakeModel):
+    """A model with NO prefix cache whose latency creeps up by a fixed step.
+
+    There is no side channel to find. The drift stands in for anything that
+    changes during a run - thermal throttling, CPU frequency scaling, a noisy
+    neighbour, GC pressure - which is ambient on any real machine.
+    """
+
+    def __init__(self, slope_ms: float) -> None:
+        super().__init__(prefix_cache=False)
+        self._slope = slope_ms
+        self._calls = 0
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        self._calls += 1
+        return 100.0 + self._slope * self._calls
+
+
+def test_a_drifting_machine_does_not_manufacture_a_side_channel() -> None:
+    # Timing all primed trials and then all control trials put every bit of a
+    # run's drift onto whichever block ran second, and the t-test read that offset
+    # as a cross-tenant side channel. It was not marginal: at 0.01 ms per call all
+    # 12 tenant pairs were flagged, each with an identical mean gap of
+    # _TRIALS x slope - the block-size artifact itself, not a per-pair signal.
+    # Inventing a cross-tenant finding out of machine noise is the worst direction
+    # for a signed evidence pack to be wrong in, so the arms are now interleaved.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    for slope in (0.01, 0.1, 1.0):
+        report = KvCacheTimingProbe(substrate, model=_DriftingModel(slope)).run()
+        assert report.findings == (), f"drift of {slope} ms/call invented a finding"
+        # Alternating which arm is timed first makes the two arms' mean measurement
+        # positions equal, so a LINEAR drift cancels exactly rather than shrinking.
+        assert all(signal.mean_gap_ms == 0.0 for signal in report.signals)
+
+
+def test_interleaving_still_detects_a_real_shared_cache() -> None:
+    # The premise the test above rests on: the drift fix must not have bought its
+    # zero false positives by blunting the probe. A genuine shared prefix cache is
+    # still caught, on every ordered tenant pair.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert len(report.findings) == len(report.signals)
+    assert all(signal.mean_gap_ms > 0.0 for signal in report.signals)

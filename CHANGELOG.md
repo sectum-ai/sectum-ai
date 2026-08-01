@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A drifting machine manufactured KV-cache side-channel findings.** The Class 5
+  timing probe measured all primed trials and then all control trials, so every bit
+  of drift during a run — thermal throttling, CPU frequency scaling, a noisy
+  neighbour, GC — landed on whichever block ran second, and Welch's t-test read the
+  offset as a cross-tenant side channel. Against a model with **no prefix cache at
+  all**, so no channel to find, a drift of 0.01 ms per call flagged all 12 tenant
+  pairs, each with an identical mean gap of `_TRIALS × slope` — the block-size
+  artifact itself rather than a per-pair signal. The two arms are now interleaved,
+  alternating which is timed first, so their mean measurement positions are equal
+  and a linear drift cancels exactly (`_TRIALS` must stay even for that). A genuine
+  shared prefix cache is still caught on every pair.
+- **A memorized single-token subject was attested ERASED.** The A3 subject-erasure
+  model probe splits a fingerprint in half and prompts with the leading part, but it
+  split on whitespace and gave up below two tokens. A subject fingerprint is often
+  one token — an email address, an account number, a national id — which is exactly
+  what an erasure request turns on. The whole-phrase detector never matches on a real
+  autoregressive model (it continues rather than echoes, as the code already
+  documented), so both detectors were inert and the model surface reported no
+  residual for a subject the model still regurgitates on demand: a false erasure
+  claim in the GDPR wedge. A single-token fingerprint is now cut mid-token —
+  prompting `alice.brown@exa` and seeing `mple.com` completed is the same extraction
+  signal, and the standard probe for a memorized secret.
+
 - **A one-digit config typo could silently switch the semantic detector off.**
   `detection.semantic_threshold` accepted any float — `1.5`, `99`, `-5`, and even
   `nan`/`inf`. A cosine similarity lives in `[0, 1]`, so anything above `1.0` is

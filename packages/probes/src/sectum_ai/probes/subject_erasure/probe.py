@@ -342,11 +342,27 @@ class SubjectErasureProbe:
         if phrase.casefold() in model.infer(target, phrase).casefold():
             return True
         tokens = phrase.split()
-        if len(tokens) < 2:
-            return False
-        cut = max(1, len(tokens) // 2)
-        prefix = " ".join(tokens[:cut])
-        suffix = " ".join(tokens[cut:]).casefold()
+        if len(tokens) >= 2:
+            cut = max(1, len(tokens) // 2)
+            prefix = " ".join(tokens[:cut])
+            suffix = " ".join(tokens[cut:]).casefold()
+        else:
+            # A single-token fingerprint - an email address, account number, or
+            # national id, which is exactly what a subject-erasure request turns
+            # on - has no word boundary to cut at. Giving up here skipped (2)
+            # entirely and returned "no residual", but (1) is documented above to
+            # never match on a real autoregressive model: it continues rather than
+            # echoes, so the whole-phrase prompt is stripped from the completion.
+            # Both detectors were therefore inert, and the model surface attested
+            # ERASED for a subject the model still regurgitates on demand. Cut
+            # mid-token instead - prompting "alice.brown@exa" and seeing
+            # "mple.com" completed is the same extraction signal, and the standard
+            # probe for a memorized secret.
+            if len(phrase) < 2:
+                return False
+            cut = len(phrase) // 2
+            prefix = phrase[:cut]
+            suffix = phrase[cut:].casefold()
         return bool(suffix) and suffix in model.infer(target, prefix).casefold()
 
     @staticmethod
