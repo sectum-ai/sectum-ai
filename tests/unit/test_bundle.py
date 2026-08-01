@@ -4,11 +4,15 @@ import io
 import json
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from sectum_ai.cli.app import app
 from sectum_ai.evidence import (
     EVIDENCE_MEMBER,
+    MANIFEST_MEMBER,
     RUN_MEMBER,
     Check,
     VerificationResult,
@@ -218,3 +222,50 @@ def test_a_forged_bundled_run_record_fails_verification() -> None:
     assert not result.passed
     check = next(c for c in result.checks if c.name == "bundled-run")
     assert not check.ok and "altered or replaced" in check.detail
+
+
+def _bundle_with_manifest(manifest_obj: object) -> bytes:
+    """A ZIP whose bundle-manifest.json is ``manifest_obj``, plus one other member."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(MANIFEST_MEMBER, json.dumps(manifest_obj))
+        archive.writestr(EVIDENCE_MEMBER, b"{}")
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    "manifest_obj",
+    [
+        [1, 2, 3],  # manifest is a list -> reached .get
+        "hello",  # manifest is a string -> reached .get
+        7,  # manifest is a number -> reached .get
+        {"members": None},  # -> reached sorted(None)
+        {"members": "evidence.json"},  # -> iterated a string's characters
+        {"members": ["evidence.json"]},  # -> a list where a mapping was assumed
+        {"members": {}, "evidence": ["evidence.json"]},  # -> unhashable dict key
+        {"members": {}, "evidence": None},
+    ],
+)
+def test_a_hostile_bundle_manifest_is_refused_not_crashed(manifest_obj: object) -> None:
+    # bundle-manifest.json is attacker-controlled JSON, so its SHAPE is a claim to
+    # check. Read unchecked, these shapes raised AttributeError/TypeError out of
+    # verify_bundle: `sectum-ai verify` then exited 1 on a traceback instead of 4
+    # (VERIFICATION FAILED). A tamper-evidence tool that crashes on a hostile
+    # artifact has not refused it - a caller keying on exit 4 reads the crash as
+    # the tool breaking rather than the bundle being bad. Same standard the in-toto
+    # sidecar already holds: a malformed input raises a typed error, never an
+    # uncaught exception.
+    result = verify_bundle(_bundle_with_manifest(manifest_obj))
+    assert not result.passed
+    assert not result.anchored  # a refused bundle asserts nothing about anchoring
+    assert any(not check.ok for check in result.checks)
+
+
+def test_a_refused_bundle_exits_four_not_a_traceback(tmp_path: Path) -> None:
+    # The exit code IS the contract for a CI gate or delivery pipeline: 4 means the
+    # evidence failed verification, and anything else means the tool did not answer.
+    bundle = tmp_path / "evidence-bundle.zip"
+    bundle.write_bytes(_bundle_with_manifest([1, 2, 3]))
+    result = CliRunner().invoke(app, ["verify", str(bundle)])
+    assert result.exit_code == 4
+    assert "VERIFICATION FAILED" in result.output

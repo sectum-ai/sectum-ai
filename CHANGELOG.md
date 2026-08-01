@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A hostile evidence bundle crashed `verify` instead of being refused.** Every
+  field of `bundle-manifest.json` is attacker-controlled JSON, but its *shape* was
+  assumed rather than checked: a manifest that was a JSON array reached `.get`, a
+  `"members": null` reached `sorted()`, and a list-valued `"evidence"` reached a
+  dict lookup. Each raised an uncaught `AttributeError`/`TypeError` out of
+  `verify_bundle`, so `sectum-ai verify` exited **1 on a traceback instead of 4
+  (VERIFICATION FAILED)**. For a tamper-evidence tool that distinction is the
+  contract: a CI gate or delivery pipeline keying on exit 4 reads a crash as the
+  tool breaking, not as the bundle being bad — and any service verifying uploaded
+  bundles had a one-line denial of service. The three shapes are now validated and
+  refused with a typed `bundle-manifest` check, the same standard the in-toto
+  sidecar already held (a malformed input raises a typed error, never an uncaught
+  exception). Detection of altered, missing, unlisted, and duplicate members is
+  unchanged.
 - **The signed audit pack promised zero false positives.** Its scope/methodology
   narrative told the auditor that "confirmed findings carry no false positives" —
   a guarantee the pipeline cannot make. Marker-traceability bounds confirmations
