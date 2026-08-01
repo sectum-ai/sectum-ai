@@ -36,9 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documented as modelled, the one metric there that carried no such caveat. The
   number is unchanged and still useful: it measures the embedding model, not the
   store.
-
-### Fixed
-
+- **A mixed embedding-model config silently dropped models from that gradient.**
+  The two-model guard counted *configured* names, not comparable ones. `fake-*`
+  names carry a modelled recall rather than real vectors, so they cannot share a
+  sweep with a real provider — but they were excluded with nothing said, so an
+  operator who configured three models saw a two-model gradient and no indication
+  the third was missing. A config with exactly one real name among fakes was worse:
+  it produced a single-entry "gradient" — one model compared against nothing,
+  recorded into the run's metrics as though it were a sweep. Excluded names are now
+  named, and a gradient needs two or more real models or it is not recorded at all.
+  The resolver is also consulted once per name rather than twice, so an `st:` spec
+  no longer constructs (and potentially downloads) its model twice.
 - **A judge's "no" could veto a cross-tenant leak that was sitting in the text.**
   `_exact` applies the "the canary is literally present, so it leaked" standard to
   `HARD_CANARY` only; an `ENTITY_CANARY` went through the semantic path, where the

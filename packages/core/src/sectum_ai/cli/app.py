@@ -513,19 +513,43 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
     metric that measures the configured store. Keep the two distinct wherever this
     is rendered, or a modelled gradient reads as a measured leak rate.
 
-    Needs two or more configured embedding models to be a comparison. Names that
-    resolve to *real* providers (``st:``/``openai:``/``hash-``) run the genuine
-    cosine sweep, so the gradient reflects real embedding strength and is recorded
-    whatever the store. Legacy ``fake-*`` names fall back to the deterministic
-    recall illustration, whose numbers mean nothing outside the in-memory
-    ``FakeVectorStore`` and are therefore omitted from a live run's evidence.
+    Needs two or more *comparable* models to be a comparison. Names that resolve to
+    real providers (``st:``/``openai:``/``hash-``) run the genuine cosine sweep, so
+    the gradient reflects real embedding strength and is recorded whatever the
+    store. Legacy ``fake-*`` names have no real vectors, only a modelled recall, so
+    they cannot share a sweep with a real provider: a mixed config drops them and
+    says so, rather than silently reporting a gradient over fewer models than were
+    configured. All-fake falls back to the deterministic recall illustration, whose
+    numbers mean nothing outside the in-memory ``FakeVectorStore`` and are therefore
+    omitted from a live run's evidence.
     """
     names = substrate.scenario.embedding_models
     if len(names) <= 1:
         return {}
-    real = [model for name in names if (model := resolve_embedding_model(name)) is not None]
-    if real:
+    # Resolve once: a `st:` spec constructs (and may download) a model, so the
+    # earlier two-pass form would have paid that twice.
+    resolved = [(name, resolve_embedding_model(name)) for name in names]
+    real = [model for _, model in resolved if model is not None]
+    modelled_only = [name for name, model in resolved if model is None]
+    if real and modelled_only:
+        # Dropping these was silent: an operator who configured 3 models could be
+        # shown a 2-model gradient with nothing saying the third was excluded.
+        typer.echo(
+            f"warning: {', '.join(untrusted(name) for name in modelled_only)} "
+            "excluded from the embedding-model gradient - fake-* names carry a "
+            "modelled recall, not real vectors, so they cannot be compared "
+            "against a real provider"
+        )
+    if len(real) > 1:
         return embedding_provider_sweep(substrate, real)
+    if real:
+        # One real model is not a gradient. Emitting it produced a single-entry
+        # "comparison" from a config that asked for several.
+        typer.echo(
+            "warning: no embedding-model gradient recorded - a comparison needs "
+            "two or more real embedding models, and only one was configured"
+        )
+        return {}
     if isinstance(vector, FakeVectorStore):
         return embedding_model_sweep(substrate, names)
     return {}

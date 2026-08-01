@@ -1,5 +1,7 @@
 """Tests for the Class 2 embedding-model sweep (the engineering spec, section 7)."""
 
+import pytest
+
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.baseline import compare_metrics
 from sectum_ai.cli.app import _per_model_rpr
@@ -72,3 +74,29 @@ def test_per_model_rpr_falls_back_to_the_recall_illustration_for_fake_names() ->
 def test_per_model_rpr_is_empty_for_a_single_model() -> None:
     substrate = build_substrate(_scenario_with_models("hash-256"))
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
+
+
+def test_a_mixed_config_says_which_models_it_dropped(capsys: pytest.CaptureFixture[str]) -> None:
+    # `fake-*` names carry a modelled recall, not real vectors, so they cannot be
+    # compared against a real provider - but they were dropped SILENTLY. An
+    # operator who configured three models saw a two-model gradient with nothing
+    # saying the third was excluded, which is the config not being honoured
+    # without being told.
+    substrate = build_substrate(_scenario_with_models("hash-32", "hash-256", "fake-mini"))
+    rates = _per_model_rpr(substrate, FakeVectorStore())
+    assert set(rates) == {"hash-32", "hash-256"}  # the real pair still compares
+    output = capsys.readouterr().out
+    assert "fake-mini" in output
+    assert "excluded from the embedding-model gradient" in output
+
+
+def test_one_real_model_among_fakes_is_not_reported_as_a_gradient(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The two-model guard counted CONFIGURED names, not comparable ones, so this
+    # config produced a single-entry "gradient" - a comparison of one model
+    # against nothing, recorded into the run's metrics as if it were a sweep.
+    substrate = build_substrate(_scenario_with_models("hash-256", "fake-mini"))
+    assert _per_model_rpr(substrate, FakeVectorStore()) == {}
+    output = capsys.readouterr().out
+    assert "two or more real embedding models" in output
