@@ -32,7 +32,9 @@ from sectum_ai.adapters import ModelAdapter
 from sectum_ai.spec import Finding, FindingStatus, Severity, Substrate, Surface
 
 # Trials per condition. Enough samples that the jitter noise floor is stable and
-# the t-test has ample degrees of freedom.
+# the t-test has ample degrees of freedom. Must stay EVEN: `_measure` alternates
+# which arm it times first, and only an even count leaves the two arms with equal
+# mean measurement positions, which is what makes a linear drift cancel exactly.
 _TRIALS = 24
 # Cohen's d: 0.8 is the conventional "large effect" boundary. A timing gap above
 # it stands clear of the per-prompt jitter noise floor (practical significance).
@@ -277,14 +279,35 @@ class KvCacheTimingProbe:
         return KvCacheTimingReport(signals=tuple(signals), findings=tuple(findings))
 
     def _measure(self, owner: UUID, observer: UUID, prefix: str) -> TimingSignal:
-        primed = [
-            self._model.measure_latency(observer, f"{prefix} probe {trial}")
-            for trial in range(_TRIALS)
-        ]
-        control = [
-            self._model.measure_latency(observer, f"unrelated-{observer.hex[:8]} probe {trial}")
-            for trial in range(_TRIALS)
-        ]
+        # Interleave the two arms, alternating which is measured first, instead of
+        # timing all primed trials and then all control trials.
+        #
+        # Block ordering confounded the comparison with anything that drifts during
+        # the run - thermal throttling, CPU frequency scaling, a noisy neighbour, GC.
+        # Every bit of that drift landed on whichever block ran second, and the
+        # t-test read the resulting offset as a side channel. It is not a small
+        # effect: against a model with NO prefix cache, so no channel to find, a
+        # drift of 0.01 ms per call flagged all 12 tenant pairs, each with an
+        # identical mean gap of 24 x 0.01 ms - the block-size artifact itself.
+        # Manufacturing a cross-tenant finding out of ambient machine noise is the
+        # worst direction for a signed evidence pack to be wrong in.
+        #
+        # Alternating (ABBA rather than ABAB) makes the two arms' mean measurement
+        # positions equal, so a linear drift cancels exactly rather than merely
+        # shrinking - which is why _TRIALS must stay even. Higher-order drift (a GC
+        # pause mid-run) is damped, not eliminated; the Bonferroni-corrected alpha
+        # and the effect-size floor remain the guards against that.
+        primed: list[float] = []
+        control: list[float] = []
+        for trial in range(_TRIALS):
+            primed_prompt = f"{prefix} probe {trial}"
+            control_prompt = f"unrelated-{observer.hex[:8]} probe {trial}"
+            if trial % 2 == 0:
+                primed.append(self._model.measure_latency(observer, primed_prompt))
+                control.append(self._model.measure_latency(observer, control_prompt))
+            else:
+                control.append(self._model.measure_latency(observer, control_prompt))
+                primed.append(self._model.measure_latency(observer, primed_prompt))
         # The side channel makes the primed (cache-hit) prompt faster, so the gap
         # is control minus primed; a positive gap in the expected direction.
         t_statistic, df, std_error = _welch(control, primed)

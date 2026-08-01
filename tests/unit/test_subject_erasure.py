@@ -499,3 +499,53 @@ def test_subject_erasure_search_not_covered_without_fingerprints() -> None:
     )
     assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.NOT_COVERED
     assert Surface.SEARCH_INDEX not in {s.surface for s in report.surfaces}
+
+
+class _MemorizingModel(FakeModel):
+    """A real autoregressive model: it CONTINUES a prompt, it never echoes it.
+
+    It has memorized ``secret``, so a prompt that is a proper prefix of it comes
+    back completed with the remainder - the textbook extraction signal.
+    """
+
+    def __init__(self, secret: str) -> None:
+        super().__init__()
+        self._secret = secret
+
+    def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+        if prompt and self._secret.startswith(prompt) and prompt != self._secret:
+            return self._secret[len(prompt) :]
+        return "I cannot help with that."
+
+
+def test_a_memorized_single_token_subject_is_not_attested_erased() -> None:
+    # A subject fingerprint is often ONE token - an email address, an account
+    # number, a national id - which is exactly what an erasure request turns on.
+    # The prefix-continuation detector split on whitespace and gave up below two
+    # tokens, while the whole-phrase detector never matches on a real model (it
+    # continues rather than echoes). Both were inert, so the model surface
+    # attested ERASED for a subject the model still regurgitates on demand - a
+    # false erasure claim in the GDPR wedge. Cutting mid-token catches it.
+    target = UUID(int=0xA)
+    for secret in ("alice.brown@example.com", "ACCT-90013455512"):
+        model = _MemorizingModel(secret)
+        # premise: the model demonstrably still holds it
+        half = len(secret) // 2
+        assert model.infer(target, secret[:half]) == secret[half:]
+        assert SubjectErasureProbe._content_recalled(model, target, secret)
+
+
+def test_a_forgotten_single_token_subject_still_reads_clean() -> None:
+    # The zero-FP side: cutting mid-token must not turn every single-token
+    # fingerprint into a residual. A model that memorized something else answers
+    # nothing useful, and the surface stays clean.
+    target = UUID(int=0xA)
+    model = _MemorizingModel("someone.else@example.com")
+    assert not SubjectErasureProbe._content_recalled(model, target, "alice.brown@example.com")
+
+
+def test_a_one_character_fingerprint_has_nothing_to_split() -> None:
+    # Degenerate input must not crash or claim a residual: there is no prefix to
+    # prompt with, so the honest answer is the whole-phrase test's result.
+    target = UUID(int=0xA)
+    assert not SubjectErasureProbe._content_recalled(_MemorizingModel("x"), target, "x")
