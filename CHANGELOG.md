@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-02
+
+Documentation only — no code, no behaviour change, no effect on an evidence pack.
+Three places where the docs described the tool inaccurately, found by auditing the
+docs surface against the code after 0.8.0's fifteen fixes.
+
 ### Fixed
 
 - **Docs claimed the KV-cache probe ran half as many trials as it does, at a
