@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs claimed the KV-cache probe ran half as many trials as it does, at a
+  significance bar 12× looser.** The Class 5 example README described "24 paired
+  trials per tenant pair, half primed and half control" — the probe runs 24 per
+  *condition*, so 48 timed prompts per pair (`run.sh` in the same directory said
+  "per condition" and was right; the two contradicted each other). The README and
+  `run.sh` both quoted the gate as `p < 0.01` while the probe applies a
+  Bonferroni-corrected level — `0.01` divided by the number of ordered tenant-pair
+  comparisons, so `p < 0.00083` on the four-tenant demo. Both now state the real
+  figures, and the README documents why the two conditions are interleaved.
+- **Docs overstated the detection guarantee and described a superseded mechanism.**
+  `substrate.md` and `vs-deepteam.md` headlined "zero false positives by
+  construction"; the property the tests actually pin is that a confirmation ties
+  back to a manifest marker, which bounds confirmations rather than proving each
+  one correct. `substrate.md` also still said a finding is `CONFIRMED` "only on an
+  exact/format hit or a positive judge verdict", which stopped being true in 0.8.0
+  when a verbatim foreign entity began confirming on observation regardless of the
+  verdict. Both corrected; the accurate `HARD_CANARY` and `calibrate` uses of the
+  term were left alone.
+- **The Class 2 page presented the modelled embedding gradient as a measurement.**
+  0.8.0 relabelled that gradient in the CLI, the metrics, and the config table, but
+  the attack-catalog page it links to still read "runs the probe once per model and
+  reports a per-model rate" — the exact misreading the relabelling exists to
+  prevent. It now states that the sweep builds its own shared index and never
+  queries the configured vector store, and that a gradient needs two or more *real*
+  models (a mixed config drops `fake-*` names with a warning).
+
 ## [0.8.0] - 2026-08-01
 
 Every fix below corrects something the tool **claimed but had not measured** — or,

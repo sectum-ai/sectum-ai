@@ -48,9 +48,23 @@ coverage at small `n` or an extreme rate (0% or 100%).
 ## Embedding-model sweep
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
-Retrieval-Pivot Rate rises with embedding strength. When a scenario lists more
-than one `embedding_models` entry, `sectum-ai probe` runs the probe once per model
-and reports a per-model rate (`retrieval_pivot_rate_by_model`).
+Retrieval-Pivot Rate rises with embedding strength. When a scenario lists two or
+more `embedding_models` entries that resolve to real providers, `sectum-ai probe`
+sweeps them and reports `retrieval_pivot_rate_by_model`.
+
+!!! warning "The gradient is modelled, not a measurement of your store"
+
+    The sweep builds its **own** index and ranks by cosine over a single index
+    shared by every tenant. It never queries the configured vector store, so that
+    store's real isolation — namespaces, filters, ACLs — is bypassed by
+    construction. The gradient therefore describes how much cross-tenant content
+    each *embedding model* surfaces under an assumed shared-index condition; it is
+    not `retrieval_pivot_rate`, which is the metric that measures the configured
+    store. The CLI prints it under its own heading for this reason.
+
+    Legacy `fake-*` names carry a modelled recall rather than real vectors, so they
+    cannot share a sweep with a real provider: a mixed config drops them and says
+    so, and a gradient needs two or more *real* models or none is recorded.
 
 Each entry is resolved to an embedding model:
 
