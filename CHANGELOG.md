@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-01
+
+Every fix below corrects something the tool **claimed but had not measured** — or,
+in one case, claimed on the strength of noise. Several change what a signed evidence
+pack asserts, so a pack produced by an earlier version may state a verdict this
+version would not: re-run before relying on an erasure attestation, a KV-cache
+side-channel finding, or a per-model retrieval gradient.
+
+One change is breaking for configuration: `detection.semantic_threshold` now rejects
+values outside `[0.0, 1.0]`, which previously loaded and silently disabled the
+semantic detector. A config carrying such a value will fail to load until corrected.
+
 ### Fixed
 
 - **A drifting machine manufactured KV-cache side-channel findings.** The Class 5
