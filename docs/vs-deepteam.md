@@ -25,7 +25,7 @@ control-mapped evidence pack — *whether the system isolates tenants at all*.
 |---|---|---|
 | **Category** | LLM red-teaming vulnerability check | Multi-tenant AI *verification* |
 | **Method** | A single adversarial prompt per attempt | A marker substrate: synthetic tenants (and users) seeded with cryptographic canaries, probed from each session |
-| **Detection** | LLM-as-judge, binary score | Manifest-grounded exact → semantic → judge pipeline; every confirmed finding ties back to a planted marker (**zero false positives by construction**) |
+| **Detection** | LLM-as-judge, binary score | Manifest-grounded exact → semantic → judge pipeline; every confirmed finding ties back to a planted marker, and a candidate that cannot be is recorded as *unverified* rather than confirmed (**manifest-grounded by construction**) |
 | **Boundary** | Tenant or user, per the prompt | Principal boundary — tenant *and* user within a tenant — verified default-deny ([ADR-0006](adr/0006-principal-isolation-model.md)) |
 | **Surfaces** | The model response | Vector DB, RAG, semantic & KV caches, agent memory, MCP tool calls, fine-tunes/adapters, tracing — across the catalog |
 | **Catalog** | One retrieval check | 12 probe classes incl. side-channel (KV-cache timing), embedding inversion, MCP confused-deputy/token-passthrough, persistent-memory contamination, LoRA bleed, multi-modal RAG entity-bleed, and the GDPR Art. 17 erasure wedge |

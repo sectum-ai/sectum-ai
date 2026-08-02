@@ -97,13 +97,17 @@ a marker owned by one principal observed in another principal's session.
    default judge confirms only when the entity's tokens appear in order within a
    short span, keeping precision high.
 
-**Zero false positives by construction:** every finding ties back to a manifest
-marker, and a finding is `CONFIRMED` only on an exact/format hit or a positive
-judge verdict. A semantic candidate that cannot be tied to a manifest marker is
+**Manifest-grounded by construction:** every finding ties back to a manifest
+marker. A finding is `CONFIRMED` on an exact/format hit, on a foreign entity whose
+plaintext is literally present in the observation (a leak by observation, which no
+judge verdict can unmake), or on a judge verdict whose cited evidence is traceable
+to the marker. A semantic candidate that cannot be tied to a manifest marker is
 downgraded to `UNVERIFIED`, excluded from the headline count but kept in the
-appendix. **Zero false negatives:** a foreign marker of any type, planted in any
-field, that appears verbatim in an observation is always confirmed. Both are
-pinned as invariants (see the testing strategy).
+appendix. That bounds confirmations to the manifest's own markers; it is not a
+claim that every confirmation is correct, since a semantic confirmation still
+rests on the configured judge. **Zero false negatives:** a foreign marker of any
+type, planted in any field, that appears verbatim in an observation is always
+confirmed. Both are pinned as invariants (see the testing strategy).
 
 ## Reproducibility contract
 

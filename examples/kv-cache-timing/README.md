@@ -29,23 +29,38 @@ across customers.
 ## What the demo does
 
 `run.sh` runs the canonical CLI flow end to end. Class 5 is
-*statistical* rather than plan/detect: the probe runs **24 paired
-trials per (owner, observer) tenant pair**, half with a primed prefix
-(the cache-hit condition) and half with an unrelated control prefix
-(the cache-miss baseline), then runs a two-sided **Welch's t-test** on
-the two latency distributions and reports the t-statistic, degrees of
-freedom, p-value, a 95% confidence interval on the gap, and Cohen's d.
+*statistical* rather than plan/detect: the probe runs **24 trials per
+condition per (owner, observer) tenant pair** — 24 with a primed prefix
+(the cache-hit condition) and 24 with an unrelated control prefix (the
+cache-miss baseline), so 48 timed prompts per pair — then runs a
+two-sided **Welch's t-test** on the two latency distributions and
+reports the t-statistic, degrees of freedom, p-value, a 95% confidence
+interval on the gap, and Cohen's d.
+
+The two conditions are **interleaved**, alternating which is timed
+first, rather than measured as two blocks. Anything that drifts during
+a run — thermal throttling, CPU frequency scaling, a noisy neighbour —
+would otherwise land entirely on whichever block ran second and read as
+a timing gap. Alternating makes the two conditions' mean measurement
+positions equal, so a linear drift cancels instead of masquerading as a
+side channel.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
 2. **`sectum-ai probe --probe kv-cache-timing`** runs the timing trials
    against the demo config's fake model with `prefix_cache=true`
    (the leaky condition Class 5 is built to catch). A finding is
-   confirmed only when the timing gap is **statistically significant**
-   (Welch t-test p < 0.01), **practically large** (Cohen's d ≥ 0.8),
-   and **directional** (the primed prefix is faster) — the spec §7
-   "avoid over-claiming" bar. The probe exits `2` when it confirms at
-   least one side channel — the success signal on the leaky demo stack.
+   confirmed only when the timing gap is **statistically significant**,
+   **practically large** (Cohen's d ≥ 0.8), and **directional** (the
+   primed prefix is faster) — the spec §7 "avoid over-claiming" bar.
+   Significance is judged at a **Bonferroni-corrected** level: the run
+   performs one t-test per ordered tenant pair, so the per-pair bar is
+   `0.01` divided by the number of comparisons, which holds the
+   *family-wise* false-positive rate at 0.01 rather than letting 0.01
+   leak once per pair. On this demo's four tenants that is 12
+   comparisons, so a pair must clear **p < 0.00083**. The probe exits
+   `2` when it confirms at least one side channel — the success signal
+   on the leaky demo stack.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack
    (PDF + JSON + in-toto envelope). The audit-pack PDF carries the
    per-pair t-statistic, p-value, confidence interval, effect size,

@@ -13,7 +13,9 @@
 # Class 5 is a statistical workflow rather than a plan/detect probe: the
 # probe times paired primed-vs-control prompts and runs a Welch t-test on
 # the two latency distributions. A finding is confirmed only when the gap is
-# significant (p < 0.01), large (Cohen's d >= 0.8), and directional; the
+# significant at a Bonferroni-corrected level (0.01 divided by the number of
+# tenant-pair comparisons, so the family-wise rate stays at 0.01), large
+# (Cohen's d >= 0.8), and directional; the
 # audit-pack PDF carries the t-statistic, p-value, CI, and effect size so an
 # auditor can review the statistical strength themselves.
 set -euo pipefail
@@ -35,8 +37,9 @@ echo "==> 2/4  Probe the KV cache (paired primed-vs-control timing trials)"
 # 'sectum-ai probe' exits 2 when it confirms cross-tenant leaks - expected on
 # the leaky-cache fake model in the demo config, so tolerate the non-zero
 # exit. The statistical run gates each tenant pair on a Welch t-test; a
-# confirmed Class 5 finding is one whose gap is significant (p < 0.01),
-# large (Cohen's d >= 0.8), and directional (primed faster).
+# confirmed Class 5 finding is one whose gap is significant at the
+# Bonferroni-corrected level (0.01 / 12 comparisons here), large (Cohen's
+# d >= 0.8), and directional (primed faster).
 rc=0; sectum-ai probe --workdir "$out" --probe kv-cache-timing || rc=$?
 if [ "$rc" -ne 2 ]; then
   echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2
