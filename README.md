@@ -9,16 +9,18 @@ a tamper-evident PDF plus a machine-readable evidence pack that auditors,
 customer security teams, and DPOs accept — and that anyone can verify
 independently, without trusting us.
 
-> **Status: pre-alpha.** All six build-plan phases (the spec, §14) have met their
+> **Status: v0.8.1.** Every build-plan phase (the spec, §14) has met its
 > acceptance criteria: the marker substrate, the leak-detection pipeline, the
 > Class 1–11 and 13 attack catalog, the tamper-evident evidence chain (Class 12), the
 > adapter SDK (live adapters for vector stores, caches, memory, observability,
 > RAG, agents, MCP, and the search-index / eval-set / backup erasure surfaces,
 > exercised by a docker-compose integration-CI job), the probe
-> interface, the regression-baseline engine, the `sectum-ai` CLI, a mkdocs
-> documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
-> authoritative, per-phase gate record (with the test/example that enforces each
-> criterion). Pre-alpha reflects API maturity, not missing phases.
+> interface, the regression-baseline engine, the twelve-command `sectum-ai` CLI, a
+> mkdocs documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
+> authoritative, per-phase gate record, with the test or example that enforces each
+> criterion; [`CHANGELOG.md`](CHANGELOG.md) records every release. The 0.x version
+> reflects a public API and config schema that are not yet frozen — not missing
+> capability.
 
 ## The problem
 
@@ -39,8 +41,9 @@ substrate and a manifest-grounded detection pipeline.
 ## What Sectum AI does
 
 **Marker substrate.** Synthetic tenants seeded with three classes of
-cryptographic canary markers and a hashed ground-truth manifest. Deterministic,
-reproducible, manifest-grounded — zero false positives.
+cryptographic canary markers and a hashed ground-truth manifest. Deterministic
+and reproducible: every confirmation ties back to a manifest marker, which
+bounds what can be reported as a leak.
 
 **13 surfaces.** Vector DB, RAG pipeline, semantic cache, KV cache, agent
 memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
