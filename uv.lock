@@ -817,7 +817,7 @@ wheels = [
 
 [[package]]
 name = "cohere"
-version = "5.21.1"
+version = "7.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastavro" },
@@ -829,9 +829,9 @@ dependencies = [
     { name = "types-requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/75/4c346f6e2322e545f8452692304bd4eca15a2a0209ab9af6a0d1a7810b67/cohere-5.21.1.tar.gz", hash = "sha256:e5ade4423b928b01ff2038980e1b62b2a5bb412c8ab83e30882753b810a5509f", size = 191272, upload-time = "2026-03-26T15:09:27.857Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4b/16/62ba386903ea854a2fce2cc2f959b9e0c8fa1d3e5699a3a523a6c691ffc9/cohere-7.0.8.tar.gz", hash = "sha256:5d9986b9b13cfe5590021474540648ff3c9e9ce4bfddc3d7f8e31acf1898c4d7", size = 213501, upload-time = "2026-07-23T19:31:41.066Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/50/5538f02ec6d10fbb84f29c1b18c68ff2a03d7877926a80275efdf8755a9f/cohere-5.21.1-py3-none-any.whl", hash = "sha256:f15592ec60d8cf12f01563db94ec28c388c61269d9617f23c2d6d910e505344e", size = 334262, upload-time = "2026-03-26T15:09:26.284Z" },
+    { url = "https://files.pythonhosted.org/packages/37/52/255cefc27e058853b8750fcb22c549fd52684214d4fc1e4169ab23320644/cohere-7.0.8-py3-none-any.whl", hash = "sha256:a4fe9b9e148cb277ee152009d3566434b055db9d41fc7433abda78add22632ab", size = 357010, upload-time = "2026-07-23T19:31:39.432Z" },
 ]
 
 [[package]]
@@ -2299,7 +2299,7 @@ wheels = [
 
 [[package]]
 name = "langfuse"
-version = "4.9.1"
+version = "4.14.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
@@ -2311,9 +2311,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/9a/c2e4b5c33a225a0158de0e774396823612a6c5beea21cde42e95b196c398/langfuse-4.9.1.tar.gz", hash = "sha256:e3d7162a8004f71abd6ad90fba2f3a7d0088cbdce1c77deea521837d49580ab4", size = 339957, upload-time = "2026-06-19T09:30:49.841Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/1c/d3410521e8b36d36aa7e6792394d193f91959742292a56f20cdda56f94aa/langfuse-4.14.3.tar.gz", hash = "sha256:eba25be6da7e5eeb640b28d7a0910f5c40cc6449eeaef89ba5d282d9db1a355d", size = 389580, upload-time = "2026-08-06T09:25:51.043Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/9e/2b21989730ebb613118a667e59f652aebb5a1ca07de10984bf28a02a888f/langfuse-4.9.1-py3-none-any.whl", hash = "sha256:3feb00679aff2ff45b0e786574c748d7c40d23768452e17e3a02e8706b7cbce3", size = 599839, upload-time = "2026-06-19T09:30:48.4Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/15/8c2d05d20ed05386cbc27bb19987485345f8138052f07a60d3286c329b75/langfuse-4.14.3-py3-none-any.whl", hash = "sha256:a3f77d11d8dcf440f28678271c7ea1aab01c51e372fa344661c038434122f8df", size = 688218, upload-time = "2026-08-06T09:25:49.711Z" },
 ]
 
 [[package]]
@@ -5274,7 +5274,7 @@ weasyprint = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.43.51" },
-    { name = "cohere", marker = "extra == 'cohere'", specifier = ">=5,<6" },
+    { name = "cohere", marker = "extra == 'cohere'", specifier = ">=7.0.5,<8" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.40" },
     { name = "pillow", marker = "extra == 'clip'", specifier = ">=10" },
@@ -5402,7 +5402,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'tgi'", specifier = ">=0.24" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
     { name = "langchain-core", marker = "extra == 'rag-langchain'", specifier = ">=0.3" },
-    { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=4,<5" },
+    { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=4.14.0,<5" },
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=1.2.9" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1" },
