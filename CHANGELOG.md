@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-07
+
+Dependency constraints and a documentation-index fix. No probe, detector, evidence,
+or CLI behaviour changes, and no effect on what an evidence pack asserts.
+
+### Changed
+
+- **`sectum-ai[cohere]` now requires cohere 7.x** (`>=7.0.5,<8`, was `>=5,<6`), and
+  **`sectum-ai-adapters[langfuse]` requires langfuse `>=4.14.0`** (was `>=4`). Only
+  the optional extras are affected; the core install is unchanged. The cohere jump
+  crosses two majors, so the adapter was checked against the resolved 7.0.8 rather
+  than trusted to CI, which never exercises it: the extra is opt-in and not installed
+  there, so the client path does not run and the one test touching it asserts the
+  package is *absent*. `cohere.Client`, the `embed(texts=, model=, input_type=)`
+  parameters, and both response shapes are intact, and `CohereEmbedding._vectors`
+  already reads either.
+
+### Fixed
+
+- **The examples index listed a removed example.** `examples/byoc-runner/` was moved
+  out of this repository, but `examples/README.md` still listed it, which the standing
+  index guard (`tests/unit/test_examples_index.py`) fails on. The stale prose sentence
+  and table row are removed, along with the now-dead `_WITHOUT_A_RUNNER` exemption
+  naming it — an exemption for a directory that no longer exists is the same
+  enumeration drift that test exists to catch.
+
 ## [0.8.1] - 2026-08-02
 
 Documentation only — no code, no behaviour change, no effect on an evidence pack.
