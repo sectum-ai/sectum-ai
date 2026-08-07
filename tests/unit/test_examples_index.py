@@ -35,10 +35,10 @@ def test_the_examples_index_lists_every_example() -> None:
 
 # The runner's shape varies, and the index says so: most examples ship a top-level
 # run.sh, the two analytical sweeps ship run.py, and open-webui-run drives a Docker
-# stack from scripts/run.sh. byoc-runner has no single entry point at all - it is an
-# operator workflow (crontab + upload script + config) that its README walks through.
+# stack from scripts/run.sh. An example with no single entry point at all - an operator
+# workflow its README walks through - goes in _WITHOUT_A_RUNNER; none currently do.
 _RUNNERS = ("run.sh", "run.py", "scripts/run.sh")
-_WITHOUT_A_RUNNER = {"byoc-runner"}
+_WITHOUT_A_RUNNER: set[str] = set()
 
 
 def test_every_example_ships_a_readme_and_a_runner() -> None:
