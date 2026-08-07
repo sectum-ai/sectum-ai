@@ -5,8 +5,7 @@ is a self-contained directory with a `README.md` and, in most cases, a `run.sh` 
 the `sectum-ai` CLI. The exceptions: the two analytical sweeps
 ([`embedding-rpr-sweep/`](embedding-rpr-sweep/), [`multimodal-rag-bleed/`](multimodal-rag-bleed/))
 are `run.py` and measure a rate rather than build an evidence pack;
-[`open-webui-run/`](open-webui-run/) drives a Docker stack from `scripts/`; and
-[`byoc-runner/`](byoc-runner/) is an operator workflow its README walks through.
+[`open-webui-run/`](open-webui-run/) drives a Docker stack from `scripts/`.
 
 | Example | Attack class | What it shows |
 |---|---|---|
@@ -28,7 +27,6 @@ are `run.py` and measure a rate rather than build an evidence pack;
 | [`erasure-attestation/`](erasure-attestation/) | Class 11 | A GDPR Article 17 erasure-verification run and its attestation pack. |
 | [`subject-erasure/`](subject-erasure/) | Class 11 | The same erasure verification at *data-subject* granularity — a GDPR right-to-erasure (DSR) request for one user within a tenant. |
 | [`open-webui-run/`](open-webui-run/) | Class 2 (flagship), 1, 11 | Sectum against a **self-hosted Open WebUI** (real product): seeds the substrate, uploads each tenant's corpus into Open WebUI Knowledge via its API, and measures the Retrieval-Pivot Rate through Open WebUI's chat-with-knowledge endpoint. Requires Docker; not part of the offline `SECTUM_RUN_E2E` suite. |
-| [`byoc-runner/`](byoc-runner/) | — | A BYOC operator workflow: a Sectum CLI install reads a Cloud snapshot subscription. |
 
 Each `run.sh` invokes the `sectum-ai` CLI from this repository through `uv` and
 writes its artifacts to an `out/` directory inside the example. Those `out/`
