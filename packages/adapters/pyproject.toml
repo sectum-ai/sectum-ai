@@ -53,7 +53,7 @@ huggingface = ["transformers>=5.13.0", "peft>=0.13", "torch>=2.4", "accelerate>=
 vllm = ["openai>=1.50"]
 # TGI is reached over its native text-generation API via the huggingface_hub
 # InferenceClient (not the GPU-heavy text-generation-inference server package).
-tgi = ["huggingface_hub>=0.24"]
+tgi = ["huggingface_hub>=1.26.1"]
 openai-assistants = ["openai>=1.50"]
 anthropic-tooluse = ["anthropic>=0.40"]
 rag-langchain = ["langchain-core>=0.3"]
