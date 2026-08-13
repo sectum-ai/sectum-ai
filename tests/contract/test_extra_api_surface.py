@@ -123,3 +123,76 @@ def test_peft_lora_surface() -> None:
     assert _accepts(peft.LoraConfig.__init__, ("r", "lora_alpha", "task_type", "target_modules"))
     assert len(_params(peft.get_peft_model)) >= 2, "get_peft_model(model, config) changed shape"
     assert hasattr(peft.PeftModel, "from_pretrained")
+
+
+# --- openai: embeddings, vLLM completions, and the Assistants beta namespace ---
+
+
+def _openai_client() -> Any:
+    """A client built with a dummy key: construction makes no network call."""
+    openai = pytest.importorskip("openai")
+    return openai.OpenAI(api_key="sk-not-a-real-key")
+
+
+def test_openai_client_constructor_surface() -> None:
+    # OpenAIEmbedding passes api_key=; _vllm_live passes base_url=/api_key=/timeout=.
+    openai = pytest.importorskip("openai")
+    assert _accepts(openai.OpenAI.__init__, ("api_key", "base_url", "timeout"))
+
+
+def test_openai_embeddings_and_completions_surface() -> None:
+    # OpenAIEmbedding.embed -> .embeddings.create(model=, input=)
+    # _VllmLiveBackend.complete -> .completions.create(model=, prompt=, max_tokens=,
+    # temperature=). `completions` is the legacy namespace, so its removal in favour
+    # of chat-only is a plausible upstream change and would break the vLLM adapter.
+    client = _openai_client()
+    assert _accepts(client.embeddings.create, ("model", "input"))
+    assert _accepts(client.completions.create, ("model", "prompt", "max_tokens", "temperature"))
+
+
+def test_openai_assistants_beta_namespace_surface() -> None:
+    # The whole Assistants adapter hangs off `client.beta`, which is by name a
+    # provisional namespace - OpenAI graduating or retiring it is the single most
+    # likely break in this file, and it would take out every method below at once.
+    client = _openai_client()
+    beta = client.beta
+    assert _accepts(beta.assistants.create, ("model", "name", "instructions", "tools"))
+    threads = beta.threads
+    assert hasattr(threads, "create")
+    assert _accepts(threads.messages.create, ("thread_id", "role", "content"))
+    assert _accepts(threads.messages.list, ("thread_id", "order"))
+    assert _accepts(threads.runs.create, ("thread_id", "assistant_id"))
+    assert _accepts(threads.runs.retrieve, ("thread_id", "run_id"))
+    assert hasattr(threads.runs, "submit_tool_outputs")
+
+
+# --- anthropic: adapters.agent._anthropic_tooluse_live ----------------------
+
+
+def test_anthropic_messages_create_surface() -> None:
+    # The tool-use loop calls .messages.create(model=, max_tokens=, system=,
+    # tools=, messages=) and reads `.content` blocks whose `.type` is "tool_use".
+    anthropic = pytest.importorskip("anthropic")
+    assert _accepts(anthropic.Anthropic.__init__, ("api_key",))
+    client = anthropic.Anthropic(api_key="sk-ant-not-a-real-key")
+    assert _accepts(client.messages.create, ("model", "max_tokens", "system", "tools", "messages"))
+
+
+# --- langfuse: adapters.observability.langfuse ------------------------------
+
+
+def test_langfuse_client_and_api_namespace_surface() -> None:
+    # LangfuseObservability constructs Langfuse(public_key=, secret_key=, host=)
+    # and reaches through `.api` for every operation: projects.get() to list
+    # tenants, trace.list(user_id=, limit=, page=) to page a tenant's traces, and
+    # trace.delete_multiple(trace_ids=) to erase them. `.api` is the v3+ layout;
+    # a restructure there breaks the whole adapter, including its erasure path.
+    langfuse = pytest.importorskip("langfuse")
+    assert _accepts(langfuse.Langfuse.__init__, ("public_key", "secret_key", "host"))
+    client = langfuse.Langfuse(
+        public_key="pk-not-real", secret_key="sk-not-real", host="http://localhost:1"
+    )
+    api = client.api
+    assert hasattr(api.projects, "get")
+    assert _accepts(api.trace.list, ("user_id", "limit", "page"))
+    assert _accepts(api.trace.delete_multiple, ("trace_ids",))

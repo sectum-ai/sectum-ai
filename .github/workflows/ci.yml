@@ -73,21 +73,17 @@ jobs:
       # The lint-type-test job installs no extras, so every live adapter behind
       # one is unreachable there and a bump to its package goes green having run
       # none of the code it could break. Install the packages whose API surface
-      # tests/contract/test_extra_api_surface.py pins, at the versions the
-      # lockfile resolves, so that file actually executes.
+      # tests/contract/test_extra_api_surface.py pins so that file executes.
       #
-      # Installed directly rather than via `--extra huggingface` because that
-      # extra also pulls torch and the NVIDIA CUDA wheels (~GBs) which the
-      # surface checks - signature and attribute inspection - do not need.
-      # Installed at the versions the LOCKFILE resolves, not the newest on PyPI,
-      # so the contract reflects what a user of the extra actually gets. Taken
-      # from `uv export` rather than `uv sync --extra huggingface`, because that
-      # extra also pulls torch and the NVIDIA CUDA wheels (~GBs) which signature
+      # Versions come from `uv export`, i.e. what the LOCKFILE resolves, not the
+      # newest on PyPI, so the contract reflects what a user of the extra gets.
+      # Installed directly rather than via `uv sync --extra huggingface`, which
+      # would also pull torch and the NVIDIA CUDA wheels (~GBs) that signature
       # and attribute inspection does not need.
       - name: Install the pinned extras (locked versions, no torch)
         run: |
           uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt
-          grep -E '^(cohere|huggingface-hub|transformers|peft)==' /tmp/all-reqs.txt \
+          grep -E '^(cohere|huggingface-hub|transformers|peft|openai|anthropic|langfuse)==' /tmp/all-reqs.txt \
             | tee /tmp/extras-reqs.txt
           uv pip install -r /tmp/extras-reqs.txt
 
