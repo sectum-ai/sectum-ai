@@ -44,16 +44,16 @@ qdrant = ["qdrant-client>=1.12"]
 milvus = ["pymilvus>=2.4"]
 opensearch = ["opensearch-py>=2.4"]
 azure-search = ["azure-search-documents>=11.4", "azure-core>=1.30"]
-langgraph = ["langgraph>=1.2.9", "langchain-core>=0.3"]
+langgraph = ["langgraph>=1.2.10", "langchain-core>=0.3"]
 autogen = ["pyautogen>=0.2,<0.3"]
 crewai = ["crewai>=1.15.1"]
-huggingface = ["transformers>=5.13.0", "peft>=0.13", "torch>=2.4", "accelerate>=1"]
+huggingface = ["transformers>=5.14.1", "peft>=0.20.0", "torch>=2.4", "accelerate>=1"]
 # vLLM is reached over its OpenAI-compatible HTTP API, so the client SDK is the
 # only dependency (not the GPU-heavy vllm package itself).
 vllm = ["openai>=1.50"]
 # TGI is reached over its native text-generation API via the huggingface_hub
 # InferenceClient (not the GPU-heavy text-generation-inference server package).
-tgi = ["huggingface_hub>=0.24"]
+tgi = ["huggingface_hub>=1.26.1"]
 openai-assistants = ["openai>=1.50"]
 anthropic-tooluse = ["anthropic>=0.40"]
 rag-langchain = ["langchain-core>=0.3"]
