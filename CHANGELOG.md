@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-08-13
+
+Dependency constraints on five optional extras. No probe, detector, evidence, or CLI
+behaviour changes, and no effect on what an evidence pack asserts.
+
+### Changed
+
+- **Five optional extras now require newer floors**: `sectum-ai-adapters[huggingface]`
+  requires `transformers>=5.14.1` and `peft>=0.20.0`, `[tgi]` requires
+  `huggingface_hub>=1.26.1`, `[langgraph]` requires `langgraph>=1.2.10`, and the dev
+  group requires `types-pyyaml>=6.0.12.20260724`. Only the optional extras are
+  affected; the core install is unchanged. The adapter call surface of each was
+  verified against the resolved version rather than trusted to CI, which does not
+  install these extras and so never executes the code that depends on them.
+
+### Internal
+
+Not shipped in the distributions (the wheels are built `only-include`
+`src/sectum_ai`), recorded here because it changes how dependency bumps are reviewed:
+a new `extras-contract` CI job installs the seven third-party packages whose APIs the
+live adapters call — at the versions the lockfile resolves — and asserts every
+attribute and parameter those adapters pass. Previously a bump to any of them earned a
+green check list having executed none of the affected code, which is how a two-major
+`cohere` bump passed unexamined in 0.8.2's cycle.
+
 ## [0.8.2] - 2026-08-07
 
 Dependency constraints and a documentation-index fix. No probe, detector, evidence,
