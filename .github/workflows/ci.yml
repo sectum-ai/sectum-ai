@@ -56,6 +56,44 @@ jobs:
         env:
           SECTUM_RUN_E2E: "1"
 
+  extras-contract:
+    name: Extras API contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      # The lint-type-test job installs no extras, so every live adapter behind
+      # one is unreachable there and a bump to its package goes green having run
+      # none of the code it could break. Install the packages whose API surface
+      # tests/contract/test_extra_api_surface.py pins, at the versions the
+      # lockfile resolves, so that file actually executes.
+      #
+      # Installed directly rather than via `--extra huggingface` because that
+      # extra also pulls torch and the NVIDIA CUDA wheels (~GBs) which the
+      # surface checks - signature and attribute inspection - do not need.
+      # Installed at the versions the LOCKFILE resolves, not the newest on PyPI,
+      # so the contract reflects what a user of the extra actually gets. Taken
+      # from `uv export` rather than `uv sync --extra huggingface`, because that
+      # extra also pulls torch and the NVIDIA CUDA wheels (~GBs) which signature
+      # and attribute inspection does not need.
+      - name: Install the pinned extras (locked versions, no torch)
+        run: |
+          uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt
+          grep -E '^(cohere|huggingface-hub|transformers|peft)==' /tmp/all-reqs.txt \
+            | tee /tmp/extras-reqs.txt
+          uv pip install -r /tmp/extras-reqs.txt
+
+      - name: Extras API contract
+        run: uv run --no-sync pytest tests/contract/test_extra_api_surface.py -v
+
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
