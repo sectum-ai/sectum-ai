@@ -94,6 +94,21 @@ Edit `[project] version` in each of:
 All five must be the same string. The first release is `0.1.0`. Subsequent
 releases follow [Semantic Versioning](https://semver.org/).
 
+Then bump the **same version** in the GitHub Action, which is a separate surface
+this list used to omit:
+
+- `action.yml` — the `version` input's `default`
+- `docs/github-action.md` — the `version` row of the inputs table, and the
+  `sectum-ai/sectum-ai@vX.Y.Z` pin example
+
+That default is passed straight to `pip install "sectum-ai==<version>"`, so a
+caller who does not override it gets exactly this string. Leaving it behind means
+every default run of the Action installs the *previous* release: v0.7.0 through
+v0.8.3 all shipped while the Action kept installing 0.6.0, handing users a CLI
+that predated the correctness fixes those releases existed to deliver.
+`tests/unit/test_action_version.py` now fails the build if any of the three drift
+apart, so this step cannot be silently skipped again.
+
 ### 2. Re-validate the ATLAS technique catalog
 
 [ADR-0009](adr/0009-atlas-technique-review-process.md) makes this a release
