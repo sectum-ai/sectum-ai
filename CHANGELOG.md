@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-08-14
+
+### Fixed
+
+- **The GitHub Action was installing sectum-ai 0.6.0.** `action.yml`'s `version`
+  input default is passed straight to `pip install "sectum-ai==<version>"`, and it
+  had read `0.6.0` since the v0.6.0 release — so every default run of
+  `sectum-ai/sectum-ai@vX.Y.Z` through v0.8.3 installed a CLI six releases old.
+  That CLI **predates every correctness fix in 0.8.0**: the Datadog fifteen-minute
+  search window that attested still-retained subjects ERASED, the single-token
+  subject fingerprint that was never probed for memorisation, the judge verdict
+  that could veto a verbatim cross-tenant leak, the KV-cache side-channel findings
+  manufactured out of machine drift, and the audit pack's zero-false-positive
+  claim. Anyone relying on the Action for CI verification was running the versions
+  those releases exist to replace, and should re-run against this one.
+
+  The release runbook is the root cause and is fixed too: `docs/RELEASING.md` listed
+  only the five `pyproject.toml` files, so following it faithfully still shipped the
+  bug. A test (`tests/unit/test_action_version.py`) now fails the build whenever the
+  Action default, the documented default, or the pin example drifts from the shipped
+  version — the drift is invisible by construction, since a stale version string
+  looks exactly like a current one.
+
 ## [0.8.3] - 2026-08-13
 
 Dependency constraints on five optional extras. No probe, detector, evidence, or CLI
