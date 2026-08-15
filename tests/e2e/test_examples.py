@@ -98,7 +98,9 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     assert pack_path.exists(), f"sectum-ai report did not write {pack_path}"
 
     # Baseline: a freshly built pack verifies (exit 0).
-    verify = _sectum("verify", str(pack_path), "--allow-unanchored", cwd=tmp_path)
+    verify = _sectum(
+        "verify", str(pack_path), "--allow-unanchored", "--allow-synthetic", cwd=tmp_path
+    )
     assert verify.returncode == 0, (verify.stdout + verify.stderr)[-2000:]
 
     # Mutate the pack: change a single field VALUE inside the canonical run
@@ -116,7 +118,12 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     assert tampered != original, "tamper pattern did not match the pack contents"
     pack_path.write_text(tampered, encoding="utf-8")
 
-    verify_tampered = _sectum("verify", str(pack_path), cwd=tmp_path)
+    # Pass the same two flags as the baseline: this test is about the digest
+    # mismatch, and without them the pack would exit 4 on `run-scope` (a demo
+    # pack has no live surface) whether or not the tamper was detected at all.
+    verify_tampered = _sectum(
+        "verify", str(pack_path), "--allow-unanchored", "--allow-synthetic", cwd=tmp_path
+    )
     assert verify_tampered.returncode == 4, (
         f"expected exit 4 (verification failure), got {verify_tampered.returncode}\n"
         + (verify_tampered.stdout + verify_tampered.stderr)[-2000:]
@@ -125,6 +132,7 @@ def test_tampered_evidence_pack_makes_sectum_verify_exit_4(tmp_path: Path) -> No
     # operator parsing the output (CI step, audit-pack reviewer) can spot it.
     combined = verify_tampered.stdout + verify_tampered.stderr
     assert "[FAIL]" in combined or "VERIFICATION FAILED" in combined.upper(), combined[-1000:]
+    assert "[FAIL] run-scope" not in combined, "the tamper was not what failed verification here"
 
 
 def test_sectum_probe_filter_runs_only_the_named_probe(tmp_path: Path) -> None:

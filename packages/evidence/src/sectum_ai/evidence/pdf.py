@@ -25,6 +25,7 @@ from sectum_ai.spec import (
     Finding,
     FindingStatus,
     RunResult,
+    SurfaceProvenance,
     sha256_hex,
 )
 
@@ -64,6 +65,49 @@ _COVERAGE_CAVEAT = (
     "per-tenant erasure API, so the data is presumed retained until it ages out "
     "of the backend's retention window (a backend limitation, not a flow failure)."
 )
+
+
+def provenance_statement(run: RunResult) -> str:
+    """The audit pack's first scope sentence: which systems these findings are about.
+
+    An auditor reads this document to learn what was tested. Sectum falls back to
+    an in-memory fake for every adapter family it cannot reach, and before this
+    the pack rendered a run against eight of them identically to a production
+    assessment - the words *synthetic*, *live*, and *adapter* appeared nowhere in
+    it. Stated first, because every sentence after it is conditional on it.
+
+    Shared by both PDF engines (ReportLab and WeasyPrint) so the two cannot
+    disagree about the one paragraph that fixes the document's subject.
+    """
+    provenance = run.surface_provenance
+    if not provenance:
+        return (
+            "Surface provenance: not recorded. This run predates Sectum's provenance "
+            "block, so whether it exercised live backends or the built-in synthetic "
+            "stores cannot be established from this pack."
+        )
+    synthetic = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.SYNTHETIC.value)
+    live = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.LIVE.value)
+    if not synthetic:
+        return (
+            "Surface provenance: every surface exercised by this run was a live, "
+            f"configured backend ({', '.join(live)}). These findings describe those "
+            "systems."
+        )
+    if not live:
+        return (
+            "Surface provenance: NO live backend was configured. Every surface in this "
+            f"run ({', '.join(synthetic)}) was Sectum's built-in synthetic store, so "
+            "the findings, metrics, and any clean result below describe that synthetic "
+            "stack and NOT a production system. This pack is a demonstration, not an "
+            "attestation."
+        )
+    return (
+        f"Surface provenance: {len(live)} of {len(provenance)} surfaces were live, "
+        f"configured backends ({', '.join(live)}). The remaining surfaces "
+        f"({', '.join(synthetic)}) were Sectum's built-in synthetic stores; results "
+        "attributed to them describe that fake and not a production system."
+    )
 
 
 def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:
@@ -290,6 +334,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     ]
 
     flow += [Spacer(1, 12), Paragraph("Scope and methodology", heading)]
+    flow += [Paragraph(escape(provenance_statement(run)), body)]
     flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]

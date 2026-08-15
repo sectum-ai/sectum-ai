@@ -11,6 +11,12 @@ anchor (a real RFC 3161 timestamp or a Rekor inclusion proof). A local-dev
 token is reproducible by anyone over any digest, so an attacker who edits a
 pack can simply re-stamp it; ``require_anchored=True`` refuses that downgrade
 by failing any pack whose digest no verified independent anchor binds.
+
+Integrity vs. subject: every check above concerns the *bytes*. A run against
+Sectum's own in-memory fakes passes all of them, so "the signature is valid" and
+"this describes a real system" were unrelated facts and only the first was
+checked. ``require_live=True`` (the default) closes that: a pack whose run
+touched no live backend is refused rather than read as an attestation.
 """
 
 import json
@@ -23,6 +29,7 @@ from sectum_ai.spec import (
     EvidenceError,
     EvidencePack,
     GroundTruthManifest,
+    SurfaceProvenance,
     canonical_hash,
     sha256_hex,
 )
@@ -62,6 +69,7 @@ def verify_pack(
     rekor_keyring: Mapping[str, bytes] | None = None,
     pdf_bytes: bytes | None = None,
     require_anchored: bool = False,
+    require_live: bool = False,
 ) -> VerificationResult:
     """Verify an evidence pack; return a PASS/FAIL verdict with per-check detail.
 
@@ -87,6 +95,13 @@ def verify_pack(
     carries a Rekor inclusion proof, it is verified too; ``rekor_keyring``
     (log id -> PEM key) overrides the built-in Rekor keys for a private instance.
 
+    ``require_live=True`` refuses a pack whose run touched no live backend at
+    all: every other check here concerns the integrity of the bytes, and all of
+    them pass just as cleanly for a run against Sectum's own in-memory fakes. It
+    defaults off for the same reason as ``require_anchored`` - the library reports,
+    the CLI decides - and ``sectum-ai verify`` turns it on unless the caller passes
+    ``--allow-synthetic``. The ``run-scope`` check states the provenance either way.
+
     ``pdf_bytes`` are the bytes of the audit PDF when it sits alongside the pack;
     when given (and the pack binds a ``pdf_ref``) they are re-hashed and checked
     against that bound digest, so a swapped audit PDF fails verification.
@@ -103,6 +118,7 @@ def verify_pack(
         _check_schema_version(pack),
         token_check,
         _check_consistency(pack),
+        _check_run_scope(pack, require_live),
     ]
     rekor_anchored = False
     if pack.anchored_in_log and pack.rekor_proof is None:
@@ -292,6 +308,64 @@ def _check_schema_version(pack: EvidencePack) -> Check:
         )
     )
     return Check("schema-version", ok=ok, detail=detail)
+
+
+def _check_run_scope(pack: EvidencePack, require_live: bool) -> Check:
+    """Report which stack this pack's verdicts describe, and refuse a synthetic one.
+
+    Every other check here answers a question about the *bytes* - that they are
+    intact, that an anchor binds them, that the PDF matches. All of them pass just
+    as cleanly for a run that touched nothing real, which is precisely the pack a
+    third party must not accept as an attestation. Sectum ships an in-memory fake
+    for every adapter family and falls back to one silently, so "the signature is
+    valid" and "this describes your vendor's production systems" were unrelated
+    facts and only the first was checked.
+
+    Fails closed, like ``independent-anchor``: the reader of a pack is the party
+    least able to notice what is missing from it.
+    """
+    provenance = pack.run_result.surface_provenance
+    if not provenance:
+        return Check(
+            "run-scope",
+            ok=not require_live,
+            detail=(
+                "the run records no surface provenance (it predates the block), so "
+                "whether it touched live backends cannot be established from this pack"
+                + ("" if require_live else "; accepted by --allow-synthetic")
+            ),
+        )
+    synthetic = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.SYNTHETIC.value)
+    if not synthetic:
+        return Check(
+            "run-scope",
+            ok=True,
+            detail="every surface this run exercised was a live backend",
+        )
+    live = len(provenance) - len(synthetic)
+    if live:
+        return Check(
+            "run-scope",
+            ok=True,
+            detail=(
+                f"{live} of {len(provenance)} surfaces were live; these ran against "
+                f"Sectum's built-in fake and describe no real system: {', '.join(synthetic)}"
+            ),
+        )
+    return Check(
+        "run-scope",
+        ok=not require_live,
+        detail=(
+            "NO surface was live - every verdict in this pack describes Sectum's "
+            "built-in synthetic stack, not any production system. A grade, a metric, "
+            "or a clean result here is not evidence about the operator's systems"
+            + (
+                ". Re-run against configured adapters, or accept a demo pack explicitly"
+                if require_live
+                else "; accepted by --allow-synthetic"
+            )
+        ),
+    )
 
 
 def _check_consistency(pack: EvidencePack) -> Check:

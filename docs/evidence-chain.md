@@ -78,7 +78,17 @@ anyone over an edited pack, so without a real RFC 3161 timestamp or a Rekor
 inclusion proof the digest checks prove internal consistency, not tamper
 evidence. Pass `--allow-unanchored` to accept that integrity-only result
 explicitly; the verdict then reads `INTEGRITY OK - UNANCHORED`, never plain
-`VERIFIED`. Because
+`VERIFIED`.
+
+Every check above concerns the **bytes**. A run that touched nothing real passes
+all of them, because Sectum falls back to an in-memory fake for every adapter
+family it cannot reach — so "the signature is valid" and "this describes a real
+system" were unrelated facts, and only the first was checked. The `run-scope`
+check closes that: it reports the run's signed
+[surface provenance](coverage.md), and `sectum-ai verify` **refuses** (exit 4) a
+pack in which no surface was live. A third party receiving a vendor's pack is the
+party least able to notice what is missing from it, so this fails closed like the
+anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 

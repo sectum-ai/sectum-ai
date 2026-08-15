@@ -117,6 +117,7 @@ def verify_bundle(
     tsa_root: bytes | None = None,
     rekor_keyring: Mapping[str, bytes] | None = None,
     require_anchored: bool = False,
+    require_live: bool = False,
 ) -> VerificationResult:
     """Verify a bundle end to end and return a PASS/FAIL verdict with per-check detail.
 
@@ -125,7 +126,8 @@ def verify_bundle(
     duplicate names), and the contained evidence pack must pass
     :func:`verify_pack` - with ``tsa_certificate``/``tsa_root``/``rekor_keyring``
     threaded through so a customer-pinned TSA or a private Rekor instance
-    verifies, and ``require_anchored`` enforced the same way as on a bare pack.
+    verifies, and ``require_anchored``/``require_live`` enforced the same way as
+    on a bare pack.
     A missing, extra, or mismatched member, or a failed pack verification, fails
     the result - so editing a bundled artifact, smuggling an unlisted one in, or
     altering the pack is caught. The result's ``anchored`` reflects the contained
@@ -251,6 +253,7 @@ def verify_bundle(
         rekor_keyring=rekor_keyring,
         pdf_bytes=pdf_bytes,
         require_anchored=require_anchored,
+        require_live=require_live,
     )
     checks.extend(pack_result.checks)
     if pack.pdf_ref is not None and pdf_bytes is None:

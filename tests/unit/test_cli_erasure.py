@@ -29,7 +29,13 @@ def test_erasure_attestation_verifies(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
     result = _runner.invoke(
-        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
     )
     assert result.exit_code == 0
     assert "INTEGRITY OK - UNANCHORED" in result.output
@@ -315,7 +321,13 @@ def test_erasure_scoped_pack_still_verifies(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     result = _runner.invoke(
-        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
     )
     assert result.exit_code == 0
     assert "INTEGRITY OK - UNANCHORED" in result.output

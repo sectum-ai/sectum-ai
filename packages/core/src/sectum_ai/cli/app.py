@@ -1532,6 +1532,18 @@ def verify(
             ),
         ),
     ] = False,
+    allow_synthetic: Annotated[
+        bool,
+        typer.Option(
+            "--allow-synthetic",
+            help=(
+                "Accept a pack whose run touched no live backend. Every other check "
+                "concerns the integrity of the bytes and passes just as cleanly for a "
+                "run against Sectum's built-in fakes, so without this flag such a pack "
+                "is refused rather than read as an attestation about a real system."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Independently verify a tamper-evident evidence pack (or an .zip bundle)."""
     if not pack.exists():
@@ -1554,6 +1566,7 @@ def verify(
             tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
             rekor_keyring=_rekor_keyring_override(rekor_key),
             require_anchored=not allow_unanchored,
+            require_live=not allow_synthetic,
         )
         for check in bundle_result.checks:
             typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
@@ -1579,6 +1592,7 @@ def verify(
         rekor_keyring=_rekor_keyring_override(rekor_key),
         pdf_bytes=pdf_bytes,
         require_anchored=not allow_unanchored,
+        require_live=not allow_synthetic,
     )
     for check in result.checks:
         typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")

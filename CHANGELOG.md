@@ -38,8 +38,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and named on the class line, so rule 4 still holds: nothing is dropped silently,
   it just no longer moves the grade.
 
+- **`verify` answers what the pack is about, not only whether its bytes are
+  intact.** A new `run-scope` check reports the run's signed provenance, and
+  `sectum-ai verify` now **refuses** (exit 4) a pack in which no surface was
+  live. Every other check in the verifier concerns the bytes — the digest
+  recomputes, an anchor binds it, the PDF matches its bound hash — and all of
+  them pass just as cleanly for a run against Sectum's own in-memory fakes, so
+  "the signature is valid" and "this describes a real system" were unrelated
+  facts and only the first was checked. Fails closed like the anchor check,
+  because a third party receiving a vendor's pack is the party least able to
+  notice what is missing from it; pass `--allow-synthetic` to accept a demo pack
+  knowingly. The library's `verify_pack(require_live=...)` defaults off and the
+  CLI sets the policy, matching how `require_anchored` already works.
+- **The audit PDF states its subject in the first line of "Scope and
+  methodology"** — which surfaces were live backends and which were Sectum's
+  built-in stores, and, when none were live, that the pack is a demonstration
+  rather than an attestation. Shared by both PDF engines so they cannot disagree
+  about the paragraph that fixes the document's subject.
+
 ### Changed
 
+- `sectum-ai verify` on a demo pack now needs `--allow-synthetic` alongside
+  `--allow-unanchored`. The shipped examples, the sample-pack docs, and the
+  regenerated sample artifacts all say so.
 - `METHODOLOGY_VERSION` is **1.1** (from 1.0) for scorecard honesty rule 5.
   `docs/scorecard.md` publishes the scope table and the reasoning behind the
   asymmetry between an all-synthetic and a partly-synthetic run.

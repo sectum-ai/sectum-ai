@@ -25,7 +25,7 @@ sectum-ai erasure --subject "$here/subject.yaml" --workdir "$out" --config "$her
 
 echo
 echo "==> 3/3  Independently verify the per-subject attestation"
-sectum-ai verify "$out/erasure-evidence.json" --allow-unanchored
+sectum-ai verify "$out/erasure-evidence.json" --allow-unanchored --allow-synthetic
 
 echo
 echo "This demo runs against the built-in synthetic store, so it reports ERASED with a"
