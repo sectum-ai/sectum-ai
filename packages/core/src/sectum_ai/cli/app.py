@@ -59,6 +59,7 @@ from sectum_ai.config import (
     build_vector_store,
     embedder_model_name,
     load_config,
+    surface_provenance,
 )
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum_ai.embeddings import EmbeddingModel, resolve_embedding_model, validate_embedding_spec
@@ -133,6 +134,7 @@ from sectum_ai.spec import (
     SectumError,
     Substrate,
     Surface,
+    SurfaceProvenance,
     canonical_hash,
     configure_logging,
     untrusted,
@@ -874,6 +876,10 @@ def probe(
             bundle.observability.name: _ADAPTERS_VERSION,
             bundle.agent.name: _ADAPTERS_VERSION,
         },
+        # What the run interrogated, not just which adapters it named: a family
+        # that fell back to the in-memory fake produces verdicts about nothing
+        # real, and that has to be legible to whoever reads the signed pack.
+        surface_provenance=surface_provenance(bundle),
         probe_versions={
             # What actually INTERROGATED the stack, not what the suite contained: a probe
             # whose plan comes back empty asked the stack nothing, and recording it let
@@ -992,8 +998,30 @@ def probe(
             if class_rate is not None:
                 typer.echo(f"{label}: {class_rate:.0%}")
         typer.echo(f"run recorded -> {path}")
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     if confirmed:
         raise typer.Exit(code=2)
+
+
+def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
+    """Tell the operator which surfaces this run never touched for real.
+
+    The same warning the DSR path has always emitted, generalized to the probe
+    suite: a family that resolved to the in-memory fake produces verdicts about
+    nothing in production, and an all-synthetic run still grades and packs like a
+    real one. The signed record carries this too - this is the copy the operator
+    sees while there is still time to fix the config.
+    """
+    fake = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.SYNTHETIC.value)
+    if not fake:
+        return
+    scope = "every surface" if len(fake) == len(provenance) else ", ".join(fake)
+    typer.echo(
+        f"warning: no live adapter configured for {scope} - these verdicts describe "
+        "the built-in synthetic stack, not your production systems. Configure real "
+        "adapters via --config; `sectum-ai list-adapters` shows the kinds available.",
+        err=True,
+    )
 
 
 def _resolve_timestamper(evidence: EvidenceConfig, tsa_override: str | None) -> Timestamper | None:

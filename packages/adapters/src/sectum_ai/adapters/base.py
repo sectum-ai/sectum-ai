@@ -109,6 +109,15 @@ class Adapter(ABC):
 
     family: AdapterFamily
 
+    synthetic: bool = False
+    """Whether this adapter is an in-memory fake rather than a real backend.
+
+    Recorded per surface in the signed run (``RunResult.surface_provenance``) so
+    a reader of the evidence pack can tell whether a verdict describes their
+    production systems. Declared here rather than sniffed from ``name`` because
+    the name is a constructor argument any caller can set to anything.
+    """
+
     def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:
         self.name = name
         self.capabilities: frozenset[Capability] = (

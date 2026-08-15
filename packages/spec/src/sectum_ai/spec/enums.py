@@ -75,6 +75,29 @@ class Surface(StrEnum):
     TRACING = "tracing"
 
 
+class SurfaceProvenance(StrEnum):
+    """What a run's probes actually interrogated on one surface.
+
+    The third anti-over-claim block, after :class:`CoverageVerdict` (which
+    surface was scanned) and :class:`ClassVerdict` (which class was checked).
+    Those two answer *what did the run look at*; this one answers the question
+    underneath them - *was there anything real behind it*.
+
+    Sectum ships a synthetic in-memory adapter for every family, and an omitted
+    or misspelled adapter key resolves to one silently. A whole run against
+    those stores is well-formed, signs cleanly, and describes nothing about the
+    operator's production systems - so the fact has to travel inside the signed
+    record, where a third party reading the pack can see it, rather than in a
+    console warning only the operator ever sees.
+    """
+
+    LIVE = "LIVE"
+    """A configured backend outside this process - the run touched a real system."""
+
+    SYNTHETIC = "SYNTHETIC"
+    """The built-in in-memory fake: a verdict here says nothing about production."""
+
+
 class CoverageVerdict(StrEnum):
     """The per-surface coverage verdict in a Class 11 erasure attestation.
 

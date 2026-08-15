@@ -111,6 +111,8 @@ class FakeVectorStore(VectorStoreAdapter):
     queryable. All default to off.
     """
 
+    synthetic = True
+
     def __init__(
         self,
         name: str = "fake-vector",
@@ -210,6 +212,8 @@ class FakeRAGPipeline(RAGPipelineAdapter):
     pipeline is tenant-scoped (the default).
     """
 
+    synthetic = True
+
     def __init__(self, name: str = "fake-rag", *, shared_index: bool = False) -> None:
         capabilities: set[Capability] = set()
         if shared_index:
@@ -253,6 +257,8 @@ class FakeObservability(ObservabilityAdapter):
       Datadog APM). Class 11 records this as *attestable-with-caveat*, distinct
       from a soft-delete failure (spec §7 #8).
     """
+
+    synthetic = True
 
     def __init__(
         self,
@@ -331,6 +337,8 @@ class FakeAgent(AgentAdapter):
 
     With both off the agent is tenant-scoped and reports that capability.
     """
+
+    synthetic = True
 
     def __init__(
         self,
@@ -413,6 +421,8 @@ class FakeMCP(MCPAdapter):
     With ``user_scoped=True`` (reporting ``USER_SCOPED``) a ``lookup`` carrying a
     ``user`` resolves only that user's own resources within the tenant (ADR-0006).
     """
+
+    synthetic = True
 
     def __init__(
         self,
@@ -576,6 +586,8 @@ class FakeCache(CacheAdapter):
     the cross-user leak. All default to off except ``tenant_scoped``.
     """
 
+    synthetic = True
+
     def __init__(
         self,
         name: str = "fake-cache",
@@ -648,6 +660,8 @@ class FakeModel(ModelAdapter):
     (the user boundary) model different boundaries and are not meant to be
     combined. All default to off.
     """
+
+    synthetic = True
 
     _BASE_LATENCY_MS = 100.0
     _CACHE_HIT_SPEEDUP_MS = 60.0
@@ -761,6 +775,8 @@ class FakeMemory(MemoryAdapter):
     boundary) model different boundaries and are not meant to be combined.
     """
 
+    synthetic = True
+
     def __init__(
         self,
         name: str = "fake-memory",
@@ -812,6 +828,8 @@ class FakeSearchIndex(SearchIndexAdapter):
     erasure verification is built to catch. Defaults to off.
     """
 
+    synthetic = True
+
     def __init__(self, name: str = "fake-search", *, soft_delete: bool = False) -> None:
         capabilities = {Capability.TEXT_SEARCH}
         if soft_delete:
@@ -845,6 +863,8 @@ class FakeEvalSet(EvalSetAdapter):
     leaves the fixtures in place - the residue Class 11 erasure verification is
     built to catch. Defaults to off.
     """
+
+    synthetic = True
 
     def __init__(self, name: str = "fake-eval-set", *, soft_delete: bool = False) -> None:
         capabilities = {Capability.TEXT_SEARCH}
@@ -881,6 +901,8 @@ class FakeBackup(BackupAdapter):
     ``soft_delete=True`` a ``delete`` is acknowledged but leaves the snapshot in
     place - the residue Class 11 is built to catch. Both default to off.
     """
+
+    synthetic = True
 
     def __init__(
         self, name: str = "fake-backup", *, soft_delete: bool = False, no_erasure: bool = False

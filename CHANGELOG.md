@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A run now records what it actually interrogated, not just which adapters it
+  named.** `RunResult` carries a `surface_provenance` block — `LIVE` or
+  `SYNTHETIC` per surface — inside the canonical hash, so the disclosure is
+  signed alongside the findings. Sectum ships an in-memory fake for every adapter
+  family and resolves an omitted key to one, which meant a run against eight
+  fakes graded `A` at `confidence: high`, packed into a signature-clean
+  attestation, and produced an audit PDF that never used the word *synthetic*.
+  The only prior trace was `adapter_versions` keys reading `fake-vector`, and an
+  adapter's name is a constructor argument any caller can set to anything —
+  provenance is now a declared class attribute (`Adapter.synthetic`) read off the
+  built instance. A misspelled adapter key (`vector:` instead of `vector_store:`,
+  which the open `adapters` mapping accepts silently) is therefore recorded as
+  the fake it resolved to, not the backend the config appeared to name.
+- `probe` warns on stderr naming every surface that fell back to the synthetic
+  stack — the warning the DSR path has always emitted, generalized to the probe
+  suite, where the operator can still fix the config.
+
+### Changed
+
+- `SCHEMA_VERSION` is **0.6.0** (from 0.5.0) for the `surface_provenance` block.
+  Per the evidence chain's existing compatibility policy, a verifier refuses a
+  pack from a different `major.minor` rather than risk mis-verifying it, so packs
+  signed under 0.5.0 must be verified with a 0.8.x-or-earlier `sectum-ai verify`.
+  The shipped sample packs and the reproducibility goldens are regenerated.
+
 ## [0.8.4] - 2026-08-14
 
 ### Fixed

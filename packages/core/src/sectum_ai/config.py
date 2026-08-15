@@ -42,6 +42,7 @@ from pydantic import (
 )
 
 from sectum_ai.adapters import (
+    Adapter,
     AgentAdapter,
     BackupAdapter,
     CacheAdapter,
@@ -75,7 +76,7 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError
+from sectum_ai.spec import AdapterError, ConfigError, Surface, SurfaceProvenance
 
 
 class ScenarioConfig(BaseModel):
@@ -297,6 +298,34 @@ class AdapterBundle:
     rag: RAGPipelineAdapter
     observability: ObservabilityAdapter
     agent: AgentAdapter
+
+
+# Which surface each bundle field speaks for, for the signed provenance block.
+_BUNDLE_SURFACES: tuple[tuple[str, Surface], ...] = (
+    ("vector", Surface.VECTOR_DB),
+    ("cache", Surface.SEMANTIC_CACHE),
+    ("model", Surface.MODEL_ADAPTER),
+    ("mcp", Surface.MCP),
+    ("memory", Surface.AGENT_MEMORY),
+    ("rag", Surface.RAG_PIPELINE),
+    ("observability", Surface.TRACING),
+    ("agent", Surface.AGENT_FRAMEWORK),
+)
+
+
+def surface_provenance(bundle: AdapterBundle) -> dict[str, str]:
+    """Map each exercised surface to whether its adapter was live or synthetic.
+
+    Read off the adapter instances rather than the config, so a family that fell
+    back to a fake - an omitted key, a misspelled one - is recorded as what it
+    actually is and not as what the config appeared to ask for.
+    """
+
+    def provenance(field: str) -> SurfaceProvenance:
+        adapter: Adapter = getattr(bundle, field)
+        return SurfaceProvenance.SYNTHETIC if adapter.synthetic else SurfaceProvenance.LIVE
+
+    return {surface.value: provenance(field).value for field, surface in _BUNDLE_SURFACES}
 
 
 def _bool(extras: dict[str, Any], key: str, default: bool) -> bool:

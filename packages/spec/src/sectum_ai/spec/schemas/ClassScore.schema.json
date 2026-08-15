@@ -23,7 +23,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.5.0/ClassScore.schema.json",
+  "$id": "https://schemas.sectum.ai/0.6.0/ClassScore.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "One attack class's line in an isolation scorecard (``docs/scorecard.md``).",

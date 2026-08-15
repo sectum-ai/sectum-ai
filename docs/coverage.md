@@ -27,6 +27,16 @@ synthetic substrate.
 
 See [Adapters](adapters.md) for how to configure each backend.
 
+Every family Sectum cannot reach falls back to its in-memory fake, so a run
+against an incomplete config still produces a complete-looking result. Which
+surfaces were real is not left to the reader to infer: `probe` warns on stderr
+about every synthetic surface, and the run records a `surface_provenance` block
+(`LIVE` / `SYNTHETIC` per surface) inside the signed evidence, so a third party
+reading the pack can tell what the verdicts actually describe. The block is read
+off the constructed adapters, which means a misspelled key — `vector:` for
+`vector_store:` — is recorded as the fake it resolved to, not the backend the
+config appeared to name.
+
 ## Probe → the surface it needs
 
 | Probe (class) | Requires | Runs when your stack has |

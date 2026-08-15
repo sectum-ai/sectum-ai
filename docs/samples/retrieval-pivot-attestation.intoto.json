@@ -4,17 +4,17 @@
     {
       "name": "run-sectum-ai-demo-2026",
       "digest": {
-        "sha256": "b8cf8660c1866d21609045438391b729f308292a965e4fb09c75572a3d4ab93b"
+        "sha256": "04a68a4f48f6a5e9ccefb451ff7a929f6cc59aba01f009897f34d1e0a5ebc330"
       }
     }
   ],
   "predicateType": "https://sectum.ai/attestation/multi-tenant-verification/v1",
   "predicate": {
-    "schema_version": "0.5.0",
-    "scenario_hash": "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65",
-    "manifest_hash": "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27",
-    "started_at": "2026-06-15T16:59:06.073964+00:00",
-    "finished_at": "2026-06-15T16:59:07.780009+00:00",
+    "schema_version": "0.6.0",
+    "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
+    "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
+    "started_at": "2026-08-15T17:42:58.262873+00:00",
+    "finished_at": "2026-08-15T17:42:59.992641+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,
@@ -92,20 +92,18 @@
       {
         "framework": "GDPR",
         "control_ids": [
-          "Article 17",
           "Article 25",
           "Article 32"
         ],
-        "assertion": "Erasure across the AI surfaces verified; tenant isolation tested."
+        "assertion": "Tenant isolation tested across the AI surfaces."
       },
       {
         "framework": "CCPA/CPRA",
         "control_ids": [
-          "1798.105",
           "1798.100",
           "1798.150"
         ],
-        "assertion": "Deletion of a consumer's personal information across the AI surfaces verified; segregation of consumer data tested."
+        "assertion": "Segregation of consumer data tested across the AI surfaces."
       },
       {
         "framework": "EU AI Act",
