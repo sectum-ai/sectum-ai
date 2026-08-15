@@ -29,4 +29,4 @@ carry a remediation pointer to return an explicit authorization error.
 ## Status
 
 Implemented in Phase 3. This is the table-stakes probe — its value is
-manifest-grounded, zero-false-positive detection.
+manifest-grounded detection: every confirmation ties back to a planted marker.

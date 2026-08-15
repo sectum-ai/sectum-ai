@@ -9,10 +9,15 @@ runs cheapest-and-most-certain first:
 2. Semantic similarity against foreign ENTITY_CANARY markers yields candidates.
 3. A calibrated judge adjudicates each candidate.
 
-Zero false positives by construction: every finding is tied to a manifest
-marker, and a finding is only ``CONFIRMED`` on an exact hit or a positive judge
-verdict. Text containing no manifest marker can never produce a confirmed
-finding (the engineering spec, section 6.4; tested as an invariant).
+Manifest-grounded by construction: every finding ties back to a manifest
+marker. A finding is ``CONFIRMED`` on an exact/format hit, on a foreign entity
+whose plaintext is literally present in the observation (a leak by observation,
+which no judge verdict can unmake), or on a judge verdict whose cited evidence
+is traceable to the marker. That bounds confirmations to the manifest's own
+markers; it is not a claim that every confirmation is correct, since a semantic
+confirmation still rests on the configured judge. Text containing no manifest
+marker can never produce a confirmed finding (the engineering spec, section 6.4;
+tested as an invariant).
 """
 
 import hashlib
