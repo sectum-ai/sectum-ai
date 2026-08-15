@@ -29,14 +29,22 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 ## Verifying these packs
 
-Every pack here verifies under the open-source `sectum-ai verify`. The samples
-are produced by the offline demo flow, so their timestamp is the local-dev
-token — pass `--allow-unanchored` to accept integrity-only verification (a
-production pack built with `report --tsa --rekor` verifies without the flag,
-as an independently anchored attestation):
+Every pack here verifies under the open-source `sectum-ai verify`, given two
+flags that say plainly what these packs are. They are produced by the offline
+demo flow, so:
+
+- their timestamp is the local-dev token — `--allow-unanchored` accepts
+  integrity-only verification (a production pack built with `report --tsa
+  --rekor` verifies without the flag, as an independently anchored attestation);
+- every surface they exercised was Sectum's built-in in-memory fake, not a
+  configured backend — `--allow-synthetic` accepts that. Without it `verify`
+  refuses, because every other check concerns the integrity of the *bytes* and
+  passes just as cleanly for a run that touched nothing real. The `run-scope`
+  check reports the provenance either way.
 
 ```sh
-uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json --allow-unanchored
+uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json \
+  --allow-unanchored --allow-synthetic
 ```
 
 A `VERIFIED` outcome means the whole-pack attested digest matches the

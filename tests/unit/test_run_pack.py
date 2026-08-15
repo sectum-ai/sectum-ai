@@ -177,7 +177,7 @@ def test_pack_builds_a_verifiable_run_pack(tmp_path: Path) -> None:
         "bundle-manifest.json",
     } <= _members(pack)
 
-    verified = _runner.invoke(app, ["verify", str(pack), "--allow-unanchored"])
+    verified = _runner.invoke(app, ["verify", str(pack), "--allow-unanchored", "--allow-synthetic"])
     assert verified.exit_code == 0, verified.output
 
 

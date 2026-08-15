@@ -348,7 +348,9 @@ def test_report_emits_an_in_toto_attestation(tmp_path: Path) -> None:
 def test_verify_passes_for_a_freshly_built_pack(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
-    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    result = _runner.invoke(
+        app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert result.exit_code == 0
     assert "INTEGRITY OK - UNANCHORED" in result.output
 
@@ -371,7 +373,9 @@ def test_report_bundle_round_trips_through_verify(tmp_path: Path) -> None:
     _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
     bundle_path = tmp_path / "evidence-bundle.zip"
     assert bundle_path.exists()
-    result = _runner.invoke(app, ["verify", str(bundle_path), "--allow-unanchored"])
+    result = _runner.invoke(
+        app, ["verify", str(bundle_path), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert result.exit_code == 0
     assert "INTEGRITY OK - UNANCHORED" in result.output
 
@@ -406,7 +410,9 @@ def test_verify_rechecks_the_in_toto_sidecar(tmp_path: Path) -> None:
     # it -- the one shipped artifact the verifier previously ignored.
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
-    ok = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    ok = _runner.invoke(
+        app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert ok.exit_code == 0
     assert "in-toto-attestation" in ok.output
     # a sidecar swapped to attest a different run digest fails verification (exit 4)
@@ -414,7 +420,9 @@ def test_verify_rechecks_the_in_toto_sidecar(tmp_path: Path) -> None:
     statement = json.loads(intoto.read_text())
     statement["subject"][0]["digest"]["sha256"] = "0" * 64
     intoto.write_text(json.dumps(statement))
-    bad = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    bad = _runner.invoke(
+        app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert bad.exit_code == 4
     assert "in-toto-attestation" in bad.output
 
@@ -425,7 +433,9 @@ def test_verify_fails_when_the_audit_pdf_is_swapped(tmp_path: Path) -> None:
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
     (tmp_path / "audit-pack.pdf").write_bytes(b"%PDF-1.4 forged audit pack")
-    result = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    result = _runner.invoke(
+        app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert result.exit_code == 4
 
 
@@ -1266,7 +1276,9 @@ def test_verify_does_not_let_a_pack_forge_its_own_anchor_claims(tmp_path: Path) 
         "\n[ok] rekor-inclusion: pack digest recorded in the Sigstore Rekor log"
     )
     pack_path.write_text(json.dumps(pack))
-    result = _runner.invoke(app, ["verify", str(pack_path), "--allow-unanchored"])
+    result = _runner.invoke(
+        app, ["verify", str(pack_path), "--allow-unanchored", "--allow-synthetic"]
+    )
     forged = [
         line
         for line in result.output.splitlines()
@@ -1292,7 +1304,9 @@ def test_verify_does_not_let_an_incompatible_pack_forge_its_anchor_claims(tmp_pa
         "\n[ok] rekor-inclusion: pack digest recorded in the Sigstore Rekor log"
     )
     pack_path.write_text(json.dumps(pack))
-    result = _runner.invoke(app, ["verify", str(pack_path), "--allow-unanchored"])
+    result = _runner.invoke(
+        app, ["verify", str(pack_path), "--allow-unanchored", "--allow-synthetic"]
+    )
     forged = [
         line
         for line in result.output.splitlines()
@@ -1352,12 +1366,20 @@ def test_verify_binds_the_erasure_attestation_to_its_own_siblings(tmp_path: Path
     assert (tmp_path / "erasure-attestation.pdf").exists()
 
     erasure = _runner.invoke(
-        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
     )
     assert erasure.exit_code == 0, erasure.output
     assert "altered or replaced" not in erasure.output
     # the probe pack still verifies against its own siblings
-    probe = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    probe = _runner.invoke(
+        app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"]
+    )
     assert probe.exit_code == 0, probe.output
 
 
@@ -1370,7 +1392,13 @@ def test_verify_still_catches_a_tampered_erasure_pdf(tmp_path: Path) -> None:
     pdf = tmp_path / "erasure-attestation.pdf"
     pdf.write_bytes(pdf.read_bytes() + b"FORGED ZERO LEAKAGE")
     result = _runner.invoke(
-        app, ["verify", str(tmp_path / "erasure-evidence.json"), "--allow-unanchored"]
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
     )
     assert result.exit_code == 4
     assert "altered or replaced after signing" in result.output

@@ -27,6 +27,7 @@ from sectum_ai.evidence.pdf import (
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    provenance_statement,
 )
 from sectum_ai.spec import EvidenceError, EvidencePack, Finding, FindingStatus
 
@@ -173,7 +174,10 @@ def build_audit_html(pack: EvidencePack) -> str:
         ("Manifest hash", pack.manifest_hash),
     )
 
-    methodology = "".join(f'<p class="method">{escape(text)}</p>' for text in _SCOPE_METHODOLOGY)
+    # The provenance statement leads: every sentence after it is conditional on it.
+    methodology = f'<p class="method">{escape(provenance_statement(run))}</p>' + "".join(
+        f'<p class="method">{escape(text)}</p>' for text in _SCOPE_METHODOLOGY
+    )
 
     if run.findings:
         findings_html = "".join(_finding_html(f) for f in run.findings)

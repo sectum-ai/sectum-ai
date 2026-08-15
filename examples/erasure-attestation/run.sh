@@ -25,7 +25,7 @@ sectum-ai erasure --workdir "$out" --target-tenant "Acme Robotics"
 
 echo
 echo "==> 3/3  Independently verify the erasure attestation"
-sectum-ai verify "$out/erasure-evidence.json" --allow-unanchored
+sectum-ai verify "$out/erasure-evidence.json" --allow-unanchored --allow-synthetic
 
 echo
 echo "Attestation PDF: $out/erasure-attestation.pdf"
