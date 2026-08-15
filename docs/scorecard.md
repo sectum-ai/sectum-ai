@@ -13,6 +13,8 @@ sectum-ai score  --workdir .sectum-ai           # or: --output json
 Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   run run-sectum-ai-demo-2026 (.sectum-ai/run.json)
   record 3b4338ec5a375e02 (sha256, the run identifier)
+  scope: Sectum's built-in SYNTHETIC stack - this grade describes no
+         production system (no live adapter on any surface)
   capped by a failing critical-band class
 
   Class  1  Direct tenant boundary fetch    FAIL        critical
@@ -20,7 +22,7 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   ...
   Class 13  Multi-modal RAG entity-bleed    NOT_COVERED critical probe did not run - ...
 
-  Methodology: docs/scorecard.md (v1.0) - weighted 0.00 over the covered classes; coverage 0.88.
+  Methodology: docs/scorecard.md (v1.1) - weighted 0.00 over the covered classes; coverage 0.88.
   Untested classes lower confidence, never the grade.
 ```
 
@@ -72,10 +74,10 @@ check the pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that
 stamped on every scorecard, so a recompute uses the same rules and lands on the same
 letter.
 
-## The four honesty rules
+## The five honesty rules
 
 This page exists because a single letter is the easiest place in the product to
-over-claim. Four rules prevent it:
+over-claim. Five rules prevent it:
 
 1. **A class that did not run can only ever be `NOT_COVERED` — never `PASS`.** A grade
    must never imply the stack passed a check it was never asked to perform. Untested
@@ -94,6 +96,24 @@ over-claim. Four rules prevent it:
    bookkeeping. A confirmed finding this catalog cannot attribute at all (a probe added
    or renamed without updating the catalog) makes `score` **refuse** (exit 3) rather than
    silently drop a leak.
+5. **A letter states which stack it is about.** Sectum falls back to an in-memory fake
+   for every adapter family it cannot reach, so an all-fake run graded `A` at
+   `confidence: high` and read exactly like a production pass. Every scorecard now
+   carries a **scope**, derived from the run's signed `surface_provenance`:
+
+   | Scope | When | Effect on the grade |
+   |---|---|---|
+   | `synthetic_stack` | No surface was live | Still graded — the run is unambiguously the demo (the quickstart configures no adapters — see [coverage](coverage.md)) — under a scope line naming the synthetic stack. |
+   | `configured_stack` | At least one surface was live | Any class whose probes **all** ran against fakes is `NOT_COVERED` and drops out of the letter. |
+   | `unrecorded` | The run predates `surface_provenance` | Graded as before; the scope says its subject cannot be established. |
+
+   The asymmetry is deliberate. A run with nothing live is a demo. A run with *some*
+   live surfaces was an attempt at a real assessment, and its remaining fakes are
+   silent gaps the operator believes were covered — so only there is a synthetic-backed
+   class withheld. A fake's verdict is neither assurance nor fault: a pass against it
+   proves nothing about production, and a leak from it is not the operator's bug. Those
+   findings are still counted and named on the class line (rule 4 forbids dropping them
+   silently); they simply do not move the letter.
 
 ## The catalog and its weights
 
@@ -220,5 +240,5 @@ carry the currently-unreachable `low`/`info` weight bands).
 grade/confidence/cap tests beside them — so changing one fails CI until this page and the
 version move too.
 Any change to them is a change to what a published grade means, so bump
-`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.0` must always
+`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.1` must always
 recompute to the same letter.

@@ -25,10 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `probe` warns on stderr naming every surface that fell back to the synthetic
   stack — the warning the DSR path has always emitted, generalized to the probe
   suite, where the operator can still fix the config.
+- **The scorecard states which stack its letter is about** — honesty rule 5, and
+  the consequence of the block above. `IsolationScore` carries a `scope` and the
+  `synthetic_surfaces` behind it, both rendered beside the grade. A run with no
+  live surface is unambiguously the demo (the quickstart configures nothing), so
+  it still grades — under a scope line naming the synthetic stack. A run with
+  *some* live surfaces was an attempt at a real assessment, and its remaining
+  fakes are silent gaps the operator believes were covered: there, a class whose
+  probes all ran against fakes is `NOT_COVERED` and drops out of the letter. That
+  closes both directions — a pass against a fake was false assurance, and a leak
+  from a fake was a false alarm about production. Those findings are still counted
+  and named on the class line, so rule 4 still holds: nothing is dropped silently,
+  it just no longer moves the grade.
 
 ### Changed
 
-- `SCHEMA_VERSION` is **0.6.0** (from 0.5.0) for the `surface_provenance` block.
+- `METHODOLOGY_VERSION` is **1.1** (from 1.0) for scorecard honesty rule 5.
+  `docs/scorecard.md` publishes the scope table and the reasoning behind the
+  asymmetry between an all-synthetic and a partly-synthetic run.
+- `SCHEMA_VERSION` is **0.6.0** (from 0.5.0) for the `surface_provenance` block
+  and the scorecard's `scope` / `synthetic_surfaces` fields.
   Per the evidence chain's existing compatibility policy, a verifier refuses a
   pack from a different `major.minor` rather than risk mis-verifying it, so packs
   signed under 0.5.0 must be verified with a 0.8.x-or-earlier `sectum-ai verify`.

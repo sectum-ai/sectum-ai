@@ -131,6 +131,7 @@ from sectum_ai.spec import (
     MarkerType,
     RunMetrics,
     RunResult,
+    ScoreScope,
     SectumError,
     Substrate,
     Surface,
@@ -1001,6 +1002,34 @@ def probe(
     _warn_on_synthetic_surfaces(run.surface_provenance)
     if confirmed:
         raise typer.Exit(code=2)
+
+
+def _scope_lines(card: IsolationScore) -> list[str]:
+    """The scope block: which stack this letter is about (``docs/scorecard.md``, rule 5).
+
+    A grade is meaningless without its subject, and the subject is the thing a
+    reader assumes rather than checks - so it is stated next to the letter, not
+    left to be inferred from an adapter list further down.
+    """
+    if card.scope is ScoreScope.SYNTHETIC_STACK:
+        return [
+            "  scope: Sectum's built-in SYNTHETIC stack - this grade describes no",
+            "         production system (no live adapter on any surface)",
+        ]
+    if card.scope is ScoreScope.UNRECORDED:
+        return [
+            "  scope: not recorded - this run predates surface provenance, so whether",
+            "         it touched live backends cannot be established from it",
+        ]
+    if not card.synthetic_surfaces:
+        return ["  scope: your configured stack (every surface live)"]
+    lines = [
+        f"  scope: your configured stack, except {len(card.synthetic_surfaces)} SYNTHETIC "
+        "surface(s) -",
+        "         any class resting only on these is excluded from the grade:",
+    ]
+    lines.extend(f"           {surface}" for surface in card.synthetic_surfaces)
+    return lines
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -2455,6 +2484,8 @@ def _render_scorecard(card: IsolationScore, source: Path) -> None:
     # actually graded) is what identifies WHICH record earned this letter.
     typer.echo(f"  run {untrusted(card.run_id)} ({source})")
     typer.echo(f"  record {card.run_digest[:16]} (sha256, the run identifier)")
+    for line in _scope_lines(card):
+        typer.echo(line)
     if card.capped_by is not None:
         typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")

@@ -6,7 +6,7 @@ attack catalog into one letter plus a per-class breakdown, from a signed
 run rather than trusting the grade. The published methodology (``docs/scorecard.md``)
 pins the weights, thresholds, and caps that :data:`METHODOLOGY_VERSION` stamps.
 
-Four rules keep the letter honest (the same anti-over-claim discipline as the Class 11
+Five rules keep the letter honest (the same anti-over-claim discipline as the Class 11
 coverage block):
 
 1. **A class that did not run can only ever be NOT_COVERED - never PASS.** A grade must
@@ -29,6 +29,16 @@ coverage block):
    rather than being silently dropped. Re-grading a record you did not produce is this
    module's whole purpose, so the record's own findings - not its bookkeeping - are the
    authority on what leaked.
+5. **A letter states which stack it is about.** Sectum falls back to an in-memory fake
+   for every family it cannot reach, so an all-fake run graded ``A`` at high confidence
+   and read exactly like a production pass. Every score now carries a
+   :class:`~sectum_ai.spec.ScoreScope`. A run with *nothing* live is unambiguously the
+   demo and still grades, under a scope naming the synthetic stack. A run with *some*
+   live surfaces was an attempt at a real assessment, and its fakes are silent gaps the
+   operator believes were covered - so there, a class whose probes all ran against fakes
+   is ``NOT_COVERED``: a fake's verdict is neither assurance nor fault. Its findings are
+   still counted and named on the class line, so nothing is dropped silently (rule 4);
+   they simply do not move the letter.
 
 Class 11 (GDPR Article 17 erasure) is deliberately out of scope here: it is a control
 check with its own attestation (``sectum-ai erasure``), not an adversarial isolation
@@ -51,7 +61,10 @@ from sectum_ai.spec import (
     IsolationScore,
     RunMetrics,
     RunResult,
+    ScoreScope,
     Severity,
+    Surface,
+    SurfaceProvenance,
     untrusted,
     wilson_interval,
 )
@@ -59,11 +72,12 @@ from sectum_ai.spec import (
 __all__ = [
     "CATALOG",
     "METHODOLOGY_VERSION",
+    "PROBE_SURFACES",
     "SEVERITY_WEIGHTS",
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.0"
+METHODOLOGY_VERSION = "1.1"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -79,6 +93,30 @@ SEVERITY_WEIGHTS: dict[Severity, int] = {
     Severity.INFO: 0,
 }
 """How much each severity band contributes to the weighted score and to coverage."""
+
+
+# Which surface each probe drives, so a class backed only by synthetic adapters can be
+# recognised from the signed run alone. Declared here rather than imported from the
+# probes: this module re-grades a record it did not produce, and must not depend on the
+# implementations that produced it. ``tests/unit/test_scorecard_scope.py`` pins these
+# against each probe's own ``surfaces`` attribute so the two cannot drift.
+PROBE_SURFACES: dict[str, tuple[Surface, ...]] = {
+    "tenant-boundary-fetch": (Surface.VECTOR_DB,),
+    "rag-entity-bleed": (Surface.VECTOR_DB,),
+    "rag-pipeline-bleed": (Surface.RAG_PIPELINE,),
+    "rag-poisoning": (Surface.VECTOR_DB,),
+    "semantic-cache-contamination": (Surface.SEMANTIC_CACHE,),
+    # KvCacheTimingProbe predates the Probe protocol's ``surfaces`` attribute and
+    # declares none; it takes a ModelAdapter directly.
+    "kv-cache-timing": (Surface.MODEL_ADAPTER,),
+    "embedding-inversion": (Surface.VECTOR_DB,),
+    "agent-tool-hijack": (Surface.MCP,),
+    "agent-framework-hijack": (Surface.AGENT_FRAMEWORK,),
+    "memory-contamination": (Surface.AGENT_MEMORY,),
+    "lora-cross-tenant": (Surface.MODEL_ADAPTER,),
+    "ikea-extraction": (Surface.VECTOR_DB,),
+    "multimodal-rag-bleed": (Surface.VECTOR_DB,),
+}
 
 
 @dataclass(frozen=True)
@@ -255,12 +293,57 @@ def _confirmed_probe_ids(run: RunResult) -> set[str]:
     }
 
 
-def _score_class(entry: _CatalogClass, run: RunResult, proven: set[str]) -> ClassScore:
+def _scope_of(run: RunResult) -> tuple[ScoreScope, frozenset[str]]:
+    """Which stack this run's grade describes, and which surfaces were fakes."""
+    provenance = run.surface_provenance
+    if not provenance:
+        # A record from before surface_provenance existed. Its subject cannot be
+        # established, and guessing either way would be the over-claim: say so.
+        return ScoreScope.UNRECORDED, frozenset()
+    synthetic = frozenset(
+        surface
+        for surface, value in provenance.items()
+        if value == SurfaceProvenance.SYNTHETIC.value
+    )
+    live = any(value == SurfaceProvenance.LIVE.value for value in provenance.values())
+    scope = ScoreScope.CONFIGURED_STACK if live else ScoreScope.SYNTHETIC_STACK
+    return scope, synthetic
+
+
+def _score_class(
+    entry: _CatalogClass, run: RunResult, proven: set[str], synthetic: frozenset[str]
+) -> ClassScore:
     ran = [
         probe_id
         for probe_id in entry.probe_ids
         if probe_id in run.probe_versions or probe_id in proven
     ]
+    backing = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
+    if ran and backing and backing <= synthetic:
+        # Rule 5: a class every one of whose probes ran against the built-in fake
+        # cannot speak for the operator's stack in either direction - a pass is not
+        # assurance and a leak is not their fault. Its findings are still counted and
+        # named, so nothing is dropped silently; they just do not move this grade.
+        confirmed_synthetic = sum(
+            1
+            for finding in run.findings
+            if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+        )
+        against = ", ".join(sorted(backing))
+        detail = (
+            f"; the {confirmed_synthetic} finding(s) here describe that fake, not your stack"
+            if confirmed_synthetic
+            else ""
+        )
+        return ClassScore(
+            class_id=entry.class_id,
+            name=entry.name,
+            verdict=ClassVerdict.NOT_COVERED,
+            severity=entry.severity,
+            probe_ids=tuple(ran),
+            confirmed_findings=confirmed_synthetic,
+            note=f"no live adapter behind {against} - probed the built-in fake{detail}",
+        )
     # A confirmed finding fails the class it belongs to, whether or not the run's
     # bookkeeping recorded that probe as having run - never drop contradicting evidence.
     confirmed = sum(
@@ -338,7 +421,14 @@ def score_run(run: RunResult) -> IsolationScore:
         # a traceback: the record cannot be graded, and saying so is the whole answer.
         raise ConfigError(f"this run cannot be identified, so it is not graded: {exc}") from exc
 
-    classes = tuple(_score_class(entry, run, proven) for entry in CATALOG)
+    scope, synthetic = _scope_of(run)
+    # A run with nothing live is unambiguously the demo (nobody configured anything), so
+    # it still grades - under a scope that says whose stack it graded. A run with some
+    # live surfaces was an attempt at a real assessment, and the fakes in it are the
+    # dangerous case: silent gaps the operator believes were covered. Only there are the
+    # synthetic-backed classes withheld from the letter.
+    withhold = synthetic if scope is ScoreScope.CONFIGURED_STACK else frozenset()
+    classes = tuple(_score_class(entry, run, proven, withhold) for entry in CATALOG)
     weight = {entry.class_id: SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG}
     total_weight = sum(weight.values())
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
@@ -384,6 +474,8 @@ def score_run(run: RunResult) -> IsolationScore:
         classes_covered=len(covered),
         classes_total=len(CATALOG),
         capped_by=capped_by,
+        scope=scope,
+        synthetic_surfaces=tuple(sorted(synthetic)),
         classes=classes,
         methodology_version=METHODOLOGY_VERSION,
     )

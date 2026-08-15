@@ -99,6 +99,16 @@
       "title": "Grade",
       "type": "string"
     },
+    "ScoreScope": {
+      "description": "Which stack an isolation grade actually describes.\n\nA letter is meaningless without its subject. Sectum falls back to an\nin-memory fake for every family it cannot reach, so the same ``A`` can mean\n\"your production stack held\" or \"the built-in demo stack held\" - and nothing\nin the grade itself distinguished them.",
+      "enum": [
+        "configured_stack",
+        "synthetic_stack",
+        "unrecorded"
+      ],
+      "title": "ScoreScope",
+      "type": "string"
+    },
     "Severity": {
       "description": "Finding severity levels.",
       "enum": [
@@ -174,6 +184,18 @@
       "default": "0.6.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/ScoreScope",
+      "default": "unrecorded"
+    },
+    "synthetic_surfaces": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Synthetic Surfaces",
+      "type": "array"
     },
     "weighted_score": {
       "maximum": 1.0,
