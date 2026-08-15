@@ -19,6 +19,7 @@ from sectum_ai.spec.enums import (
     Grade,
     MarkerType,
     PrincipalKind,
+    ScoreScope,
     Severity,
     Surface,
 )
@@ -51,6 +52,11 @@ preceding block states what the run *checked*; this one states what it checked
 *against*, so a fully synthetic run can no longer present as an attestation
 about production. It is inside the canonical hash, so the disclosure is signed
 with the findings rather than asserted alongside them.
+
+:class:`IsolationScore` carries the consequence: a ``scope`` naming which stack
+the letter describes, and the ``synthetic_surfaces`` behind it. A grade with no
+subject is the same over-claim one level up - an all-synthetic run graded ``A``
+at high confidence and read exactly like a production pass.
 """
 
 
@@ -467,6 +473,16 @@ class IsolationScore(SectumModel):
     # the published methodology), never the severity recorded on an individual finding.
     # Makes the grade explainable rather than an opaque letter.
     capped_by: Severity | None = None
+    # Which stack this letter is about, derived from the run's ``surface_provenance``.
+    # A grade with no subject is the over-claim this scorecard's rules exist to
+    # prevent, one level up: an all-synthetic run graded ``A`` at high confidence and
+    # read exactly like a production pass.
+    scope: ScoreScope = ScoreScope.UNRECORDED
+    # The surfaces that ran against the built-in fake, in catalog order. Rendered
+    # beside the grade; on a CONFIGURED_STACK run the classes resting only on these
+    # are NOT_COVERED, since a verdict from a fake says nothing about the operator's
+    # systems in either direction - a pass is not assurance and a leak is not a fault.
+    synthetic_surfaces: tuple[str, ...] = ()
     classes: tuple[ClassScore, ...] = ()
     # The methodology revision (weights, thresholds, caps) the grade was computed
     # under, so a recompute uses the same rules and lands on the same letter.

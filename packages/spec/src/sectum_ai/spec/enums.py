@@ -98,6 +98,25 @@ class SurfaceProvenance(StrEnum):
     """The built-in in-memory fake: a verdict here says nothing about production."""
 
 
+class ScoreScope(StrEnum):
+    """Which stack an isolation grade actually describes.
+
+    A letter is meaningless without its subject. Sectum falls back to an
+    in-memory fake for every family it cannot reach, so the same ``A`` can mean
+    "your production stack held" or "the built-in demo stack held" - and nothing
+    in the grade itself distinguished them.
+    """
+
+    CONFIGURED_STACK = "configured_stack"
+    """At least one surface was live: the grade is about the operator's systems."""
+
+    SYNTHETIC_STACK = "synthetic_stack"
+    """No surface was live - the grade describes Sectum's own demo substrate."""
+
+    UNRECORDED = "unrecorded"
+    """The run predates ``surface_provenance``; its subject cannot be established."""
+
+
 class CoverageVerdict(StrEnum):
     """The per-surface coverage verdict in a Class 11 erasure attestation.
 

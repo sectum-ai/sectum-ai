@@ -753,7 +753,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     payload = json.loads(result.output)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"] == "1.0"  # pinned; see docs/scorecard.md
+    assert payload["methodology_version"] == "1.1"  # pinned; see docs/scorecard.md
     # The demo leaks on every surface it exercised, so the covered classes all fail.
     assert payload["weighted_score"] == 0.0
     assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
