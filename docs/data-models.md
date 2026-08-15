@@ -22,7 +22,7 @@ without running Sectum.
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
 | `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate, erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`), side-channel effect sizes, and the Class 3/6/10 rates. |
-| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `findings[]`, `metrics`. |
+| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics`. |
 | `EvidencePack` | The signed bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, and `schema_version`. |
 | `ControlMapping` | A finding's mapped compliance control (framework, control id, assertion) — see the [compliance mappings](compliance-mappings.md). |
 | `ClassScore` | One attack class's line in an isolation scorecard: `class_id`, `name`, `verdict` (`PASS`/`FAIL`/`NOT_COVERED`), weight `severity` band, `probe_ids`, `confirmed_findings`, `headline?`, `note?`. |
@@ -30,13 +30,19 @@ without running Sectum.
 
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, and `EvidencePack`
 each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
-schema it does not understand. The current `SCHEMA_VERSION` is **0.5.0** — it
-added the Retrieval-Pivot Rate's binomial counts (`retrieval_pivot_n`,
+schema it does not understand. The current `SCHEMA_VERSION` is **0.6.0** — it
+added `surface_provenance` to `RunResult`, a per-surface record of whether each
+adapter family the run exercised was a live backend or Sectum's built-in
+in-memory fake. Sectum ships a fake for every family and resolves an omitted (or
+misspelled) adapter key to one, so a run can be well-formed, sign cleanly, and
+describe nothing about production; the block puts that fact inside the canonical
+hash where a pack's reader can see it. The prior **0.5.0** added the
+Retrieval-Pivot Rate's binomial counts (`retrieval_pivot_n`,
 `retrieval_pivot_k`) and a Wilson confidence interval (`retrieval_pivot_rate_ci`)
 to `RunMetrics`, so the headline rate's uncertainty is reproducible from the
 signed evidence (see the
-[Class 2 attack catalog page](attack-catalog/class-02-rag-entity-bleed.md)). The
-prior **0.4.0** added the per-surface erasure `coverage` block to `RunMetrics`
+[Class 2 attack catalog page](attack-catalog/class-02-rag-entity-bleed.md)), and
+**0.4.0** added the per-surface erasure `coverage` block to `RunMetrics`
 (see the [erasure attack catalog page](attack-catalog/class-11-erasure.md)).
 
 ## Published JSON Schema

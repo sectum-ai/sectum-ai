@@ -23,7 +23,7 @@ from sectum_ai.spec.enums import (
     Surface,
 )
 
-SCHEMA_VERSION = "0.5.0"
+SCHEMA_VERSION = "0.6.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
@@ -43,6 +43,14 @@ which surfaced a foreign marker) and a Wilson score interval on the rate
 (``retrieval_pivot_rate_ci``). The counts make the interval reproducible from the
 signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
+
+0.6.0 — :class:`RunResult` records ``surface_provenance`` (surface ->
+:class:`~sectum_ai.spec.enums.SurfaceProvenance`): whether each adapter family
+the run exercised was a live backend or the built-in synthetic fake. Every
+preceding block states what the run *checked*; this one states what it checked
+*against*, so a fully synthetic run can no longer present as an attestation
+about production. It is inside the canonical hash, so the disclosure is signed
+with the findings rather than asserted alongside them.
 """
 
 
@@ -354,6 +362,18 @@ class RunResult(SectumModel):
     started_at: UtcDateTime
     finished_at: UtcDateTime
     adapter_versions: dict[str, str] = Field(default_factory=dict)
+    # Per-surface provenance (surface value -> SurfaceProvenance value): whether
+    # each family this run exercised was a live backend or the built-in fake.
+    # ``adapter_versions`` above names the adapters, but its keys are adapter
+    # *names* - a mutable constructor argument, not a provenance record - and
+    # nothing downstream reads them, so a fully synthetic run scored an A at high
+    # confidence and packed into a clean attestation. Only surfaces the run
+    # actually exercised appear; a family with no adapter is absent rather than
+    # recorded as anything, since a class that never ran is already NOT_COVERED.
+    # Stored as plain strings for the same reason as ``erasure_coverage``: it
+    # keeps the canonical-hash form and exported JSON Schema identical to the
+    # other blocks. The values are SurfaceProvenance members.
+    surface_provenance: dict[str, str] = Field(default_factory=dict)
     probe_versions: dict[str, str] = Field(default_factory=dict)
     findings: tuple[Finding, ...] = ()
     metrics: RunMetrics = Field(default_factory=RunMetrics)

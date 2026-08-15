@@ -1,22 +1,23 @@
 {
   "run_result": {
     "run_id": "erasure-7cd276c8",
-    "scenario_hash": "bf705865563c42f77e59e2944e9d66f6a7bc1431789515dd57c473c960861e65",
-    "manifest_hash": "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27",
-    "started_at": "2026-06-15T16:59:26.891040+00:00",
-    "finished_at": "2026-06-15T16:59:26.892022+00:00",
+    "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
+    "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
+    "started_at": "2026-08-15T17:43:15.308933+00:00",
+    "finished_at": "2026-08-15T17:43:15.309996+00:00",
     "adapter_versions": {
-      "fake-vector": "0.1.0",
-      "fake-observability": "0.1.0",
-      "fake-memory": "0.1.0",
-      "fake-cache": "0.1.0",
-      "fake-model": "0.1.0",
-      "fake-search": "0.1.0",
-      "fake-eval-set": "0.1.0",
-      "fake-backup": "0.1.0"
+      "fake-vector": "0.8.4",
+      "fake-observability": "0.8.4",
+      "fake-memory": "0.8.4",
+      "fake-cache": "0.8.4",
+      "fake-model": "0.8.4",
+      "fake-search": "0.8.4",
+      "fake-eval-set": "0.8.4",
+      "fake-backup": "0.8.4"
     },
+    "surface_provenance": {},
     "probe_versions": {
-      "gdpr-erasure-verification": "0.1.0"
+      "gdpr-erasure-verification": "0.8.4"
     },
     "findings": [
       {
@@ -422,10 +423,10 @@
       "inversion_reconstruction_rate": null,
       "extraction_efficiency": null
     },
-    "schema_version": "0.5.0"
+    "schema_version": "0.6.0"
   },
-  "manifest_hash": "b8236a0e14d14c15fe2e6206e17fe4008f9f3c89992ee9eb25345259431b1c27",
-  "tsa_token": "{\"digest\":\"80ff1619ac1b217116caabdb30a59f254069eeeaad0a62fde3e87af52dbdca0a\",\"timestamped_at\":\"2026-06-15T16:59:26.914456+00:00\",\"tsa\":\"local-dev\"}",
+  "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
+  "tsa_token": "{\"digest\":\"dfc4b504583918bfad92e87d56a587a4c39f429c7252f6ac1f3546fddb6aeee9\",\"timestamped_at\":\"2026-08-15T17:43:15.324094+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -458,20 +459,32 @@
     {
       "framework": "GDPR",
       "control_ids": [
-        "Article 17",
         "Article 25",
         "Article 32"
       ],
-      "assertion": "Erasure across the AI surfaces verified; tenant isolation tested."
+      "assertion": "Tenant isolation tested across the AI surfaces."
+    },
+    {
+      "framework": "GDPR",
+      "control_ids": [
+        "Article 17"
+      ],
+      "assertion": "Erasure across the AI surfaces verified."
     },
     {
       "framework": "CCPA/CPRA",
       "control_ids": [
-        "1798.105",
         "1798.100",
         "1798.150"
       ],
-      "assertion": "Deletion of a consumer's personal information across the AI surfaces verified; segregation of consumer data tested."
+      "assertion": "Segregation of consumer data tested across the AI surfaces."
+    },
+    {
+      "framework": "CCPA/CPRA",
+      "control_ids": [
+        "1798.105"
+      ],
+      "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
     },
     {
       "framework": "EU AI Act",
@@ -505,8 +518,8 @@
       "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "bf662d1af0677286aeb842094c46027d5538b22bdb4f4b16d85d2afce49f992c",
+  "pdf_ref": "41d9201dcdefa771586ed53aae605ad8d45f99e5489c06084cff1c4ecc0d221e",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
-  "schema_version": "0.5.0"
+  "schema_version": "0.6.0"
 }

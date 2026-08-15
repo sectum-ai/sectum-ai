@@ -12,6 +12,7 @@ from sectum_ai.spec.enums import (
     PrincipalKind,
     Severity,
     Surface,
+    SurfaceProvenance,
 )
 from sectum_ai.spec.errors import (
     AdapterError,
@@ -85,6 +86,7 @@ __all__ = [
     "SharedEntity",
     "Substrate",
     "Surface",
+    "SurfaceProvenance",
     "SyntheticTenantSpec",
     "SyntheticUserSpec",
     "canonical_hash",
