@@ -48,7 +48,8 @@ real product).
   **as the tenant's own user** so Open WebUI's real retrieval + authorization
   path runs.
 - **Sectum detects** the foreign canary in Open WebUI's answer + retrieved
-  source chunks against the manifest — zero false positives. **Note on what the
+  source chunks against the manifest, every confirmation tied back to a planted
+  marker. **Note on what the
   default run measures:** with the default `fake` embedder, detection is the
   **exact** `HARD_CANARY` and **credential-format** `SECRET_CANARY` paths, so the
   headline RPR is an *exact-match* result. The organic `ENTITY_CANARY` **semantic**
