@@ -95,11 +95,13 @@ def test_a_configured_backend_records_that_surface_as_live() -> None:
     assert set(others.values()) == {SurfaceProvenance.SYNTHETIC.value}
 
 
-def test_a_misspelled_adapter_key_is_recorded_as_synthetic_not_live() -> None:
-    # `adapters` is an open mapping, so `vector:` instead of `vector_store:`
-    # resolves to the fake. The operator asked for a live run and got a synthetic
-    # one; provenance is read off the built instance so the record still says so.
-    config = SectumConfig(adapters={"vector": AdapterConfig(kind="pgvector", dsn_env="NOT_READ")})
+def test_an_omitted_family_is_recorded_as_synthetic_not_live() -> None:
+    # Provenance is read off the built instance, not the config, so a family the
+    # config never mentions is recorded as the fake it resolved to rather than
+    # being absent. A misspelled key used to reach this same state; it is now
+    # rejected at load instead (tests/unit/test_adapter_key_validation.py), which
+    # leaves omission as the way a live-looking config still probes nothing real.
+    config = SectumConfig(adapters={"cache": AdapterConfig(kind="fake")})
     provenance = surface_provenance(build_adapters(config))
     assert provenance[Surface.VECTOR_DB.value] == SurfaceProvenance.SYNTHETIC.value
 
