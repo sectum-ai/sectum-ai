@@ -85,6 +85,23 @@ alongside `--allow-unanchored`. A pack from a real, configured run is unaffected
   signed under 0.5.0 must be verified with a 0.8.x-or-earlier `sectum-ai verify`.
   The shipped sample packs and the reproducibility goldens are regenerated.
 
+### Fixed
+
+- **The detection module's own docstring described pre-0.8.0 behaviour.** It
+  headlined "Zero false positives by construction" — the claim 0.8.1 retracted
+  from `docs/substrate.md` and `docs/vs-deepteam.md` — and it described
+  confirmation as happening "only on an exact hit or a positive judge verdict",
+  which stopped being true in 0.8.0, when a verbatim foreign entity began
+  confirming on observation regardless of the judge's verdict. So the file that
+  *implements* detection had been documenting a rule the code no longer followed.
+  The wording now mirrors the corrected `docs/substrate.md`: confirmations are
+  bounded to the manifest's own markers, which is not the same as asserting every
+  confirmation is correct — a semantic confirmation still rests on the configured
+  judge. The closing invariant is unchanged and still holds: text containing no
+  manifest marker can never produce a confirmed finding
+  (`tests/invariants/test_zero_fp.py`). The same retracted wording is also
+  corrected in the Class 1 attack-catalog page and the open-webui example README.
+
 ## [0.8.4] - 2026-08-14
 
 ### Fixed
