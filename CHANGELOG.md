@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **An unknown adapter family is now rejected at config load instead of ignored.**
+  Every resolver reads its family with `config.adapters.get(name, fake)`, so an
+  unrecognised key was never looked up: the family fell back to the built-in
+  in-memory fake and the run proceeded as though configured. `vector:` instead of
+  `vector_store:` is the whole failure — one character short of a real backend,
+  written by an operator who then believed they had probed production. 0.9.0 made
+  that visible *after* the fact (the run records the surface as `SYNTHETIC`); this
+  closes it before anything is seeded. The error names the key, suggests the
+  family it most likely meant, lists the valid set, and says what would otherwise
+  have happened.
+
+  **This is a breaking change for a config that carries such a key** — which is
+  the point, since it was never doing what its author intended. A family you want
+  left synthetic should be *omitted*; omission is deliberate and is still recorded
+  as `SYNTHETIC` in the run's surface provenance.
+
 ## [0.9.0] - 2026-08-15
 
 Sectum ships an in-memory fake for every adapter family and falls back to one

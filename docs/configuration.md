@@ -65,7 +65,27 @@ The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
 `memory`, `rag`, `observability`, and `agent` — and `sectum-ai probe` drives all
 of them through the runner. `sectum-ai erasure` additionally consumes the three
 Class 11 erasure surfaces `search_index`, `eval_set`, and `backup` (documented
-below). Any other family name parses successfully but is not consumed.
+below).
+
+Any **other** family name is rejected at config load. It used to parse and simply
+never be read, which meant a one-character slip silently disabled a backend:
+
+```
+$ sectum-ai probe --config sectum-ai.yaml
+ConfigError: invalid config in sectum-ai.yaml: 1 validation error for SectumConfig
+adapters
+  Value error, unknown adapter family: 'vector' (did you mean 'vector_store'?).
+  Valid families are: agent, backup, cache, eval_set, mcp, memory, model,
+  observability, rag, search_index, vector_store. An unrecognised key is never
+  read, so the family would silently fall back to the built-in synthetic adapter
+  and the run would describe nothing real [type=value_error, ...]
+```
+
+A misspelled key is never intentional, so `sectum-ai` says so before it seeds
+anything rather than probing a fake and reporting the result. A family you
+genuinely want left synthetic should simply be **omitted** — omission is
+deliberate, and the run records it as `SYNTHETIC` in its
+[surface provenance](coverage.md) either way.
 
 Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
 that support them), beyond the per-family fields the tables below highlight:

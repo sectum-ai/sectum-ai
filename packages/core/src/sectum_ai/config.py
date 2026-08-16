@@ -28,6 +28,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -232,6 +233,29 @@ class DetectionConfig(BaseModel):
         return self
 
 
+ADAPTER_FAMILIES: frozenset[str] = frozenset(
+    {
+        "vector_store",
+        "cache",
+        "model",
+        "mcp",
+        "memory",
+        "rag",
+        "observability",
+        "agent",
+        "search_index",
+        "eval_set",
+        "backup",
+    }
+)
+"""Every adapter family a config may name, i.e. every key the resolvers read.
+
+``tests/unit/test_adapter_key_validation.py`` pins this against the ``adapters.get``
+call sites, so a family added to a resolver but not here cannot silently become
+un-configurable.
+"""
+
+
 class SectumConfig(BaseModel):
     """The parsed ``sectum-ai.yaml`` configuration."""
 
@@ -243,6 +267,39 @@ class SectumConfig(BaseModel):
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
+
+    @field_validator("adapters")
+    @classmethod
+    def _check_adapter_families(
+        cls, adapters: dict[str, AdapterConfig]
+    ) -> dict[str, AdapterConfig]:
+        """Reject an adapter family this build cannot resolve, rather than ignoring it.
+
+        Every resolver reads its family with ``config.adapters.get(name, fake)``, so
+        an unrecognised key was simply never looked up: the family fell back to the
+        built-in in-memory fake and the run proceeded as if configured. ``vector:``
+        instead of ``vector_store:`` is the whole failure - one character short of
+        a real backend, and the operator who wrote it believed they had probed
+        production. Nothing about the result said otherwise until the run's surface
+        provenance made it visible after the fact.
+
+        A misspelled key is never intentional, so the honest moment to say so is
+        config load, before anything is seeded or probed.
+        """
+        unknown = sorted(set(adapters) - ADAPTER_FAMILIES)
+        if not unknown:
+            return adapters
+        details = []
+        for key in unknown:
+            near = get_close_matches(key, ADAPTER_FAMILIES, n=1, cutoff=0.6)
+            details.append(f"{key!r}" + (f" (did you mean {near[0]!r}?)" if near else ""))
+        raise ValueError(
+            f"unknown adapter {'families' if len(unknown) > 1 else 'family'}: "
+            f"{', '.join(details)}. Valid families are: "
+            f"{', '.join(sorted(ADAPTER_FAMILIES))}. An unrecognised key is never "
+            "read, so the family would silently fall back to the built-in synthetic "
+            "adapter and the run would describe nothing real"
+        )
 
     @model_validator(mode="before")
     @classmethod
