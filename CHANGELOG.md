@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-15
+
+Sectum ships an in-memory fake for every adapter family and falls back to one
+silently, so a run that touched **nothing real** produced a `GRADE A` at
+`confidence: high`, packed into a signature-clean attestation, and rendered an
+audit PDF indistinguishable from a production assessment. Every honesty rule the
+tool had answered *what did this run check*; none answered *what did it check
+against*. This release closes that at all three layers — the signed record, the
+grade, and the verifier.
+
+**If you verify packs in CI, read this:** `sectum-ai verify` now refuses a pack in
+which no surface was live. A demo or self-test pack needs `--allow-synthetic`
+alongside `--allow-unanchored`. A pack from a real, configured run is unaffected.
+
 ### Added
 
 - **A run now records what it actually interrogated, not just which adapters it
