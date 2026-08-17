@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-17
+
+The last way a config could look live and probe nothing. v0.9.0 made a synthetic
+run *visible* — recorded in the signed evidence, scoped in the grade, refused by
+`verify`. All of that reports after the run. This closes the most common way one
+started: an adapter family whose key the resolver never reads.
+
+Minor-version rather than patch because a config carrying such a key now fails to
+load. If you have one, it has never been doing what you intended.
+
 ### Changed
 
 - **An unknown adapter family is now rejected at config load instead of ignored.**
