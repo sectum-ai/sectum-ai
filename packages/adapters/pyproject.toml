@@ -62,7 +62,7 @@ rag-langchain = ["langchain-core>=0.3"]
 boto3 = ["boto3>=1.43.51"]
 # the GCS backup adapter is the Google-cloud parallel of the S3 one (fake-gcs-server
 # for local testing via STORAGE_EMULATOR_HOST).
-gcs = ["google-cloud-storage>=2.10"]
+gcs = ["google-cloud-storage>=3.13.1"]
 # helicone + datadog observability read over their REST APIs with the standard
 # library (no SDK), so they need no extras group; listed here for discoverability.
 
