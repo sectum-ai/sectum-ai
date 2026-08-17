@@ -25,7 +25,7 @@ dev = [
     "mcp>=1",
     "types-pyyaml>=6.0.12.20260724",
     "hypothesis>=6.155.1",
-    "rfc3161-client>=1.0.3",
+    "rfc3161-client>=1.0.8",
     "cryptography>=43",
     # Class 13 multi-modal image substrate (the [multimodal] extra); declared here so
     # the offline imagehash sweep, its unit tests, and the e2e example run in CI.
