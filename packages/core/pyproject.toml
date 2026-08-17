@@ -54,8 +54,8 @@ bedrock = ["boto3>=1.43.51"]
 # Multi-modal RAG entity-bleed (Class 13): Pillow renders the deterministic synthetic
 # image substrate for the offline imagehash-<dim> sweep; the clip extra adds real CLIP
 # image embeddings via sentence-transformers. See sectum_ai/multimodal.py.
-multimodal = ["pillow>=10"]
-clip = ["pillow>=10", "sentence-transformers>=3"]
+multimodal = ["pillow>=12.3.0"]
+clip = ["pillow>=12.3.0", "sentence-transformers>=3"]
 
 [project.scripts]
 sectum-ai = "sectum_ai.cli.app:app"

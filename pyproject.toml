@@ -29,7 +29,7 @@ dev = [
     "cryptography>=43",
     # Class 13 multi-modal image substrate (the [multimodal] extra); declared here so
     # the offline imagehash sweep, its unit tests, and the e2e example run in CI.
-    "pillow>=10",
+    "pillow>=12.3.0",
 ]
 docs = [
     "mkdocs-material>=9.7.7",
