@@ -24,7 +24,6 @@ from sectum_ai.spec import (
     Observation,
     ProbeStep,
     Substrate,
-    Surface,
     get_logger,
 )
 
@@ -163,7 +162,7 @@ class Runner:
         )
         return Observation(
             step_id=step.step_id,
-            surface=Surface.VECTOR_DB,
+            surface=self._vector.surface,
             raw_response="\n".join(hit.content for hit in hits),
         )
 
@@ -177,7 +176,7 @@ class Runner:
         # an absent one is the ambiguous 200-empty case, not a proven deny.
         return Observation(
             step_id=step.step_id,
-            surface=Surface.VECTOR_DB,
+            surface=self._vector.surface,
             raw_response=hit.content if hit is not None else "",
             access_outcome=AccessOutcome.RETURNED if hit is not None else AccessOutcome.EMPTY,
         )
@@ -196,7 +195,7 @@ class Runner:
             owner_user_id=step.actor_user_id,
         )
         self._vector.upsert(step.actor_tenant_id, [document])
-        return Observation(step_id=step.step_id, surface=Surface.VECTOR_DB, raw_response="")
+        return Observation(step_id=step.step_id, surface=self._vector.surface, raw_response="")
 
     def _cache_set(self, step: ProbeStep) -> Observation:
         if self._cache is None:
@@ -207,7 +206,7 @@ class Runner:
             step.payload["value"],
             user=step.actor_user_id,
         )
-        return Observation(step_id=step.step_id, surface=Surface.SEMANTIC_CACHE, raw_response="")
+        return Observation(step_id=step.step_id, surface=self._cache.surface, raw_response="")
 
     def _cache_get(self, step: ProbeStep) -> Observation:
         if self._cache is None:
@@ -215,7 +214,7 @@ class Runner:
         value = self._cache.get(step.actor_tenant_id, step.payload["key"], user=step.actor_user_id)
         return Observation(
             step_id=step.step_id,
-            surface=Surface.SEMANTIC_CACHE,
+            surface=self._cache.surface,
             raw_response=value or "",
         )
 
@@ -225,7 +224,7 @@ class Runner:
         self._model.train_adapter(
             step.actor_tenant_id, [step.payload["text"]], user=step.actor_user_id
         )
-        return Observation(step_id=step.step_id, surface=Surface.MODEL_ADAPTER, raw_response="")
+        return Observation(step_id=step.step_id, surface=self._model.surface, raw_response="")
 
     def _model_infer(self, step: ProbeStep) -> Observation:
         if self._model is None:
@@ -246,7 +245,7 @@ class Runner:
         )
         return Observation(
             step_id=step.step_id,
-            surface=Surface.MODEL_ADAPTER,
+            surface=self._model.surface,
             raw_response=response,
             structured=structured,
         )
@@ -260,7 +259,7 @@ class Runner:
         )
         return Observation(
             step_id=step.step_id,
-            surface=Surface.MCP,
+            surface=self._mcp.surface,
             raw_response=result.output,
         )
 
@@ -268,7 +267,7 @@ class Runner:
         if self._memory is None:
             raise AdapterError("a memory.write step needs a memory adapter")
         self._memory.remember(step.actor_tenant_id, step.payload["text"], user=step.actor_user_id)
-        return Observation(step_id=step.step_id, surface=Surface.AGENT_MEMORY, raw_response="")
+        return Observation(step_id=step.step_id, surface=self._memory.surface, raw_response="")
 
     def _memory_recall(self, step: ProbeStep) -> Observation:
         if self._memory is None:
@@ -278,7 +277,7 @@ class Runner:
         )
         return Observation(
             step_id=step.step_id,
-            surface=Surface.AGENT_MEMORY,
+            surface=self._memory.surface,
             raw_response="\n".join(recalled),
         )
 
@@ -288,7 +287,7 @@ class Runner:
         answer = self._rag.ask(step.actor_tenant_id, step.payload["query"])
         return Observation(
             step_id=step.step_id,
-            surface=Surface.RAG_PIPELINE,
+            surface=self._rag.surface,
             raw_response=answer.answer,
         )
 
@@ -298,7 +297,7 @@ class Runner:
         hits = self._observability.search_traces(step.actor_tenant_id, step.payload["marker"])
         return Observation(
             step_id=step.step_id,
-            surface=Surface.TRACING,
+            surface=self._observability.surface,
             raw_response="\n".join(hit.snippet for hit in hits),
         )
 
@@ -308,7 +307,7 @@ class Runner:
         result = self._agent.run(step.actor_tenant_id, step.payload["task"])
         return Observation(
             step_id=step.step_id,
-            surface=Surface.AGENT_FRAMEWORK,
+            surface=self._agent.surface,
             raw_response=result.output,
         )
 

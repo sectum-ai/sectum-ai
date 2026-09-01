@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **An observation is labelled by the adapter that produced it, not by its
+  action.** The runner stamped a literal onto every observation — a
+  `vector.fetch` step always produced `Surface.VECTOR_DB` — which holds only
+  while one family can ever fill a slot. That label reaches the signed evidence,
+  the scorecard's per-class lines, and the audit pack, so an adapter speaking for
+  a different surface would have had its findings filed under the wrong one.
+  `Adapter.surface` is now declared by each family base and read by the runner;
+  every adapter shipping today keeps exactly the label it had. Same shape as the
+  v0.9.0 provenance fix: a fact declared by the thing it describes, rather than
+  inferred from something incidental next to it.
+
 ### Fixed
 
 - The `README.md` status line advertised **v0.8.1** while the repo shipped
