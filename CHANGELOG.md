@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dependency floors raised to match the locked versions: `ruff>=0.16.3` (resolves
+  to 0.16.5 — no lint or format changes across 288 files), `pillow>=12.3.0`,
+  `rfc3161-client>=1.0.8`, `langchain-core>=1.5.4`, `google-cloud-storage>=3.13.1`.
+  Drained as one batch rather than five PRs, which each would have
+  cascade-conflicted on this file. `pillow` and `rfc3161-client` are in the
+  default sync and covered by 38 executing tests; `langchain-core` and
+  `google-cloud-storage` sit behind extras that no CI job installs, so those two
+  are constraint-only — their locked versions already satisfied the new floors.
+
 - **Classes 6 and 13 now run only where their mechanism exists.** Both describe a
   *vector-space* effect: Class 6 reconstructs a foreign entity from a partial
   fragment and reports it as `AML.T0024.001 Invert ML Model`, and Class 13 is the
