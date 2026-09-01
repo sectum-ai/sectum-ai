@@ -7,6 +7,7 @@ foreign entity canary; if the index returns the full canary content, the
 foreign entity has been reconstructed from partial knowledge.
 """
 
+from sectum_ai.adapters import Capability
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
 from sectum_ai.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
 
@@ -21,6 +22,13 @@ class EmbeddingInversionProbe(DetectingProbe):
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
     requires_adapters: tuple[str, ...] = ("vector",)
+    # Only meaningful against a store that ranks by embedding similarity. A
+    # backend that matches on substrings can return the full document for a
+    # fragment query without any embedding being involved, and this probe would
+    # record that keyword hit as AML.T0024.001 "Invert ML Model" - a real result
+    # attributed to a mechanism the backend does not have. Skipped there, which
+    # scores the class NOT_COVERED rather than PASS.
+    requires_any_capability: tuple[Capability, ...] = (Capability.SEMANTIC_RETRIEVAL,)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan, per entity canary, a partial-fragment query from each foreign principal.

@@ -13,6 +13,7 @@ plan/detect over deterministic synthetic images (the ``imagehash-<dim>`` CI prox
 CLIP; on real embedders a stronger model leaks more, the multi-modal echo of Class 2.
 """
 
+from sectum_ai.adapters import Capability
 from sectum_ai.probes.detection import DetectingProbe, cross_principal_observers
 from sectum_ai.spec import Finding, Observation, ProbeStep, Substrate, Surface
 
@@ -39,6 +40,11 @@ class MultimodalRagBleedProbe(DetectingProbe):
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)
     requires_adapters: tuple[str, ...] = ("vector",)
+    # Class 13 is the Retrieval Pivot through a SHARED MULTI-MODAL VECTOR SPACE
+    # (see the module docstring): with no embedding similarity behind the store
+    # the pivot this probe describes cannot occur, so a hit here would be some
+    # other mechanism wearing this class's name. Skipped there -> NOT_COVERED.
+    requires_any_capability: tuple[Capability, ...] = (Capability.SEMANTIC_RETRIEVAL,)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
         """Plan one benign image query per shared visual entity, from every principal.

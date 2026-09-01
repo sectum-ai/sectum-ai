@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Classes 6 and 13 now run only where their mechanism exists.** Both describe a
+  *vector-space* effect: Class 6 reconstructs a foreign entity from a partial
+  fragment and reports it as `AML.T0024.001 Invert ML Model`, and Class 13 is the
+  Retrieval Pivot through a shared multi-modal embedding space. Neither declared a
+  capability gate, so both ran against any store filling the vector slot. A
+  backend that matches on substrings can return a whole document for a fragment
+  query with no embedding involved — recorded as embedding inversion, a real
+  result attributed to a mechanism the backend does not have — and a backend
+  finding nothing scored the class `PASS`, credit for a check that could not be
+  performed. Both directions are the failure mode the honesty rules exist to
+  prevent. `VectorStoreAdapter.semantic_retrieval` defaults to `True`, so every
+  store Sectum ships is unaffected and none can forget the capability; a backend
+  that retrieves some other way sets it `False` and those classes report
+  `NOT_COVERED`.
+
 - **An observation is labelled by the adapter that produced it, not by its
   action.** The runner stamped a literal onto every observation — a
   `vector.fetch` step always produced `Surface.VECTOR_DB` — which holds only
