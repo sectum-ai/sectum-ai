@@ -54,6 +54,7 @@ class Capability(StrEnum):
     PER_TENANT_MEMORY = "per_tenant_memory"
     SHARED_MEMORY = "shared_memory"
     SHARED_PREFIX_CACHE = "shared_prefix_cache"
+    SEMANTIC_RETRIEVAL = "semantic_retrieval"
 
 
 class _AdapterValue(BaseModel):
@@ -145,6 +146,28 @@ class VectorStoreAdapter(Adapter):
 
     family = AdapterFamily.VECTOR_STORE
     surface = Surface.VECTOR_DB
+
+    semantic_retrieval: bool = True
+    """Whether this store's ``query`` ranks by embedding similarity.
+
+    Two probe classes are only *meaningful* against a store that does. Class 6
+    reconstructs a foreign entity from a partial fragment and reports it as
+    ``AML.T0024.001 Invert ML Model``; Class 13 is the Retrieval Pivot through a
+    shared multi-modal vector space. Run either against a store that matches on
+    substrings instead, and a keyword hit gets recorded as embedding inversion -
+    a real finding attributed to a mechanism the backend does not have.
+
+    Defaults to ``True`` because every store Sectum ships is embedding-backed, so
+    the capability cannot be forgotten when adding one. A backend that retrieves
+    some other way sets it ``False`` and those classes report NOT_COVERED, which
+    is the honest verdict for a check that could not be performed.
+    """
+
+    def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:
+        declared = set(capabilities or ())
+        if self.semantic_retrieval:
+            declared.add(Capability.SEMANTIC_RETRIEVAL)
+        super().__init__(name, frozenset(declared))
 
     @abstractmethod
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
