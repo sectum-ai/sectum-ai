@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `README.md` status line advertised **v0.8.1** while the repo shipped
+  0.10.0 (two releases stale). Bumped it to v0.10.0 and added a standing test
+  (`tests/unit/test_action_version.py`) that ties the README status version to
+  the shipped package version, the same guard the Action default already has.
+
 ## [0.10.0] - 2026-08-17
 
 The last way a config could look live and probe nothing. v0.9.0 made a synthetic

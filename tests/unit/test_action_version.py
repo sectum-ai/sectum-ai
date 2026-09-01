@@ -39,6 +39,12 @@ def _action_default() -> str:
     return default
 
 
+def _readme_status_version() -> str | None:
+    readme = (_ROOT / "README.md").read_text()
+    match = re.search(r"\*\*Status:\s*v(\d+\.\d+\.\d+)", readme)
+    return match.group(1) if match else None
+
+
 def test_the_action_default_matches_the_shipped_version() -> None:
     # A release that bumps the packages but not the Action leaves every default
     # run of the Action installing the previous release.
@@ -64,4 +70,18 @@ def test_the_action_docs_quote_the_same_version() -> None:
     assert pins <= {shipped}, (
         f"docs/github-action.md pins sectum-ai/sectum-ai@v{sorted(pins - {shipped})} "
         f"in an example, but this repo ships {shipped}"
+    )
+
+
+def test_the_readme_status_matches_the_shipped_version() -> None:
+    # The README status line states the shipped version in prose but was tied to
+    # nothing, so it sat at v0.8.1 while the repo shipped 0.10.0 (two releases
+    # stale) - a wrong version string in the storefront of a "verify, don't trust
+    # us" product. Guard it like the Action default.
+    shipped = _package_version()
+    status = _readme_status_version()
+    assert status is not None, "README.md has no `**Status: vX.Y.Z**` line"
+    assert status == shipped, (
+        f"README.md status line says v{status}, but this repo ships {shipped}; "
+        "bump the `**Status: vX.Y.Z**` line in README.md as part of the release"
     )
