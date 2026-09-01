@@ -9,7 +9,7 @@ a tamper-evident PDF plus a machine-readable evidence pack that auditors,
 customer security teams, and DPOs accept — and that anyone can verify
 independently, without trusting us.
 
-> **Status: v0.8.1.** Every build-plan phase (the spec, §14) has met its
+> **Status: v0.10.0.** Every build-plan phase (the spec, §14) has met its
 > acceptance criteria: the marker substrate, the leak-detection pipeline, the
 > Class 1–11 and 13 attack catalog, the tamper-evident evidence chain (Class 12), the
 > adapter SDK (live adapters for vector stores, caches, memory, observability,
