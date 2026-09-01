@@ -16,7 +16,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from sectum_ai.spec import CorpusDocument, get_logger
+from sectum_ai.spec import CorpusDocument, Surface, get_logger
 
 _log = get_logger(__name__)
 
@@ -118,6 +118,17 @@ class Adapter(ABC):
     the name is a constructor argument any caller can set to anything.
     """
 
+    surface: Surface
+    """The place tenant data can leak that this adapter speaks for.
+
+    A property of the adapter, not of the action that drives it. The runner used
+    to stamp a literal onto every observation - ``vector.fetch`` always produced
+    ``Surface.VECTOR_DB`` - which is correct only while one family can ever fill a
+    slot. It is the same shape as reading provenance off an adapter's ``name``
+    (see ``synthetic`` above): true by convention until something reuses the slot,
+    and then silently wrong in the signed evidence.
+    """
+
     def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:
         self.name = name
         self.capabilities: frozenset[Capability] = (
@@ -133,6 +144,7 @@ class VectorStoreAdapter(Adapter):
     """Adapter for a vector database (the engineering spec, section 11)."""
 
     family = AdapterFamily.VECTOR_STORE
+    surface = Surface.VECTOR_DB
 
     @abstractmethod
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
@@ -176,6 +188,7 @@ class RAGPipelineAdapter(Adapter):
     """Adapter for a retrieval-augmented-generation pipeline."""
 
     family = AdapterFamily.RAG_PIPELINE
+    surface = Surface.RAG_PIPELINE
 
     @abstractmethod
     def ask(self, tenant: UUID, query: str) -> RagAnswer:
@@ -186,6 +199,7 @@ class ObservabilityAdapter(Adapter):
     """Adapter for an observability or tracing backend."""
 
     family = AdapterFamily.OBSERVABILITY
+    surface = Surface.TRACING
 
     @abstractmethod
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
@@ -221,6 +235,7 @@ class AgentAdapter(Adapter):
     """Adapter for an agent framework."""
 
     family = AdapterFamily.AGENT
+    surface = Surface.AGENT_FRAMEWORK
 
     @abstractmethod
     def run(self, tenant: UUID, task: str) -> AgentResult:
@@ -231,6 +246,7 @@ class MCPAdapter(Adapter):
     """Adapter for a Model Context Protocol server."""
 
     family = AdapterFamily.MCP
+    surface = Surface.MCP
 
     @abstractmethod
     def list_tools(self) -> list[str]:
@@ -253,6 +269,7 @@ class CacheAdapter(Adapter):
     """Adapter for a semantic or application cache."""
 
     family = AdapterFamily.CACHE
+    surface = Surface.SEMANTIC_CACHE
 
     @abstractmethod
     def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
@@ -303,6 +320,7 @@ class ModelAdapter(Adapter):
     """
 
     family = AdapterFamily.MODEL
+    surface = Surface.MODEL_ADAPTER
 
     @abstractmethod
     def train_adapter(
@@ -365,6 +383,7 @@ class MemoryAdapter(Adapter):
     """
 
     family = AdapterFamily.MEMORY
+    surface = Surface.AGENT_MEMORY
 
     @abstractmethod
     def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
@@ -404,6 +423,7 @@ class SearchIndexAdapter(Adapter):
     """
 
     family = AdapterFamily.SEARCH_INDEX
+    surface = Surface.SEARCH_INDEX
 
     @abstractmethod
     def index(self, tenant: UUID, text: str) -> None:
@@ -439,6 +459,7 @@ class EvalSetAdapter(Adapter):
     """
 
     family = AdapterFamily.EVAL_SET
+    surface = Surface.EVAL_SET
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:
@@ -476,6 +497,7 @@ class BackupAdapter(Adapter):
     """
 
     family = AdapterFamily.BACKUP
+    surface = Surface.BACKUP
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:
