@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verdict about a system the scorecard cannot identify, so it fails closed, exactly
   as rule 1 does for a class that never ran. A record carrying no provenance at all
   (produced before v0.9.0) is exempt: its absence is not evidence of a mismatch.
+  The class note states only what the scorecard knows — which surface it
+  expected and that the run does not record it — never the unrelated surfaces
+  the run happened to exercise, since naming those would imply the very
+  attribution the rule refuses. A run in which *every* class is unattributable
+  refuses to grade at all rather than emitting a meaningless letter.
   `METHODOLOGY_VERSION` is **1.2**.
 
 
