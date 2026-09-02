@@ -22,7 +22,7 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   ...
   Class 13  Multi-modal RAG entity-bleed    NOT_COVERED critical probe did not run - ...
 
-  Methodology: docs/scorecard.md (v1.1) - weighted 0.00 over the covered classes; coverage 0.88.
+  Methodology: docs/scorecard.md (v1.2) - weighted 0.00 over the covered classes; coverage 0.88.
   Untested classes lower confidence, never the grade.
 ```
 
@@ -74,10 +74,10 @@ check the pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that
 stamped on every scorecard, so a recompute uses the same rules and lands on the same
 letter.
 
-## The five honesty rules
+## The six honesty rules
 
 This page exists because a single letter is the easiest place in the product to
-over-claim. Five rules prevent it:
+over-claim. Six rules prevent it:
 
 1. **A class that did not run can only ever be `NOT_COVERED` — never `PASS`.** A grade
    must never imply the stack passed a check it was never asked to perform. Untested
@@ -114,6 +114,13 @@ over-claim. Five rules prevent it:
    proves nothing about production, and a leak from it is not the operator's bug. Those
    findings are still counted and named on the class line (rule 4 forbids dropping them
    silently); they simply do not move the letter.
+6. **A class graded against an unaccountable surface is `NOT_COVERED`.** Each probe's
+   adapter slot normally speaks for a known surface, but an adapter declares its own —
+   an application's resource API can fill the vector slot — so a run's provenance may
+   name a surface this methodology cannot tie to a class. Grading it would assert a
+   verdict about a system the scorecard cannot identify, so it fails closed, exactly as
+   rule 1 does for a class that never ran. A record carrying no provenance block at all
+   (one produced before v0.9.0) is exempt: its absence is not evidence of a mismatch.
 
 ## The catalog and its weights
 
@@ -240,5 +247,5 @@ carry the currently-unreachable `low`/`info` weight bands).
 grade/confidence/cap tests beside them — so changing one fails CI until this page and the
 version move too.
 Any change to them is a change to what a published grade means, so bump
-`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.1` must always
+`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.2` must always
 recompute to the same letter.

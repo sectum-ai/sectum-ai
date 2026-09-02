@@ -6,7 +6,7 @@ attack catalog into one letter plus a per-class breakdown, from a signed
 run rather than trusting the grade. The published methodology (``docs/scorecard.md``)
 pins the weights, thresholds, and caps that :data:`METHODOLOGY_VERSION` stamps.
 
-Five rules keep the letter honest (the same anti-over-claim discipline as the Class 11
+Six rules keep the letter honest (the same anti-over-claim discipline as the Class 11
 coverage block):
 
 1. **A class that did not run can only ever be NOT_COVERED - never PASS.** A grade must
@@ -39,6 +39,14 @@ coverage block):
    is ``NOT_COVERED``: a fake's verdict is neither assurance nor fault. Its findings are
    still counted and named on the class line, so nothing is dropped silently (rule 4);
    they simply do not move the letter.
+6. **A class graded against an unaccountable surface is NOT_COVERED.** :data:`PROBE_SURFACES`
+   records which surface each probe's adapter slot normally speaks for, but an adapter
+   declares its own :attr:`~sectum_ai.adapters.Adapter.surface` - an application's own
+   resource API can fill the vector slot - so a run's provenance block may name a surface
+   this catalog cannot tie to a class. Grading it would assert a verdict about a system
+   the scorecard cannot identify, so it fails closed, exactly as rule 1 does for a class
+   that never ran. A record with no provenance at all (one predating the block) is
+   exempt: absence of the block is not evidence of a mismatch.
 
 Class 11 (GDPR Article 17 erasure) is deliberately out of scope here: it is a control
 check with its own attestation (``sectum-ai erasure``), not an adversarial isolation
@@ -77,7 +85,7 @@ __all__ = [
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.1"
+METHODOLOGY_VERSION = "1.2"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -311,7 +319,11 @@ def _scope_of(run: RunResult) -> tuple[ScoreScope, frozenset[str]]:
 
 
 def _score_class(
-    entry: _CatalogClass, run: RunResult, proven: set[str], synthetic: frozenset[str]
+    entry: _CatalogClass,
+    run: RunResult,
+    proven: set[str],
+    synthetic: frozenset[str],
+    exercised: frozenset[str],
 ) -> ClassScore:
     ran = [
         probe_id
@@ -319,6 +331,26 @@ def _score_class(
         if probe_id in run.probe_versions or probe_id in proven
     ]
     backing = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
+    if ran and backing and exercised and not backing <= exercised:
+        # Rule 6: this class ran, but against a surface the run does not account for.
+        # :data:`PROBE_SURFACES` says which surface each probe's slot normally speaks
+        # for; an adapter is free to declare a different one (an application's own API
+        # filling the vector slot, say), and then the provenance block names a surface
+        # this methodology cannot tie to a class. Grading it would assert a verdict
+        # about a system the scorecard cannot identify, so it fails closed - the same
+        # answer rule 1 gives for a class that never ran at all.
+        return ClassScore(
+            class_id=entry.class_id,
+            name=entry.name,
+            verdict=ClassVerdict.NOT_COVERED,
+            severity=entry.severity,
+            probe_ids=tuple(ran),
+            note=(
+                f"ran against {', '.join(sorted(exercised - backing)) or 'an unrecorded surface'}"
+                f" rather than {', '.join(sorted(backing))}; this methodology cannot"
+                " attribute the result to a class"
+            ),
+        )
     if ran and backing and backing <= synthetic:
         # Rule 5: a class every one of whose probes ran against the built-in fake
         # cannot speak for the operator's stack in either direction - a pass is not
@@ -428,7 +460,8 @@ def score_run(run: RunResult) -> IsolationScore:
     # dangerous case: silent gaps the operator believes were covered. Only there are the
     # synthetic-backed classes withheld from the letter.
     withhold = synthetic if scope is ScoreScope.CONFIGURED_STACK else frozenset()
-    classes = tuple(_score_class(entry, run, proven, withhold) for entry in CATALOG)
+    exercised = frozenset(run.surface_provenance)
+    classes = tuple(_score_class(entry, run, proven, withhold, exercised) for entry in CATALOG)
     weight = {entry.class_id: SEVERITY_WEIGHTS[entry.severity] for entry in CATALOG}
     total_weight = sum(weight.values())
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]

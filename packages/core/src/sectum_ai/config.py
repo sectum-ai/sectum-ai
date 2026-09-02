@@ -43,7 +43,6 @@ from pydantic import (
 )
 
 from sectum_ai.adapters import (
-    Adapter,
     AgentAdapter,
     BackupAdapter,
     CacheAdapter,
@@ -77,7 +76,7 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError, Surface, SurfaceProvenance
+from sectum_ai.spec import AdapterError, ConfigError, SurfaceProvenance
 
 
 class ScenarioConfig(BaseModel):
@@ -358,31 +357,39 @@ class AdapterBundle:
 
 
 # Which surface each bundle field speaks for, for the signed provenance block.
-_BUNDLE_SURFACES: tuple[tuple[str, Surface], ...] = (
-    ("vector", Surface.VECTOR_DB),
-    ("cache", Surface.SEMANTIC_CACHE),
-    ("model", Surface.MODEL_ADAPTER),
-    ("mcp", Surface.MCP),
-    ("memory", Surface.AGENT_MEMORY),
-    ("rag", Surface.RAG_PIPELINE),
-    ("observability", Surface.TRACING),
-    ("agent", Surface.AGENT_FRAMEWORK),
+# The adapter slots a probe run exercises. Which SURFACE each speaks for is read
+# off the adapter itself, never mapped here: a slot filled by something new would
+# otherwise be recorded under the family that usually occupies it.
+_BUNDLE_SLOTS: tuple[str, ...] = (
+    "vector",
+    "cache",
+    "model",
+    "mcp",
+    "memory",
+    "rag",
+    "observability",
+    "agent",
 )
 
 
 def surface_provenance(bundle: AdapterBundle) -> dict[str, str]:
     """Map each exercised surface to whether its adapter was live or synthetic.
 
-    Read off the adapter instances rather than the config, so a family that fell
+    Both halves come off the adapter instance. Liveness, so a family that fell
     back to a fake - an omitted key, a misspelled one - is recorded as what it
-    actually is and not as what the config appeared to ask for.
+    actually is rather than what the config appeared to ask for. And the surface
+    itself, so the block agrees with the ``Finding.surface`` values in the same
+    signed record: those have been adapter-declared since the runner stopped
+    stamping literals, and a static slot -> surface map here would have keyed the
+    provenance of an API-backed store under ``vector_db`` while its own findings
+    said ``api``.
     """
-
-    def provenance(field: str) -> SurfaceProvenance:
-        adapter: Adapter = getattr(bundle, field)
-        return SurfaceProvenance.SYNTHETIC if adapter.synthetic else SurfaceProvenance.LIVE
-
-    return {surface.value: provenance(field).value for field, surface in _BUNDLE_SURFACES}
+    return {
+        (adapter := getattr(bundle, field)).surface.value: (
+            SurfaceProvenance.SYNTHETIC if adapter.synthetic else SurfaceProvenance.LIVE
+        ).value
+        for field in _BUNDLE_SLOTS
+    }
 
 
 def _bool(extras: dict[str, Any], key: str, default: bool) -> bool:

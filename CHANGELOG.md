@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The provenance block now reads its surfaces off the adapter too.** v0.10.1
+  stopped the runner stamping `Surface.VECTOR_DB` onto every `vector.*`
+  observation — but only in `runner.py`. `surface_provenance` carried the
+  identical coupling: liveness came off the adapter instance while the *key* came
+  from a static slot → surface map. An adapter declaring a different surface would
+  have produced findings labelled one way and a provenance block keyed another,
+  inside a single signed record. Behaviour-preserving for every adapter shipping
+  today, and pinned by a test that the two agree.
+- **Scorecard honesty rule 6: a class graded against an unaccountable surface is
+  `NOT_COVERED`.** `PROBE_SURFACES` records which surface each probe's adapter slot
+  normally speaks for, but an adapter declares its own — so a run's provenance can
+  name a surface the catalog cannot tie to a class. Grading it would assert a
+  verdict about a system the scorecard cannot identify, so it fails closed, exactly
+  as rule 1 does for a class that never ran. A record carrying no provenance at all
+  (produced before v0.9.0) is exempt: its absence is not evidence of a mismatch.
+  `METHODOLOGY_VERSION` is **1.2**.
+
+
 ## [0.10.1] - 2026-09-01
 
 Housekeeping with one theme running through it: a label should be declared by
