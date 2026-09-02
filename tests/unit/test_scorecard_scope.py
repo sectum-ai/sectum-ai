@@ -86,9 +86,12 @@ def test_the_probe_surface_map_matches_each_probe_s_own_declaration() -> None:
         if probe_id not in PROBE_SURFACES:
             continue
         checked += 1
-        assert PROBE_SURFACES[probe_id] == tuple(surfaces), (
+        # A SUBSET, not equality: the map lists every surface the probe's slot may
+        # legitimately speak for, which is a superset of the one family that normally
+        # fills it. The probe's own declaration must still be among them.
+        assert set(surfaces) <= set(PROBE_SURFACES[probe_id]), (
             f"score.PROBE_SURFACES[{probe_id!r}] is {PROBE_SURFACES[probe_id]} but the "
-            f"probe declares {tuple(surfaces)}"
+            f"probe declares {tuple(surfaces)}, which it does not cover"
         )
     assert checked, "no probe declared its surfaces - the introspection broke"
 

@@ -22,6 +22,7 @@ synthetic substrate.
 | Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage`, `bedrock` (the four hosted opt-in live) | ✅ |
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
+| Application resource API (`app`) | *(live HTTP adapter not yet implemented)* | ✅ |
 | Eval / golden set | `langsmith` (opt-in live) | ✅ |
 | Backup / snapshot | `s3`, `gcs` (opt-in live) | ✅ |
 

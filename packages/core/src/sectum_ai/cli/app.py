@@ -774,8 +774,11 @@ def probe(
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
         typer.echo(
-            f"skipping {skipped_id}: no configured adapter provides '{missing_cap}' "
-            "(e.g. a serving-only model trains no per-tenant adapter)",
+            # The reason is the capability itself; a baked-in example was written when
+            # only the LoRA probe used this mechanism and misdescribed every other gate
+            # the moment a second one existed. The class scores NOT_COVERED, never PASS.
+            f"skipping {skipped_id}: no configured adapter provides '{missing_cap}', "
+            "so this class is reported NOT_COVERED rather than passed",
             err=True,
         )
     vector = bundle.vector
