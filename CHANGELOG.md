@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-01
+
+The first surface outside the AI stack, and the label discipline that made it
+safe to add. A stack whose vector store, cache, memory, and agent framework are
+all perfectly isolated — but whose `GET /api/documents/{id}` hands over another
+tenant's document — is the same breach, and graded `A` before this.
+
+Adding it needed no probe change and no schema change. What it did need was for
+every consumer of "which surface is this" to read the adapter rather than a
+literal, which is the rest of this release.
+
+
 ### Added
 
 - **`app` — the application's own resource API as a probed surface.** The surfaces
@@ -39,9 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capability gate — it names the missing capability and states that the class is
   reported `NOT_COVERED` rather than passed. The example was written when one probe
   used the mechanism and misdescribed every gate added since.
-
-
-### Changed
 
 - **The provenance block now reads its surfaces off the adapter too.** v0.10.1
   stopped the runner stamping `Surface.VECTOR_DB` onto every `vector.*`
