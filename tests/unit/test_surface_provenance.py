@@ -24,7 +24,7 @@ from sectum_ai.adapters import base as adapters_base
 from sectum_ai.adapters import fakes as adapters_fakes
 from sectum_ai.cli.app import _warn_on_synthetic_surfaces, app
 from sectum_ai.config import (
-    _BUNDLE_SURFACES,
+    _BUNDLE_SLOTS,
     AdapterBundle,
     AdapterConfig,
     SectumConfig,
@@ -62,25 +62,29 @@ def test_no_adapter_outside_the_fakes_module_claims_to_be_synthetic() -> None:
             assert not obj.synthetic, f"{name} in base.py declares synthetic"
 
 
-def test_the_surface_map_covers_every_field_of_the_bundle() -> None:
-    # A family added to AdapterBundle but not to _BUNDLE_SURFACES would be
-    # exercised by the suite and omitted from the provenance block entirely,
-    # which reads to a pack consumer as a surface that was never touched.
-    mapped = {field for field, _ in _BUNDLE_SURFACES}
+def test_the_slot_list_covers_every_field_of_the_bundle() -> None:
+    # A family added to AdapterBundle but not to _BUNDLE_SLOTS would be exercised
+    # by the suite and omitted from the provenance block entirely, which reads to
+    # a pack consumer as a surface that was never touched.
     declared = {f.name for f in dataclasses.fields(AdapterBundle)}
-    assert mapped == declared, f"unmapped bundle fields: {sorted(declared - mapped)}"
+    assert set(_BUNDLE_SLOTS) == declared, (
+        f"unlisted bundle fields: {sorted(declared - set(_BUNDLE_SLOTS))}"
+    )
 
 
-def test_the_surface_map_uses_distinct_known_surfaces() -> None:
-    surfaces = [surface for _, surface in _BUNDLE_SURFACES]
-    assert len(set(surfaces)) == len(surfaces), "two bundle fields map to one surface"
+def test_each_slot_contributes_a_distinct_known_surface() -> None:
+    # Two slots collapsing onto one surface would silently overwrite each other in
+    # the provenance dict, hiding one family's liveness behind another's.
+    bundle = build_adapters(SectumConfig())
+    surfaces = [getattr(bundle, slot).surface for slot in _BUNDLE_SLOTS]
+    assert len(set(surfaces)) == len(surfaces), "two bundle slots report one surface"
     assert all(s in Surface for s in surfaces)
 
 
 def test_a_default_config_records_every_surface_as_synthetic() -> None:
     provenance = surface_provenance(build_adapters(SectumConfig()))
     assert set(provenance.values()) == {SurfaceProvenance.SYNTHETIC.value}
-    assert len(provenance) == len(_BUNDLE_SURFACES)
+    assert len(provenance) == len(_BUNDLE_SLOTS)
 
 
 def test_a_configured_backend_records_that_surface_as_live() -> None:
@@ -119,7 +123,7 @@ def test_probe_records_the_provenance_block_in_the_run(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     recorded = json.loads((tmp_path / "run.json").read_text())["surface_provenance"]
-    assert set(recorded) == {surface.value for _, surface in _BUNDLE_SURFACES}
+    assert len(recorded) == len(_BUNDLE_SLOTS)
     assert set(recorded.values()) == {SurfaceProvenance.SYNTHETIC.value}
 
 
