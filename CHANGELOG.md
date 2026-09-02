@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-01
+
+Housekeeping with one theme running through it: a label should be declared by
+the thing it describes, and a check that cannot be performed should say so rather
+than pass. Nothing here changes what any shipping adapter measures — the two
+correctness fixes matter for backends that do not exist yet, which is the cheapest
+time to fix them.
+
+
 ### Changed
 
 - Dependency floors raised to match the locked versions: `ruff>=0.16.3` (resolves
