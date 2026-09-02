@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`app` — the application's own resource API as a probed surface.** The surfaces
+  Sectum verifies are the AI stack; `app` is the application in front of it, reached
+  through the *same* contract a vector store is: a write, a search, and a
+  read-one-by-id that **is** the Class 1 cross-tenant object-reference primitive. It
+  fills the vector slot, so every probe driving that slot runs unmodified — no probe
+  changes, and no schema change, since `Surface.API` was already in the enum and in
+  the committed JSON Schemas.
+
+  It declares what it is rather than what slot it occupies: `Surface.API`, so its
+  findings and the run's provenance both say `api`; and no semantic retrieval, so
+  Class 6 and Class 13 are skipped rather than passing vacuously. Configuring both
+  `app` and `vector_store` is refused — a run carrying both cannot say which system
+  it probed. `kind: fake` only for now; a live HTTP adapter is not implemented, and
+  says so rather than falling back.
+
+  Why it exists: a stack whose vector store, cache, memory, and agent framework are
+  all perfectly isolated, but whose `GET /api/documents/{id}` returns another
+  tenant's document, is the same breach — and graded `A` before this.
+
+### Changed
+
+- `PROBE_SURFACES` now lists every surface a probe's adapter slot may legitimately
+  speak for, and a class is attributed to whichever of them the run actually
+  recorded. Rule 6 fires when *none* matches, which is the case it was written for;
+  an API-backed vector slot is now a supported attribution rather than an
+  unaccountable one.
+- The probe-skip message no longer offers a LoRA-specific example for every
+  capability gate — it names the missing capability and states that the class is
+  reported `NOT_COVERED` rather than passed. The example was written when one probe
+  used the mechanism and misdescribed every gate added since.
+
+
 ### Changed
 
 - **The provenance block now reads its surfaces off the adapter too.** v0.10.1

@@ -17,7 +17,7 @@ scenario:
   corpus_profile: demo
 workdir: .sectum-ai
 adapters:
-  vector_store: ...
+  vector_store: ...      # or `app:` — the application's own resource API
   cache: ...
   model: ...
   mcp: ...
@@ -67,6 +67,37 @@ of them through the runner. `sectum-ai erasure` additionally consumes the three
 Class 11 erasure surfaces `search_index`, `eval_set`, and `backup` (documented
 below).
 
+### `app` — the application's own resource API
+
+The surfaces above are the AI stack. `app` is the application in front of it, probed
+through the *same* contract a vector store is: a write, a search, and a
+read-one-by-id. That last one is the Class 1 primitive — fetch another tenant's
+object by id and see whether the API hands it over — so every probe that drives the
+vector slot runs against it unmodified.
+
+```yaml
+adapters:
+  app:
+    kind: fake          # a live HTTP adapter is not implemented yet
+    shared_index: true  # models an API that does not filter by tenant
+```
+
+It fills the **same slot** as `vector_store`, so configuring both is refused: a run
+carrying both cannot say which system it probed.
+
+Two things keep it honest about what it is rather than what slot it occupies. It
+declares `Surface.API`, so its findings and the run's
+[surface provenance](coverage.md) both say `api` rather than `vector_db`. And it
+declares no semantic retrieval, so **Class 6 (embedding inversion) and Class 13
+(multi-modal bleed) are skipped** — an application's search is not an embedding
+space, and a substring hit reported as *Invert ML Model* would attribute a real
+result to a mechanism that is not there. Those classes report `NOT_COVERED`, never
+`PASS` ([scorecard](scorecard.md), rules 5 and 6).
+
+Why this exists: a stack whose vector store, cache, memory, and agent framework are
+all perfectly isolated — but whose `GET /api/documents/{id}` returns another
+tenant's document — is the same breach, and graded `A` before this.
+
 Any **other** family name is rejected at config load. It used to parse and simply
 never be read, which meant a one-character slip silently disabled a backend:
 
@@ -75,7 +106,7 @@ $ sectum-ai probe --config sectum-ai.yaml
 ConfigError: invalid config in sectum-ai.yaml: 1 validation error for SectumConfig
 adapters
   Value error, unknown adapter family: 'vector' (did you mean 'vector_store'?).
-  Valid families are: agent, backup, cache, eval_set, mcp, memory, model,
+  Valid families are: agent, app, backup, cache, eval_set, mcp, memory, model,
   observability, rag, search_index, vector_store. An unrecognised key is never
   read, so the family would silently fall back to the built-in synthetic adapter
   and the run would describe nothing real [type=value_error, ...]

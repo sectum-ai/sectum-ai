@@ -48,6 +48,7 @@ from sectum_ai.adapters import (
     CacheAdapter,
     EvalSetAdapter,
     FakeAgent,
+    FakeAppApi,
     FakeBackup,
     FakeCache,
     FakeEvalSet,
@@ -235,6 +236,7 @@ class DetectionConfig(BaseModel):
 ADAPTER_FAMILIES: frozenset[str] = frozenset(
     {
         "vector_store",
+        "app",
         "cache",
         "model",
         "mcp",
@@ -517,6 +519,28 @@ def _optional_extra(extra: str) -> Iterator[None]:
             f"the '{extra}' adapter requires the optional `{extra}` dependency; "
             f"install sectum-ai-adapters[{extra}] to enable it"
         ) from error
+
+
+def build_app(config: AdapterConfig) -> VectorStoreAdapter:
+    """Build the application-API adapter the config selects.
+
+    The app under test is probed through the same contract a vector store is - a
+    write, a search, and a read-one-by-id that is the Class 1 primitive - so it
+    fills the vector slot and every probe driving that slot runs unmodified. It
+    declares ``Surface.API`` and no semantic retrieval, so its findings, the run's
+    provenance, and the classes that are skipped all describe what it really is.
+    """
+    extras = config.model_extra or {}
+    if config.kind == "fake":
+        return FakeAppApi(
+            shared_index=_bool(extras, "shared_index", False),
+            user_scoped=_bool(extras, "user_scoped", False),
+            soft_delete=_bool(extras, "soft_delete", False),
+        )
+    raise ConfigError(
+        f"unsupported app adapter kind: {config.kind!r}. Only 'fake' is available; a "
+        "live HTTP adapter for a real application API is not implemented yet"
+    )
 
 
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
@@ -1231,8 +1255,22 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
     A family that the config omits defaults to a plain (non-leaky) fake.
     """
     fake = AdapterConfig(kind="fake")
+    # `app` and `vector_store` both fill the vector slot - the app's resource API is
+    # probed through the same contract. Configuring both is a real ambiguity about
+    # which system is under test, so it is refused rather than silently resolved.
+    app = config.adapters.get("app")
+    if app is not None and "vector_store" in config.adapters:
+        raise ConfigError(
+            "configure either 'app' or 'vector_store', not both: each fills the same "
+            "adapter slot, so a run carrying both cannot say which system it probed"
+        )
+    vector = (
+        build_app(app)
+        if app is not None
+        else build_vector_store(config.adapters.get("vector_store", fake))
+    )
     return AdapterBundle(
-        vector=build_vector_store(config.adapters.get("vector_store", fake)),
+        vector=vector,
         cache=build_cache(config.adapters.get("cache", fake)),
         model=build_model(config.adapters.get("model", fake)),
         mcp=build_mcp(config.adapters.get("mcp", fake)),

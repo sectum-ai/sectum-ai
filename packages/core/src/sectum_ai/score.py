@@ -103,27 +103,31 @@ SEVERITY_WEIGHTS: dict[Severity, int] = {
 """How much each severity band contributes to the weighted score and to coverage."""
 
 
-# Which surface each probe drives, so a class backed only by synthetic adapters can be
-# recognised from the signed run alone. Declared here rather than imported from the
-# probes: this module re-grades a record it did not produce, and must not depend on the
-# implementations that produced it. ``tests/unit/test_scorecard_scope.py`` pins these
-# against each probe's own ``surfaces`` attribute so the two cannot drift.
+# Which surfaces each probe's adapter slot may legitimately speak for. Usually one -
+# the family that normally fills the slot - but an adapter declares its own surface,
+# so the vector slot is also satisfied by an application's resource API (``API``)
+# probed through the same upsert/query/fetch contract. A run is attributed to the
+# entry that actually appears in its provenance; a surface in NO entry is what rule 6
+# refuses to grade. Declared here rather than imported from the probes: this module
+# re-grades a record it did not produce and must not depend on what produced it.
+# ``tests/unit/test_scorecard_scope.py`` pins each probe's own declared surface as a
+# SUBSET of its entry, so the two cannot drift apart.
 PROBE_SURFACES: dict[str, tuple[Surface, ...]] = {
-    "tenant-boundary-fetch": (Surface.VECTOR_DB,),
-    "rag-entity-bleed": (Surface.VECTOR_DB,),
+    "tenant-boundary-fetch": (Surface.VECTOR_DB, Surface.API),
+    "rag-entity-bleed": (Surface.VECTOR_DB, Surface.API),
     "rag-pipeline-bleed": (Surface.RAG_PIPELINE,),
-    "rag-poisoning": (Surface.VECTOR_DB,),
+    "rag-poisoning": (Surface.VECTOR_DB, Surface.API),
     "semantic-cache-contamination": (Surface.SEMANTIC_CACHE,),
     # KvCacheTimingProbe predates the Probe protocol's ``surfaces`` attribute and
     # declares none; it takes a ModelAdapter directly.
     "kv-cache-timing": (Surface.MODEL_ADAPTER,),
-    "embedding-inversion": (Surface.VECTOR_DB,),
+    "embedding-inversion": (Surface.VECTOR_DB, Surface.API),
     "agent-tool-hijack": (Surface.MCP,),
     "agent-framework-hijack": (Surface.AGENT_FRAMEWORK,),
     "memory-contamination": (Surface.AGENT_MEMORY,),
     "lora-cross-tenant": (Surface.MODEL_ADAPTER,),
-    "ikea-extraction": (Surface.VECTOR_DB,),
-    "multimodal-rag-bleed": (Surface.VECTOR_DB,),
+    "ikea-extraction": (Surface.VECTOR_DB, Surface.API),
+    "multimodal-rag-bleed": (Surface.VECTOR_DB, Surface.API),
 }
 
 
@@ -330,8 +334,11 @@ def _score_class(
         for probe_id in entry.probe_ids
         if probe_id in run.probe_versions or probe_id in proven
     ]
-    backing = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
-    if ran and backing and exercised and not backing <= exercised:
+    accepted = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
+    # What actually backed this class in THIS run: the acceptable surfaces the run
+    # recorded. Empty means the slot was filled by something the catalog cannot place.
+    backing = accepted & exercised
+    if ran and accepted and exercised and not backing:
         # Rule 6: this class ran, but against a surface the run does not account for.
         # :data:`PROBE_SURFACES` says which surface each probe's slot normally speaks
         # for; an adapter is free to declare a different one (an application's own API
@@ -349,9 +356,10 @@ def _score_class(
             # not which one backed this class, so naming the others would imply an
             # attribution this rule exists to refuse.
             note=(
-                f"expected {', '.join(sorted(backing))}, which this run's provenance "
-                "does not record; the surface it ran against cannot be attributed to "
-                "a class by this methodology"
+                f"expected {'one of ' if len(accepted) > 1 else ''}"
+                f"{', '.join(sorted(accepted))}, none of which this run's provenance "
+                "records; the surface it ran against cannot be attributed to a class "
+                "by this methodology"
             ),
         )
     if ran and backing and backing <= synthetic:

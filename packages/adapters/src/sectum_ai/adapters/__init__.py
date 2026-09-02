@@ -30,6 +30,7 @@ from sectum_ai.adapters.base import (
 )
 from sectum_ai.adapters.fakes import (
     FakeAgent,
+    FakeAppApi,
     FakeBackup,
     FakeCache,
     FakeEvalSet,
@@ -53,6 +54,7 @@ __all__ = [
     "Capability",
     "EvalSetAdapter",
     "FakeAgent",
+    "FakeAppApi",
     "FakeBackup",
     "FakeCache",
     "FakeEvalSet",

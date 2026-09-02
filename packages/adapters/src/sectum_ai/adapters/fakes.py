@@ -12,6 +12,7 @@ The fakes are consolidated in this module for now; per-family modules
 import hashlib
 import re
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from sectum_ai.adapters.base import (
@@ -33,7 +34,7 @@ from sectum_ai.adapters.base import (
     VectorHit,
     VectorStoreAdapter,
 )
-from sectum_ai.spec import AdapterError, CorpusDocument, ErasureUnsupported
+from sectum_ai.spec import AdapterError, CorpusDocument, ErasureUnsupported, Surface
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # ``search`` is the parameter/description-injection surface: a tool whose own
@@ -935,3 +936,37 @@ class FakeBackup(BackupAdapter):
         if self._soft_delete:
             return
         self._snapshots.pop(tenant, None)
+
+
+class FakeAppApi(FakeVectorStore):
+    """An application's own resource API, standing in for a live one.
+
+    The app under test is reached through the same contract a vector store is:
+    ``upsert`` writes a tenant's documents through its API, ``fetch`` reads one
+    back by id as a named principal - which is a cross-tenant object-reference
+    test, the Class 1 primitive - and ``query`` searches. So it fills the vector
+    slot and every probe that drives that slot runs against it unmodified.
+
+    Two declarations make it honest about what it is rather than what slot it
+    occupies. ``surface`` is :data:`~sectum_ai.spec.Surface.API`, so its findings
+    and the run's provenance both say ``api``. ``semantic_retrieval`` is ``False``,
+    so Class 6 (embedding inversion) and Class 13 (multi-modal bleed) are skipped:
+    an application's search is not an embedding space, and a substring hit
+    reported as ``Invert ML Model`` would be a real result attributed to a
+    mechanism that is not there.
+
+    ``shared_index=True`` is the leak this models - the API that does not filter
+    by tenant, so one tenant's id returns another's object.
+
+    Retrieval reuses the vector fake's, which is embedding-ranked rather than
+    keyword-matched. That imprecision is harmless precisely because the two
+    classes whose verdicts depend on the retrieval *mechanism* are gated off; the
+    classes that remain ask only whether foreign content came back.
+    """
+
+    synthetic = True
+    surface = Surface.API
+    semantic_retrieval = False
+
+    def __init__(self, name: str = "fake-app", **kwargs: Any) -> None:
+        super().__init__(name, **kwargs)

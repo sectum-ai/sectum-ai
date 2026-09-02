@@ -42,9 +42,19 @@ _ALL_PROBES = (
 
 
 class ApiBackedStore(FakeVectorStore):
-    """An application's own resource API filling the vector slot."""
+    """An application's own resource API filling the vector slot - a supported case."""
 
     surface = Surface.API
+
+
+class MisdeclaredStore(FakeVectorStore):
+    """A slot filled by something the catalog cannot place at all.
+
+    ``prompt_logs`` is a real surface that no probe's slot speaks for, so a run
+    reporting it against the vector slot is exactly the case rule 6 exists for.
+    """
+
+    surface = Surface.PROMPT_LOGS
 
 
 def _bundle(vector: FakeVectorStore) -> AdapterBundle:
@@ -105,9 +115,9 @@ def test_every_bundle_slot_is_covered() -> None:
 
 
 def test_a_class_run_against_an_unaccountable_surface_is_not_covered() -> None:
-    # Rule 6. The vector-slot classes ran against `api`; the catalog can only tie
-    # them to `vector_db`, so it cannot say what the result describes.
-    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    # Rule 6: the vector-slot classes ran against a surface no probe's slot speaks
+    # for, so the catalog cannot say what the result describes.
+    provenance = surface_provenance(_bundle(MisdeclaredStore()))
     by_id = {c.class_id: c for c in score_run(_run(provenance)).classes}
     assert by_id[1].verdict is ClassVerdict.NOT_COVERED
     assert "cannot" in (by_id[1].note or "")
@@ -133,11 +143,11 @@ def test_a_record_with_no_provenance_is_exempt_from_rule_6() -> None:
 def test_the_note_states_only_what_the_scorecard_knows() -> None:
     # The run records WHICH surfaces it exercised, not which one backed this class.
     # Naming the others would imply exactly the attribution rule 6 refuses to make.
-    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    provenance = surface_provenance(_bundle(MisdeclaredStore()))
     entry = next(c for c in score_run(_run(provenance)).classes if c.class_id == 1)
     note = entry.note or ""
-    assert "expected vector_db" in note
-    assert "does not record" in note
+    assert "expected one of api, vector_db" in note
+    assert "none of which" in note
     # The unrelated surfaces this run happened to exercise must not appear.
     assert Surface.AGENT_MEMORY.value not in note
     assert Surface.MCP.value not in note
@@ -147,7 +157,7 @@ def test_a_run_whose_every_class_is_unattributable_refuses_to_grade() -> None:
     # Rule 6 can withhold everything. A letter over zero covered classes would mean
     # nothing, and `F` would read as "failed" when the truth is "cannot attribute" -
     # the same reason score_run refuses a run that exercised no class at all.
-    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    provenance = surface_provenance(_bundle(MisdeclaredStore()))
     moment = datetime(2026, 1, 1, tzinfo=UTC)
     run = RunResult(
         run_id="r",
@@ -166,7 +176,7 @@ def test_rule_6_outranks_the_synthetic_withholding_of_rule_5() -> None:
     # Both could apply to an all-fake API-backed run. "We cannot identify what this
     # describes" is the stronger statement, and it must not be masked by the
     # softer "this was a fake" note.
-    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    provenance = surface_provenance(_bundle(MisdeclaredStore()))
     provenance[Surface.SEMANTIC_CACHE.value] = SurfaceProvenance.LIVE.value
     entry = next(c for c in score_run(_run(provenance)).classes if c.class_id == 1)
     assert entry.verdict is ClassVerdict.NOT_COVERED
