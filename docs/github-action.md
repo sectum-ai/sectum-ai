@@ -28,14 +28,14 @@ it runs the bundled demo substrate, which is deliberately leaky and therefore
 exits with a confirmed leak — handy for trying the action out, not a real test.
 
 > The action ships from `v0.1.2` onward. Pin to a release tag
-> (`sectum-ai/sectum-ai@v0.10.0`) or a commit SHA for reproducible runs; `@main`
+> (`sectum-ai/sectum-ai@v0.10.1`) or a commit SHA for reproducible runs; `@main`
 > tracks the latest.
 
 ## Inputs
 
 | Input | Default | Description |
 |---|---|---|
-| `version` | `0.10.0` | `sectum-ai` version to install from PyPI. Pin for reproducibility; leave empty for the latest release. |
+| `version` | `0.10.1` | `sectum-ai` version to install from PyPI. Pin for reproducibility; leave empty for the latest release. |
 | `config` | _(none)_ | Path to your `sectum-ai.yaml`. If omitted, the built-in demo substrate is used. |
 | `workdir` | `.sectum-ai` | Directory for the seeded substrate and run artifacts. |
 | `output` | `json` | Report format written to `output-file`: `text` / `json` / `sarif` / `oscal`. |
