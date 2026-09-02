@@ -15,6 +15,8 @@ grading a verdict about a system it cannot identify.
 
 from datetime import UTC, datetime
 
+import pytest
+
 from sectum_ai.adapters import FakeVectorStore
 from sectum_ai.config import (
     _BUNDLE_SLOTS,
@@ -24,7 +26,13 @@ from sectum_ai.config import (
     surface_provenance,
 )
 from sectum_ai.score import score_run
-from sectum_ai.spec import ClassVerdict, RunResult, Surface, SurfaceProvenance
+from sectum_ai.spec import (
+    ClassVerdict,
+    ConfigError,
+    RunResult,
+    Surface,
+    SurfaceProvenance,
+)
 
 _ALL_PROBES = (
     "tenant-boundary-fetch",
@@ -120,6 +128,38 @@ def test_a_record_with_no_provenance_is_exempt_from_rule_6() -> None:
     # NOT_COVERED across the board.
     by_id = {c.class_id: c for c in score_run(_run({})).classes}
     assert by_id[1].verdict is ClassVerdict.PASS
+
+
+def test_the_note_states_only_what_the_scorecard_knows() -> None:
+    # The run records WHICH surfaces it exercised, not which one backed this class.
+    # Naming the others would imply exactly the attribution rule 6 refuses to make.
+    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    entry = next(c for c in score_run(_run(provenance)).classes if c.class_id == 1)
+    note = entry.note or ""
+    assert "expected vector_db" in note
+    assert "does not record" in note
+    # The unrelated surfaces this run happened to exercise must not appear.
+    assert Surface.AGENT_MEMORY.value not in note
+    assert Surface.MCP.value not in note
+
+
+def test_a_run_whose_every_class_is_unattributable_refuses_to_grade() -> None:
+    # Rule 6 can withhold everything. A letter over zero covered classes would mean
+    # nothing, and `F` would read as "failed" when the truth is "cannot attribute" -
+    # the same reason score_run refuses a run that exercised no class at all.
+    provenance = surface_provenance(_bundle(ApiBackedStore()))
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="a" * 64,
+        manifest_hash="b" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"tenant-boundary-fetch": "1.0"},
+        surface_provenance=provenance,
+    )
+    with pytest.raises(ConfigError, match="nothing to grade"):
+        score_run(run)
 
 
 def test_rule_6_outranks_the_synthetic_withholding_of_rule_5() -> None:

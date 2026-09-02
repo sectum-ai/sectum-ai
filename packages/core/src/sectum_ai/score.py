@@ -345,10 +345,13 @@ def _score_class(
             verdict=ClassVerdict.NOT_COVERED,
             severity=entry.severity,
             probe_ids=tuple(ran),
+            # Say only what is known. The run records WHICH surfaces it exercised,
+            # not which one backed this class, so naming the others would imply an
+            # attribution this rule exists to refuse.
             note=(
-                f"ran against {', '.join(sorted(exercised - backing)) or 'an unrecorded surface'}"
-                f" rather than {', '.join(sorted(backing))}; this methodology cannot"
-                " attribute the result to a class"
+                f"expected {', '.join(sorted(backing))}, which this run's provenance "
+                "does not record; the surface it ran against cannot be attributed to "
+                "a class by this methodology"
             ),
         )
     if ran and backing and backing <= synthetic:
