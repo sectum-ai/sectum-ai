@@ -240,3 +240,21 @@ def test_mem0_reports_a_hit_found_on_a_full_page() -> None:
             return {"results": rows}
 
     assert Mem0Memory(_FullPageWithHit()).recall(_TENANT_A, "canary OMEGA-9")
+
+
+def test_a_token_overlap_recall_does_not_suppress_the_cap_refusal() -> None:
+    # `recall` reports hits by token OVERLAP; the Class 11 probe counts an exact
+    # substring. Every hard canary shares the tokens "sectum" and "canary", so one
+    # other canary among the page-filling rows made the adapter report a "hit" the
+    # probe would not count - suppressing the refusal, so the target marker past
+    # the cap read as absent and the memory surface attested ERASED.
+    from sectum_ai.adapters.memory.mem0 import _GET_ALL_LIMIT
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeMem0()
+    adapter = Mem0Memory(client)
+    adapter.remember(_TENANT_A, "note about SECTUM-CANARY-OTHERAAAAAAAAAAAAAAA")
+    for index in range(_GET_ALL_LIMIT - 1):
+        adapter.remember(_TENANT_A, f"unrelated note {index}")
+    with pytest.raises(AdapterError, match="listing"):
+        adapter.recall(_TENANT_A, "SECTUM-CANARY-TARGETBBBBBBBBBBBBBBB")

@@ -32,6 +32,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A capped listing attested ERASED because the refusal was gated on a hit the
+  caller never counts.** The eval-set and memory adapters report hits by token
+  overlap; the Class 11 probe counts an exact substring. Every hard canary shares
+  the tokens `sectum` and `canary`, and the default scenario plants two per
+  tenant, so scanning for one always "hit" the other's fixture — the guard was
+  dead on every over-cap dataset, and a marker past the cap read as absent. The
+  refusal is now suppressed only by a hit the caller would also count, in all
+  three adapters (the search index's test was also laxer than its caller's).
+- **`diff` read an erasure that could not be re-scanned as one that succeeded.**
+  A run whose own CLI printed `ERASURE INCONCLUSIVE` and exited 3 wrote
+  `erasure_residue: 0`, so two confirmed residual findings "resolved", every
+  delta printed `[ok]`, and the wedge SKU's own diff said `no regression` at exit
+  0. A surface whose absence was never established now carries no residue count
+  at all — writing 0 asserts a number the run did not measure — and `diff` and
+  `baseline --compare` report `[ERASURE NOT RESCANNED]`, mark the metric not
+  measured, and fail the gate. This is the fourth lost-coverage signal beside the
+  three the earlier cycles added.
 - **`docs/coverage.md` promised Class 9 coverage against vLLM and TGI, which the
   CLI skips.** Both declare a shared prefix cache and neither per-tenant adapters
   nor shared weights, so the LoRA probe never runs there — the same page said the

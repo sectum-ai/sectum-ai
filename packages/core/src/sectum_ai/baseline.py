@@ -265,6 +265,12 @@ class RunDiff:
     # cannot carry the user) where the earlier run did. Twelve resolved
     # cross-user leaks used to read as a fix.
     boundary_lost: tuple[str, ...] = ()
+    # Surfaces the earlier run scanned to a definite erasure verdict that the
+    # later run did not (out of scope, or scanned but its absence never
+    # established). Not a leak - but the later run measured no residue there, so
+    # `erasure_residue[<surface>]: 2 -> 0` and the two residual findings that go
+    # with it read as an erasure that succeeded. The wedge SKU's own diff.
+    erasure_lost: tuple[str, ...] = ()
     # The two runs used different scenarios (a re-seed, other tenants or users).
     # Finding ids embed markers and principals, so every finding "resolves"; a
     # later run with no users read every cross-user leak as fixed.
@@ -297,6 +303,7 @@ class RunDiff:
             or bool(self.coverage_lost)
             or bool(self.scope_lost)
             or bool(self.boundary_lost)
+            or bool(self.erasure_lost)
             or self.scenario_changed
         )
 
@@ -373,7 +380,25 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
                 if count and not earlier.metrics.user_steps_dropped.get(probe_id)
             )
         ),
+        erasure_lost=_erasure_lost(earlier, later),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
+    )
+
+
+def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
+    """Surfaces the earlier run scanned to a residue count and the later one did not.
+
+    A surface whose post-erasure absence could not be established carries no
+    residue count (`cli.app` omits it rather than writing a 0 it never measured),
+    and its coverage verdict is NOT_COVERED. Without this the drop read as an
+    erasure that had succeeded.
+    """
+    return tuple(
+        sorted(
+            surface
+            for surface in earlier.metrics.erasure_residue
+            if surface not in later.metrics.erasure_residue
+        )
     )
 
 

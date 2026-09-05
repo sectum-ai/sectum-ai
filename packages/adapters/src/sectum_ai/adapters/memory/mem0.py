@@ -149,7 +149,10 @@ class Mem0Memory(MemoryAdapter):
         memories = self._memories(result)
         query_tokens = _tokens(query)
         recalled = [text for text in memories if query_tokens & _tokens(text)]
-        if not recalled and len(_rows(result)) >= _GET_ALL_LIMIT:
+        # `recalled` is token-overlap; the caller counts an exact substring, and
+        # every canary shares the tokens "sectum" and "canary" - so suppress the
+        # refusal only on a hit the caller would also count.
+        if not any(query in text for text in recalled) and len(_rows(result)) >= _GET_ALL_LIMIT:
             # mem0's get_all defaults to limit=100 and pages no further; a
             # subject's memory past the window read as not recalled - ERASED. The
             # count is of ROWS (a row with an empty memory still fills the page),

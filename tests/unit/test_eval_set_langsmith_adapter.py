@@ -141,3 +141,21 @@ def test_langsmith_eval_set_reports_a_fixture_found_on_a_full_page() -> None:
     for index in range(999):
         adapter.add(_TENANT_A, f"fixture number {index}")
     assert adapter.search(_TENANT_A, "SECTUM-CANARY-AAA")
+
+
+def test_a_token_overlap_hit_does_not_suppress_the_cap_refusal() -> None:
+    # The adapter reports hits by token OVERLAP; the Class 11 probe counts an
+    # exact substring. Every hard canary shares the tokens "sectum" and "canary",
+    # so one other canary among the page-filling rows made the adapter report a
+    # "hit" the probe would not count - which suppressed the refusal, and the
+    # target marker sitting past the cap then read as absent. The surface attested
+    # ERASED off a listing that was never complete.
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeLangSmith()
+    adapter = LangSmithEvalSet(client)
+    adapter.add(_TENANT_A, "fixture SECTUM-CANARY-OTHERAAAAAAAAAAAAAAA")
+    for index in range(999):
+        adapter.add(_TENANT_A, f"fixture number {index}")
+    with pytest.raises(AdapterError, match="listing cap"):
+        adapter.search(_TENANT_A, "SECTUM-CANARY-TARGETBBBBBBBBBBBBBBB")

@@ -101,7 +101,11 @@ class LangSmithEvalSet(EvalSetAdapter):
             text = self._text(example)
             if query_tokens & _tokens(text):
                 hits.append(text)
-        if not hits and seen >= _EXAMPLE_LIMIT:
+        # `hits` is token-overlap; the caller counts an exact substring. Suppress
+        # the refusal only on a hit the caller would also count, or a page-filling
+        # row sharing one token (every canary shares "sectum" and "canary") hides a
+        # truncated listing and the marker past it reads as absent.
+        if not any(query in text for text in hits) and seen >= _EXAMPLE_LIMIT:
             # A truncated page is not a scan: a fixture past it read as absent. A
             # fixture FOUND on a full page already answers the question, so only a
             # miss is refused.

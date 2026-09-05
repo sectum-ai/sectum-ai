@@ -560,3 +560,26 @@ def test_a_two_surface_probes_metric_is_not_measured_when_its_live_surface_falls
     assert "[SCOPE LOST] vector_db" in cli.output
     assert "[not measured] poisoning_bleed_delta" in cli.output, cli.output
     assert "[ok] poisoning_bleed_delta" not in cli.output
+
+
+def test_an_erasure_surface_that_was_not_rescanned_is_not_a_fixed_leak(tmp_path: Path) -> None:
+    # A Class 11 run whose own CLI printed ERASURE INCONCLUSIVE and exited 3
+    # carries no residue count for that surface. `diff` read the missing count as
+    # a drop to zero: two confirmed residual findings "resolved", every delta
+    # `[ok]`, `RESULT: no regression`, exit 0 - on the wedge SKU's own diff. The
+    # same shape as a lost probe or a lost live surface, on the fourth signal.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2}))
+    later = _run(metrics=RunMetrics(erasure_residue={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
+    assert "[not measured] erasure_residue[vector_db]" in cli.output, cli.output
+    assert "[ok] erasure_residue[vector_db]" not in cli.output
+    assert "RESULT: REGRESSION" in cli.output
+    assert cli.exit_code == 2

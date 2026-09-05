@@ -1943,10 +1943,15 @@ def _emit_erasure_attestation(
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
+            # A surface whose absence the scan could not establish has no residue
+            # COUNT - writing 0 there asserts a number the run never measured, and
+            # `diff` read it as a leak that had been fixed. It is absent here and
+            # NOT_COVERED in the coverage block, which is what tells it apart from
+            # a surface that was never scanned at all.
             erasure_residue={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
-                if surface.erasure_supported
+                if surface.erasure_supported and not surface.unverifiable_after
             },
             erasure_caveats={
                 surface.surface.value: surface.residual_after
@@ -2589,7 +2594,13 @@ _HEADLINE_METRIC_PROBES: dict[str, frozenset[str]] = {
 
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
-    return _delta_verdict(delta, result.coverage_lost, result.boundary_lost, result.scope_lost)
+    return _delta_verdict(
+        delta,
+        result.coverage_lost,
+        result.boundary_lost,
+        result.scope_lost,
+        result.erasure_lost,
+    )
 
 
 def _delta_verdict(
@@ -2597,6 +2608,7 @@ def _delta_verdict(
     coverage_lost: Sequence[str] = (),
     boundary_lost: Sequence[str] = (),
     scope_lost: Sequence[str] = (),
+    erasure_lost: Sequence[str] = (),
 ) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
@@ -2620,6 +2632,11 @@ def _delta_verdict(
         for probe_id, surfaces in PROBE_SURFACES.items()
         if any(surface.value in gone for surface in surfaces)
     }
+    # `erasure_residue[vector_db]` is keyed by SURFACE, not probe id, so it needs
+    # its own lookup: a surface the later run could not scan to a count reads "not
+    # measured", never "[ok] ... 2 -> 0", which asserts the erasure worked.
+    if any(f"[{surface}]" in delta.name for surface in erasure_lost):
+        return "not measured"
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
     # ANY feeding probe lost: losing one of the two bleed probes changes the
     # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
@@ -2710,6 +2727,12 @@ def baseline(
             f"[BOUNDARY LOST] {untrusted(probe_id)}: its user-level steps were not run in "
             "this run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
+        )
+    for surface in result.erasure_lost:
+        typer.echo(
+            f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the baseline scanned it to a "
+            "residue count and this run did not (out of scope, or its absence could not be "
+            "established); any resolved residual finding there was not re-tested"
         )
     if result.scenario_changed:
         typer.echo(
@@ -2865,6 +2888,12 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "the later run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
         )
+    for surface in result.erasure_lost:
+        typer.echo(
+            f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the earlier run scanned it to a "
+            "residue count and this one did not (out of scope, or its absence could not be "
+            "established); any resolved residual finding there was not re-tested"
+        )
     if result.scenario_changed:
         typer.echo(
             "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
@@ -2900,6 +2929,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "coverage_lost": list(result.coverage_lost),
         "scope_lost": list(result.scope_lost),
         "boundary_lost": list(result.boundary_lost),
+        "erasure_lost": list(result.erasure_lost),
         "scenario_changed": result.scenario_changed,
         "regressed": result.regressed,
     }
