@@ -82,20 +82,20 @@ is opt-in live.
 
 **Search index.** The OpenSearch search index (`kind: opensearch`, the `[opensearch]`
 extra) indexes each tenant's derived full-text documents into its own OpenSearch index
-(`{prefix}-{tenant}`) and searches with a `match` query — the tenth "hiding place",
+(`{prefix}-{tenant.hex}`) and searches with a `match` query — the tenth "hiding place",
 distinct from the vector store. Class 11 erasure seeds it, then confirms a `delete`
 purges the index; `soft_delete=True` leaves it in place — the erasure residue. A
 search whose matches exceed the page it returns is refused rather than truncated.
 
 **Eval set.** The LangSmith eval set (`kind: langsmith`, the `[langsmith]` extra) maps
-each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant}`) — a dataset *is* a
+each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant.hex}`) — a dataset *is* a
 curated golden eval set, the fourth "hiding place". A fixture is a dataset example,
 Class 11 erasure seeds them, and `delete` removes the tenant's dataset;
 `soft_delete=True` leaves the fixtures in place. A search that hits the 1000-example
 listing cap is refused rather than truncated.
 
 **Backup.** The S3 backup (`kind: s3`, the `[boto3]` extra) keeps each tenant's
-snapshots under the key prefix `{prefix}/{tenant}/` in one bucket (AWS S3 or any
+snapshots under the key prefix `{prefix}/{tenant.hex}/` in one bucket (AWS S3 or any
 S3-compatible store — MinIO, Ceph — via `endpoint_url`), the seventh "hiding place". A
 search lists that prefix and `delete` purges it; `no_erasure=True` models an immutable /
 object-lock (WORM) bucket that exposes no per-tenant purge, so `delete` raises

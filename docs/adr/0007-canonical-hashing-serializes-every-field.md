@@ -15,7 +15,9 @@ RFC 3161 TSA token, the Sigstore Rekor entry, and `sectum-ai verify`.
 Because no field is omitted, adding an optional field shifts the digest of every
 existing instance. ADR-0006 added `Marker.owner_user_id` (default `None`) and
 `SyntheticTenantSpec.users` (default `()`), which moved the default scenario's
-`scenario_hash` once (`802d1643…` → `083169e0…`). That raises the question:
+`scenario_hash` once (`802d1643…` → `083169e0…` — the two values as of that
+change; later additive fields have moved it again, and the current golden lives
+in `tests/invariants/test_reproducibility.py`). That raises the question:
 should `to_canonical_json` adopt `exclude_none=True` (or `exclude_defaults=True`)
 so additive optional fields never perturb the digest?
 

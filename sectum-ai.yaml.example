@@ -81,7 +81,7 @@ adapters:
 
   observability:
     # kind: phoenix            # Arize Phoenix (per-tenant project)
-    #   base_url: http://localhost:6006
+    #   base_url: http://localhost:6007   # compose.yaml publishes 6006 as 6007
     # kind: langfuse           # Langfuse cloud or self-hosted
     #   host: https://cloud.langfuse.com
     #   public_key_env: LANGFUSE_PUBLIC_KEY
@@ -153,7 +153,8 @@ adapters:
 
   mcp:
     # kind: stdio              # stdio Model Context Protocol server
-    #   command: "uvx your-mcp-server"   # one string: the executable and its arguments
+    #   command: "uvx"                 # the executable alone - it is exec'd as given
+    #   args: ["your-mcp-server"]      # its arguments, one list entry each
     # kind: http               # streamable-HTTP MCP server
     #   url: https://mcp.example.com/mcp
     #   tenant_argument: tenant

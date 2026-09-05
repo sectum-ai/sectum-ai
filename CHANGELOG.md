@@ -71,6 +71,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   includes unverified findings' judge rationales.
 - `SECURITY.md` and `docs/index.md` state the shipped version and drifted
   unguarded; both are now pinned by `tests/unit/test_action_version.py`.
+- Smaller docs corrections: a prose paragraph had run into the `rag` kinds table
+  and terminated it; the compose backend list in `PHASES.md` omitted Qdrant and
+  OpenSearch; the ADR index left the 0010-0015 gap unexplained; ADR-0016's
+  decision omitted `anchored_with_timestamp`, which its own update adds;
+  ADR-0018's prefix list predates `cohere:`, `voyage:` and `bedrock:`; the live
+  search-index, eval-set and backup adapters key on `tenant.hex`, not a dashed
+  UUID; the MCP example put a command's arguments in `command` rather than
+  `args`; the Phoenix example used the container port, not the published one;
+  five nested models have no standalone schema file, not one; Class 9 accepts
+  shared weights, which is the posture it exists to catch; and Class 11's
+  unverifiable-phrase rule is a six-character floor, not "a bare two-word
+  name".
 - **A lost live surface still printed `[ok]` for the metrics that matter most.**
   The cycle-6 rule marked a probe unmeasured only when *every* surface it lists
   was lost, but `PROBE_SURFACES` lists alternatives and a run drives one of them,
@@ -330,7 +342,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surface scanned to `ERASED` or `RESIDUAL`.
 - **A phoenix / langfuse / langsmith observability kind without its extra was a
   raw traceback**, not the typed exit-3 error every other family gives — the
-  sibling of the v0.11.0 `mcp` defect.
+  sibling of the `mcp` extra defect fixed above in this same section.
 - **The in-toto verifier accepted a statement with a foreign subject beside the
   genuine one**; a statement now attests exactly one subject.
 - **`verify` reported the Rekor integration time as a verified fact.** The

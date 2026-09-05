@@ -82,7 +82,9 @@ or DPO accepts. Contains the canonicalized run, the hashed ground-truth
 manifest, a timestamp token (the reproducible local-dev token by default; an
 RFC 3161 token when a TSA is configured), a Sigstore Rekor inclusion proof
 (when enabled), control mappings (SOC 2 / ISO 27001 / ISO/IEC 42001 / GDPR /
-CCPA/CPRA / EU AI Act / HIPAA / NIST AI RMF / OWASP), a machine-readable
+CCPA/CPRA / EU AI Act / HIPAA / NIST AI RMF / OWASP) — each earned only where a
+live surface was exercised, so an all-synthetic run carries none — a
+machine-readable
 `evidence.json`, and a
 human-readable [audit-pack PDF](https://github.com/sectum-ai/sectum-ai/tree/main/docs/samples). The pack is
 independently verifiable by `sectum-ai verify`.

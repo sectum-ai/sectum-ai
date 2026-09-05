@@ -46,6 +46,11 @@ per-model rate for **any** vector store.
   documented as such.
 - Scenario `embedding_models` entries are resolved by prefix: `st:<model>`,
   `openai:<model>`, `hash-<dim>`, or a legacy `fake-*` name.
+
+  > **Update (2026-09-05).** Three more hosted providers ship behind the same
+  > seam, so the full prefix set is `st:`, `openai:`, `cohere:`, `voyage:`,
+  > `bedrock:`, `hash-<dim>`, and the legacy `fake-*` names
+  > (`sectum_ai.embeddings`).
 - `embedding_provider_sweep` embeds the corpus and the benign queries with each
   real model and retrieves top-k by **cosine** over a single shared index, so the
   per-model rate reflects the real embeddings. Because it is a property of the

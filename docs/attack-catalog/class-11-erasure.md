@@ -36,8 +36,9 @@ subject rather than `ERASED`. On a model that merges every tenant's weights
 (`SHARED_WEIGHTS`) there is no untrained tenant to ask, so a completion cannot be
 told apart from the base model's own knowledge: the model surface reads
 `NOT_COVERED` for the subject rather than signing a residual it cannot attribute. An email is cut inside its local part. A phrase the check cannot
-verify — a trailing part under six characters, a bare two-word name, a prefix
-with no scrambled form — is counted and the verifiable phrases are still
+verify — a trailing part under six characters (which is what makes most bare
+two-word names unverifiable: "Doe" is three), or a prefix with no scrambled
+form — is counted and the verifiable phrases are still
 scanned: the model surface reads `RESIDUAL` if any of them is recalled, else
 `NOT_COVERED` for the subject (never `ERASED` while something was unchecked), and
 the run says how many supplied fingerprints it could not check. The tenant probe's canary scan uses the

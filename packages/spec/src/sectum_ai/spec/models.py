@@ -28,6 +28,10 @@ from sectum_ai.spec.enums import (
 SCHEMA_VERSION = "0.7.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
+The blocks below are the schema changes that carried an anti-over-claim
+guarantee. The three oldest come first; from the ``(newest first)`` marker on,
+the order reverses.
+
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
 mappings, pdf ref, transparency-log intent), not just the run record, and
 timestamps in the canonical form are normalized to UTC so the digest is
@@ -169,7 +173,7 @@ class PlantedLocation(SectumModel):
     """Where a marker was planted within a document."""
 
     doc_id: str
-    field: str  # one of: body, title, metadata, tags
+    field: str  # one of: body, title, metadata
 
 
 class Marker(SectumModel):

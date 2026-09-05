@@ -56,7 +56,7 @@ point: it is rejected at config load, since v0.10.0.)
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
 | Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
-| LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
+| LoRA cross-tenant influence (9) | model | a self-hosted model that trains on tenant data — per-tenant adapters (HF + PEFT), or shared weights, which is the posture the probe exists to catch |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
 | Data-subject erasure — A3 DSR | vector store + cache (+ optional model, tracing, memory, search index) | vector + cache; model / tracing / memory / search index when configured |

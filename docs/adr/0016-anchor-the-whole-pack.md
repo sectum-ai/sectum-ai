@@ -33,7 +33,7 @@ time and still pass.
 
 **The anchors bind the whole attested pack.** A new `attested_digest(pack)` is the
 SHA-256 of the canonical form of `{run_result, manifest_hash, control_mappings,
-pdf_ref, anchored_in_log}`. `build_evidence_pack` timestamps and Rekor-records
+pdf_ref, anchored_in_log}` — and, since the update below, `anchored_with_timestamp`. `build_evidence_pack` timestamps and Rekor-records
 *that* digest; `sectum-ai verify` recomputes it from the pack's own fields and checks
 it against the timestamp token and any Rekor proof. Editing any bound field
 changes the digest and fails verification.

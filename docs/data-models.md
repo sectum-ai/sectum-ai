@@ -21,7 +21,7 @@ without running Sectum.
 | `ProbeStep` | One planned action: `step_id`, `probe_id`, `actor_tenant_id`, `actor_user_id?`, `action`, `payload`. |
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
-| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate, erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`), side-channel effect sizes, and the Class 3/6/10 rates. |
+| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes, `user_steps_dropped`, and the Class 3/6/10 rates. |
 | `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped`). |
 | `EvidencePack` | The attested bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, the `anchored_in_log` / `anchored_with_timestamp` downgrade guards, and `schema_version`. |
 | `ControlMapping` | A pack-level framework mapping (framework, control ids, an assertion ending in the live surfaces it rests on) — see the [compliance mappings](compliance-mappings.md). |
@@ -64,8 +64,10 @@ from its model, so the published schema always matches the code.
 The committed schemas are: `Scenario`, `Marker`, `CorpusDocument`,
 `GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`, `Finding`,
 `RunMetrics`, `RunResult`, `EvidencePack`, `ControlMapping`, `ClassScore`, and
-`IsolationScore`. (`Scenario` embeds `SyntheticTenantSpec` inline, so that nested
-model has no standalone schema file.)
+`IsolationScore`. The nested models a parent embeds inline —
+`SyntheticTenantSpec`, `SyntheticUserSpec`, `SharedEntity`, `Principal`, and
+`PlantedLocation` — have no standalone schema file; they appear in their
+parent's `$defs`.
 
 ## Canonical hashing
 
