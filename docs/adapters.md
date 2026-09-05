@@ -146,7 +146,9 @@ trace up by id within the tenant's own scope, so `erasure --subject` can verify 
 named trace is gone. LangSmith, Phoenix, Helicone, and Datadog each read one page
 of at most 1000 traces, and Langfuse pages to its 1000-trace budget; a miss on a
 full page (or past the budget) is refused (an `AdapterError`) rather than read as
-"erased", since a trace beyond it is indistinguishable from a deleted one. A search response that is
+"erased", since a trace beyond it is indistinguishable from a deleted one. The
+Class 11 marker scan (`search_traces`) reads the same page and refuses it on the
+same rule. A search response that is
 an error envelope (a 200 carrying `error`/`errors`, or no `data` list) is likewise an
 error, not an empty tenant; the generic OpenTelemetry reader treats a `DELETE` that
 answers `404` as a purge only when its query then shows no spans — it asks with an
@@ -206,7 +208,10 @@ nothing user-specific reaches the backend), and the mem0 memory store (a flat
 `user_id` space that *is* the tenant) and the serving-only models never do. The
 runner drops user-level
 *read* steps for an adapter that does not carry the user (a user-owned plant still
-runs, as the tenant), records the count in the signed run (`user_steps_dropped`),
+runs, as the tenant — unless the filter leaves the probe no judged step at all, in
+which case the plants go too and the probe runs nothing rather than grading a
+class off zero observations), records the count in the signed run
+(`user_steps_dropped`),
 and warns; the run claims the tenant boundary alone there, and `diff` /
 `baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
 Run as the tenant and judged as the user, such a step confirmed cross-user leaks of

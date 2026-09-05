@@ -90,7 +90,10 @@ class HeliconeObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         hits: list[TraceHit] = []
-        for row in self._client.query_requests(tenant.hex):
+        rows = self._client.query_requests(tenant.hex)
+        # As in `fetch_trace`: a marker past the page cap is not "absent".
+        _refuse_capped("Helicone", len(rows), _REQUEST_LIMIT)
+        for row in rows:
             snippet = _row_snippet(row)
             if marker in snippet:
                 hits.append(

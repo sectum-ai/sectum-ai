@@ -53,8 +53,11 @@ built-in fake is graded on the live surface's findings only: a confirmed finding
 on the fake is withheld (the class note says how many), so a leaking fake vector
 store beside a clean live RAG pipeline no longer fails Class 2 — the OSCAL and the
 JSON summary for the same record already said no leak was confirmed on a live
-surface. The Retrieval-Pivot Rate follows the same rule: on a mixed run it is
-computed over the live surfaces' query steps only. A finding's surface maps to
+surface. Every headline rate follows the same rule: on a mixed run the
+Retrieval-Pivot Rate, the poisoning bleed delta, the inversion reconstruction
+rate, and the extraction efficiency are computed over the live surfaces' steps
+only. "Mixed" is decided by what the run's steps drove, not by what the config
+named: a live adapter no probe touched does not make a run mixed. A finding's surface maps to
 the adapter that produced it (a KV-cache timing finding rests on the model
 adapter), so those findings count against a live model adapter everywhere.
 

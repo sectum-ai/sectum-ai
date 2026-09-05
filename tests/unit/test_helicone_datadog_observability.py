@@ -380,3 +380,21 @@ def test_an_error_envelope_is_not_an_empty_tenant(payload: object) -> None:
 
     with pytest.raises(AdapterError):
         _data_list(payload, "helicone")
+
+
+def test_search_traces_refuses_a_capped_page_like_fetch_trace() -> None:
+    # Cycle 4 guarded `fetch_trace`; Class 11 scans with `search_traces` on the
+    # same single page, so a retained canary past the cap read as absent and a
+    # soft-delete backend attested ERASED.
+    from sectum_ai.spec import AdapterError
+
+    helicone = _FakeHelicone()
+    for _ in range(1000):
+        helicone.add(_TENANT_A.hex, "request body")
+    with pytest.raises(AdapterError, match="page cap"):
+        HeliconeObservability(helicone).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+    datadog = _FakeDatadog()
+    for _ in range(1000):
+        datadog.add(_TENANT_A.hex, "span")
+    with pytest.raises(AdapterError, match="page cap"):
+        DatadogObservability(datadog).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")

@@ -183,7 +183,7 @@ def test_an_unverified_finding_is_not_a_failure() -> None:
 def test_grading_a_run_that_exercised_nothing_is_refused() -> None:
     # Grading nothing would emit a letter that means nothing, and F would falsely read
     # as "failed" when the truth is "never tested".
-    with pytest.raises(ConfigError, match="nothing to grade"):
+    with pytest.raises(ConfigError, match="can be graded"):
         score_run(_run(ran=()))
 
 

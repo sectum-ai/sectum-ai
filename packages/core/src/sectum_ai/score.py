@@ -498,8 +498,10 @@ def score_run(run: RunResult) -> IsolationScore:
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
     if not covered:
         raise ConfigError(
-            "no catalog class was exercised by this run, so there is nothing to grade; "
-            "run 'sectum-ai probe' against a configured stack first"
+            "no catalog class this run exercised can be graded: either no probe ran, or "
+            "every class that ran was backed only by Sectum's built-in fakes (their "
+            "verdicts describe that fake, not your stack); run 'sectum-ai probe' against "
+            "a configured stack first"
         )
     covered_weight = sum(weight[c.class_id] for c in covered)
     if not covered_weight:

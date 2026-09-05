@@ -49,7 +49,7 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.probes._recall import content_recalled, continuation_split
+from sectum_ai.probes._recall import content_recalled, continuation_split, has_base_control
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
 
@@ -252,7 +252,13 @@ class SubjectErasureProbe:
             # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
             # canary model scan.
             supplied = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ())))
-            phrases = tuple(p for p in supplied if continuation_split(p) is not None)
+            phrases = (
+                tuple(p for p in supplied if continuation_split(p) is not None)
+                if has_base_control(model)
+                # Without a base-knowledge control every phrase is unverifiable:
+                # see `_recall.has_base_control`.
+                else ()
+            )
             if len(phrases) < len(supplied):
                 # A fingerprint the continuation check cannot verify (a bare
                 # two-word name; a prefix with no control form). It is counted, the

@@ -79,6 +79,21 @@ def scramble(prefix: str) -> str | None:
     return None if control == prefix else control
 
 
+def has_base_control(model: ModelAdapter) -> bool:
+    """Whether a recall from ``model`` can be told apart from base knowledge.
+
+    The control is the same prompt as a tenant that trained nothing. A model that
+    merges every tenant's weights (``SHARED_WEIGHTS``) has no such tenant, so a
+    completion the base already knew - "Hussein Obama" after "Barack" - cannot be
+    attributed to the subject's data. Its fingerprints are unverifiable, not
+    residual: the alternative was a CONFIRMED HIGH finding at confidence 1.0 in a
+    DSR attestation for a model that trained nothing.
+    """
+    return model.supports(Capability.PER_TENANT_ADAPTER) and not model.supports(
+        Capability.SHARED_WEIGHTS
+    )
+
+
 def content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
     """Whether ``model`` still reproduces ``phrase`` for ``target``, controls applied."""
     if _reproduced(model, target, phrase, phrase.casefold()):

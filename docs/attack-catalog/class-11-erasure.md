@@ -31,7 +31,10 @@ scrambled prompt is what gives it away). On the vector store the fingerprint is
 a top-50 similarity query; a page that comes back full without the phrase makes
 that phrase unverifiable (a stored document ranked past the page is
 indistinguishable from an erased one), so the surface reads `NOT_COVERED` for the
-subject rather than `ERASED`. An email is cut inside its local part. A phrase the check cannot
+subject rather than `ERASED`. On a model that merges every tenant's weights
+(`SHARED_WEIGHTS`) there is no untrained tenant to ask, so a completion cannot be
+told apart from the base model's own knowledge: the model surface reads
+`NOT_COVERED` for the subject rather than signing a residual it cannot attribute. An email is cut inside its local part. A phrase the check cannot
 verify — a trailing part under six characters, a bare two-word name, a prefix
 with no scrambled form — is counted and the verifiable phrases are still
 scanned: the model surface reads `RESIDUAL` if any of them is recalled, else

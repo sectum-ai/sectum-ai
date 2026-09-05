@@ -487,4 +487,24 @@ def test_a_record_from_another_schema_line_is_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(old, default=str))
     cli = CliRunner().invoke(app, ["diff", str(path), str(_write(tmp_path / "l.json", _run()))])
     assert cli.exit_code == 3, cli.output
-    assert "schema 0.6.0" in cli.output
+    assert "schema '0.6.0'" in cli.output
+
+
+def test_a_metric_is_not_measured_when_its_boundary_was_lost(tmp_path: Path) -> None:
+    # `[ok] confirmed_findings: 1 -> 0` printed directly above `[BOUNDARY LOST]`,
+    # asserting a fix the later run never re-measured.
+    earlier = _run(_finding("f-1"))
+    later = _run().model_copy(
+        update={"metrics": RunMetrics(user_steps_dropped={"rag-entity-bleed": 12})}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[BOUNDARY LOST] rag-entity-bleed" in cli.output
+    assert "[ok] confirmed_findings" not in cli.output, cli.output
+    assert "[not measured] confirmed_findings" in cli.output

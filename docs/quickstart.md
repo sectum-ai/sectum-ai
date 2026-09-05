@@ -70,7 +70,8 @@ the later run did not run because its adapter cannot carry a user, reported as
 `[BOUNDARY LOST]`, and two runs of different scenarios — a re-seed, other tenants
 or users, where every finding "resolves" because its id embeds the markers and
 principals — reported as `[SCENARIO CHANGED]`; a record from another schema line
-is refused outright), or residual / attestable-with-caveat data on an erased surface
+is refused outright — as it is by `report`, `score`, and `verify`, which also
+check the run record *inside* a pack), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
 including a `probe` run in which nothing interrogated the stack, and a `report` on
 a run that names no probe (or was recorded against a since re-seeded substrate);

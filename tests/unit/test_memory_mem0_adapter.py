@@ -124,9 +124,13 @@ def test_mem0_search_tolerates_a_bare_list_result_shape() -> None:
     assert any("GAMMA-3" in e for e in adapter.recall(_TENANT_A, "canary GAMMA-3"))
 
 
-def test_mem0_recall_tolerates_none_and_malformed_rows() -> None:
-    # mem0's result shape shifts across releases; recall must not crash on a None
-    # result or a row missing the "memory" key - it returns nothing, never raises.
+def test_mem0_recall_reads_an_absent_scope_empty_and_a_shape_mismatch_as_an_error() -> None:
+    # mem0's result shape shifts across releases. A None result is an empty scope.
+    # Rows that carry no "memory" text are a SHAPE MISMATCH, not an empty tenant:
+    # read as empty they became "not recalled", and the A3 check attested the
+    # subject erased.
+    from sectum_ai.spec import AdapterError
+
     class _NoneMem0(_FakeMem0):
         def get_all(self, *, user_id: str, **_: Any) -> Any:
             return None
@@ -137,7 +141,8 @@ def test_mem0_recall_tolerates_none_and_malformed_rows() -> None:
         def get_all(self, *, user_id: str, **_: Any) -> Any:
             return {"results": [{"id": "no-memory-key"}, "not-a-dict"]}
 
-    assert Mem0Memory(_MalformedMem0()).recall(_TENANT_A, "anything") == []
+    with pytest.raises(AdapterError, match="response shape"):
+        Mem0Memory(_MalformedMem0()).recall(_TENANT_A, "anything")
 
 
 def test_mem0_recall_is_exhaustive_not_a_ranked_window() -> None:

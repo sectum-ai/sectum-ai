@@ -69,10 +69,14 @@ class LangSmithObservability(ObservabilityAdapter):
         if project not in self._project_names():
             return []
         hits: list[TraceHit] = []
+        seen = 0
         for run in self._client.list_runs(project_name=project, limit=_RUN_LIMIT):
+            seen += 1
             snippet = self._snippet(run)
             if marker in snippet:
                 hits.append(TraceHit(trace_id=str(run.id), project=project, snippet=snippet))
+        # As in `fetch_trace`: a marker past the page cap is not "absent".
+        _refuse_capped("LangSmith", seen, _RUN_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:

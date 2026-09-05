@@ -39,7 +39,9 @@ class PhoenixObservability(ObservabilityAdapter):
         if project not in self._project_names():
             return []
         hits: list[TraceHit] = []
+        seen = 0
         for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
+            seen += 1
             snippet = self._snippet(span)
             if marker in snippet:
                 hits.append(
@@ -49,6 +51,8 @@ class PhoenixObservability(ObservabilityAdapter):
                         snippet=snippet,
                     )
                 )
+        # As in `fetch_trace`: a marker past the page cap is not "absent".
+        _refuse_capped("Phoenix", seen, _SPAN_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:

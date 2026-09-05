@@ -300,7 +300,15 @@ def _check_schema_version(pack: EvidencePack) -> Check:
     silently mis-verified. A patch-level difference is compatible (the spec, §9 -
     every aggregate model is ``schema_version``-stamped).
     """
-    ok = _schema_major_minor(pack.schema_version) == _schema_major_minor(SCHEMA_VERSION)
+    supported = _schema_major_minor(SCHEMA_VERSION)
+    # The run record inside carries its own stamp, and its fields are what every
+    # other check reads: a 0.6.x run (which recorded every adapter slot) under a
+    # current pack stamp passed the run-scope gate on a live slot no probe drove.
+    ok = (
+        supported
+        == _schema_major_minor(pack.schema_version)
+        == _schema_major_minor(pack.run_result.schema_version)
+    )
     detail = (
         # `!r` (as the incompatible branch already does) is load-bearing, not cosmetic:
         # the pack supplies schema_version, `_schema_major_minor` reads only the major and
@@ -310,7 +318,8 @@ def _check_schema_version(pack: EvidencePack) -> Check:
         f"pack schema_version {pack.schema_version!r} is supported by this verifier"
         if ok
         else (
-            f"pack schema_version {pack.schema_version!r} is incompatible with this verifier "
+            f"pack schema_version {pack.schema_version!r} (run record "
+            f"{pack.run_result.schema_version!r}) is incompatible with this verifier "
             f"(supports {SCHEMA_VERSION!r}); verify with a matching sectum version"
         )
     )

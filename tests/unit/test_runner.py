@@ -548,3 +548,44 @@ def test_user_level_plants_run_as_the_tenant_and_only_reads_are_dropped() -> Non
     found = confirmed_findings([f for _, fs in results for f in fs])
     assert found and all(f.owner_tenant_id != f.observed_in_tenant_id for f in found)
     assert runner.dropped_user_steps.get(MemoryContamProbe.id, 0) > 0
+
+
+def test_a_probe_left_with_only_plants_runs_nothing() -> None:
+    # One tenant whose users are the only foreign principals, on an adapter that
+    # carries no user: every judged read was dropped and the plants alone ran, so
+    # the probe landed in probe_versions and `score` graded its class PASS off
+    # zero observations - the vacuous pass the plan guards exist to prevent.
+    from sectum_ai.adapters import FakeCache
+    from sectum_ai.probes import SemanticCacheProbe
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    class _TenantOnlyCache(FakeCache):
+        carries_user = False
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="cache-one-tenant-two-users",
+            seed=5,
+            tenants=(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=1),
+                    display_name="T1",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=11), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=12), display_name="b"),
+                    ),
+                ),
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    runner = Runner(substrate, cache=_TenantOnlyCache())
+    results = runner.run_per_step(SemanticCacheProbe())
+    assert results == [], "no judged step survives, so the plants are not run either"
+    assert runner.dropped_user_steps[SemanticCacheProbe.id] > 0
+    # ... while an adapter that carries the user runs the whole plan.
+    carrying = Runner(substrate, cache=FakeCache())
+    assert carrying.run_per_step(SemanticCacheProbe())
+    assert carrying.dropped_user_steps == {}

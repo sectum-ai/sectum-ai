@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import AdapterConfig, EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum_ai.spec import RunMetrics, RunResult, SyntheticUserSpec
+from sectum_ai.spec import SCHEMA_VERSION, RunMetrics, RunResult, SyntheticUserSpec
 
 _runner = CliRunner()
 
@@ -826,7 +826,7 @@ def test_score_refuses_a_run_that_exercised_no_catalog_class(tmp_path: Path) -> 
     run_path.write_text(json.dumps(record))
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 3  # a ConfigError, not a ZeroDivisionError traceback
-    assert "nothing to grade" in (result.output + str(result.exception or ""))
+    assert "can be graded" in (result.output + str(result.exception or ""))
 
 
 def test_score_rejects_sarif_and_oscal(tmp_path: Path) -> None:
@@ -1493,6 +1493,9 @@ def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str,
                 "finished_at": "2026-01-01T00:00:00+00:00",
                 "probe_versions": probe_versions,
                 "metrics": metrics,
+                # A record without a stamp is refused: the field defaults to the
+                # current version, so "missing" cannot read as "current".
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -1640,3 +1643,85 @@ def test_the_retrieval_pivot_rate_describes_the_live_surfaces_on_a_mixed_run(
     assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
     assert summary["retrieval_pivot_rate"] == 0.0  # the live pipeline did not
     assert summary["retrieval_pivot_k"] == 0
+
+
+def test_every_headline_rate_describes_the_live_surfaces_on_a_mixed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The cycle-4 filter reached the Retrieval-Pivot Rate only: the same summary
+    # reported 0% pivot on the live pipeline and 100% poisoning bleed, 100%
+    # inversion and 18% extraction from the fake vector store, as the stack's.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"]).stdout
+    )
+    assert summary["surface_provenance"]["rag_pipeline"] == "LIVE"
+    assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
+    assert summary["confirmed_on_live_surfaces"] == 0
+    for rate in ("retrieval_pivot_rate", "poisoning_bleed_delta"):
+        assert summary[rate] in (0.0, None), (rate, summary[rate])
+    assert summary["inversion_reconstruction_rate"] in (0.0, None)
+    assert summary["extraction_efficiency"] in (0.0, None)
+
+
+def test_an_unexercised_live_adapter_does_not_make_a_run_mixed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "Mixed" keyed on the configured slots, so a live observability adapter no
+    # probe drove emptied the Class 2 rate: the summary said Class 2 did not run
+    # while the scorecard failed it on the same record.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeObservability
+
+    class _LiveTracing(FakeObservability):
+        synthetic = False
+
+    monkeypatch.setattr(config_module, "build_observability", lambda _cfg: _LiveTracing())
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(
+            app,
+            [
+                "probe",
+                "--workdir",
+                str(tmp_path),
+                "--probe",
+                "rag-entity-bleed",
+                "--output",
+                "json",
+            ],
+        ).stdout
+    )
+    assert "tracing" not in summary["surface_provenance"]
+    assert summary["retrieval_pivot_n"] > 0
+    assert summary["retrieval_pivot_rate"] is not None
+
+
+def test_the_text_summary_says_how_many_findings_describe_the_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "0 on live surfaces" in result.output, result.output

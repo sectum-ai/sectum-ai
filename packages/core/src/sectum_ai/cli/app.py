@@ -128,7 +128,7 @@ from sectum_ai.runner import (
     confirmed_finding_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import score_run
+from sectum_ai.score import PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     ClassVerdict,
@@ -497,6 +497,25 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
     raise typer.Exit(code=3)
 
 
+def _refuse_other_schema_line(recorded: object, what: str) -> None:
+    """Refuse a record from another ``major.minor`` schema line.
+
+    A record's fields ARE its schema: a 0.6.x run recorded every adapter slot, so
+    it read as having exercised them all - `report` signed one under a current
+    pack stamp and `verify`'s run-scope gate passed on a live slot no probe drove.
+    An absent stamp is refused too: the field defaults to the current version, so
+    "missing" cannot be read as "current".
+    """
+    if (
+        not isinstance(recorded, str)
+        or recorded.rsplit(".", 1)[0] != SCHEMA_VERSION.rsplit(".", 1)[0]
+    ):
+        raise ConfigError(
+            f"{what} is a schema {recorded!r} record; this build reads {SCHEMA_VERSION} "
+            "records only - re-run 'sectum-ai probe' to produce one"
+        )
+
+
 def _load_run(workdir: Path) -> RunResult:
     """Load the recorded run from ``workdir``, or exit with a config error."""
     path = workdir / "run.json"
@@ -504,7 +523,14 @@ def _load_run(workdir: Path) -> RunResult:
         typer.echo(f"no run at {path}; run 'sectum-ai probe' first", err=True)
         raise typer.Exit(code=3)
     try:
-        return RunResult.model_validate_json(path.read_text())
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        typer.echo(f"the run at {path} is malformed: {error}", err=True)
+        raise typer.Exit(code=3) from error
+    stamp = raw.get("schema_version") if isinstance(raw, dict) else None
+    _refuse_other_schema_line(stamp, str(path))
+    try:
+        return RunResult.model_validate(raw)
     except ValueError as error:
         typer.echo(f"the run at {path} is malformed: {error}", err=True)
         raise typer.Exit(code=3) from error
@@ -856,16 +882,25 @@ def probe(
     kv_findings = list(kv_report.findings) if kv_report is not None else []
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
-    bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
-    # On a run with any live surface the headline describes the live surfaces
-    # only: pooling the fake vector store's hits into the live pipeline's rate
-    # presented a demo leak as the configured stack's Retrieval-Pivot Rate.
-    if any(not adapter.synthetic for adapter in _slot_adapters(bundle).values()):
-        bleed_steps = [
-            result
-            for result in bleed_steps
-            if not _slot_adapters(bundle)[result[0].action.split(".", 1)[0]].synthetic
-        ]
+    exercised = _exercised_surfaces(bundle, step_results, kv_report)
+    # On a run with any live surface EVERY headline describes the live surfaces
+    # only: pooling the fake vector store's hits presented a demo leak as the
+    # configured stack's rate. "Live" is decided by what the steps drove, not by
+    # what the config named: an adapter no probe touched does not make a run mixed.
+    live_slots = {
+        family
+        for family, adapter in _slot_adapters(bundle).items()
+        if not adapter.synthetic and adapter.surface.value in exercised
+    }
+
+    def _live_only(results: list[StepResult]) -> list[StepResult]:
+        if not live_slots:
+            return results
+        return [r for r in results if r[0].action.split(".", 1)[0] in live_slots]
+
+    bleed_steps = _live_only(
+        [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
+    )
     # The Retrieval-Pivot Rate is a binomial proportion (k of n benign cross-tenant
     # query steps surfaced a foreign canary). Record k and n so the rate's Wilson
     # confidence interval is reproducible from the signed evidence, and compute the
@@ -875,17 +910,19 @@ def probe(
     rpr_ci = wilson_interval(rpr_k, rpr_n) if rpr_n else None
     # Class 3/6/10 headline rates over each probe's benign query steps. Poisoning
     # excludes its own vector.upsert (plant) steps, which never produce findings.
-    poison_query_steps = [
-        result
-        for result in step_results
-        if result[0].probe_id == RagPoisoningProbe.id and result[0].action == "vector.query"
-    ]
-    inversion_steps = [
-        result for result in step_results if result[0].probe_id == EmbeddingInversionProbe.id
-    ]
-    extraction_steps = [
-        result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id
-    ]
+    poison_query_steps = _live_only(
+        [
+            result
+            for result in step_results
+            if result[0].probe_id == RagPoisoningProbe.id and result[0].action == "vector.query"
+        ]
+    )
+    inversion_steps = _live_only(
+        [result for result in step_results if result[0].probe_id == EmbeddingInversionProbe.id]
+    )
+    extraction_steps = _live_only(
+        [result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id]
+    )
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),
@@ -911,7 +948,7 @@ def probe(
         surface_provenance={
             surface: provenance
             for surface, provenance in surface_provenance(bundle).items()
-            if surface in _exercised_surfaces(bundle, step_results, kv_report)
+            if surface in exercised
         },
         probe_versions={
             # What actually INTERROGATED the stack, not what the suite contained: a probe
@@ -1027,7 +1064,10 @@ def probe(
         typer.echo(json.dumps(run_to_oscal(run, tool_version=__version__), indent=2))
     else:
         plural = "" if probe_count == 1 else "s"
-        typer.echo(f"ran {probe_count} probe{plural}: {_confirmed_summary(confirmed)}")
+        typer.echo(
+            f"ran {probe_count} probe{plural}: "
+            f"{_confirmed_summary(confirmed, run.surface_provenance)}"
+        )
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         if run.metrics.retrieval_pivot_rate_by_model:
@@ -1085,13 +1125,21 @@ def _scope_lines(card: IsolationScore) -> list[str]:
     return lines
 
 
-def _confirmed_summary(confirmed: Sequence[Finding]) -> str:
+def _confirmed_summary(confirmed: Sequence[Finding], provenance: dict[str, str]) -> str:
     """``"3 confirmed cross-tenant findings"``, or by kind when they are not all that."""
     kinds = Counter(leak_label(f) for f in confirmed)
+    live = sum(
+        1 for f in confirmed if provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
+    )
+    suffix = (
+        f"; {live} on live surfaces"
+        if confirmed and any(p == SurfaceProvenance.LIVE.value for p in provenance.values())
+        else ""
+    )
     if set(kinds) <= {"cross-tenant leak"}:
-        return f"{len(confirmed)} confirmed cross-tenant findings"
+        return f"{len(confirmed)} confirmed cross-tenant findings{suffix}"
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
-    return f"{len(confirmed)} confirmed findings ({parts})"
+    return f"{len(confirmed)} confirmed findings ({parts}){suffix}"
 
 
 def _slot_adapters(bundle: AdapterBundle) -> dict[str, Adapter]:
@@ -2423,18 +2471,40 @@ _HEADLINE_METRIC_PROBES: dict[str, frozenset[str]] = {
 }
 
 
-def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str:
+def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
+    """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
+    return _delta_verdict(delta, result.coverage_lost, result.boundary_lost, result.scope_lost)
+
+
+def _delta_verdict(
+    delta: MetricDelta,
+    coverage_lost: Sequence[str] = (),
+    boundary_lost: Sequence[str] = (),
+    scope_lost: Sequence[str] = (),
+) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
     A metric fed by a probe this run did not exercise reads "not measured", never
     "ok": its drop to zero is missing coverage, not a fixed leak, and `[ok]
     per_probe_findings[rag-poisoning]: 24 -> 0` positively asserts the opposite.
     """
-    lost = set(coverage_lost)
+    # A probe that lost its user boundary, or whose backing surface fell back to
+    # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`
+    # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.
+    lost = set(coverage_lost) | set(boundary_lost)
+    lost |= {
+        probe_id
+        for probe_id, surfaces in PROBE_SURFACES.items()
+        if any(surface.value in set(scope_lost) for surface in surfaces)
+    }
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
     # ANY feeding probe lost: losing one of the two bleed probes changes the
     # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
     if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by & lost):
+        return "not measured"
+    # The pooled counts span every probe, so any loss at all makes them
+    # incomparable: a run that stopped exercising a boundary "resolved" its leaks.
+    if lost and delta.name in ("confirmed_findings",):
         return "not measured"
     if delta.informational:
         return "info"
@@ -2478,8 +2548,8 @@ def baseline(
         )
         raise typer.Exit(code=3)
     try:
-        saved = RunResult.model_validate_json(baseline_path.read_text())
-    except ValueError as error:
+        saved = _load_run_artifact(baseline_path)
+    except ConfigError as error:
         typer.echo(
             f"the baseline at {baseline_path} is malformed "
             f"(re-run 'sectum-ai baseline --save' to refresh it): {error}",
@@ -2492,8 +2562,8 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
-            f"{delta.baseline:g} -> {delta.current:g}"
+            f"[{_lost_verdict(delta, result)}] "
+            f"{untrusted(delta.name)}: {delta.baseline:g} -> {delta.current:g}"
         )
     for change in result.findings.severity_escalations:
         typer.echo(
@@ -2550,15 +2620,12 @@ def _load_run_artifact(path: Path) -> RunResult:
         data = json.loads(path.read_text())
     except json.JSONDecodeError as error:
         raise ConfigError(f"{path} is not valid JSON: {error}") from error
-    # A record from another schema line means another set of fields: a run that
-    # recorded every adapter slot (0.6.x) read as having exercised them all, and
-    # a `diff` against it flagged surfaces the baseline never touched.
-    recorded = data.get("schema_version") if isinstance(data, dict) else None
-    if isinstance(recorded, str) and recorded.rsplit(".", 1)[0] != SCHEMA_VERSION.rsplit(".", 1)[0]:
-        raise ConfigError(
-            f"{path} is a schema {recorded} record; this build compares {SCHEMA_VERSION} "
-            "records only - re-run 'sectum-ai probe' to produce a comparable one"
-        )
+    inner = data.get("run_result") if isinstance(data, dict) else None
+    # Both stamps: a pack stamped 0.7.0 can wrap a 0.6.x run record.
+    stamp = data.get("schema_version") if isinstance(data, dict) else None
+    _refuse_other_schema_line(stamp, str(path))
+    if isinstance(inner, dict):
+        _refuse_other_schema_line(inner.get("schema_version"), f"the run inside {path}")
     try:
         if isinstance(data, dict) and "run_result" in data:
             return EvidencePack.model_validate(data).run_result
@@ -2654,8 +2721,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
-            f"{delta.baseline:g} -> {delta.current:g}"
+            f"  [{_lost_verdict(delta, result)}] "
+            f"{untrusted(delta.name)}: {delta.baseline:g} -> {delta.current:g}"
         )
 
     typer.echo("")

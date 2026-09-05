@@ -118,7 +118,12 @@ class DatadogObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         hits: list[TraceHit] = []
-        for event in self._client.search_spans(tenant.hex):
+        events = self._client.search_spans(tenant.hex)
+        # The Class 11 primitive reads the same single page as `fetch_trace`: a
+        # retained canary past the cap came back as "no trace", and a soft-delete
+        # backend whose post-erasure page no longer holds it attested ERASED.
+        _refuse_capped("Datadog", len(events), _SPAN_LIMIT)
+        for event in events:
             snippet = _event_snippet(event)
             if marker in snippet:
                 hits.append(

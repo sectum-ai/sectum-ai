@@ -19,7 +19,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
-from sectum_ai.evidence.labels import leak_label
+from sectum_ai.evidence.labels import backing_surface, leak_label
 from sectum_ai.spec import (
     ControlMapping,
     CoverageVerdict,
@@ -131,6 +131,16 @@ def confirmed_by_kind(run: RunResult) -> str:
     if not confirmed:
         return "0"
     parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+    # How many describe the operator's systems: an auditor read "226 confirmed
+    # cross-tenant findings" beside asserted controls while the same record's
+    # OSCAL said none was confirmed on a live surface.
+    live = sum(
+        1
+        for f in confirmed
+        if run.surface_provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
+    )
+    if any(p == SurfaceProvenance.LIVE.value for p in run.surface_provenance.values()):
+        parts += f"; on live surfaces {live}"
     return f"{len(confirmed)} ({parts})"
 
 

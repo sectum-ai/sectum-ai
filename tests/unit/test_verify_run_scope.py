@@ -174,3 +174,34 @@ def test_a_live_slot_no_probe_drove_cannot_pass_the_scope_gate(
     refused = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert refused.exit_code == 4, refused.output
     assert "NO surface was live" in refused.output
+
+
+def test_a_stale_run_record_inside_a_current_pack_is_refused() -> None:
+    # `report` accepted a 0.6.x run.json (which recorded every adapter slot,
+    # including a live one no probe drove), stamped the pack 0.7.0, and `verify`
+    # passed run-scope on that phantom LIVE slot.
+    from sectum_ai.spec import SCHEMA_VERSION
+
+    pack = _pack(_LIVE)
+    stale_run = pack.run_result.model_copy(update={"schema_version": "0.6.0"})
+    stale = pack.model_copy(update={"run_result": stale_run})
+    result = verify_pack(stale, require_live=True)
+    assert not result.passed
+    check = next(c for c in result.checks if c.name == "schema-version")
+    assert not check.ok
+    assert "0.6.0" in check.detail and SCHEMA_VERSION in check.detail
+
+
+def test_report_refuses_a_run_from_another_schema_line(tmp_path: Path) -> None:
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["schema_version"] = "0.6.0"
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+    assert not (tmp_path / "evidence.json").exists()

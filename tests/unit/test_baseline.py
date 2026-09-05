@@ -1,6 +1,7 @@
 """Tests for the regression-baseline engine."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sectum_ai.baseline import compare_metrics, diff_runs
 from sectum_ai.spec import RunMetrics, RunResult
@@ -230,3 +231,30 @@ def test_a_probe_that_ran_and_found_nothing_is_not_a_coverage_loss() -> None:
     clean = _run_for({"rag-poisoning": "0.7.1"})
     assert clean.metrics.per_probe_findings == {}
     assert diff_runs(baseline, clean).coverage_lost == ()
+
+
+def test_baseline_compare_refuses_a_saved_record_from_another_schema_line(tmp_path: "Path") -> None:
+    # The refusal lived in `diff`'s loader only, so `baseline --compare` read a
+    # 0.6.x baseline (which recorded every adapter slot) and flagged [SCOPE LOST]
+    # for surfaces that baseline never exercised - while the CHANGELOG said both
+    # commands refused it.
+    import json
+    from pathlib import Path as _Path
+
+    from typer.testing import CliRunner
+
+    assert isinstance(tmp_path, _Path)
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
+    saved = tmp_path / "baseline.json"
+    record = json.loads(saved.read_text())
+    record["schema_version"] = "0.6.0"
+    saved.write_text(json.dumps(record))
+    result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output

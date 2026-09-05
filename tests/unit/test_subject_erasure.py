@@ -744,3 +744,27 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     )
     assert report.coverage()[Surface.VECTOR_DB] is not CoverageVerdict.ERASED
     assert report.unverifiable.get(Surface.VECTOR_DB, 0) == 1 or report.findings
+
+
+def test_world_knowledge_on_shared_weights_is_unverifiable_not_residual() -> None:
+    # The base-knowledge control is "the same prompt as a tenant that trained
+    # nothing", which a shared-weights model does not have: a model that trained
+    # nothing and completes "Sherlock Holmes" -> "221B Baker Street" signed a
+    # CONFIRMED HIGH residual at confidence 1.0 in a DSR attestation.
+    class _WorldKnowledge(FakeModel):
+        def __init__(self) -> None:
+            super().__init__(adapter_bleed=True)  # SHARED_WEIGHTS
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "221B Baker Street, London" if prompt.startswith("Sherlock") else "no idea"
+
+    report = SubjectErasureProbe(model=_WorldKnowledge()).verify(
+        UUID(int=0xA),
+        SubjectManifest(
+            subject_ref="u-w1",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: ("Sherlock Holmes 221B Baker Street",)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert report.findings == ()

@@ -103,6 +103,14 @@ class Mem0Memory(MemoryAdapter):
             text = row.get("memory") if isinstance(row, dict) else None
             if text:
                 texts.append(str(text))
+        if rows and not texts:
+            # A release that renames the key, or wraps its rows differently, is a
+            # shape mismatch - not an empty tenant. Read as empty it became "not
+            # recalled", and the A3 check attested the subject erased.
+            raise AdapterError(
+                f"mem0 returned {len(rows)} row(s) carrying no 'memory' text; the client's "
+                "response shape is not the one this adapter reads"
+            )
         return texts
 
     def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:

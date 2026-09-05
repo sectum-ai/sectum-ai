@@ -16,6 +16,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A probe left with only plants graded its class PASS off zero observations.**
+  On one tenant whose users are the only foreign principals, with an adapter that
+  carries no user, every judged read was dropped and the plants alone ran — which
+  put the probe in `probe_versions` and graded Classes 3, 4, 8 and 9 PASS (grade
+  A) having asked the stack nothing. When the filter leaves a probe no judged
+  step, the plants go too and the probe runs nothing.
+- **`report` signed a stale run record under a current pack stamp.** A 0.6.x
+  `run.json` (which recorded every adapter slot, including a live one no probe
+  drove) was accepted, wrapped in a pack stamped 0.7.0, and `verify` passed
+  run-scope on that phantom LIVE slot. Every loader now refuses a record from
+  another `major.minor` line — an absent stamp included, since the field defaults
+  to the current version — `verify` checks the run record's stamp as well as the
+  pack's, and `baseline --compare` is covered like `diff` (the CHANGELOG said it
+  already was).
+- **Three of the four headline rates still pooled the fakes' hits.** The cycle-4
+  fix reached the Retrieval-Pivot Rate only, so the same summary reported 0%
+  pivot on the live pipeline beside 100% poisoning bleed, 100% inversion, and 18%
+  extraction from the fake vector store, as the configured stack's. All four are
+  live-only on a mixed run, and "mixed" is decided by the surfaces the run's steps
+  drove (a live adapter no probe touched used to empty the Class 2 rate while the
+  scorecard failed Class 2 on the same record).
+- **The audit PDF and the CLI summary carried no live/fake split.** An auditor
+  read "226 confirmed cross-tenant findings" beside asserted SOC 2 controls while
+  the same record's OSCAL said none was confirmed on a live surface. Both now say
+  how many describe the operator's systems.
+- **The Class 11 trace scan read a capped page as "no trace".** Cycle 4 guarded
+  the by-id `fetch_trace`; `search_traces` — what the erasure probe actually scans
+  with — read the same single page of 1000 on Datadog, Helicone, LangSmith and
+  Phoenix, so a retained canary past the cap attested ERASED. It refuses a full
+  page on the same rule.
+- **A shared-weights model's world knowledge signed a CONFIRMED residual.** The
+  base-knowledge control is "the same prompt as a tenant that trained nothing",
+  which a model merging every tenant's weights does not have: one that trained
+  nothing and completes "Sherlock Holmes" → "221B Baker Street" produced a
+  CONFIRMED HIGH finding at confidence 1.0 in a DSR attestation. Those
+  fingerprints are unverifiable and the surface reads NOT_COVERED.
+- `diff` and `baseline --compare` no longer print `[ok]` above a `[BOUNDARY LOST]`
+  or `[SCOPE LOST]` line: a metric whose probe lost its boundary, or whose backing
+  surface fell back to the fake, reads `[not measured]`, and the pooled counts do
+  too. A mem0 response whose rows carry no `memory` text is a shape mismatch, not
+  an empty tenant (read as empty it became "not recalled" — an attested erasure).
+  `score`'s refusal says which case it is: nothing ran, or everything that ran was
+  backed only by the fakes.
 - **Every live vector store, both Redis adapters, and the HuggingFace model
   claimed to carry the user while discarding it.** With `user_scoped: false`
   (the default) nothing user-specific reaches the backend, yet the adapters

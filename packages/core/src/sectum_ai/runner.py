@@ -115,14 +115,32 @@ class Runner:
         is dropped unless it is a plant, which runs as the tenant: judged as the
         user it would confirm leaks of a session that never existed, and the run
         may claim only the boundary it could exercise.
+
+        When the filter leaves the probe no *judged* step - a single tenant whose
+        users are the only foreign principals, on an adapter that carries no user
+        - the plants go too and the probe runs nothing. Executing the plants alone
+        put the probe id in ``probe_versions`` and graded its class PASS off zero
+        observations: the vacuous pass each planting probe's own plan guards
+        against (``docs/scorecard.md``, rule 1).
         """
         self.preflight(probe)
+        planned_steps = list(probe.plan(self._substrate))
+        droppable = [
+            step
+            for step in planned_steps
+            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
+        ]
+        judged_survives = any(
+            step not in droppable or step.action in _PLANT_ACTIONS
+            for step in planned_steps
+            if step.action not in _PLANT_ACTIONS
+        )
         results: list[StepResult] = []
         dropped = 0
-        for planned in probe.plan(self._substrate):
+        for planned in planned_steps:
             step = planned
             if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
-                if step.action not in _PLANT_ACTIONS:
+                if step.action not in _PLANT_ACTIONS or not judged_survives:
                     dropped += 1
                     continue
                 # A plant is not judged: run it as the tenant the user belongs to,
