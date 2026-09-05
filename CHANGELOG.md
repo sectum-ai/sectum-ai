@@ -64,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two workflows from the required-check list it calls the source of truth; the
   extras list omitted `azure-search`. `docs/data-models.md` states the schema
   version in prose and is now pinned by a test.
+- **A renamed CLI flag would have shipped a broken Action.** `action.yml` shells
+  out to `sectum-ai seed` and `probe` with a fixed set of flags and a second copy
+  of the `--output` allow-list, and the self-test that would catch a break runs
+  only when `action.yml` itself changes. A test now pins both against the Typer
+  app, the way the version guard pins the install pin.
 - **The fifth trace backend still discarded a hit it had already found.** Cycle
   6 taught Datadog, Helicone, LangSmith and Phoenix to refuse only a *miss* on a
   capped listing, because a marker found on a partial page is a definite
