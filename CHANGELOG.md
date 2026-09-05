@@ -44,8 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The Class 11 trace scan read a capped page as "no trace".** Cycle 4 guarded
   the by-id `fetch_trace`; `search_traces` — what the erasure probe actually scans
   with — read the same single page of 1000 on Datadog, Helicone, LangSmith and
-  Phoenix, so a retained canary past the cap attested ERASED. It refuses a full
-  page on the same rule.
+  Phoenix, so a retained canary past the cap attested ERASED. A *miss* on a full
+  page is refused on the same rule; a marker found there is a definite residual
+  and is still reported.
 - **A shared-weights model's world knowledge signed a CONFIRMED residual.** The
   base-knowledge control is "the same prompt as a tenant that trained nothing",
   which a model merging every tenant's weights does not have: one that trained

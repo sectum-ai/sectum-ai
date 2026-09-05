@@ -75,8 +75,10 @@ class LangSmithObservability(ObservabilityAdapter):
             snippet = self._snippet(run)
             if marker in snippet:
                 hits.append(TraceHit(trace_id=str(run.id), project=project, snippet=snippet))
-        # As in `fetch_trace`: a marker past the page cap is not "absent".
-        _refuse_capped("LangSmith", seen, _RUN_LIMIT)
+        # Only a MISS on a full page is refused: a marker found there is a
+        # definite residual, and refusing it would lose a real erasure failure.
+        if not hits:
+            _refuse_capped("LangSmith", seen, _RUN_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:

@@ -119,10 +119,6 @@ class DatadogObservability(ObservabilityAdapter):
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         hits: list[TraceHit] = []
         events = self._client.search_spans(tenant.hex)
-        # The Class 11 primitive reads the same single page as `fetch_trace`: a
-        # retained canary past the cap came back as "no trace", and a soft-delete
-        # backend whose post-erasure page no longer holds it attested ERASED.
-        _refuse_capped("Datadog", len(events), _SPAN_LIMIT)
         for event in events:
             snippet = _event_snippet(event)
             if marker in snippet:
@@ -137,6 +133,13 @@ class DatadogObservability(ObservabilityAdapter):
                         snippet=snippet,
                     )
                 )
+        # The Class 11 primitive reads the same single page as `fetch_trace`: a
+        # retained canary past the cap came back as "no trace", and a soft-delete
+        # backend whose post-erasure page no longer holds it attested ERASED. A
+        # marker FOUND on a full page is a definite residual, so only a miss is
+        # refused - refusing the hit would lose a real erasure failure.
+        if not hits:
+            _refuse_capped("Datadog", len(events), _SPAN_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
