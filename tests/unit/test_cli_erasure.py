@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import app
@@ -389,3 +390,42 @@ def test_a_scoped_erasure_records_provenance_for_the_scanned_surfaces_only(
     assert result.exit_code == 0, result.output
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert set(pack["run_result"]["surface_provenance"]) == {"vector_db"}
+
+
+def test_erasure_that_could_not_establish_absence_is_inconclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A marker still stored but ranked below the similarity page is invisible to
+    # the scan and looks exactly like a purged one. The run must say so rather
+    # than sign ERASURE VERIFIED, and the reason has to reach the operator: "0
+    # after" on its own reads as a purge.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes.erasure import probe as erasure_probe
+
+    erased: list[bool] = []
+    real_delete = FakeVectorStore.delete
+
+    def _delete(self: FakeVectorStore, tenant: object) -> None:
+        real_delete(self, tenant)  # type: ignore[arg-type]
+        erased.append(True)
+
+    # Present before the purge, then neither found nor ruled out: every page
+    # comes back full without the marker, which a still-stored one produces too.
+    monkeypatch.setattr(FakeVectorStore, "delete", _delete)
+    monkeypatch.setattr(
+        erasure_probe.ErasureProbe,
+        "_marker_observable",
+        lambda self, target, marker: None if erased else True,
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert result.exit_code == 3, result.output
+    assert "ERASURE VERIFIED" not in result.output
+    assert "ERASURE INCONCLUSIVE" in result.output
+    # The summary must name the reason, not fall through to the "no baseline"
+    # wording - there WAS a baseline; what failed is establishing absence.
+    assert "their absence was never established" in result.output, result.output
+    assert "no baseline on" not in result.output
+    # And the per-surface line says why "0 after" is not a purge.
+    assert "-> NOT VERIFIED" in result.output
+    assert "full similarity page" in result.output
