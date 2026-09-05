@@ -49,7 +49,12 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.probes._recall import content_recalled, continuation_split, has_base_control
+from sectum_ai.probes._recall import (
+    FINGERPRINT_QUERY_K,
+    content_recalled,
+    continuation_split,
+    has_base_control,
+)
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
 
@@ -76,7 +81,6 @@ SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (
 )
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
-_FINGERPRINT_QUERY_K = 50
 
 _REMEDIATION = {
     Surface.VECTOR_DB: (
@@ -338,10 +342,10 @@ class SubjectErasureProbe:
         # full without it: a stored document ranked past k is indistinguishable
         # from an erased one, and read as erased.
         needle = phrase.casefold()
-        hits = vector.query(target, phrase, k=_FINGERPRINT_QUERY_K)
+        hits = vector.query(target, phrase, k=FINGERPRINT_QUERY_K)
         if any(needle in hit.content.casefold() for hit in hits):
             return True
-        return None if len(hits) >= _FINGERPRINT_QUERY_K else False
+        return None if len(hits) >= FINGERPRINT_QUERY_K else False
 
     @staticmethod
     def _content_in_memory(memory: MemoryAdapter, target: UUID, phrase: str) -> bool:

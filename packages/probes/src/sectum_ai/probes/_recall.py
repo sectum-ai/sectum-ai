@@ -27,6 +27,15 @@ from sectum_ai.adapters import Capability, ModelAdapter
 # those, so a phrase whose trailing part is shorter than this is not checked.
 MIN_CONTINUATION_CHARS = 6
 
+# The similarity page a marker/fingerprint scan reads. A marker still stored but
+# ranked past the page is invisible to `query`, so a SHORT page without it is
+# absence and a FULL one is only "not in the top k" - the caller must treat that
+# as inconclusive. Class 11 and the A3 subject probe both scan a vector store for
+# the same thing; they kept separate copies of this number, one moved to 50 and
+# the other stayed at 10, and the run that read a full page as absence signed
+# ERASURE VERIFIED over a canary the store still returned.
+FINGERPRINT_QUERY_K = 50
+
 
 def continuation_split(phrase: str) -> tuple[str, str] | None:
     """The (prefix, casefolded suffix) a prefix-continuation check prompts with.

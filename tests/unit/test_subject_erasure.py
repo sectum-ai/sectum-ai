@@ -714,7 +714,7 @@ def test_an_echo_on_shared_weights_is_not_recall_either() -> None:
 def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     # The vector fingerprint check was a top-k similarity query: a stored subject
     # document ranked past k read as absent, and the surface attested ERASED.
-    from sectum_ai.probes.subject_erasure.probe import _FINGERPRINT_QUERY_K
+    from sectum_ai.probes._recall import FINGERPRINT_QUERY_K
     from sectum_ai.spec import CorpusDocument
 
     store = FakeVectorStore()
@@ -728,7 +728,7 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
             title="maria chen clinical intake note",
             content="maria chen clinical intake note filler",
         )
-        for i in range(_FINGERPRINT_QUERY_K + 5)
+        for i in range(FINGERPRINT_QUERY_K + 5)
     ]
     docs.append(
         CorpusDocument(

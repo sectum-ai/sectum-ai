@@ -24,7 +24,7 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.probes._recall import content_recalled
+from sectum_ai.probes._recall import FINGERPRINT_QUERY_K, content_recalled
 from sectum_ai.spec import (
     CoverageVerdict,
     ErasureUnsupported,
@@ -61,7 +61,6 @@ ERASURE_SURFACES: tuple[Surface, ...] = (
 # ranks past the page is invisible to `query`, so a SHORT page without it is
 # absence and a FULL one is only "not in the top k" - the same contract, and the
 # same constant, as the subject probe's fingerprint check.
-_FINGERPRINT_QUERY_K = 50
 
 _Scan = Callable[[UUID, tuple[Marker, ...]], list[Marker]]
 _Delete = Callable[[UUID], None]
@@ -495,10 +494,10 @@ class ErasureProbe:
             document = self._documents.get(location.doc_id)
             if document is None:
                 continue
-            hits = self._vector.query(target, document.title, k=_FINGERPRINT_QUERY_K)
+            hits = self._vector.query(target, document.title, k=FINGERPRINT_QUERY_K)
             if any(marker.plaintext in hit.content for hit in hits):
                 return True
-            if len(hits) >= _FINGERPRINT_QUERY_K:
+            if len(hits) >= FINGERPRINT_QUERY_K:
                 inconclusive = True
         return None if inconclusive else False
 
