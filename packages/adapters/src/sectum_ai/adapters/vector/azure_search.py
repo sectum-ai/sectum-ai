@@ -22,6 +22,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.adapters.vector._settle import settle
 from sectum_ai.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
@@ -153,7 +154,8 @@ class AzureSearchVectorStore(VectorStoreAdapter):
         if not items:
             return
         index = self._ensure_index(tenant)
-        self._client(index).upload_documents(
+        client = self._client(index)
+        client.upload_documents(
             documents=[
                 {
                     "id": self._key(document.doc_id),
@@ -169,6 +171,22 @@ class AzureSearchVectorStore(VectorStoreAdapter):
                 for document in items
             ]
         )
+        # Azure indexes asynchronously; see _settle for what an early read cost.
+        last_key = self._key(items[-1].doc_id)
+        settle(
+            lambda: self._document_present(client, last_key),
+            f"Azure AI Search index {index} did not reflect the upload",
+        )
+
+    @staticmethod
+    def _document_present(client: Any, key: str) -> bool:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            client.get_document(key=key)
+        except ResourceNotFoundError:
+            return False
+        return True
 
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
@@ -225,6 +243,10 @@ class AzureSearchVectorStore(VectorStoreAdapter):
         index = self._index_name(tenant)
         if self._index_exists(index):
             self._index_client.delete_index(index)
+            settle(
+                lambda: not self._index_exists(index),
+                f"Azure AI Search index {index} still exists after the delete",
+            )
 
     def list_namespaces(self) -> list[str]:
         try:

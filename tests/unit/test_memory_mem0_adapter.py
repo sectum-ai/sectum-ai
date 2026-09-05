@@ -29,11 +29,9 @@ class _FakeMem0:
         assert infer is False, "the adapter must store verbatim (infer=False)"
         self._by_user.setdefault(user_id, []).append(messages)
 
-    def search(self, query: str, *, user_id: str, limit: int | None = None, **_: Any) -> Any:
-        # mem0 returns its scope's memories ranked by relevance; the adapter applies
-        # its own keyword-overlap filter, so returning the whole scope is faithful.
-        rows = [{"memory": text} for text in self._by_user.get(user_id, [])]
-        return {"results": rows[:limit] if limit is not None else rows}
+    def get_all(self, *, user_id: str, **_: Any) -> Any:
+        # The adapter lists the scope exhaustively and keyword-filters it itself.
+        return {"results": [{"memory": text} for text in self._by_user.get(user_id, [])]}
 
     def delete_all(self, *, user_id: str) -> None:
         self._by_user.pop(user_id, None)
@@ -117,7 +115,7 @@ def test_mem0_soft_delete_leaves_the_residue() -> None:
 def test_mem0_search_tolerates_a_bare_list_result_shape() -> None:
     # older mem0 returns a bare list of dicts instead of {"results": [...]}
     class _OldMem0(_FakeMem0):
-        def search(self, query: str, *, user_id: str, limit: int | None = None, **_: Any) -> Any:
+        def get_all(self, *, user_id: str, **_: Any) -> Any:
             return [{"memory": text} for text in self._by_user.get(user_id, [])]
 
     adapter = Mem0Memory(_OldMem0())
@@ -129,13 +127,24 @@ def test_mem0_recall_tolerates_none_and_malformed_rows() -> None:
     # mem0's result shape shifts across releases; recall must not crash on a None
     # result or a row missing the "memory" key - it returns nothing, never raises.
     class _NoneMem0(_FakeMem0):
-        def search(self, query: str, *, user_id: str, limit: int | None = None, **_: Any) -> Any:
+        def get_all(self, *, user_id: str, **_: Any) -> Any:
             return None
 
     assert Mem0Memory(_NoneMem0()).recall(_TENANT_A, "anything") == []
 
     class _MalformedMem0(_FakeMem0):
-        def search(self, query: str, *, user_id: str, limit: int | None = None, **_: Any) -> Any:
+        def get_all(self, *, user_id: str, **_: Any) -> Any:
             return {"results": [{"id": "no-memory-key"}, "not-a-dict"]}
 
     assert Mem0Memory(_MalformedMem0()).recall(_TENANT_A, "anything") == []
+
+
+def test_mem0_recall_is_exhaustive_not_a_ranked_window() -> None:
+    # `search(limit=100)` ranked a planted marker out of its window in a tenant
+    # with more than 100 memories, and the miss read as "not recalled".
+    client = _FakeMem0()
+    adapter = Mem0Memory(client)
+    for index in range(150):
+        adapter.remember(_TENANT_A, f"filler note number {index}")
+    adapter.remember(_TENANT_A, "note about canary OMEGA-9")
+    assert any("OMEGA-9" in entry for entry in adapter.recall(_TENANT_A, "canary OMEGA-9"))

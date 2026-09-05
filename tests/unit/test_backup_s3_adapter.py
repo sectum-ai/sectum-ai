@@ -33,6 +33,23 @@ class _FakePaginator:
             yield {"Contents": contents[1:]}
 
 
+class _FakeVersionPaginator:
+    """`list_object_versions`: every version and delete marker under the prefix."""
+
+    def __init__(self, versions: dict[str, list[tuple[str, bytes | None]]]) -> None:
+        self._versions = versions
+
+    def paginate(self, *, Bucket: str, Prefix: str) -> Any:
+        page: dict[str, list[dict[str, str]]] = {"Versions": [], "DeleteMarkers": []}
+        for key, history in self._versions.items():
+            if not key.startswith(Prefix):
+                continue
+            for version_id, body in history:
+                entry = {"Key": key, "VersionId": version_id}
+                page["DeleteMarkers" if body is None else "Versions"].append(entry)
+        yield page
+
+
 class _FakeBody:
     def __init__(self, data: bytes) -> None:
         self._data = data
@@ -42,29 +59,68 @@ class _FakeBody:
 
 
 class _FakeS3:
-    """In-memory stand-in for a boto3 S3 client (one flat key->body store)."""
+    """In-memory stand-in for a boto3 S3 client.
 
-    def __init__(self) -> None:
+    ``versioned=True`` models a bucket with versioning (as Object Lock implies): a
+    delete without a VersionId inserts a delete marker and keeps every version,
+    and ``list_objects_v2`` hides a key whose newest version is a marker - so the
+    ``_store`` the unversioned tests read is the *current* view, while
+    ``_versions`` holds the history.
+    """
+
+    def __init__(self, *, versioned: bool = False, refuse: set[str] | None = None) -> None:
         self._store: dict[str, bytes] = {}
+        self._versions: dict[str, list[tuple[str, bytes | None]]] = {}
+        self._versioned = versioned
+        self._refuse = refuse or set()
+        self._sequence = 0
         self.delete_batch_sizes: list[int] = []
 
-    def get_paginator(self, name: str) -> _FakePaginator:
+    def get_bucket_versioning(self, *, Bucket: str) -> dict[str, Any]:
+        return {"Status": "Enabled"} if self._versioned else {}
+
+    def get_paginator(self, name: str) -> Any:
+        if name == "list_object_versions":
+            return _FakeVersionPaginator(self._versions)
         assert name == "list_objects_v2"
         return _FakePaginator(self._store)
 
     def put_object(self, *, Bucket: str, Key: str, Body: bytes) -> None:
         self._store[Key] = Body
+        self._sequence += 1
+        self._versions.setdefault(Key, []).append((f"v{self._sequence}", Body))
 
-    def get_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:
-        return {"Body": _FakeBody(self._store[Key])}
+    def get_object(self, *, Bucket: str, Key: str, VersionId: str | None = None) -> dict[str, Any]:
+        if VersionId is None:
+            return {"Body": _FakeBody(self._store[Key])}
+        body = next(b for vid, b in self._versions[Key] if vid == VersionId)
+        assert body is not None
+        return {"Body": _FakeBody(body)}
 
-    def delete_objects(self, *, Bucket: str, Delete: dict[str, Any]) -> None:
+    def delete_objects(self, *, Bucket: str, Delete: dict[str, Any]) -> dict[str, Any]:
         objects = Delete["Objects"]
         # S3 rejects a delete_objects request with more than 1000 keys
         assert len(objects) <= 1000, "delete_objects must be batched at <=1000 keys"
         self.delete_batch_sizes.append(len(objects))
+        errors: list[dict[str, str]] = []
         for obj in objects:
-            self._store.pop(obj["Key"], None)
+            key, version_id = obj["Key"], obj.get("VersionId")
+            if key in self._refuse:
+                errors.append({"Key": key, "Code": "AccessDenied"})
+                continue
+            if version_id is not None:
+                self._versions[key] = [(v, b) for v, b in self._versions[key] if v != version_id]
+                if not any(b is not None for _, b in self._versions[key]):
+                    self._store.pop(key, None)
+                    self._versions.pop(key, None)
+            elif self._versioned:
+                self._sequence += 1
+                self._versions[key].append((f"v{self._sequence}", None))
+                self._store.pop(key, None)
+            else:
+                self._store.pop(key, None)
+                self._versions.pop(key, None)
+        return {"Errors": errors} if errors else {}
 
 
 def _backup(client: _FakeS3, **kwargs: Any) -> S3Backup:
@@ -143,3 +199,40 @@ def test_s3_backup_delete_batches_beyond_the_1000_key_cap() -> None:
     assert client._store == {}  # every object purged
     assert client.delete_batch_sizes and max(client.delete_batch_sizes) <= 1000
     assert sum(client.delete_batch_sizes) == 1001
+
+
+def test_s3_backup_purges_every_version_on_a_versioned_bucket() -> None:
+    # On a versioned bucket a plain delete inserts a delete marker and keeps
+    # every version; list_objects_v2 then omits the key, so the post-erasure scan
+    # read the retained snapshot as gone and the erasure verified.
+    client = _FakeS3(versioned=True)
+    adapter = _backup(client)
+    adapter.add(_TENANT_A, "SECTUM-CANARY-VER")
+    adapter.add(_TENANT_A, "SECTUM-CANARY-VER")  # a second version of the same key
+    adapter.delete(_TENANT_A)
+    assert client._versions == {}, "every version, not a delete marker, must go"
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-VER") == []
+
+
+def test_s3_backup_scan_sees_a_retained_noncurrent_version() -> None:
+    # The scan reads versions, so data hidden behind a delete marker is residue.
+    client = _FakeS3(versioned=True)
+    adapter = _backup(client)
+    adapter.add(_TENANT_A, "SECTUM-CANARY-HIDDEN")
+    key = next(iter(client._store))
+    client.delete_objects(Bucket=_BUCKET, Delete={"Objects": [{"Key": key}]})  # a marker
+    assert key not in client._store
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-HIDDEN")
+
+
+def test_s3_backup_delete_refuses_a_partial_purge() -> None:
+    # A per-key error in delete_objects (a version under Object Lock, a denied
+    # key) was never read: the purge "succeeded" and the re-scan decided.
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeS3()
+    adapter = _backup(client)
+    adapter.add(_TENANT_A, "SECTUM-CANARY-LOCKED")
+    client._refuse = set(client._store)
+    with pytest.raises(AdapterError, match="no_erasure"):
+        adapter.delete(_TENANT_A)

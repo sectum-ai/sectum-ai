@@ -32,6 +32,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.adapters.observability._listing import _data_list, _refuse_capped
 from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _REQUEST_LIMIT = 1000
@@ -113,13 +114,15 @@ class HeliconeObservability(ObservabilityAdapter):
         request id, so another tenant's - or an erased - id returns ``None``: the
         by-id existence primitive for the A3 subject-erasure check.
         """
-        for row in self._client.query_requests(tenant.hex):
+        rows = self._client.query_requests(tenant.hex)
+        for row in rows:
             if str(row.get("request_id") or row.get("id") or "") == trace_id:
                 return TraceHit(
                     trace_id=trace_id,
                     project=self._row_owner(row, tenant.hex),
                     snippet=_row_snippet(row),
                 )
+        _refuse_capped("Helicone", len(rows), _REQUEST_LIMIT)
         return None
 
     def _row_owner(self, row: dict[str, Any], default: str) -> str:
@@ -163,8 +166,8 @@ class _HttpHeliconeClient:
                 payload = json.loads(response.read())
         except (urllib.error.URLError, TimeoutError) as error:
             raise AdapterError(f"helicone request to {self._url} failed: {error}") from error
-        data = payload.get("data") if isinstance(payload, dict) else None
-        return [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+        data = _data_list(payload, "helicone")
+        return [row for row in data if isinstance(row, dict)]
 
     def query_requests(self, tenant_value: str) -> list[dict[str, Any]]:
         body = {

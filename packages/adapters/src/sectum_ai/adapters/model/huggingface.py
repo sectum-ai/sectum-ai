@@ -102,10 +102,6 @@ class HuggingFaceLoraModel(ModelAdapter):
         self._adapter_bleed = adapter_bleed
         self._user_scoped = user_scoped
         self._soft_delete = soft_delete
-        # The `delete` contract is "no inference surfaces this tenant's
-        # memorized text any longer". The soft-delete branch records the
-        # request so the (still-stored) adapter is not re-routed on infer.
-        self._soft_deleted: set[str] = set()
 
     @classmethod
     def connect(
@@ -154,10 +150,6 @@ class HuggingFaceLoraModel(ModelAdapter):
         self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
     ) -> None:
         scope = _scope_for(tenant, user, user_scoped=self._user_scoped)
-        # Re-training a previously soft-deleted scope brings it back; that
-        # matches the spec — `soft_delete=True` is a routing flip, not a
-        # destructive removal of the on-disk weights.
-        self._soft_deleted.discard(scope)
         try:
             self._backend.train_lora(scope, list(texts))
         except Exception as error:
@@ -171,16 +163,13 @@ class HuggingFaceLoraModel(ModelAdapter):
                 # LoRA is merged into the call regardless of who asked. The
                 # backend's `list_scopes` returns the live set so an empty
                 # adapter store still works (falls back to base inference).
-                completion_parts: list[str] = []
-                for scope_id in self._backend.list_scopes():
-                    if scope_id in self._soft_deleted:
-                        continue
-                    completion_parts.append(self._backend.infer(scope_id, prompt))
+                completion_parts = [
+                    self._backend.infer(scope_id, prompt)
+                    for scope_id in self._backend.list_scopes()
+                ]
                 if not completion_parts:
                     return self._backend.infer(None, prompt)
                 return " ".join(completion_parts)
-            if scope in self._soft_deleted:
-                return self._backend.infer(None, prompt)
             return self._backend.infer(scope, prompt)
         except Exception as error:
             raise AdapterError(f"peft LoRA inference failed: {error}") from error
@@ -193,15 +182,26 @@ class HuggingFaceLoraModel(ModelAdapter):
             raise AdapterError(f"peft LoRA latency measurement failed: {error}") from error
 
     def delete(self, tenant: UUID) -> None:
-        scope = _scope_for(tenant, user=None, user_scoped=self._user_scoped)
+        # The Class 11 residue knob: a soft-delete model acknowledges the request
+        # and leaves the LoRA on disk AND serving, so the memorized text still
+        # surfaces - the residue the erasure scan exists to catch. It used to
+        # re-route inference to the base model instead, which hid the retained
+        # weights from the very scan and signed an ERASED for a LoRA still on
+        # disk (the inverse of what the built-in fake does).
         if self._soft_delete:
-            # The Class 11 residue knob: a soft-delete model acknowledges the
-            # request but leaves the LoRA on disk; inference now routes to
-            # the base model, but the weights are still there to be revived.
-            self._soft_deleted.add(scope)
             return
+        # Every scope under the tenant: a user-scoped model stores
+        # `<tenant>/<user>` LoRAs, and removing only `<tenant>` left each user's
+        # adapter serving the memorized text after a tenant erasure.
+        prefix = _scope_for(tenant, user=None, user_scoped=self._user_scoped)
         try:
-            self._backend.remove(scope)
+            scopes = [
+                scope
+                for scope in self._backend.list_scopes()
+                if scope == prefix or scope.startswith(f"{prefix}/")
+            ]
+            for scope in scopes or [prefix]:
+                self._backend.remove(scope)
         except Exception as error:
             raise AdapterError(f"peft LoRA delete failed: {error}") from error
 

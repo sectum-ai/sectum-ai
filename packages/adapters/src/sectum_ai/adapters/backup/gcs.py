@@ -54,6 +54,7 @@ class GCSBackup(BackupAdapter):
         self._prefix = prefix
         self._no_erasure = no_erasure
         self._soft_delete = soft_delete
+        self._bucket_meta: Any | None = None
 
     @classmethod
     def connect(
@@ -89,8 +90,30 @@ class GCSBackup(BackupAdapter):
     def _tenant_prefix(self, tenant: UUID) -> str:
         return f"{self._prefix}/{tenant.hex}/"
 
+    def _meta(self) -> Any:
+        if self._bucket_meta is None:
+            self._bucket_meta = self._client.get_bucket(self._bucket)
+        return self._bucket_meta
+
+    def _is_versioned(self) -> bool:
+        return bool(getattr(self._meta(), "versioning_enabled", False))
+
+    def _soft_delete_retention_s(self) -> int:
+        # Buckets created since 2024 default to a 7-day soft-delete policy: a
+        # deleted object is restorable for that window, which a listing without
+        # `soft_deleted=True` cannot see - so the scan read it as purged.
+        policy = getattr(self._meta(), "soft_delete_policy", None)
+        return int(getattr(policy, "retention_duration_seconds", 0) or 0)
+
     def _blobs(self, tenant: UUID) -> list[Any]:
-        return list(self._client.list_blobs(self._bucket, prefix=self._tenant_prefix(tenant)))
+        # With object versioning a delete makes the object noncurrent, not gone;
+        # list every generation so the scan sees what is retained and the purge
+        # removes each one (a blob listed with `versions=True` carries its
+        # generation, which its `delete()` then targets).
+        prefix = self._tenant_prefix(tenant)
+        if self._is_versioned():
+            return list(self._client.list_blobs(self._bucket, prefix=prefix, versions=True))
+        return list(self._client.list_blobs(self._bucket, prefix=prefix))
 
     def add(self, tenant: UUID, text: str) -> None:
         # Name the object by a content hash so re-adding the same snapshot is idempotent
@@ -121,6 +144,13 @@ class GCSBackup(BackupAdapter):
         # residue Class 11 erasure verification is built to catch.
         if self._soft_delete:
             return
+        retention = self._soft_delete_retention_s()
+        if retention:
+            raise ErasureUnsupported(
+                f"the backup bucket keeps deleted objects restorable for {retention} s "
+                "(a soft-delete policy), so a per-tenant purge is not an erasure; data "
+                "is presumed retained until it ages out"
+            )
         # GCS deletes are per-object (no bulk delete_objects call, so no 1000-key cap
         # to batch around, unlike the S3 sibling).
         for blob in self._blobs(tenant):

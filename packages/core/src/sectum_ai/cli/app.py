@@ -47,6 +47,7 @@ from sectum_ai.config import (
     EvidenceConfig,
     SectumConfig,
     SecurityConfig,
+    adapter_config,
     build_adapters,
     build_backup,
     build_cache,
@@ -1958,12 +1959,18 @@ def erasure(
                 err=True,
             )
         manifest = _load_subject_manifest(subject)
-        subject_store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
-        subject_cache = build_cache(loaded.adapters.get("cache", fake_default))
-        subject_obs = build_observability(loaded.adapters.get("observability", fake_default))
-        subject_model = build_model(loaded.adapters.get("model", fake_default))
-        subject_memory = build_memory(loaded.adapters.get("memory", fake_default))
-        subject_search = build_search_index(loaded.adapters.get("search_index", fake_default))
+        with adapter_config(loaded, "vector_store", fake_default) as cfg:
+            subject_store = build_vector_store(cfg)
+        with adapter_config(loaded, "cache", fake_default) as cfg:
+            subject_cache = build_cache(cfg)
+        with adapter_config(loaded, "observability", fake_default) as cfg:
+            subject_obs = build_observability(cfg)
+        with adapter_config(loaded, "model", fake_default) as cfg:
+            subject_model = build_model(cfg)
+        with adapter_config(loaded, "memory", fake_default) as cfg:
+            subject_memory = build_memory(cfg)
+        with adapter_config(loaded, "search_index", fake_default) as cfg:
+            subject_search = build_search_index(cfg)
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -2062,18 +2069,26 @@ def erasure(
             ),
         )
         return
-    store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
-    obs = build_observability(loaded.adapters.get("observability", fake_default))
-    memory = build_memory(loaded.adapters.get("memory", fake_default))
-    cache = build_cache(loaded.adapters.get("cache", fake_default))
-    model = build_model(loaded.adapters.get("model", fake_default))
+    with adapter_config(loaded, "vector_store", fake_default) as cfg:
+        store = build_vector_store(cfg)
+    with adapter_config(loaded, "observability", fake_default) as cfg:
+        obs = build_observability(cfg)
+    with adapter_config(loaded, "memory", fake_default) as cfg:
+        memory = build_memory(cfg)
+    with adapter_config(loaded, "cache", fake_default) as cfg:
+        cache = build_cache(cfg)
+    with adapter_config(loaded, "model", fake_default) as cfg:
+        model = build_model(cfg)
     # The search index, eval set, and backup each resolve from config (kind:
     # opensearch / langsmith / s3) like the other surfaces, falling back to the
     # fake. soft_delete (and backup's no_erasure) ride on fake_default's extras -
     # set from --soft-delete when no config is given, absent under --config.
-    search = build_search_index(loaded.adapters.get("search_index", fake_default))
-    evalset = build_eval_set(loaded.adapters.get("eval_set", fake_default))
-    backup = build_backup(loaded.adapters.get("backup", fake_default))
+    with adapter_config(loaded, "search_index", fake_default) as cfg:
+        search = build_search_index(cfg)
+    with adapter_config(loaded, "eval_set", fake_default) as cfg:
+        evalset = build_eval_set(cfg)
+    with adapter_config(loaded, "backup", fake_default) as cfg:
+        backup = build_backup(cfg)
     provenance = surface_provenance_of((store, obs, memory, cache, model, search, evalset, backup))
     _warn_on_synthetic_surfaces(provenance)
     for tenant in substrate.tenants:

@@ -12,6 +12,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, VectorStoreAdapter
 from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
 from sectum_ai.spec import CorpusDocument
@@ -218,3 +220,58 @@ def test_pinecone_tenant_only_store_leaks_across_users() -> None:
     assert not store.supports(Capability.USER_SCOPED)
     store.upsert(_TENANT_A, _user_documents(_TENANT_A, _USER_B, "ub", "alpha"))
     assert store.fetch(_TENANT_A, "ub-0", user=_USER_A) is not None
+
+
+def test_pinecone_upsert_and_delete_wait_for_the_index_to_reflect_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pinecone is eventually consistent: a probe that queried right after the
+    # upsert saw nothing (no baseline), and one that re-scanned right after a
+    # delete saw the not-yet-purged vectors as a RESIDUAL erasure failure.
+    from sectum_ai.spec import AdapterError
+
+    class _LaggingIndex(_FakeIndex):
+        """Writes land only after the caller has polled ``lag`` times."""
+
+        def __init__(self, lag: int) -> None:
+            super().__init__()
+            self._lag = lag
+            self._pending: list[tuple[str, Any]] = []
+            self.polls = 0
+
+        def upsert(self, *, vectors: list[dict[str, Any]], namespace: str) -> None:
+            self._pending.append(("upsert", (vectors, namespace)))
+
+        def delete(self, *, delete_all: bool, namespace: str) -> None:
+            self._pending.append(("delete", namespace))
+
+        def _tick(self) -> None:
+            self.polls += 1
+            if self.polls >= self._lag:
+                for op, arg in self._pending:
+                    if op == "upsert":
+                        super().upsert(vectors=arg[0], namespace=arg[1])
+                    else:
+                        super().delete(delete_all=True, namespace=arg)
+                self._pending.clear()
+
+        def fetch(self, *, ids: list[str], namespace: str) -> SimpleNamespace:
+            self._tick()
+            return super().fetch(ids=ids, namespace=namespace)
+
+        def describe_index_stats(self) -> SimpleNamespace:
+            self._tick()
+            return super().describe_index_stats()
+
+    monkeypatch.setattr("sectum_ai.adapters.vector._settle.time.sleep", lambda _s: None)
+    index = _LaggingIndex(lag=3)
+    store = PineconeVectorStore(index, _embed)
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    assert {hit.doc_id for hit in store.query(_TENANT_A, "alpha", k=10)} == {"a-0", "a-1", "a-2"}
+    index.polls = 0
+    store.delete(_TENANT_A)
+    assert store.query(_TENANT_A, "alpha", k=10) == []
+    # and a write that never lands is an error, not a silent baseline gap
+    never = _LaggingIndex(lag=10**6)
+    with pytest.raises(AdapterError, match="did not reflect"):
+        PineconeVectorStore(never, _embed).upsert(_TENANT_A, _documents(_TENANT_A, "a", "x"))

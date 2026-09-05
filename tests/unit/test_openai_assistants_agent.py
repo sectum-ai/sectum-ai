@@ -179,3 +179,28 @@ def test_openai_assistants_wraps_add_message_failures_in_adapter_error() -> None
     agent = OpenAIAssistantsAgent(_BrokenAddMessage(), "asst_test")
     with pytest.raises(AdapterError, match="openai assistants run failed"):
         agent.run(_TENANT_A, "anything")
+
+
+def test_the_live_run_loop_gives_up_after_the_run_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A run parked in `queued` / `in_progress` was polled forever.
+    from types import SimpleNamespace
+
+    from sectum_ai.adapters.agent._openai_assistants_live import LiveAssistantsClient
+    from sectum_ai.spec import AdapterError
+
+    class _Runs:
+        def create(self, *, thread_id: str, assistant_id: str) -> SimpleNamespace:
+            return SimpleNamespace(id="run_1", status="queued")
+
+        def retrieve(self, *, thread_id: str, run_id: str) -> SimpleNamespace:
+            return SimpleNamespace(id=run_id, status="in_progress")
+
+    client = object.__new__(LiveAssistantsClient)
+    client._openai = SimpleNamespace(beta=SimpleNamespace(threads=SimpleNamespace(runs=_Runs())))
+    client._tools = {}
+    client._run_timeout_s = 0.0
+    monkeypatch.setattr(
+        "sectum_ai.adapters.agent._openai_assistants_live.time.sleep", lambda _s: None
+    )
+    with pytest.raises(AdapterError, match="did not complete"):
+        client.run_until_complete("thread_1", "asst_1")

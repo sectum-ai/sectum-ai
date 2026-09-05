@@ -39,6 +39,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.adapters.observability._listing import _data_list, _refuse_capped
 from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _SPAN_LIMIT = 1000
@@ -144,13 +145,15 @@ class DatadogObservability(ObservabilityAdapter):
         older than that window is indistinguishable from an erased one, so the
         window must cover the account's retention or this reports a false ERASED.
         """
-        for event in self._client.search_spans(tenant.hex):
+        events = self._client.search_spans(tenant.hex)
+        for event in events:
             if str(event.get("id") or "") == trace_id:
                 return TraceHit(
                     trace_id=trace_id,
                     project=self._event_owner(event, tenant.hex),
                     snippet=_event_snippet(event),
                 )
+        _refuse_capped("Datadog", len(events), _SPAN_LIMIT)
         return None
 
     def _event_owner(self, event: dict[str, Any], default: str) -> str:
@@ -221,10 +224,8 @@ class _HttpDatadogClient:
                 payload = json.loads(response.read())
         except (urllib.error.URLError, TimeoutError) as error:
             raise AdapterError(f"datadog request to {self._url} failed: {error}") from error
-        data = payload.get("data") if isinstance(payload, dict) else None
-        return (
-            [event for event in data if isinstance(event, dict)] if isinstance(data, list) else []
-        )
+        data = _data_list(payload, "datadog")
+        return [event for event in data if isinstance(event, dict)]
 
     def search_spans(self, tenant_value: str) -> list[dict[str, Any]]:
         return self._post(f"@{self._tenant_tag}:{tenant_value}")

@@ -344,3 +344,39 @@ def test_an_empty_search_window_is_rejected() -> None:
 
     with pytest.raises(AdapterError, match="search_window"):
         _HttpDatadogClient("k", "app", base_url="http://x", tenant_tag="tenant", search_window="  ")
+
+
+def test_a_by_id_miss_on_a_capped_listing_is_refused() -> None:
+    # Helicone and Datadog list a single page of 1000; a subject's trace beyond it
+    # read back absent, and the A3 check attested it erased.
+    from sectum_ai.spec import AdapterError
+
+    helicone = _FakeHelicone()
+    for _ in range(1000):
+        helicone.add(_TENANT_A.hex, "request body")
+    with pytest.raises(AdapterError, match="page cap"):
+        HeliconeObservability(helicone).fetch_trace(_TENANT_A, "req-9999")
+    datadog = _FakeDatadog()
+    for _ in range(1000):
+        datadog.add(_TENANT_A.hex, "span")
+    with pytest.raises(AdapterError, match="page cap"):
+        DatadogObservability(datadog).fetch_trace(_TENANT_A, "span-9999")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"error": "rate limited"},
+        {"errors": [{"title": "forbidden"}]},
+        {"meta": {}},
+        ["not", "an", "object"],
+    ],
+)
+def test_an_error_envelope_is_not_an_empty_tenant(payload: object) -> None:
+    # A 200 whose body carried an error (or no `data` list) read as "no traces":
+    # INCONCLUSIVE in Class 11, and in the A3 check a None that attested erasure.
+    from sectum_ai.adapters.observability._listing import _data_list
+    from sectum_ai.spec import AdapterError
+
+    with pytest.raises(AdapterError):
+        _data_list(payload, "helicone")

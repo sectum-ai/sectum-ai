@@ -127,8 +127,10 @@ resolver reads them. `user_scoped` is read by `vector_store`, `app`, `cache`,
 `model`, `mcp`, and `memory`. `soft_delete` is read by `vector_store`, `app`,
 `cache`, `model`, `memory`, `observability`, `search_index`, `eval_set`, and
 `backup` — but not by `mcp`. The `rag` and `agent` resolvers read neither.
-Because adapter blocks accept unknown fields, a knob a resolver does not read is
-silently ignored rather than rejected — check the row for the family you mean.
+A field in your block that the family's resolver never reads is **rejected** when
+the adapter is built (exit `3`, naming the field): `shared_idx: true`, or
+`soft_delete` under `rag`, would otherwise change nothing and the run would measure
+the default. This is the field-level sibling of the unknown-family check.
 
 ### `vector_store`
 
@@ -141,7 +143,7 @@ silently ignored rather than rejected — check the row for the family you mean.
 | `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)* | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
 | `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
 | `milvus` | `uri: str = "http://localhost:19530"`, `token_env: str` *(or `token: str`, optional)*, `user_scoped: bool = false` | Milvus server. Each tenant maps to its own collection (strong consistency); `user_scoped: true` adds a per-user filter expression. A local/self-hosted Milvus usually needs no `token`. Requires the `milvus` extra. |
-| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = false`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
+| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = true`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
 | `azure-search` | `endpoint: str` *(required)*, `api_key_env: str` *(or `api_key: str`)*, `user_scoped: bool = false` | Azure AI Search service. Each tenant maps to its own index (HNSW, cosine); `user_scoped: true` adds an OData filter. Hosted (no local backend); requires the `azure-search` extra. |
 
 ### `cache`
@@ -181,7 +183,7 @@ silently ignored rather than rejected — check the row for the family you mean.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `soft_delete: bool = false` | In-memory full-text index (the tenth "hiding place"). `soft_delete: true` acknowledges a delete but leaves the documents searchable — the Class 11 residue. |
-| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = false`, `prefix: str = "sectum-ai-search"`, `soft_delete: bool = false` | `OpenSearchSearchIndex` — each tenant's derived full-text documents live in their own index (`{prefix}-{tenant.hex}`), searched with a `match` query; `delete` drops the index (`soft_delete: true` leaves the residue). A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
+| `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = true`, `prefix: str = "sectum-ai-search"`, `soft_delete: bool = false` | `OpenSearchSearchIndex` — each tenant's derived full-text documents live in their own index (`{prefix}-{tenant.hex}`), searched with a `match` query; `delete` drops the index (`soft_delete: true` leaves the residue). A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
 
 ### `eval_set`
 

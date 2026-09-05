@@ -175,6 +175,7 @@ def test_otel_honours_a_custom_tenant_attribute() -> None:
 # are covered without a live server. The 85% coverage gate excludes
 # adapters/observability, so this branch would otherwise ship untested.
 
+import json  # noqa: E402
 import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 
@@ -218,13 +219,59 @@ def test_http_store_rejects_a_non_http_base_url() -> None:
         )
 
 
-def test_http_purge_swallows_404_as_idempotent_success(
+def _delete_404_query_returns(spans: list[dict[str, Any]]) -> Callable[..., Any]:
+    """DELETE answers 404; the query endpoint answers with ``spans`` for the tenant."""
+
+    class _Response:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        if request.get_method() == "DELETE":
+            _raise_http_error(404)()
+        return _Response({"resourceSpans": [{"scopeSpans": [{"spans": spans}]}]})
+
+    return _urlopen
+
+
+def test_http_purge_treats_404_as_success_only_when_the_spans_are_gone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # 404 means the tenant's spans are already absent, so erasure is an
-    # idempotent no-op success - purge must NOT raise.
-    monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(404))
+    # 404 is idempotent success when the tenant's spans are in fact gone.
+    monkeypatch.setattr(urllib.request, "urlopen", _delete_404_query_returns([]))
     _http_store().purge(_TENANT_A.hex)  # must not raise
+
+
+def test_http_purge_404_with_spans_remaining_is_a_caveat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A router that never implemented DELETE answers 404 for the method+path too.
+    # Reading that as a purge recorded the surface erasable, and the re-scan's
+    # residue as an erasure FAILURE instead of the attestable-with-caveat it is.
+    monkeypatch.setattr(
+        urllib.request, "urlopen", _delete_404_query_returns([{"traceId": "t1", "name": "x"}])
+    )
+    with pytest.raises(ErasureUnsupported, match="answered 404"):
+        _http_store().purge(_TENANT_A.hex)
+
+
+def test_an_error_envelope_is_not_an_empty_tenant() -> None:
+    # A 200 without resourceSpans (an error body) read as "no traces".
+    class _ErrorStore(_FakeOtelStore):
+        def query(self, tenant_hex: str, marker: str) -> dict[str, Any]:
+            return {"error": "backend unavailable"}
+
+    with pytest.raises(AdapterError, match="no resourceSpans"):
+        OtelObservability(_ErrorStore()).search_traces(_TENANT_A, "anything")
 
 
 @pytest.mark.parametrize("code", [405, 501])

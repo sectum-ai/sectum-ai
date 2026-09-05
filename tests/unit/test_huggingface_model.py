@@ -157,25 +157,34 @@ def test_huggingface_lora_delete_removes_the_lora_dir() -> None:
     assert _TENANT_A.hex not in backend.trained
 
 
-def test_huggingface_lora_soft_delete_keeps_the_lora_but_routes_to_base() -> None:
-    # The Class 11 residue knob: a soft-delete model acknowledges the
-    # request but leaves the LoRA on disk; subsequent inference routes to
-    # base, but the weights are still there to be revived (a retrain
-    # discards the soft-delete flag).
+def test_huggingface_lora_soft_delete_keeps_the_lora_serving() -> None:
+    # The Class 11 residue knob: a soft-delete model acknowledges the request and
+    # leaves the LoRA on disk AND serving, so the memorized text still surfaces -
+    # the residue the erasure scan exists to catch. It used to re-route inference
+    # to the base model instead, which hid the retained weights from that very
+    # scan (`marker in infer(...)`) and signed an ERASED for a LoRA still on disk.
     backend = _FakeBackend()
     model = HuggingFaceLoraModel(backend, soft_delete=True)
     assert model.supports(Capability.SOFT_DELETE)
     model.train_adapter(_TENANT_A, ["SECRET-A"])
     model.delete(_TENANT_A)
-    # The LoRA dir is still on disk in the backend's view.
     assert _TENANT_A.hex in backend.trained
-    # But inference now routes to the base model.
-    response = model.infer(_TENANT_A, "what")
-    assert response.startswith("base:")
-    # A re-train restores the routing.
-    model.train_adapter(_TENANT_A, ["SECRET-A revived"])
-    response_again = model.infer(_TENANT_A, "what")
-    assert response_again.startswith(_TENANT_A.hex)
+    assert "SECRET-A" in model.infer(_TENANT_A, "what")
+
+
+def test_huggingface_lora_tenant_delete_removes_every_user_scope() -> None:
+    # A user-scoped model stores `<tenant>/<user>` LoRAs; deleting only `<tenant>`
+    # left each user's adapter serving the memorized text after a tenant erasure,
+    # and the tenant-level scan (user=None, base routing) could not see it.
+    backend = _FakeBackend()
+    model = HuggingFaceLoraModel(backend, user_scoped=True)
+    model.train_adapter(_TENANT_A, ["SECRET-U1"], user=_USER_1)
+    model.train_adapter(_TENANT_A, ["SECRET-U2"], user=_USER_2)
+    model.train_adapter(_TENANT_B, ["SECRET-B"], user=_USER_1)
+    model.delete(_TENANT_A)
+    assert not any(scope.startswith(_TENANT_A.hex) for scope in backend.trained)
+    assert "SECRET-U1" not in model.infer(_TENANT_A, "what", user=_USER_1)
+    assert "SECRET-B" in model.infer(_TENANT_B, "what", user=_USER_1)
 
 
 def test_huggingface_lora_measure_latency_returns_a_deterministic_float() -> None:

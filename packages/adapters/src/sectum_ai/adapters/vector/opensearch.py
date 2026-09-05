@@ -51,7 +51,7 @@ class OpenSearchVectorStore(VectorStoreAdapter):
         user: str | None = None,
         password: str | None = None,
         use_ssl: bool = False,
-        verify_certs: bool = False,
+        verify_certs: bool = True,
         name: str = "opensearch",
         prefix: str = "sectum-ai",
         user_scoped: bool = False,

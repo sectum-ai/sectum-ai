@@ -14,6 +14,11 @@ Requires the ``opensearch`` optional dependency:
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, SearchIndexAdapter
+from sectum_ai.spec import AdapterError
+
+# OpenSearch's default index.max_result_window; a tenant with more matching
+# documents than this is refused rather than silently truncated.
+_SEARCH_SIZE = 10000
 
 
 class OpenSearchSearchIndex(SearchIndexAdapter):
@@ -33,7 +38,7 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         user: str | None = None,
         password: str | None = None,
         use_ssl: bool = False,
-        verify_certs: bool = False,
+        verify_certs: bool = True,
         name: str = "opensearch-search",
         prefix: str = "sectum-ai-search",
         soft_delete: bool = False,
@@ -76,12 +81,24 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         if not self._client.indices.exists(index=index):
             return []
         response = self._client.search(
-            index=index, body={"size": 100, "query": {"match": {"content": query}}}
+            index=index,
+            body={
+                "size": _SEARCH_SIZE,
+                "track_total_hits": True,
+                "query": {"match": {"content": query}},
+            },
         )
-        return [
-            str(hit.get("_source", {}).get("content", ""))
-            for hit in response.get("hits", {}).get("hits", [])
-        ]
+        hits = response.get("hits", {})
+        rows = hits.get("hits", [])
+        total = hits.get("total", {})
+        total_count = int(total.get("value", 0)) if isinstance(total, dict) else int(total or 0)
+        if total_count > len(rows):
+            # A truncated page is not a scan: a document ranked past it read as absent.
+            raise AdapterError(
+                f"OpenSearch matched {total_count} documents for the tenant but returned "
+                f"{len(rows)}; the search-index scan would be incomplete"
+            )
+        return [str(hit.get("_source", {}).get("content", "")) for hit in rows]
 
     def delete(self, tenant: UUID) -> None:
         # A soft-delete index acknowledges the request but keeps the documents

@@ -14,6 +14,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.adapters.observability._listing import _refuse_capped
 
 _RUN_LIMIT = 1000
 """How many of a project's most recent runs to scan when searching for a marker."""
@@ -84,9 +85,12 @@ class LangSmithObservability(ObservabilityAdapter):
         project = self._project_name(tenant)
         if project not in self._project_names():
             return None
+        seen = 0
         for run in self._client.list_runs(project_name=project, limit=_RUN_LIMIT):
+            seen += 1
             if str(run.id) == trace_id:
                 return TraceHit(trace_id=trace_id, project=project, snippet=self._snippet(run))
+        _refuse_capped("LangSmith", seen, _RUN_LIMIT)
         return None
 
     def list_projects(self) -> list[str]:
