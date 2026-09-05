@@ -41,19 +41,26 @@ _ERASURE_VERDICTS = frozenset({CoverageVerdict.ERASED.value, CoverageVerdict.RES
 
 # Framework -> control IDs -> what a Sectum AI verification run asserts about
 # them -> the evidence required to assert it (the engineering spec, section 18).
-_CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
+# (framework, control ids, assertion, requirement, surfaces). ``surfaces`` names
+# the surfaces an assertion is about; empty means any surface an isolation probe
+# exercised live. A row was asserted on the strength of ANY live surface - the
+# OWASP row ("vector and embedding weaknesses") on a run whose only live surface
+# was MCP and whose vector store was the leaking fake.
+_CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str, tuple[str, ...]], ...] = (
     (
         "SOC 2 (TSC)",
         ("CC6.1", "CC6.6", "CC6.7"),
         "Tenant logical separation tested by benign and adversarial probing "
         "across the AI surfaces.",
         _ISOLATION,
+        (),
     ),
     (
         "ISO/IEC 27001:2022",
         ("A.5.15", "A.8.3", "A.8.12"),
         "Cross-tenant information leakage tested; residual leakage itemized.",
         _ISOLATION,
+        (),
     ),
     (
         "ISO/IEC 42001:2023",
@@ -61,60 +68,69 @@ _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
         "Per-tenant data management and provenance in the AI system tested; "
         "isolation verified under AI system operation and monitoring.",
         _ISOLATION,
+        (),
     ),
     (
         "GDPR",
         ("Article 25", "Article 32"),
         "Tenant isolation tested across the AI surfaces.",
         _ISOLATION,
+        (),
     ),
     (
         "GDPR",
         ("Article 17",),
         "Erasure across the AI surfaces verified.",
         _ERASURE,
+        (),
     ),
     (
         "CCPA/CPRA",
         ("1798.100", "1798.150"),
         "Segregation of consumer data tested across the AI surfaces.",
         _ISOLATION,
+        (),
     ),
     (
         "CCPA/CPRA",
         ("1798.105",),
         "Deletion of a consumer's personal information across the AI surfaces verified.",
         _ERASURE,
+        (),
     ),
     (
         "EU AI Act",
         ("Article 15",),
         "Robustness of tenant isolation tested under benign and adversarial conditions.",
         _ISOLATION,
+        (),
     ),
     (
         "HIPAA",
         ("164.312(a)(1)", "164.312(c)(1)", "164.312(e)(1)"),
         "Segregation of regulated tenant data verified across the AI surfaces.",
         _ISOLATION,
+        (),
     ),
     (
         "NIST AI RMF",
         ("MEASURE 2.7", "MANAGE 2.x"),
         "Documented measurement of multi-tenant security risk.",
         _ISOLATION,
+        (),
     ),
     (
         "OWASP LLM Top 10",
         ("LLM08:2025",),
         "Direct test coverage of vector and embedding multi-tenant weaknesses.",
         _ISOLATION,
+        ("vector_db", "api", "rag_pipeline"),
     ),
 )
 
 
-def _run_supports(run: RunResult, requirement: str) -> bool:
-    """Whether ``run`` produced the evidence ``requirement`` names.
+def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = ()) -> bool:
+    """Whether ``run`` produced the evidence ``requirement`` names, on ``surfaces``.
 
     Isolation evidence counts a finding as well as ``probe_versions``: a finding is
     itself proof its probe executed, the same reasoning ``score._confirmed_probe_ids``
@@ -125,6 +141,8 @@ def _run_supports(run: RunResult, requirement: str) -> bool:
     on the strength of a deletion check, in the artifact built for auditors.
     """
     live = live_surfaces(run)
+    if surfaces:
+        live = live & frozenset(surfaces)
     if requirement == _ERASURE:
         # The coverage block names every erasure surface, so it is non-empty for a
         # run that verified nothing (all NOT_COVERED, or only caveats). Only a
@@ -141,6 +159,24 @@ def _run_supports(run: RunResult, requirement: str) -> bool:
     return bool(exercised - _ERASURE_PROBE_IDS) and bool(live)
 
 
+def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...]:
+    """The live surfaces ``mapping`` speaks for in ``run``, in catalog order."""
+    row = next(
+        (r for r in _CONTROL_TABLE if r[0] == mapping.framework and r[1] == mapping.control_ids),
+        None,
+    )
+    live = live_surfaces(run)
+    if row is not None and row[4]:
+        live = live & frozenset(row[4])
+    if row is not None and row[3] == _ERASURE:
+        live = frozenset(
+            s
+            for s, v in run.metrics.erasure_coverage.items()
+            if s in live and v in _ERASURE_VERDICTS
+        )
+    return tuple(sorted(live))
+
+
 def live_surfaces(run: RunResult) -> frozenset[str]:
     """The surfaces this run exercised against a live backend."""
     return frozenset(
@@ -152,7 +188,7 @@ def live_surfaces(run: RunResult) -> frozenset[str]:
 
 def mapping_requirement(mapping: ControlMapping) -> str:
     """Whether ``mapping`` rests on isolation evidence or on erasure evidence."""
-    for framework, control_ids, _assertion, requirement in _CONTROL_TABLE:
+    for framework, control_ids, _assertion, requirement, _surfaces in _CONTROL_TABLE:
         if framework == mapping.framework and control_ids == mapping.control_ids:
             return requirement
     return _ISOLATION
@@ -166,8 +202,20 @@ def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]
     ``run`` this is the full table - what Sectum can attest to in principle -
     which is what the docs and the catalog describe.
     """
-    return tuple(
-        ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
-        for framework, control_ids, assertion, requirement in _CONTROL_TABLE
-        if run is None or _run_supports(run, requirement)
-    )
+    if run is None:
+        return tuple(
+            ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
+            for framework, control_ids, assertion, _requirement, _surfaces in _CONTROL_TABLE
+        )
+    mappings: list[ControlMapping] = []
+    for framework, control_ids, assertion, requirement, surfaces in _CONTROL_TABLE:
+        if not _run_supports(run, requirement, surfaces):
+            continue
+        mapping = ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
+        # The assertion names the live surfaces it rests on, inside the signed
+        # pack: "across the AI surfaces" read as all of them.
+        covered = ", ".join(asserted_surfaces(run, mapping))
+        mappings.append(
+            mapping.model_copy(update={"assertion": f"{assertion} Live surfaces: {covered}."})
+        )
+    return tuple(mappings)

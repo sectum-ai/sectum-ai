@@ -65,7 +65,9 @@ pack, and verifies it.
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake
-between the two runs, reported as `[SCOPE LOST]`), or residual / attestable-with-caveat data on an erased surface
+between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level steps
+the later run did not run because its adapter cannot carry a user, reported as
+`[BOUNDARY LOST]`), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
 including a `probe` run in which nothing interrogated the stack, and a `report` on
 a run that names no probe (or was recorded against a since re-seeded substrate);
@@ -196,9 +198,12 @@ canonical record.
 
 The summary carries the `run_id`, the probe count, the confirmed-finding
 count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
-when Class 2 swept models), the per-probe finding counts, and a `run_path`
-pointer to the full `run.json` on disk. Errors still print to stderr and
-exit codes are unchanged.
+when Class 2 swept models), the per-probe finding counts, the run's
+`surface_provenance` with `confirmed_on_live_surfaces` (the confirmed findings
+that describe your stack rather than a built-in fake), `user_steps_dropped`
+(probes whose user-level steps were not run because the adapter cannot carry a
+user), and a `run_path` pointer to the full `run.json` on disk. Errors still print
+to stderr and exit codes are unchanged.
 
 The Retrieval-Pivot Rate is reported with a **95% Wilson confidence interval**
 and its sample size, so a small-`n` rate is never presented as a precise number:

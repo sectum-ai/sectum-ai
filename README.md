@@ -180,8 +180,8 @@ live kinds commented out.
 
 ### Run it in CI
 
-A GitHub Action seeds, probes, and fails the build on a confirmed cross-tenant
-leak (and can emit SARIF for the Security tab):
+A GitHub Action seeds, probes, and fails the build on a confirmed finding —
+cross-tenant or cross-user, on any surface (and can emit SARIF for the Security tab):
 
 ```yaml
 - uses: sectum-ai/sectum-ai@main   # pin to a release tag or SHA for production

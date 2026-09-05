@@ -29,8 +29,10 @@ that ignores the tenant filter is itself caught as a leak (defense in depth,
 the same posture the other observability adapters take).
 
 Erasure: ``delete`` issues ``DELETE {base_url}{query_path}?tenant=<hex>``.
-A 404 means the tenant's spans are already absent, so erasure is an idempotent
-no-op success. A 405 (Method Not Allowed) or 501 (Not Implemented) means the
+A 404 is an idempotent no-op success only when a follow-up empty-marker query
+shows no spans for the tenant; with spans remaining it is treated as "no delete
+API" (a router answers 404 for an unimplemented method+path too). A 405 (Method
+Not Allowed) or 501 (Not Implemented) means the
 trace store exposes no programmatic delete at all - the same "no per-tenant
 erasure API" condition the Helicone and Datadog adapters report - so ``delete``
 raises ``ErasureUnsupported`` and Class 11 itemizes the surface as

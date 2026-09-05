@@ -144,7 +144,11 @@ def probes_exercised(run: RunResult) -> str:
     if not run.probe_versions:
         return "none recorded"
     ids = sorted(run.probe_versions)
-    return f"{len(ids)}: {', '.join(ids)}"
+    text = f"{len(ids)}: {', '.join(ids)}"
+    dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
+    if dropped:
+        text += f"; user-level steps not run (tenant boundary only) for: {', '.join(dropped)}"
+    return text
 
 
 def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:

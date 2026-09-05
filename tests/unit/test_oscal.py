@@ -244,9 +244,9 @@ def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
         "CCPA/CPRA 1798.105 — erasure verification",
     }
     verdicts = {f["target"]["description"] for f in result["findings"]}
-    assert all("residual markers" in v and "cross" not in v for v in verdicts)
+    assert all("markers remaining" in v and "cross" not in v for v in verdicts)
     assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
-    assert "Residual markers remained on vector_db" in result["description"]
+    assert "presumed retained, on vector_db" in result["description"]
 
 
 def test_metadata_carries_the_surface_provenance() -> None:
@@ -264,3 +264,43 @@ def test_observations_label_a_residual_finding_as_such() -> None:
     ]
     assert "residual-data finding" in observation["description"]
     assert "cross-tenant" not in observation["description"]
+
+
+def test_a_caveat_surface_does_not_verify_the_erasure() -> None:
+    # The erasure verdict counted CONFIRMED findings only; a caveat surface (no
+    # per-tenant erasure API, data presumed retained) emits UNVERIFIED ones, so
+    # "verified the erasure on every live surface" rendered over three markers
+    # presumed retained, and the result carried the isolation narrative.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "backup": "LIVE"},
+            "metrics": RunMetrics(
+                erasure_coverage={"vector_db": "ERASED", "backup": "ATTESTABLE_WITH_CAVEAT"},
+                erasure_caveats={"backup": 3},
+            ),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
+    assert all("presumed retained" in f["target"]["description"] for f in result["findings"])
+    assert "verified an erasure" in result["description"]
+    assert "presumed retained, on backup" in result["description"]
+    assert "cross-principal" not in result["description"]
+
+
+def test_a_control_about_the_vector_surface_needs_a_live_vector_surface() -> None:
+    # The OWASP LLM08 row ("vector and embedding weaknesses") was asserted on a
+    # run whose only live surface was MCP and whose vector store was the leaking
+    # fake - twenty satisfied controls over 213 findings the scorecard withholds.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"tenant-boundary-fetch": "1", "agent-tool-hijack": "1"},
+            "surface_provenance": {"vector_db": "SYNTHETIC", "mcp": "LIVE"},
+        }
+    )
+    findings = run_to_oscal(run)["assessment-results"]["results"][0]["findings"]
+    titles = {f["title"] for f in findings}
+    assert not any("LLM08" in t for t in titles), titles
+    assert titles, "the generic rows still speak for the live MCP surface"
+    assert all("Live surfaces: mcp." in f["description"] for f in findings)

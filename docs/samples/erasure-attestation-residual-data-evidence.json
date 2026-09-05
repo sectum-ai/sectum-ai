@@ -1,10 +1,10 @@
 {
   "run_result": {
     "run_id": "erasure-7cd276c8",
-    "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
-    "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-09-05T12:30:38.148575+00:00",
-    "finished_at": "2026-09-05T12:30:38.149535+00:00",
+    "scenario_hash": "bb77ccea5102499d2e3be2ccab9f70af5470a3400fad878e0b6ad94b8c7eb253",
+    "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
+    "started_at": "2026-09-05T13:20:03.628045+00:00",
+    "finished_at": "2026-09-05T13:20:03.629073+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -430,16 +430,17 @@
       "side_channel_effect_sizes": {},
       "poisoning_bleed_delta": null,
       "inversion_reconstruction_rate": null,
-      "extraction_efficiency": null
+      "extraction_efficiency": null,
+      "user_steps_dropped": {}
     },
-    "schema_version": "0.6.0"
+    "schema_version": "0.7.0"
   },
-  "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-  "tsa_token": "{\"digest\":\"a3d0cddda9e6e4b36d248c46e21f79f84d3eda8778c214545baae7b0408d3525\",\"timestamped_at\":\"2026-09-05T12:30:38.163099+00:00\",\"tsa\":\"local-dev\"}",
+  "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
+  "tsa_token": "{\"digest\":\"e62e5b3be323776e795bfc7cf96fbea7f2b5aeb2c46ffea7c3352b0d2308e829\",\"timestamped_at\":\"2026-09-05T13:20:03.643071+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [],
-  "pdf_ref": "d3ea8cfc6ff13e8386cffe87431b71adf7365ce3272009f352b6ce83b3e8c28a",
+  "pdf_ref": "4b1d16b89fb6d01578bea4093c4b6b2b1602254e220585f85b2658c0ae3cf02c",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
-  "schema_version": "0.6.0"
+  "schema_version": "0.7.0"
 }

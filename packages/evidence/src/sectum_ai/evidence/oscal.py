@@ -57,7 +57,7 @@ from sectum_ai.evidence.controls import (
     mapping_requirement,
 )
 from sectum_ai.evidence.labels import leak_label
-from sectum_ai.spec import Finding, FindingStatus
+from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus
 
 if TYPE_CHECKING:
     from sectum_ai.spec import ControlMapping, RunResult
@@ -209,8 +209,8 @@ def _finding(
         objective = "erasure verification"
         failed = has_residual
         verdict = (
-            "Sectum AI found residual markers after the erasure on "
-            f"{', '.join(residual_surfaces)}; the erasure objective is not satisfied "
+            "Sectum AI found markers remaining, or presumed retained, after the erasure "
+            f"on {', '.join(residual_surfaces)}; the erasure objective is not satisfied "
             "for this run."
             if failed
             else "Sectum AI verified the erasure on every live surface it scanned for this run."
@@ -308,11 +308,22 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     attested = [
         f for f in run.findings if f.status is FindingStatus.CONFIRMED and f.surface.value in live
     ]
+    # An erasure verdict comes from the coverage block, not from findings alone:
+    # a caveat surface (no per-tenant erasure API, data presumed retained) emits
+    # UNVERIFIED findings, and "verified the erasure on every live surface" was
+    # rendered over three markers presumed retained.
     residual_surfaces = tuple(
-        sorted({f.surface.value for f in attested if leak_label(f) == "residual-data finding"})
+        sorted(
+            s
+            for s, v in run.metrics.erasure_coverage.items()
+            if s in live
+            and v != CoverageVerdict.ERASED.value
+            and v != CoverageVerdict.NOT_COVERED.value
+        )
     )
     has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)
     has_residual = bool(residual_surfaces)
+    erasure_run = bool(run.metrics.erasure_coverage)
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
@@ -355,11 +366,16 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
             "no control finding is stated. The observations describe that synthetic "
             "stack, not any production system."
         )
-    elif has_residual and not has_confirmed_leak:
+    elif erasure_run and not has_confirmed_leak:
         result_description = (
             "Sectum AI verified an erasure across the live configured AI surfaces. "
-            f"Residual markers remained on {', '.join(residual_surfaces)}; see the "
-            "observations and findings." + excluded
+            + (
+                f"Markers remained, or were presumed retained, on {', '.join(residual_surfaces)}; "
+                "see the observations and findings."
+                if has_residual
+                else "No marker remained on any live surface scanned."
+            )
+            + excluded
         )
     elif has_confirmed_leak:
         result_description = (

@@ -95,7 +95,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.6.0/GroundTruthManifest.schema.json",
+  "$id": "https://schemas.sectum.ai/0.7.0/GroundTruthManifest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Authoritative record of which marker belongs to which tenant.\n\nThe manifest is a pure function of the scenario and seed; it carries no\nwall-clock time so the reproducibility contract holds byte-for-byte. Its\ncanonical hash is computed via ``sectum_ai.spec.hashing.canonical_hash``.",
@@ -116,7 +116,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "0.6.0",
+      "default": "0.7.0",
       "title": "Schema Version",
       "type": "string"
     }

@@ -249,20 +249,21 @@ class SubjectErasureProbe:
             phrases = tuple(p for p in supplied if continuation_split(p) is not None)
             if len(phrases) < len(supplied):
                 # A fingerprint the continuation check cannot verify (a bare
-                # two-word name; a prefix with no control form). Dropping it
-                # silently left the surface reading ERASED "for the subject" on
-                # the phrases that survived; the surface reads NOT_COVERED and the
-                # report says how many were not checked.
+                # two-word name; a prefix with no control form). It is counted, the
+                # verifiable phrases are still scanned, and the surface can read
+                # RESIDUAL (something recalled) or NOT_COVERED - never ERASED "for
+                # the subject" on the phrases that survived.
                 unverifiable[Surface.MODEL_ADAPTER] = len(supplied) - len(phrases)
-            elif phrases and self._model_can_memorize(model):
+            if phrases and self._model_can_memorize(model):
                 recalled = [p for p in phrases if self._content_recalled(model, target, p)]
-                surfaces.append(
-                    SurfaceErasure(
-                        surface=Surface.MODEL_ADAPTER,
-                        markers_before=len(phrases),
-                        residual_after=len(recalled),
+                if recalled or Surface.MODEL_ADAPTER not in unverifiable:
+                    surfaces.append(
+                        SurfaceErasure(
+                            surface=Surface.MODEL_ADAPTER,
+                            markers_before=len(phrases),
+                            residual_after=len(recalled),
+                        )
                     )
-                )
                 findings.extend(
                     self._fingerprint_finding(
                         target, Surface.MODEL_ADAPTER, manifest.subject_ref, p

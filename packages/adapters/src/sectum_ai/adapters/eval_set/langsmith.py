@@ -18,6 +18,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, EvalSetAdapter
+from sectum_ai.spec import AdapterError
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _EXAMPLE_LIMIT = 1000
@@ -94,10 +95,18 @@ class LangSmithEvalSet(EvalSetAdapter):
             return []
         query_tokens = _tokens(query)
         hits: list[str] = []
+        seen = 0
         for example in self._client.list_examples(dataset_name=dataset, limit=_EXAMPLE_LIMIT):
+            seen += 1
             text = self._text(example)
             if query_tokens & _tokens(text):
                 hits.append(text)
+        if seen >= _EXAMPLE_LIMIT:
+            # A truncated page is not a scan: a fixture past it read as absent.
+            raise AdapterError(
+                f"LangSmith dataset {dataset} holds at least {_EXAMPLE_LIMIT} examples, the "
+                "listing cap, so the eval-set scan would be incomplete"
+            )
         return hits
 
     def delete(self, tenant: UUID) -> None:

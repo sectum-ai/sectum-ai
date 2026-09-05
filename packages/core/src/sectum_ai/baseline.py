@@ -261,6 +261,10 @@ class RunDiff:
     # fell back to the demo stack read as "no regression" (or as an improvement,
     # when the fake "resolved" every leak).
     scope_lost: tuple[str, ...] = ()
+    # Probes whose user-level steps the later run did not run (the adapter
+    # cannot carry the user) where the earlier run did. Twelve resolved
+    # cross-user leaks used to read as a fix.
+    boundary_lost: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -288,6 +292,7 @@ class RunDiff:
             or bool(self.findings.severity_escalations)
             or bool(self.coverage_lost)
             or bool(self.scope_lost)
+            or bool(self.boundary_lost)
         )
 
 
@@ -356,6 +361,13 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         findings=diff_findings(earlier.findings, later.findings),
         coverage_lost=_coverage_lost(earlier, later),
         scope_lost=_scope_lost(earlier, later),
+        boundary_lost=tuple(
+            sorted(
+                probe_id
+                for probe_id, count in later.metrics.user_steps_dropped.items()
+                if count and not earlier.metrics.user_steps_dropped.get(probe_id)
+            )
+        ),
     )
 
 

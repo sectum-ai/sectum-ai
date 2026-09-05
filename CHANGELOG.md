@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
+  user-level steps the runner did not run because the adapter cannot carry a user
+  identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
+  longer accepted by `verify` (the usual minor-bump rule); regenerate them.
+
 ### Fixed
 
 - **An erasure-only attestation asserted every isolation control it never tested.**
@@ -270,6 +277,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "exhaustive" recall was capped at 100; the adapter asks for 10 000 and refuses
   a listing that hits it. The OpenTelemetry query contract states that an empty
   marker matches every span of the tenant (what the 404 check relies on).
+- **A run that quietly stopped exercising the user boundary read as a fix.**
+  Dropped user-level steps left no trace: removing `user_argument` from a live MCP
+  config turned 16 confirmed findings into 4, and `diff` / `baseline --compare`
+  read the 12 resolved cross-user leaks as resolved (`[ok]`, exit 0). The count is
+  now in the signed metrics, the JSON summary, the PDF's probe line, and a CLI
+  warning; `diff` and `baseline --compare` flag it as `[BOUNDARY LOST]`, a
+  regression. The runner also runs a user-owned *plant* as its tenant instead of
+  dropping it — dropping it starved the tenant-level reads, so a store that leaks
+  across tenants read clean with the probe recorded.
+- **mem0 and the serving-only models inherited "carries the user".** mem0's flat
+  `user_id` space is the tenant, so Class 8 planned user-level steps there and
+  confirmed 8 CRITICAL cross-user leaks of sessions that never existed — the same
+  defect as the live MCP clients, one adapter over. Both declare `carries_user =
+  False`.
+- **Isolation controls were asserted on any live surface.** The OWASP LLM08 row
+  ("vector and embedding weaknesses") — and every other isolation row — was
+  asserted on a run whose only live surface was MCP and whose vector store was the
+  leaking fake: twenty `satisfied` OSCAL controls over 213 findings `score`
+  withholds. A row about specific surfaces needs one of them live, and every
+  mapping in a pack ends with the live surfaces it rests on.
+- **The recall check's whole-phrase branch had no control.** A chatty base model
+  that restates the prompt ("I have no record matching 'John Smith'") signed a
+  RESIDUAL for a tenant that trained nothing, and a hard delete then read as an
+  erasure failure; on a live HuggingFace model the Class 11 model baseline could
+  come only from such an echo. Both controls now apply to the echo branch. One
+  unverifiable fingerprint no longer suppresses the scan of the verifiable ones
+  (a measurable residual was replaced by NOT_COVERED).
+- **The OSCAL erasure verdict ignored caveat surfaces** (no per-tenant erasure API,
+  data presumed retained): "verified the erasure on every live surface" rendered
+  over three markers presumed retained, under the isolation narrative. The verdict
+  comes from the coverage block and the result describes an erasure run.
+- A bundled PDF the pack binds no `pdf_ref` for is refused (the first one rode
+  unbound). The JSON summary carries `confirmed_on_live_surfaces` and the run's
+  provenance beside `confirmed_findings` (which counts every surface, the fakes
+  included), and the Action carries the live count as an output. The LangSmith eval set refuses a search that hit
+  its 1000-example cap.
 - Docs: the schema-reference paragraph said a misspelled adapter field is silently
   ignored (it is refused); the example config's `openai-assistants` and
   `anthropic-tooluse` blocks said the YAML "only flips the kind" (a `factory` is

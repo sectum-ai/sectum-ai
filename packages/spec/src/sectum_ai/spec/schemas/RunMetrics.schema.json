@@ -1,5 +1,5 @@
 {
-  "$id": "https://schemas.sectum.ai/0.6.0/RunMetrics.schema.json",
+  "$id": "https://schemas.sectum.ai/0.7.0/RunMetrics.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Aggregate metrics for a run (the engineering spec, section 9).",
@@ -131,6 +131,13 @@
         "type": "number"
       },
       "title": "Side Channel Effect Sizes",
+      "type": "object"
+    },
+    "user_steps_dropped": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "User Steps Dropped",
       "type": "object"
     }
   },

@@ -652,3 +652,44 @@ def test_unverifiable_fingerprints_make_the_surface_not_covered() -> None:
     )
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
     assert report.unverifiable == {Surface.MODEL_ADAPTER: 2}
+
+
+def test_an_echoing_base_model_is_not_residual_memorization() -> None:
+    # The whole-phrase branch had no control: a chatty base that restates the
+    # prompt ('I have no record matching "John Smith"') signed a RESIDUAL for a
+    # tenant that trained nothing, and a hard delete then read as a failure.
+    class _EchoingBase(FakeModel):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return f'I have no record matching "{prompt}".'
+
+    target = UUID(int=0xA)
+    assert not SubjectErasureProbe._content_recalled(_EchoingBase(), target, _EXTRACTION_PHRASE)
+    report = SubjectErasureProbe(model=_EchoingBase()).verify(
+        target,
+        SubjectManifest(
+            subject_ref="u-e1",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    # ... while a genuine per-tenant echo (the base answers nothing) still counts.
+    model, tenant, phrase = _model_with_memorized_phrase()
+    assert SubjectErasureProbe._content_recalled(model, tenant, phrase)
+
+
+def test_unverifiable_fingerprints_do_not_hide_a_residual_one() -> None:
+    # One unverifiable phrase used to suppress the scan of every verifiable one:
+    # the DPO was told "not checked" about content the model still reproduced.
+    secret = _EXTRACTION_PHRASE
+    report = SubjectErasureProbe(model=_MemorizingModel(secret)).verify(
+        UUID(int=0xA),
+        SubjectManifest(
+            subject_ref="u-u2",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: ("John Smith", secret)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
+    assert report.unverifiable == {Surface.MODEL_ADAPTER: 1}
+    assert report.findings and "fingerprint" in report.findings[0].finding_id

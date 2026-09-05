@@ -91,7 +91,8 @@ search whose matches exceed the page it returns is refused rather than truncated
 each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant}`) — a dataset *is* a
 curated golden eval set, the fourth "hiding place". A fixture is a dataset example,
 Class 11 erasure seeds them, and `delete` removes the tenant's dataset;
-`soft_delete=True` leaves the fixtures in place.
+`soft_delete=True` leaves the fixtures in place. A search that hits the 1000-example
+listing cap is refused rather than truncated.
 
 **Backup.** The S3 backup (`kind: s3`, the `[boto3]` extra) keeps each tenant's
 snapshots under the key prefix `{prefix}/{tenant}/` in one bucket (AWS S3 or any
@@ -116,7 +117,7 @@ fake-gcs-server via `STORAGE_EMULATOR_HOST` for testing.
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
 *Erasable* backends expose a real per-tenant delete: Phoenix and LangSmith each
-map a tenant to its own project and delete it on erasure, while Langfuse (its v3
+map a tenant to its own project and delete it on erasure, while Langfuse (its v4
 SDK binds one project per key pair) instead scopes each tenant by trace `user_id`
 within a single project and bulk-deletes that tenant's traces — so a trace of the
 tenant's recorded *without* that `user_id` (or under an end-user's id) is invisible
@@ -198,11 +199,17 @@ identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
 
 **Which boundary a run can claim.** Every adapter declares whether a call made as a
 user reaches the backend *as that user* (`carries_user`). The RAG, agent, and
-observability contracts carry no user at all, and the live MCP clients carry one
-only with `user_argument`; the runner drops user-level steps for an adapter that
-does not carry the user, so the run claims the tenant boundary alone there. Run as
-the tenant and judged as the user, such a step confirmed cross-user leaks of a
-session that never existed. The built-in fakes all carry the user.
+observability contracts carry no user at all, the live MCP clients carry one
+only with `user_argument`, and the mem0 memory store (a flat `user_id` space that
+*is* the tenant) and the serving-only models never do. The runner drops user-level
+*read* steps for an adapter that does not carry the user (a user-owned plant still
+runs, as the tenant), records the count in the signed run (`user_steps_dropped`),
+and warns; the run claims the tenant boundary alone there, and `diff` /
+`baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
+Run as the tenant and judged as the user, such a step confirmed cross-user leaks of
+a session that never existed. The built-in fakes carry the user wherever their
+family contract does (vector, app, cache, model, MCP, memory); the RAG,
+observability, and agent fakes cannot, like their contracts.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:

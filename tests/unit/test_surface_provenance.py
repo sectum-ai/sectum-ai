@@ -158,3 +158,16 @@ def test_the_warning_names_the_synthetic_surfaces_when_some_are_live(
 def test_no_warning_when_every_surface_is_live(capsys: pytest.CaptureFixture[str]) -> None:
     _warn_on_synthetic_surfaces({Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value})
     assert capsys.readouterr().err == ""
+
+
+def test_the_json_summary_says_what_its_counts_describe(tmp_path: Path) -> None:
+    # The summary, the Action outputs, and the PDF all counted fake-surface leaks
+    # while OSCAL said no leak was confirmed on a live surface; the summary now
+    # carries the provenance and the live-surface count.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    summary = json.loads(result.stdout)
+    assert set(summary["surface_provenance"].values()) == {SurfaceProvenance.SYNTHETIC.value}
+    assert summary["confirmed_findings"] > 0
+    assert summary["confirmed_on_live_surfaces"] == 0
+    assert summary["user_steps_dropped"] == {}

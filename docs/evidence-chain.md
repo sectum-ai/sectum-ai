@@ -135,7 +135,8 @@ test condition cryptographically.
   digest manifest is unsigned, so the verifier does not let it vouch for anything:
   `evidence.json` is the pack, always; only the member names Sectum itself writes
   are admitted (any other listed member is refused); every present audit PDF and
-  in-toto member is bound to the pack, not just the first found; and the
+  in-toto member is bound to the pack, not just the first found (a bundled PDF
+  the pack binds no `pdf_ref` for fails outright); and the
   per-member lines say "matches the unsigned manifest" — with the README, the
   redacted config, and the sealed manifest named as unbound. Member names are the
   archive's own input and are escaped in the verifier's output.

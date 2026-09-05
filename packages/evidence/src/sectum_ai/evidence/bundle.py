@@ -295,10 +295,16 @@ def verify_bundle(
         require_live=require_live,
     )
     checks.extend(pack_result.checks)
-    for name in present_pdfs[1:]:
+    for name in present_pdfs:
         if pack.pdf_ref is None:
-            checks.append(Check(f"audit-pdf:{name}", False, "the pack binds no pdf_ref"))
-        else:
+            # verify_pack checks a PDF only when the pack binds one; a bundled PDF
+            # the pack does not bind is a delivered, unverified auditor document.
+            checks.append(
+                Check(
+                    f"audit-pdf:{name}", False, "the pack binds no pdf_ref, so this PDF is unbound"
+                )
+            )
+        elif name != present_pdfs[0]:
             checks.append(_check_pdf(pack.pdf_ref, member_bytes[name], name=f"audit-pdf:{name}"))
     if pack.pdf_ref is not None and pdf_bytes is None:
         checks.append(

@@ -179,3 +179,19 @@ def test_a_mapping_needs_evidence_from_a_live_surface() -> None:
     )
     assert control_mappings(live_elsewhere) == ()
     assert control_mappings(_run(erasure_only=True, provenance={"vector_db": "LIVE"}))
+
+
+def test_a_row_about_specific_surfaces_needs_one_of_them_live() -> None:
+    from sectum_ai.evidence.controls import asserted_surfaces
+
+    mcp_only = _run(provenance={"vector_db": "SYNTHETIC", "mcp": "LIVE"})
+    mappings = control_mappings(mcp_only)
+    frameworks = {m.framework for m in mappings}
+    assert "OWASP LLM Top 10" not in frameworks
+    assert "SOC 2 (TSC)" in frameworks
+    soc2 = next(m for m in mappings if m.framework == "SOC 2 (TSC)")
+    assert soc2.assertion.endswith("Live surfaces: mcp.")
+    assert asserted_surfaces(mcp_only, soc2) == ("mcp",)
+    vector_live = _run(provenance={"vector_db": "LIVE", "mcp": "SYNTHETIC"})
+    owasp = next(m for m in control_mappings(vector_live) if m.framework == "OWASP LLM Top 10")
+    assert owasp.assertion.endswith("Live surfaces: vector_db.")

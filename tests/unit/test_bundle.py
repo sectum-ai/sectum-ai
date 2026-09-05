@@ -348,3 +348,27 @@ def test_unbound_members_are_named_as_such() -> None:
     assert result.passed
     assert "not bound to the pack" in _check(result, "member:PACK-README.md").detail
     assert "unsigned manifest" in _check(result, "member:audit-pack.pdf").detail
+
+
+def test_a_bundled_pdf_the_pack_does_not_bind_fails() -> None:
+    # verify_pack checks a PDF only when the pack binds a pdf_ref, and only PDFs
+    # after the first got the "binds no pdf_ref" failure: a forged "zero leakage"
+    # PDF rode in a passing bundle beside a pack built without one.
+    manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+    moment = datetime(2026, 5, 17, 12, 0, tzinfo=UTC)
+    run = RunResult(
+        run_id="run-nopdf",
+        scenario_hash="scenario-hash",
+        manifest_hash=canonical_hash(manifest),
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(),
+    )
+    pack = build_evidence_pack(run, manifest)  # no pdf_ref
+    members = {
+        EVIDENCE_MEMBER: pack.model_dump_json().encode("utf-8"),
+        "audit-pack.pdf": b"%PDF-1.4 forged: zero leakage",
+    }
+    result = verify_bundle(build_bundle(members), require_anchored=False, require_live=False)
+    assert not result.passed
+    assert not _check(result, "audit-pdf:audit-pack.pdf").ok

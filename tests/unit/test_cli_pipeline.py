@@ -1554,3 +1554,63 @@ def test_a_missing_observability_extra_is_a_typed_config_error(
     monkeypatch.setitem(sys.modules, module, None)
     with pytest.raises(SectumError, match=kind):
         build_observability(AdapterConfig(kind=kind, **fields))
+
+
+def test_a_run_records_the_user_steps_it_did_not_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Dropped user-level steps left no trace in the record: removing
+    # `user_argument` from a live MCP config turned 16 confirmed findings into 4
+    # and `baseline --compare` / `diff` read the 12 resolved cross-user leaks as a
+    # fix. The count is in the signed metrics, the summary, and the CLI warning.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeMCP
+
+    class _TenantOnlyMCP(FakeMCP):
+        carries_user = False
+
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    scenario = default_scenario(seed=2026)
+    tenants = tuple(
+        tenant.model_copy(
+            update={
+                "users": (
+                    SyntheticUserSpec(user_id=UUID(int=0x100 + 2 * n), display_name="u1"),
+                    SyntheticUserSpec(user_id=UUID(int=0x101 + 2 * n), display_name="u2"),
+                )
+            }
+        )
+        for n, tenant in enumerate(scenario.tenants[:2])
+    )
+    substrate = build_substrate(scenario.model_copy(update={"tenants": tenants}))
+    (tmp_path / "substrate.json").write_text(substrate.model_dump_json())
+    args = ["--workdir", str(tmp_path)]
+    full = _runner.invoke(app, ["probe", *args, "--probe", "agent-tool-hijack", "--output", "json"])
+    assert full.exit_code == 2, full.output
+    assert json.loads(full.stdout)["user_steps_dropped"] == {}
+    _runner.invoke(app, ["baseline", *args, "--save"])
+
+    def _tenant_only_mcp(cfg: AdapterConfig) -> _TenantOnlyMCP:
+        # Read the demo block's knobs like the real builder, so the stand-in is
+        # not refused for leaving the operator's fields unread.
+        extras = cfg.model_extra or {}
+        for knob in ("confused_deputy", "token_passthrough", "cross_server_deputy", "user_scoped"):
+            extras.get(knob)
+        return _TenantOnlyMCP()
+
+    monkeypatch.setattr(config_module, "build_mcp", _tenant_only_mcp)
+    narrowed = _runner.invoke(
+        app, ["probe", *args, "--probe", "agent-tool-hijack", "--output", "json"]
+    )
+    summary = json.loads(narrowed.stdout)
+    assert summary["user_steps_dropped"] == {
+        "agent-tool-hijack": summary["user_steps_dropped"]["agent-tool-hijack"]
+    }
+    assert summary["user_steps_dropped"]["agent-tool-hijack"] > 0
+    assert "user-level steps were not run for agent-tool-hijack" in narrowed.output
+    recorded = json.loads((tmp_path / "run.json").read_text())["metrics"]["user_steps_dropped"]
+    assert recorded == summary["user_steps_dropped"]
+    compared = _runner.invoke(app, ["baseline", *args, "--compare"])
+    assert compared.exit_code == 2, compared.output
+    assert "[BOUNDARY LOST] agent-tool-hijack" in compared.output

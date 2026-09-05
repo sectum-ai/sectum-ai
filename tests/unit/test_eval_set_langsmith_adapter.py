@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, EvalSetAdapter
 from sectum_ai.adapters.eval_set.langsmith import LangSmithEvalSet
 
@@ -115,3 +117,14 @@ def test_langsmith_eval_set_search_tolerates_an_example_without_the_text_key() -
     client.create_dataset(dataset_name=_dataset(_TENANT_A))
     client.create_example(inputs={"other": "SECTUM-CANARY-AAA"}, dataset_name=_dataset(_TENANT_A))
     assert LangSmithEvalSet(client).search(_TENANT_A, "SECTUM-CANARY-AAA")
+
+
+def test_langsmith_eval_set_refuses_a_listing_that_hit_its_cap() -> None:
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeLangSmith()
+    adapter = LangSmithEvalSet(client)
+    for index in range(1000):
+        adapter.add(_TENANT_A, f"fixture number {index}")
+    with pytest.raises(AdapterError, match="listing cap"):
+        adapter.search(_TENANT_A, "fixture number 999")

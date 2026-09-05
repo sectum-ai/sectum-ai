@@ -122,7 +122,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.6.0/IsolationScore.schema.json",
+  "$id": "https://schemas.sectum.ai/0.7.0/IsolationScore.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A graded multi-tenant isolation posture derived from one run.\n\nDeliberately *derived*, not asserted: every field is recomputable from the signed\n:class:`RunResult` plus the published methodology (``docs/scorecard.md``), so a\nthird party re-grades the run rather than trusting this record.\n\nThe anti-over-claim contract: ``weighted_score`` covers the **covered classes\nonly** - a class that never ran is excluded from the grade (never counted as a\npass) and lowers ``coverage``/``confidence`` instead. A grade must never imply the\nstack passed a check it was never asked to perform.",
@@ -181,7 +181,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "0.6.0",
+      "default": "0.7.0",
       "title": "Schema Version",
       "type": "string"
     },

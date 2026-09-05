@@ -436,3 +436,22 @@ def test_losing_one_of_a_metrics_feeding_probes_is_not_measured(tmp_path: Path) 
         ],
     )
     assert "[not measured] retrieval_pivot_rate" in cli.output, cli.output
+
+
+def test_a_probe_that_stopped_running_user_steps_is_a_regression(tmp_path: Path) -> None:
+    earlier = _run()
+    later = _run(metrics=RunMetrics(user_steps_dropped={"agent-tool-hijack": 48}))
+    result = diff_runs(earlier, later)
+    assert result.boundary_lost == ("agent-tool-hijack",)
+    assert result.regressed
+    assert diff_runs(later, later).boundary_lost == ()
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2
+    assert "[BOUNDARY LOST] agent-tool-hijack" in cli.output
