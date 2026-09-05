@@ -33,8 +33,15 @@ class RagPipelineBleedProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ("rag",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan one benign shared-entity query per principal, dispatched via ``rag.ask``."""
-        principals = substrate.principals()
+        """Plan one benign shared-entity query per tenant, dispatched via ``rag.ask``.
+
+        Tenant-level principals only: ``RAGPipelineAdapter.ask`` carries no user, so
+        a user-level step would run as the tenant and be judged as the user - a
+        session that never existed. On a tenant-isolated pipeline every sibling
+        user's marker in the tenant's own answer then confirmed as a CRITICAL
+        cross-user leak (ADR-0006: user-aware adapters are the next increment).
+        """
+        principals = [p for p in substrate.principals() if p.user_id is None]
         steps: list[ProbeStep] = []
         for entity in substrate.scenario.shared_entities:
             # Query the entity only from principals foreign to one of its planted canaries;

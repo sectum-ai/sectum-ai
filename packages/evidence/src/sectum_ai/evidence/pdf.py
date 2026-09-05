@@ -47,7 +47,9 @@ _ERASURE_SURFACE_ORDER: tuple[str, ...] = (
 
 # A short, DPO-facing gloss for each coverage verdict rendered in the matrix.
 _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
-    CoverageVerdict.ERASED.value: "verified clean - no marker survived erasure",
+    CoverageVerdict.ERASED.value: (
+        "verified clean - no marker retrievable through the tenant's own read path after erasure"
+    ),
     CoverageVerdict.RESIDUAL.value: "erasure failed - a marker survived",
     CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value: (
         "no per-tenant erasure API - data presumed retained"
@@ -61,7 +63,10 @@ _COVERAGE_CAVEAT = (
     "Coverage states what this attestation verified, surface by surface. A "
     "NOT_COVERED surface was out of scope, had no configured adapter, or showed "
     "no pre-erasure baseline - it is explicitly not evidence of erasure and must "
-    "not be read as erased. ATTESTABLE WITH CAVEAT means the backend exposes no "
+    "not be read as erased. ERASED is measured through the erased tenant's own read "
+    "path: a backend that retains the data while revoking that path is "
+    "indistinguishable from one that purged it, from outside. ATTESTABLE WITH "
+    "CAVEAT means the backend exposes no "
     "per-tenant erasure API, so the data is presumed retained until it ages out "
     "of the backend's retention window (a backend limitation, not a flow failure)."
 )

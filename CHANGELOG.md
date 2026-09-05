@@ -111,6 +111,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   envelope `report` writes with `signatures: []`; the detail now says the envelope
   is unsigned (or, when signed, that no signature was verified here), and the
   docstring no longer points at a `sigstore` module that does not exist.
+- **The RAG-pipeline and agent-framework probes confirmed cross-user leaks of
+  sessions that never existed.** `rag.ask` and `agent.run` carry no user, so a
+  user-level step ran as the tenant and was judged as the user: on a
+  tenant-isolated pipeline and agent, two tenants of two users produced 12 and 8
+  CONFIRMED CRITICAL "cross-user" findings from sibling users' markers in the
+  tenant's own answers. Both probes plan from tenant-level principals only, as
+  ADR-0006 already said the tenant-keyed adapters require; the MCP end of Class 7,
+  whose `call_tool` carries the user, keeps its user-level coverage.
+- **Subject-erasure prefix-continuation counted any completion as memorization.**
+  The trailing half of an email was its domain and of a two-word name its
+  surname, so a model never trained on the subject signed a CONFIRMED HIGH
+  residual (confidence 1.0) for `alice.brown@example.com` and `John Smith`. The
+  check now has a control arm (a same-shaped prefix naming nobody must not
+  complete to the same trailing part), cuts an email inside its local part, and
+  does not check a phrase whose trailing part is under six characters — that
+  surface reads `NOT_COVERED` for it rather than a verdict a guess could produce.
+- **Class 5 missed a perfect side channel and diluted a real one.** Zero
+  within-arm spread gave an infinite t with zero degrees of freedom (read as
+  p = 1) and Cohen's d = 0, so a jitter-free, constant 60 ms cross-tenant gap
+  produced no finding; variances are now floored at the timer's resolution. And
+  with one prefix per tenant pair, on a backend whose latency call runs inference
+  (HuggingFace) the observer's own first trial warmed the primed *and* control
+  prefix for every later trial, so a genuine shared cache survived in one trial
+  of twenty-four (d ≈ 0.25, no finding); the owner now warms one prefix per trial,
+  each measured exactly once, and the control prefix is fresh per trial.
+- **A token-identical foreign entity with a changed separator was vetoed by a
+  judge "no".** The verbatim rule was a substring test, so `Project Quasar7K2Q
+  00001` for the marker `Project Quasar7K2Q-00001` reached the judge alone and a
+  cautious real judge downgraded it while the fake judge confirmed it. The
+  marker's tokens contiguous and in order are the entity, by observation.
+- **A serving-only model turned an otherwise ERASED erasure run INCONCLUSIVE.**
+  vLLM/TGI hold no per-tenant weights, so the model surface scanned to a zero
+  baseline — `NOT_COVERED`, correctly — but a zero-baseline surface also made the
+  report's `erased` false (exit 3). The model is left out of the scan plan when it
+  cannot memorize, and reads `NOT_COVERED` through the coverage block alone.
+- The `ERASED` verdict's gloss (audit PDF, catalog) now says what it measures:
+  no marker retrievable through the erased tenant's own read path. A backend that
+  retains data while revoking that path is indistinguishable from outside.
 
 
 ## [0.11.0] - 2026-09-01

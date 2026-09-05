@@ -391,9 +391,12 @@ def test_erasure_model_surface_is_not_covered_for_a_serving_only_model() -> None
     target = substrate.tenants[0].tenant_id
     store = _seeded_store(substrate, soft_delete=False)
     report = ErasureProbe(substrate, vector=store, model=VLLMModel(_ServingBackend())).run(target)
-    surfaces = {surface.surface: surface for surface in report.surfaces}
-    assert surfaces[Surface.MODEL_ADAPTER].markers_before == 0
+    # Not a scanned surface at all: in the plan it scanned to a zero baseline, and a
+    # zero-baseline surface also makes `erased` false - so configuring a serving
+    # model turned an otherwise ERASED run INCONCLUSIVE (exit 3).
+    assert Surface.MODEL_ADAPTER not in {surface.surface for surface in report.surfaces}
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert report.erased
 
 
 def test_erasure_clears_the_search_index_when_it_hard_deletes() -> None:

@@ -58,3 +58,40 @@ def test_fake_rag_pipeline_shared_index_reports_the_leak_capability() -> None:
     rag = FakeRAGPipeline(shared_index=True)
     assert rag.supports(Capability.SHARED_INDEX)
     assert not rag.supports(Capability.PER_TENANT_NAMESPACE)
+
+
+def test_a_tenant_isolated_pipeline_with_users_is_not_a_cross_user_leak() -> None:
+    # `RAGPipelineAdapter.ask(tenant, query)` carries no user, so a user-level step
+    # ran as the tenant and was judged as the user: on a tenant-isolated pipeline
+    # every sibling user's marker in the tenant's own answer confirmed as a
+    # CRITICAL cross-user leak (12 of them on two tenants of two users). The probe
+    # plans from tenants only (ADR-0006: user-aware adapters are the next step).
+    from uuid import UUID
+
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    tenants = tuple(
+        SyntheticTenantSpec(
+            tenant_id=UUID(int=n),
+            display_name=f"T{n}",
+            industry="robotics",
+            corpus_size=24,
+            users=(
+                SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+            ),
+        )
+        for n in (1, 2)
+    )
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="rag-users",
+            seed=3,
+            tenants=tenants,
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    steps = RagPipelineBleedProbe().plan(substrate)
+    assert steps and all(step.actor_user_id is None for step in steps)
+    rag = _seeded_rag(substrate, shared_index=False)
+    assert confirmed_findings(Runner(substrate, rag=rag).run(RagPipelineBleedProbe())) == []

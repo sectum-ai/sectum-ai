@@ -549,3 +549,50 @@ def test_a_one_character_fingerprint_has_nothing_to_split() -> None:
     # prompt with, so the honest answer is the whole-phrase test's result.
     target = UUID(int=0xA)
     assert not SubjectErasureProbe._content_recalled(_MemorizingModel("x"), target, "x")
+
+
+class _GenericModel(FakeModel):
+    """A base model with no subject data: it completes what any model completes."""
+
+    def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+        if "@" in prompt and not prompt.endswith("@example.com"):
+            return "@example.com"
+        if prompt.split() and prompt.split()[-1].istitle():
+            return "Smith"
+        return "I cannot help with that."
+
+
+def test_a_generic_completion_is_not_residual_memorization() -> None:
+    # The prefix-continuation check had no control arm: "@example.com" after any
+    # local part and "Smith" after "John" counted as recall, so a model that was
+    # never trained on the subject signed a CONFIRMED HIGH residual (confidence
+    # 1.0) for their email and their name.
+    target = UUID(int=0xA)
+    model = _GenericModel()
+    assert not SubjectErasureProbe._content_recalled(model, target, "alice.brown@example.com")
+    # A two-token name has no trailing part long enough to be evidence either way:
+    # the model surface does not check it, and reads NOT_COVERED rather than a
+    # verdict a guess could produce.
+    assert SubjectErasureProbe._continuation_split("John Smith") is None
+    report = SubjectErasureProbe(model=model).verify(
+        target,
+        SubjectManifest(
+            subject_ref="u-g1", records={}, fingerprints={Surface.MODEL_ADAPTER: ("John Smith",)}
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+
+
+def test_an_email_is_cut_inside_its_local_part() -> None:
+    # Cutting at the midpoint of "alice.brown@example.com" left the bare domain as
+    # the suffix; the cut now keeps subject-specific characters on both sides.
+    split = SubjectErasureProbe._continuation_split("alice.brown@example.com")
+    assert split is not None
+    prefix, suffix = split
+    assert "@" not in prefix and suffix.endswith("@example.com") and suffix != "@example.com"
+    # and a model that genuinely memorized the address is still caught (the
+    # scrambled control prefix does not reproduce it).
+    memorized = _MemorizingModel("alice.brown@example.com")
+    assert SubjectErasureProbe._content_recalled(
+        memorized, UUID(int=0xA), "alice.brown@example.com"
+    )

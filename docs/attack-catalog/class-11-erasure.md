@@ -17,7 +17,13 @@ data-subject granularity — over a **narrower surface set**. It verifies by id 
 the vector DB, semantic cache, and tracing, and by content fingerprint on the
 vector DB, model adapter, agent memory, and search index. The eval set and backup
 surfaces are not scanned by the subject probe and read `NOT_COVERED` in its
-attestation; only the tenant probe covers all eight.
+attestation; only the tenant probe covers all eight. On the model adapter the
+fingerprint check is prefix-continuation with a control arm: the subject's
+prefix must complete to the trailing part *and* a same-shaped prefix naming
+nobody must not (so `@example.com` after any local part, or `Smith` after
+`John`, is a generic completion, not recall). An email is cut inside its local
+part, and a phrase whose trailing part is under six characters — a bare
+two-word name — is not checked on that surface and reads `NOT_COVERED` there.
 
 ## Goal
 
@@ -49,7 +55,7 @@ the evidence pack (`RunMetrics.erasure_coverage`, surface → `CoverageVerdict`)
 
 | Verdict | Meaning |
 |---|---|
-| `ERASED` | Covered and clean — a baseline existed and no marker survived erasure. |
+| `ERASED` | Covered and clean — a baseline existed and no marker is retrievable through the erased tenant's own read path after erasure. A backend that retains the data while revoking that path is indistinguishable, from outside, from one that purged it. |
 | `RESIDUAL` | Covered and failed — the backend was asked to erase and a marker survived. |
 | `ATTESTABLE_WITH_CAVEAT` | Covered, but the backend exposes no per-tenant erasure API — data presumed retained. |
 | `NOT_COVERED` | Out of scope, not scanned, or no pre-erasure baseline — **never** evidence of erasure. |
