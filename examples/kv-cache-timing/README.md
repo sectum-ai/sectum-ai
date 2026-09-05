@@ -99,10 +99,11 @@ shared deployments.
 
 - **A real inference server.** The demo runs against the in-memory
   `FakeModel` with the deliberately-leaky `prefix_cache=true` knob.
-  Real engagements point at a vLLM / TensorRT-LLM / hosted
-  provider via the `ModelAdapter` interface — the new live
-  `huggingface` kind covers the local PEFT case, and a hosted-API
-  adapter is the next surface the spec calls for.
+  Real engagements point at a self-hosted server via the
+  `ModelAdapter` interface: the live `vllm` and `tgi` kinds are the
+  serving-only adapters built for this probe, and `huggingface` covers
+  the local PEFT case. A hosted API (OpenAI / Anthropic) exposes no
+  prefix cache to time, so there is no adapter for one.
 - **A statistical baseline against load.** A noisy production
   endpoint may swamp the signal even when the cache is leaky; the
   probe's 24 trials + (p < 0.01, d ≥ 0.8) gate is calibrated for the

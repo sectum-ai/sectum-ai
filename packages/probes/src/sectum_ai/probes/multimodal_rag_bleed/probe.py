@@ -36,6 +36,10 @@ class MultimodalRagBleedProbe(DetectingProbe):
     id = "multimodal-rag-bleed"
     name = "Multi-modal RAG entity-bleed"
     owasp_llm = "LLM08:2025"
+    # Same assignment as Class 2, which this is the image-modality form of: the
+    # foreign image (and the canary in its caption) is exfiltrated through the
+    # retrieval/inference API (T0024) as an LLM data leak (T0057). No image-specific
+    # ATLAS technique exists to narrow it further (ADR-0009 sweep).
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.VECTOR_DB,)

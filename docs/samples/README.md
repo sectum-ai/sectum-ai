@@ -22,15 +22,17 @@ Two erasure flavours ship side-by-side so prospects can see both:
 | [`retrieval-pivot-attestation.intoto.json`](retrieval-pivot-attestation.intoto.json) | `examples/retrieval-pivot` | 4 KB | The [in-toto](https://in-toto.io/) attestation envelope: the run digest, the timestamp token, and the manifest hash that pin the test condition. |
 | [`erasure-attestation-audit-pack.pdf`](erasure-attestation-audit-pack.pdf) | `examples/erasure-attestation` | 5 KB | The DPO-facing GDPR Article 17 erasure attestation, **happy path**: per-surface verdicts ERASED across all eight configured surfaces, with the Coverage & caveats matrix. |
 | [`erasure-attestation-evidence.json`](erasure-attestation-evidence.json) | `examples/erasure-attestation` | 4 KB | The machine-readable evidence pack for the happy-path erasure run (the JSON sibling of the PDF, schema-versioned). |
-| [`erasure-attestation-attestation.intoto.json`](erasure-attestation-attestation.intoto.json) | `examples/erasure-attestation` | 3 KB | The happy-path erasure attestation's in-toto envelope. |
+| [`erasure-attestation-attestation.intoto.json`](erasure-attestation-attestation.intoto.json) | `examples/erasure-attestation` | ~4 KB | The happy-path erasure attestation's in-toto envelope. |
 | [`erasure-attestation-residual-data-audit-pack.pdf`](erasure-attestation-residual-data-audit-pack.pdf) | `examples/erasure-attestation` (`--soft-delete`) | 8 KB | The DPO-facing PDF when the erasure was **partial** — per-surface RESIDUAL DATA verdicts with the residual marker counts. This is the artefact the controller would attach when remediating the gap. |
 | [`erasure-attestation-residual-data-evidence.json`](erasure-attestation-residual-data-evidence.json) | `examples/erasure-attestation` (`--soft-delete`) | 17 KB | Machine-readable evidence pack for the residual-data run; carries the per-marker residual hits so a DPO or controller can trace which canaries survived which surface. |
-| [`erasure-attestation-residual-data-attestation.intoto.json`](erasure-attestation-residual-data-attestation.intoto.json) | `examples/erasure-attestation` (`--soft-delete`) | 3 KB | The residual-data run's in-toto envelope. |
+| [`erasure-attestation-residual-data-attestation.intoto.json`](erasure-attestation-residual-data-attestation.intoto.json) | `examples/erasure-attestation` (`--soft-delete`) | ~4 KB | The residual-data run's in-toto envelope. |
 
 ## Verifying these packs
 
-Every pack here verifies under the open-source `sectum-ai verify`, given two
-flags that say plainly what these packs are. They are produced by the offline
+The two erasure `evidence.json` packs verify under the open-source
+`sectum-ai verify`, given two flags that say plainly what they are. (The
+retrieval-pivot sidecar and PDF are companions to an `evidence.json` that is not
+committed — ~293 KB — and verify only beside the one `run.sh` regenerates.) They are produced by the offline
 demo flow, so:
 
 - their timestamp is the local-dev token — `--allow-unanchored` accepts
@@ -47,7 +49,8 @@ uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json \
   --allow-unanchored --allow-synthetic
 ```
 
-A `VERIFIED` outcome means the whole-pack attested digest matches the
+An `INTEGRITY OK - UNANCHORED` outcome (the verdict `--allow-unanchored` produces;
+plain `VERIFIED` is reserved for a TSA- or Rekor-anchored pack) means the whole-pack attested digest matches the
 timestamped token and the manifest hash agrees between the run and the pack.
 Mutating a single byte of the attested content makes `verify` exit `4` with a
 `[FAIL]` line — that demonstrates the tamper-evident property end to end.

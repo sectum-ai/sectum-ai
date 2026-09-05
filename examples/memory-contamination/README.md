@@ -27,7 +27,7 @@ enough.
 
 This is **OWASP LLM08:2025 — Vector and Embedding Weaknesses**, on the
 persistent-memory surface (the long-term/agent memory store named in §7
-of the [engineering spec](https://github.com/sectum-ai/sectum-ai/blob/main/CLAUDE.md)).
+of the engineering spec (internal)).
 
 ## What the demo does
 

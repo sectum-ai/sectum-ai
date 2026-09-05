@@ -257,8 +257,8 @@ uv run sectum-ai diff out/sectum-isolated/run.json out/sectum/run.json
 ```
 
 Chain of custody (per the playbook): record the image tag, the two run ids + pack
-hashes, the mode/scope, and timestamps under `internal/engagements/` (outside
-this OSS repo).
+hashes, the mode/scope, and timestamps in your engagement record, outside this
+OSS repo.
 
 ## Extending to the READY-with-setup classes
 

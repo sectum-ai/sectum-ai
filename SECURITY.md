@@ -39,7 +39,7 @@ covered.
 | Version | Supported |
 |---|---|
 | `main` | Yes |
-| Latest `0.x` minor (currently `0.6.x`) | Yes |
+| Latest `0.x` minor (currently `0.11.x`) | Yes |
 | Earlier `0.x` minors | No — upgrade to the latest |
 
 This table will be updated as the project matures toward a `1.0` release.

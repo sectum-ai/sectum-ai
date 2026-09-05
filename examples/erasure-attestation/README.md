@@ -29,8 +29,10 @@ The probe verifies erasure across **eight surfaces** — the vector store,
 observability / tracing, agent / long-term memory, semantic / application cache,
 model / fine-tune adapter, derived search index, eval golden set, and backup /
 snapshot store — scanning each independently and reporting a per-surface verdict
-plus a full coverage block. Surfaces with no adapter configured (or excluded via
-`--scope`) are reported `NOT_COVERED`, never `ERASED`; third-party subprocessor
+plus a full coverage block. Surfaces excluded via `--scope` are reported
+`NOT_COVERED`, never `ERASED`. A surface with **no adapter configured** is scanned
+against Sectum's built-in in-memory fake, so its `ERASED` describes that fake, not
+your stack — which is what this demo does on all eight; third-party subprocessor
 residue remains on the roadmap. The attestation always states which surfaces it
 covers. Pass `--scope vector_db` (or a comma-separated list) to verify just a
 subset — a cheaper single-surface "snapshot" engagement.

@@ -8,11 +8,12 @@ specific subject's real records rather than synthetic markers.
 
 ## Two methods
 
-- **By id** — confirm each of the subject's record ids is gone by id (deterministic).
-  The vector store (`fetch`) and semantic cache (`get`) expose a by-id check today.
-- **By content fingerprint** — probe the vector store with the subject's known
-  content and check whether it still surfaces, catching *derived* residual (an
-  embedding copy) that a by-id check would miss.
+- **By id** — confirm each of the subject's record ids is gone by id (deterministic),
+  on the vector store (`fetch`), the semantic cache (`get`), and tracing (`fetch_trace`).
+- **By content fingerprint** — probe with the subject's known content and check
+  whether it still surfaces, catching *derived* residual (an embedding copy, a
+  memorised fine-tune, a memory entry, a search-index hit) that a by-id check would
+  miss — on the vector store, model adapter, agent memory, and search index.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content**, used only to query and stored as a **hash** in the attestation — never

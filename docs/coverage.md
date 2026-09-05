@@ -34,9 +34,9 @@ surfaces were real is not left to the reader to infer: `probe` warns on stderr
 about every synthetic surface, and the run records a `surface_provenance` block
 (`LIVE` / `SYNTHETIC` per surface) inside the signed evidence, so a third party
 reading the pack can tell what the verdicts actually describe. The block is read
-off the constructed adapters, which means a misspelled key — `vector:` for
-`vector_store:` — is recorded as the fake it resolved to, not the backend the
-config appeared to name.
+off the constructed adapters, so an *omitted* family is recorded as the fake it
+resolved to. (A misspelled family key — `vector:` for `vector_store:` — no longer
+reaches this point: it is rejected at config load, since v0.10.0.)
 
 ## Probe → the surface it needs
 
@@ -102,7 +102,7 @@ security reviewer, auditor, or DPO, not a hand-written summary:
 
 | Output | Command | For |
 |---|---|---|
-| Signed `evidence.json` | `report` (`--tsa --rekor` to anchor) | Independent verification via `sectum-ai verify` |
+| Signed `evidence.json` | `report` (`--tsa <url> --rekor` to anchor) | Independent verification via `sectum-ai verify` |
 | DPO / executive **PDF** audit pack | `report --pdf-engine weasyprint` | Humans — DPO, security lead, buyer |
 | **SARIF** 2.1.0 | `probe --output sarif` | The repository's Security → Code-scanning tab |
 | **OSCAL** 1.1.x assessment-results | `probe --output oscal` | GRC platforms, control-mapped |

@@ -1,13 +1,14 @@
 # Compliance mappings
 
-Each finding carries the control identifiers it speaks to, and the audit pack
+Each finding carries its OWASP, ATLAS, and NIST AI RMF identifiers; the framework
+control mappings below are pack-level, and the audit pack
 renders a control-by-control coverage appendix. Mappings are **assertions of
 test coverage, not legal certification** — the reports say so explicitly.
 
 | Framework | Controls | What the evidence asserts |
 |---|---|---|
-| SOC 2 (TSC) | CC6.1, CC6.6, CC6.7 | Tenant logical separation verified by adversarial and benign probing across surfaces. |
-| ISO/IEC 27001:2022 | A.5.15, A.8.3, A.8.12 | Cross-tenant leakage tested; residual leakage itemized. |
+| SOC 2 (TSC) | CC6.1, CC6.6, CC6.7 | Tenant logical separation tested by benign and adversarial probing across the AI surfaces. |
+| ISO/IEC 27001:2022 | A.5.15, A.8.3, A.8.12 | Cross-tenant information leakage tested; residual leakage itemized. |
 | ISO/IEC 42001:2023 | A.6.2.6, A.7.2, A.7.5 | Per-tenant data management and provenance in the AI system tested; isolation verified under operation and monitoring. |
 | GDPR | Art. 17, Art. 32, Art. 25 | Erasure across AI surfaces verified; tenant isolation tested. |
 | CCPA/CPRA | §1798.105, §1798.100, §1798.150 | Deletion of a consumer's personal information across the AI surfaces verified; consumer-data segregation tested. |

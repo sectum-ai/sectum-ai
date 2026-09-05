@@ -64,7 +64,10 @@ Each Class 6 finding carries:
 - **Active reconstruction loop.** The probe verifies the *path*
   (foreign neighbours reachable cross-tenant) — not the full
   reconstruction attack (iterative re-embedding to recover the
-  source text). The path's existence is the leak; closing the
+  source text). The `inversion reconstruction rate` the run prints is
+  the fraction of partial-fragment queries that surfaced a foreign
+  entity canary, i.e. how often the path exists — not a measure of
+  text recovered. The path's existence is the leak; closing the
   path closes the reconstruction surface.
 - **Differential privacy / noise injection.** Some defences add
   noise to returned embeddings to make reconstruction harder.
