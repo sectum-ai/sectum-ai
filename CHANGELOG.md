@@ -40,7 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   >1000-trace tenant became an error rather than the erasure failure it is. It
   now follows the same rule: `search_traces` refuses a miss, `fetch_trace`
   refuses an absence it cannot establish, and `delete` refuses either way,
-  because a purge over a partial listing leaves the rest.
+  because a purge over a partial listing leaves the rest. The OpenSearch
+  search-index scan had the same unconditional refusal, and no unit test at all
+  (only integration tests, which skip without a cluster).
 - **The wedge SKU signed `ERASURE VERIFIED` over a canary it could still
   retrieve.** Class 11's vector scan read a full `k=10` similarity page as
   absence — a marker still stored but ranked below the page looks exactly like a
