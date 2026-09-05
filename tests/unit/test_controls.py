@@ -41,17 +41,74 @@ def test_disclaimer_states_the_mappings_are_not_certification() -> None:
     assert "not a legal certification" in COVERAGE_DISCLAIMER
 
 
-def _run(*, probes: bool = True, erasure: bool = False) -> RunResult:
+def _run(*, probes: bool = True, erasure: bool = False, erasure_only: bool = False) -> RunResult:
     moment = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
+    if erasure_only:
+        ran = {"gdpr-erasure-verification": "0.11.0"}
+    else:
+        ran = {"tenant-boundary-fetch": "0.7.1"} if probes else {}
     return RunResult(
         run_id="run-1",
         scenario_hash="s",
         manifest_hash="m",
         started_at=moment,
         finished_at=moment,
-        metrics=RunMetrics(erasure_coverage={"vector_db": "erased"} if erasure else {}),
-        probe_versions={"tenant-boundary-fetch": "0.7.1"} if probes else {},
+        metrics=RunMetrics(
+            erasure_coverage={"vector_db": "erased"} if (erasure or erasure_only) else {}
+        ),
+        probe_versions=ran,
     )
+
+
+def test_an_erasure_only_run_asserts_only_the_deletion_controls() -> None:
+    """The artifact built for auditors must not assert what the run never tested.
+
+    `sectum-ai erasure` records exactly one probe id, and that id used to satisfy
+    the isolation requirement: both shipped erasure sample packs carried all eleven
+    mappings, including SOC 2 CC6.x "tested by benign and adversarial probing"
+    and EU AI Act Article 15 "robustness ... under adversarial conditions", on the
+    strength of a deletion check.
+    """
+    mappings = control_mappings(_run(erasure_only=True))
+    ids = {i for m in mappings for i in m.control_ids}
+    assert ids == {"Article 17", "1798.105"}, sorted(ids)
+    assert all("adversarial" not in m.assertion for m in mappings)
+
+
+def test_the_pinned_erasure_probe_ids_match_the_probes_own_declarations() -> None:
+    # controls.py cannot import the probes (the evidence package sits below them in
+    # the package graph), so it pins their ids. This holds the pin to the source.
+    from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS
+    from sectum_ai.probes import ErasureProbe, SubjectErasureProbe
+
+    assert {ErasureProbe.id, SubjectErasureProbe.id} == _ERASURE_PROBE_IDS
+
+
+def test_an_erasure_finding_alone_is_not_isolation_evidence() -> None:
+    # Rule 4's reasoning - a finding proves its probe ran - must not let an erasure
+    # residual finding smuggle the isolation controls back in.
+    from uuid import uuid4
+
+    from sectum_ai.spec import Finding, FindingStatus, Severity, Surface
+
+    run = _run(probes=False, erasure=True).model_copy(
+        update={
+            "findings": (
+                Finding(
+                    finding_id="f-1",
+                    probe_id="gdpr-erasure-verification",
+                    severity=Severity.HIGH,
+                    confidence=1.0,
+                    status=FindingStatus.CONFIRMED,
+                    owner_tenant_id=uuid4(),
+                    observed_in_tenant_id=uuid4(),
+                    surface=Surface.VECTOR_DB,
+                ),
+            )
+        }
+    )
+    ids = {i for m in control_mappings(run) for i in m.control_ids}
+    assert "CC6.1" not in ids
 
 
 def test_an_isolation_run_does_not_assert_the_deletion_controls() -> None:

@@ -1402,3 +1402,22 @@ def test_verify_still_catches_a_tampered_erasure_pdf(tmp_path: Path) -> None:
     )
     assert result.exit_code == 4
     assert "altered or replaced after signing" in result.output
+
+
+def test_the_adapters_listing_includes_every_fake_family() -> None:
+    result = _runner.invoke(app, ["adapters"])
+    assert result.exit_code == 0
+    assert "fake-app" in result.output, result.output
+
+
+def test_a_missing_mcp_extra_is_a_typed_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every other live kind wraps its import in _optional_extra; the MCP kinds did
+    # not, so a missing SDK was a raw traceback instead of the exit-3 ConfigError.
+    import sys
+
+    from sectum_ai.config import AdapterConfig, build_mcp
+    from sectum_ai.spec import SectumError
+
+    monkeypatch.setitem(sys.modules, "sectum_ai.adapters.mcp.client", None)
+    with pytest.raises(SectumError, match="mcp"):
+        build_mcp(AdapterConfig(kind="stdio", command="server"))

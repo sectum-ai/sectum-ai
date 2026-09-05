@@ -15,8 +15,9 @@ by failing any pack whose digest no verified independent anchor binds.
 Integrity vs. subject: every check above concerns the *bytes*. A run against
 Sectum's own in-memory fakes passes all of them, so "the signature is valid" and
 "this describes a real system" were unrelated facts and only the first was
-checked. ``require_live=True`` (the default) closes that: a pack whose run
-touched no live backend is refused rather than read as an attestation.
+checked. ``require_live=True`` closes that: a pack whose run touched no live backend
+is refused rather than read as an attestation. The CLI turns it on by default; the
+library defaults to ``False`` (it reports, the CLI decides).
 """
 
 import json

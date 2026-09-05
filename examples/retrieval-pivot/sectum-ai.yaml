@@ -2,7 +2,10 @@
 #
 # corpus_size 24 keeps the Retrieval-Pivot Rate high and legible (81.2% in this
 # showcase: 39 of 48 benign cross-tenant queries surface a foreign marker), which
-# is the point of this showcase. The
+# is the point of this showcase. Note that run.sh passes this file to `seed` only:
+# it runs `probe` WITHOUT --config, so the CLI's built-in demo stack (every leak
+# knob on) is what leaks. Passing this file to `probe --config` builds non-leaky
+# fakes for every omitted family and reports ~0%. The
 # package default is ~500 documents/tenant for realistic seeding (the engineering
 # spec, section 6.2); lower it here only because the demo reads better small.
 scenario:

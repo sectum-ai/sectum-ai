@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An erasure-only attestation asserted every isolation control it never tested.**
+  `controls.py` treated any executed probe as isolation evidence, and the erasure
+  probe counted — so both shipped erasure sample packs carried all eleven
+  framework mappings, including SOC 2 CC6.1/6.6/6.7 *"tested by benign and
+  adversarial probing"* and EU AI Act Article 15 *"robustness under adversarial
+  conditions"*, on the strength of a deletion check. The isolation requirement now
+  excludes the two erasure probe ids (pinned in `controls.py`, since the evidence
+  package cannot import the probes, and held to the probes' declarations by a
+  test). An erasure-only run asserts exactly GDPR Article 17 and CCPA 1798.105.
+  The sample packs are regenerated.
+- **The erasure attestation recorded no surface provenance.** v0.9.0 said a run
+  "now records what it actually interrogated" and that the fix "closes that at
+  all three layers" — true of `probe`, false of `erasure`, whose `RunResult` was
+  built without the block. Its packs therefore reported *"predates surface
+  provenance"* while stamped with the schema that carries it, the audit PDF
+  printed that sentence as fact, and `verify` could not tell a fake-backed DSR
+  attestation from a live one. Both erasure paths now record provenance off their
+  built adapters, and the tenant-level path warns on stderr about synthetic
+  surfaces as the subject path always did.
+- A missing `mcp` SDK is now the typed exit-3 `ConfigError` every other extra
+  gives, not a raw traceback.
+- `sectum-ai adapters` lists the `app` family; its help says it lists the built-in
+  fakes' capabilities rather than "installed adapters".
+- The synthetic-surface warning named a `list-adapters` command that does not
+  exist; the pack README said `report --tsa --rekor` where `--tsa` takes a URL;
+  `verify_pack`'s docstring called `require_live=True` the default (it is the
+  CLI's); the `init` template omitted the `factory` field `langchain` requires;
+  the retrieval-pivot example config promised a rate that file alone cannot
+  produce (its `run.sh` probes without it).
+
+
 ## [0.11.0] - 2026-09-01
 
 The first surface outside the AI stack, and the label discipline that made it

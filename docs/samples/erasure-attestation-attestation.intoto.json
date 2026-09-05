@@ -4,7 +4,7 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "7850d4626ee27519ef1a49006fc836f1891ef473cb2239865553fc90e57c711f"
+        "sha256": "1d12e265fcefc6470e5944f386fe44c4b9805473c3cb530111d72323a385b979"
       }
     }
   ],
@@ -13,8 +13,8 @@
     "schema_version": "0.6.0",
     "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
     "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-08-15T22:02:51.132161+00:00",
-    "finished_at": "2026-08-15T22:02:51.132759+00:00",
+    "started_at": "2026-09-05T07:04:28.424661+00:00",
+    "finished_at": "2026-09-05T07:04:28.425265+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,
@@ -52,41 +52,6 @@
     "finding_count": 0,
     "control_mappings": [
       {
-        "framework": "SOC 2 (TSC)",
-        "control_ids": [
-          "CC6.1",
-          "CC6.6",
-          "CC6.7"
-        ],
-        "assertion": "Tenant logical separation tested by benign and adversarial probing across the AI surfaces."
-      },
-      {
-        "framework": "ISO/IEC 27001:2022",
-        "control_ids": [
-          "A.5.15",
-          "A.8.3",
-          "A.8.12"
-        ],
-        "assertion": "Cross-tenant information leakage tested; residual leakage itemized."
-      },
-      {
-        "framework": "ISO/IEC 42001:2023",
-        "control_ids": [
-          "A.6.2.6",
-          "A.7.2",
-          "A.7.5"
-        ],
-        "assertion": "Per-tenant data management and provenance in the AI system tested; isolation verified under AI system operation and monitoring."
-      },
-      {
-        "framework": "GDPR",
-        "control_ids": [
-          "Article 25",
-          "Article 32"
-        ],
-        "assertion": "Tenant isolation tested across the AI surfaces."
-      },
-      {
         "framework": "GDPR",
         "control_ids": [
           "Article 17"
@@ -96,48 +61,9 @@
       {
         "framework": "CCPA/CPRA",
         "control_ids": [
-          "1798.100",
-          "1798.150"
-        ],
-        "assertion": "Segregation of consumer data tested across the AI surfaces."
-      },
-      {
-        "framework": "CCPA/CPRA",
-        "control_ids": [
           "1798.105"
         ],
         "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
-      },
-      {
-        "framework": "EU AI Act",
-        "control_ids": [
-          "Article 15"
-        ],
-        "assertion": "Robustness of tenant isolation tested under benign and adversarial conditions."
-      },
-      {
-        "framework": "HIPAA",
-        "control_ids": [
-          "164.312(a)(1)",
-          "164.312(c)(1)",
-          "164.312(e)(1)"
-        ],
-        "assertion": "Segregation of regulated tenant data verified across the AI surfaces."
-      },
-      {
-        "framework": "NIST AI RMF",
-        "control_ids": [
-          "MEASURE 2.7",
-          "MANAGE 2.x"
-        ],
-        "assertion": "Documented measurement of multi-tenant security risk."
-      },
-      {
-        "framework": "OWASP LLM Top 10",
-        "control_ids": [
-          "LLM08:2025"
-        ],
-        "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
       }
     ],
     "anchors": {
