@@ -25,7 +25,7 @@ from sectum_ai.spec.enums import (
     SurfaceProvenance,
 )
 
-SCHEMA_VERSION = "0.6.0"
+SCHEMA_VERSION = "0.7.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
@@ -45,6 +45,13 @@ which surfaced a foreign marker) and a Wilson score interval on the rate
 (``retrieval_pivot_rate_ci``). The counts make the interval reproducible from the
 signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
+
+0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
+the user-level steps the runner did not run because the adapter cannot carry a
+user identity to its backend. Without it a run that quietly stopped exercising
+the user boundary (a live MCP client configured without ``user_argument``) was
+indistinguishable from one that exercised it and found it clean, so ``diff``
+and ``baseline --compare`` read twelve resolved cross-user leaks as a fix.
 
 0.6.0 — :class:`RunResult` records ``surface_provenance`` (surface ->
 :class:`~sectum_ai.spec.enums.SurfaceProvenance`): whether each adapter family
@@ -360,6 +367,10 @@ class RunMetrics(SectumModel):
     poisoning_bleed_delta: float | None = None
     inversion_reconstruction_rate: float | None = None
     extraction_efficiency: float | None = None
+    # Probe id -> user-level steps the runner dropped because the adapter cannot
+    # carry the user (``Adapter.carries_user``). Inside the canonical hash, so a
+    # narrowed run cannot pass for one that exercised the user boundary.
+    user_steps_dropped: dict[str, int] = Field(default_factory=dict)
 
 
 class RunResult(SectumModel):

@@ -81,20 +81,34 @@ def scramble(prefix: str) -> str | None:
 
 def content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
     """Whether ``model`` still reproduces ``phrase`` for ``target``, controls applied."""
-    if phrase.casefold() in model.infer(target, phrase).casefold():
+    if _reproduced(model, target, phrase, phrase.casefold()):
         return True
     split = continuation_split(phrase)
     if split is None:
         return False
     prefix, suffix = split
-    if suffix not in model.infer(target, prefix).casefold():
+    return _reproduced(model, target, prefix, suffix)
+
+
+def _reproduced(model: ModelAdapter, target: UUID, prompt: str, needle: str) -> bool:
+    """``needle`` in the completion of ``prompt`` - and not for the controls.
+
+    The whole-phrase echo branch used to count with no control at all: a chatty
+    base model that restates the prompt ("I have no record matching 'John
+    Smith'") signed a RESIDUAL for a tenant that trained nothing, and a hard
+    delete then read as an erasure failure.
+    """
+    if needle not in model.infer(target, prompt).casefold():
         return False
-    control = scramble(prefix)
-    if control is not None and suffix in model.infer(target, control).casefold():
+    control = scramble(prompt)
+    if control is None:
+        # A prompt with no scrambled form has no control: not evidence either way.
+        return False
+    if needle in model.infer(target, control).casefold():
         return False
     if model.supports(Capability.PER_TENANT_ADAPTER) and not model.supports(
         Capability.SHARED_WEIGHTS
     ):
         # A tenant that trained nothing answers from the base weights.
-        return suffix not in model.infer(uuid4(), prefix).casefold()
+        return needle not in model.infer(uuid4(), prompt).casefold()
     return True

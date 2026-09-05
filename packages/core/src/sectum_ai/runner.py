@@ -33,6 +33,9 @@ _log = get_logger(__name__)
 StepResult = tuple[ProbeStep, list[Finding]]
 """One planned step paired with the findings it produced."""
 
+# Steps that write on behalf of a principal and are never judged.
+_PLANT_ACTIONS = frozenset({"vector.upsert", "cache.set", "model.train", "memory.write"})
+
 
 def payload_int(step: ProbeStep, key: str, default: str) -> int:
     """Read an integer payload value, raising a typed ``AdapterError`` on bad input.
@@ -86,6 +89,9 @@ class Runner:
         self._rag = rag
         self._observability = observability
         self._agent = agent
+        # Probe id -> user-level steps not run (see run_per_step); the CLI records
+        # it in the signed run so a narrowed run cannot pass for a full one.
+        self.dropped_user_steps: dict[str, int] = {}
 
     def preflight(self, probe: Probe) -> None:
         """Raise ``ConfigError`` if the probe's declared adapters are not configured.
@@ -113,13 +119,21 @@ class Runner:
         self.preflight(probe)
         results: list[StepResult] = []
         dropped = 0
-        for step in probe.plan(self._substrate):
+        for planned in probe.plan(self._substrate):
+            step = planned
             if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
-                dropped += 1
-                continue
+                if step.action not in _PLANT_ACTIONS:
+                    dropped += 1
+                    continue
+                # A plant is not judged: run it as the tenant the user belongs to,
+                # which is what the adapter would do with the user anyway. Dropping
+                # it starved the tenant-level reads that depend on it, so a store
+                # that leaks across TENANTS read clean with the probe recorded.
+                step = planned.model_copy(update={"actor_user_id": None})
             observation = self._execute(step)
             results.append((step, probe.detect(step, observation, self._substrate)))
         if dropped:
+            self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + dropped
             _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
         # Operational metadata only — step payloads and observations (tenant
         # content) are never logged here (the engineering spec, section 16).

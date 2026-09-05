@@ -24,11 +24,14 @@ must not (so `@example.com` after any local part, or `Smith` after `John`, is a
 generic completion, not recall); and on a model that routes per tenant, the same
 prefix as a tenant that trained nothing must not either (so `Hussein Obama`
 after `Barack` is the base model's world knowledge, not the tenant's residual).
-The scrambled control works for any script, not only Latin. An email is cut
-inside its local part. A phrase the check cannot verify — a trailing part under
-six characters, a bare two-word name, a prefix with no scrambled form — makes
-the whole model surface `NOT_COVERED` for the subject, and the run says how many
-supplied fingerprints it could not check. The tenant probe's canary scan uses the
+The scrambled control works for any script, not only Latin, and both controls
+apply to the whole-phrase echo too (a chatty base model that restates the prompt
+is not recall). An email is cut inside its local part. A phrase the check cannot
+verify — a trailing part under six characters, a bare two-word name, a prefix
+with no scrambled form — is counted and the verifiable phrases are still
+scanned: the model surface reads `RESIDUAL` if any of them is recalled, else
+`NOT_COVERED` for the subject (never `ERASED` while something was unchecked), and
+the run says how many supplied fingerprints it could not check. The tenant probe's canary scan uses the
 same continuation test, so a real LoRA that memorised a canary and continues it
 (rather than echoing it) is `RESIDUAL`, not invisible.
 

@@ -167,3 +167,10 @@ def test_mem0_refuses_a_listing_that_hit_its_limit() -> None:
         client._by_user[_TENANT_A.hex].append(f"bulk {index}")
     with pytest.raises(AdapterError, match="listing limit"):
         adapter.recall(_TENANT_A, "anything")
+
+
+def test_mem0_does_not_carry_the_user() -> None:
+    # mem0's flat user_id space is the tenant; inheriting carries_user=True let
+    # Class 8 plan user-level steps and confirm cross-user leaks of sessions that
+    # never existed - the sibling of the live-MCP defect.
+    assert Mem0Memory(_FakeMem0()).carries_user is False

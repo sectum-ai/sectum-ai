@@ -1,5 +1,5 @@
 {
-  "$id": "https://schemas.sectum.ai/0.6.0/ProbeStep.schema.json",
+  "$id": "https://schemas.sectum.ai/0.7.0/ProbeStep.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "A single planned probe action issued from one principal's session.\n\n``actor_user_id`` is set when the step is issued from a specific user within\n``actor_tenant_id``'s tenant (ADR-0006); a tenant-level step leaves it\n``None`` and behaves exactly as before.",

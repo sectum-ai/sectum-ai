@@ -269,6 +269,13 @@
           },
           "title": "Side Channel Effect Sizes",
           "type": "object"
+        },
+        "user_steps_dropped": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "User Steps Dropped",
+          "type": "object"
         }
       },
       "title": "RunMetrics",
@@ -308,7 +315,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.6.0/RunResult.schema.json",
+  "$id": "https://schemas.sectum.ai/0.7.0/RunResult.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The canonical record of one probe run (the engineering spec, section 9).",
@@ -356,7 +363,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "0.6.0",
+      "default": "0.7.0",
       "title": "Schema Version",
       "type": "string"
     },

@@ -54,8 +54,11 @@ outputs:
     description: "Path to the run.json the probe wrote in the workdir."
     value: ${{ steps.probe.outputs.run-path }}
   confirmed-findings:
-    description: "Number of confirmed cross-tenant findings (populated when output is json)."
+    description: "Number of confirmed findings of any kind, on every surface including the built-in fakes (populated when output is json)."
     value: ${{ steps.probe.outputs.confirmed-findings }}
+  confirmed-on-live-surfaces:
+    description: "Of those, the confirmed findings on surfaces that ran against a live backend (populated when output is json)."
+    value: ${{ steps.probe.outputs.confirmed-on-live-surfaces }}
   retrieval-pivot-rate:
     description: "Headline Retrieval-Pivot Rate (populated when output is json and Class 2 ran)."
     value: ${{ steps.probe.outputs.retrieval-pivot-rate }}
@@ -124,8 +127,10 @@ runs:
         echo "run-path=${SECTUM_WORKDIR}/run.json" >> "${GITHUB_OUTPUT}"
         if [ "${SECTUM_OUTPUT}" = "json" ] && command -v jq >/dev/null 2>&1; then
           cf=$(jq -r '.confirmed_findings // ""' "${SECTUM_OUTPUT_FILE}" 2>/dev/null || echo "")
+          live=$(jq -r '.confirmed_on_live_surfaces // ""' "${SECTUM_OUTPUT_FILE}" 2>/dev/null || echo "")
           rpr=$(jq -r '.retrieval_pivot_rate // ""' "${SECTUM_OUTPUT_FILE}" 2>/dev/null || echo "")
           echo "confirmed-findings=${cf}" >> "${GITHUB_OUTPUT}"
+          echo "confirmed-on-live-surfaces=${live}" >> "${GITHUB_OUTPUT}"
           echo "retrieval-pivot-rate=${rpr}" >> "${GITHUB_OUTPUT}"
           {
             echo "### Sectum AI — multi-tenant leak check"

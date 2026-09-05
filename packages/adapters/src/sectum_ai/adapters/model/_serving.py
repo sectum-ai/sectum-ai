@@ -44,8 +44,10 @@ class _ServingModel(ModelAdapter):
     serves every tenant from the same weights and the same KV / prefix cache — which
     is exactly the Class 5 surface the timing probe measures. Concrete adapters set
     ``_default_name`` and provide a ``connect`` classmethod that builds the backend.
+    ``carries_user`` is False for the same reason: the user never reaches the server.
     """
 
+    carries_user = False
     _default_name = "serving"
 
     def __init__(self, backend: _ServingBackend, *, name: str | None = None) -> None:

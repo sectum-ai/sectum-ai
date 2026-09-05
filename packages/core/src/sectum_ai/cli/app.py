@@ -940,6 +940,7 @@ def probe(
             # in-memory recall illustration. See _per_model_rpr.
             retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
             per_probe_findings=_per_probe_counts(confirmed),
+            user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
             poisoning_bleed_delta=(
                 confirmed_finding_rate(poison_query_steps) if poison_query_steps else None
@@ -990,6 +991,16 @@ def probe(
             "inversion_reconstruction_rate": run.metrics.inversion_reconstruction_rate,
             "extraction_efficiency": run.metrics.extraction_efficiency,
             "per_probe_findings": run.metrics.per_probe_findings,
+            # What the counts above describe: a confirmed finding on a surface that
+            # ran against the built-in fake describes that fake, and a probe whose
+            # user-level steps were not run exercised the tenant boundary only.
+            "surface_provenance": dict(run.surface_provenance),
+            "confirmed_on_live_surfaces": sum(
+                1
+                for finding in confirmed
+                if run.surface_provenance.get(finding.surface.value) == SurfaceProvenance.LIVE.value
+            ),
+            "user_steps_dropped": run.metrics.user_steps_dropped,
             "run_path": str(path),
         }
         typer.echo(json.dumps(summary, indent=2))
@@ -1029,6 +1040,7 @@ def probe(
                 typer.echo(f"{label}: {class_rate:.0%}")
         typer.echo(f"run recorded -> {path}")
     _warn_on_synthetic_surfaces(run.surface_provenance)
+    _warn_on_dropped_user_steps(run.metrics.user_steps_dropped)
     if confirmed:
         raise typer.Exit(code=2)
 
@@ -1088,6 +1100,18 @@ def _exercised_surfaces(
     if kv_report is not None and kv_report.signals:
         exercised.add(bundle.model.surface.value)
     return exercised
+
+
+def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
+    if not dropped:
+        return
+    names = ", ".join(f"{probe_id} ({count})" for probe_id, count in sorted(dropped.items()))
+    typer.echo(
+        f"warning: user-level steps were not run for {names}: the adapter cannot carry "
+        "a user identity to its backend (set its user_argument, where the family has "
+        "one), so these probes verified the tenant boundary only",
+        err=True,
+    )
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -2469,11 +2493,18 @@ def baseline(
             f"[SCOPE LOST] {untrusted(surface)}: live in the baseline, the built-in fake "
             "(or absent) in this run; its verdicts describe the fake, not your stack"
         )
+    for probe_id in result.boundary_lost:
+        typer.echo(
+            f"[BOUNDARY LOST] {untrusted(probe_id)}: its user-level steps were not run in "
+            "this run (the adapter cannot carry the user); any resolved cross-user "
+            "finding was not re-tested"
+        )
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
             "a confirmed leak escalated in severity, a probe the baseline "
-            "covered was not run, or a live surface fell back to the fake.",
+            "covered was not run, a live surface fell back to the fake, or a probe's "
+            "user-level steps were not run.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -2604,6 +2635,12 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f"[SCOPE LOST] {untrusted(surface)}: live in the earlier run, the built-in "
             "fake (or absent) in this one; its verdicts describe the fake, not your stack"
         )
+    for probe_id in result.boundary_lost:
+        typer.echo(
+            f"[BOUNDARY LOST] {untrusted(probe_id)}: its user-level steps were not run in "
+            "the later run (the adapter cannot carry the user); any resolved cross-user "
+            "finding was not re-tested"
+        )
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -2632,6 +2669,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         ],
         "coverage_lost": list(result.coverage_lost),
         "scope_lost": list(result.scope_lost),
+        "boundary_lost": list(result.boundary_lost),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))

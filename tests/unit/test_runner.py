@@ -509,3 +509,42 @@ def test_declared_requires_adapters_match_what_each_probe_plans() -> None:
         )
         checked += 1
     assert checked >= 11  # all plan/detect probes were covered
+
+
+def test_user_level_plants_run_as_the_tenant_and_only_reads_are_dropped() -> None:
+    # Dropping every user-level step starved the tenant-level reads that depend on
+    # the user-owned plants, so a store that leaks across TENANTS read clean with
+    # the probe recorded as run.
+    from sectum_ai.probes import MemoryContamProbe, confirmed_findings
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    class _TenantOnlySharedMemory(FakeMemory):
+        carries_user = False
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="memory-two-tenants-of-users",
+            seed=3,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=n),
+                    display_name=f"T{n}",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+                    ),
+                )
+                for n in (1, 2)
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    runner = Runner(substrate, memory=_TenantOnlySharedMemory(shared_memory=True))
+    results = runner.run_per_step(MemoryContamProbe())
+    assert all(step.actor_user_id is None for step, _ in results)
+    assert any(step.action == "memory.write" for step, _ in results), "plants ran as the tenant"
+    found = confirmed_findings([f for _, fs in results for f in fs])
+    assert found and all(f.owner_tenant_id != f.observed_in_tenant_id for f in found)
+    assert runner.dropped_user_steps.get(MemoryContamProbe.id, 0) > 0

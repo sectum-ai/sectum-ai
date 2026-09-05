@@ -40,7 +40,16 @@ def _tokens(text: str) -> set[str]:
 
 
 class Mem0Memory(MemoryAdapter):
-    """A long-term / agent-memory store backed by mem0, one ``user_id`` per tenant."""
+    """A long-term / agent-memory store backed by mem0, one ``user_id`` per tenant.
+
+    ``carries_user`` is False: mem0's flat ``user_id`` space is the tenant, so a
+    call made as a user reaches mem0 as the tenant. Inheriting True let Class 8
+    plan user-level steps here and confirm cross-user leaks of sessions that never
+    existed. The listing-limit refusal assumes the OSS ``Memory`` client, which
+    ``connect`` builds; the hosted ``MemoryClient`` ignores ``limit``.
+    """
+
+    carries_user = False
 
     def __init__(
         self,

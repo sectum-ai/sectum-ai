@@ -275,10 +275,13 @@ def test_user_level_steps_are_dropped_for_an_adapter_that_cannot_carry_the_user(
             mcp.provision(
                 marker.owner_tenant_id, marker.marker_id, f"Reference: {marker.plaintext}"
             )
-    results = Runner(substrate, mcp=mcp).run_per_step(AgentToolHijackProbe())
+    runner = Runner(substrate, mcp=mcp)
+    results = runner.run_per_step(AgentToolHijackProbe())
     assert results, "the tenant-level steps still run"
     assert all(step.actor_user_id is None for step, _ in results)
     assert confirmed_findings([f for _, fs in results for f in fs]) == []
+    # and the narrowing is counted, so the signed run can carry it
+    assert runner.dropped_user_steps[AgentToolHijackProbe.id] > 0
     # the same fake carrying the user reports the cross-user leak it really has
     leaky = _seeded_mcp_users(substrate, user_scoped=False)
     assert confirmed_findings(Runner(substrate, mcp=leaky).run(AgentToolHijackProbe()))
