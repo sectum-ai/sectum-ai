@@ -25,6 +25,7 @@ from sectum_ai.spec import (
     Finding,
     FindingStatus,
     Grade,
+    RunMetrics,
     RunResult,
     ScoreScope,
     Severity,
@@ -216,3 +217,19 @@ def test_a_provenance_key_that_is_not_a_surface_is_refused() -> None:
     )
     with pytest.raises(ValidationError, match="keys must be surfaces"):
         _run({"api": "LIVE", forged: "SYNTHETIC"})
+
+
+def test_an_erasure_coverage_key_or_verdict_that_is_not_a_member_is_refused() -> None:
+    # The identical-shaped `surface_provenance` validates both halves; this block
+    # did neither, and the auditor PDF prints it verbatim into the "Coverage &
+    # caveats" matrix. A record could name a surface that does not exist and give
+    # it a verdict that is not one - "FULLY ERASED" - and the pack still verified
+    # clean with the invention drawn into the artifact an auditor receives.
+    with pytest.raises(ValidationError, match="erasure_coverage keys must be surfaces"):
+        RunMetrics(erasure_coverage={"vector_db (verified 2026-05-18)": "ERASED"})
+    with pytest.raises(ValidationError, match="erasure_coverage values must be one of"):
+        RunMetrics(erasure_coverage={"vector_db": "FULLY ERASED"})
+    # The legitimate shape still parses.
+    assert RunMetrics(erasure_coverage={"vector_db": "ERASED"}).erasure_coverage == {
+        "vector_db": "ERASED"
+    }

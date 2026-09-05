@@ -359,3 +359,61 @@ def test_weasyprint_html_omits_coverage_for_a_non_erasure_pack() -> None:
     # A non-erasure pack (no coverage metric) has no Coverage section at all.
     html = build_audit_html(_pack(with_finding=True))
     assert "Coverage &amp; caveats" not in html
+
+
+def test_the_pdf_recomputes_the_rate_from_the_counts_it_was_given() -> None:
+    # The summary relayed `retrieval_pivot_rate` and its interval verbatim, so a
+    # record whose own counts said 334 of 350 printed "2.0% (95% CI 1.9%-2.1%,
+    # n=350)" into the signed, auditor-facing PDF - while `score`, which
+    # recomputes, read the same record as 95.4%. Refusing to invent an interval
+    # while faithfully relaying a fabricated one reads identically to the auditor.
+    line = _retrieval_pivot_summary(
+        _rpr_run(
+            RunMetrics(
+                retrieval_pivot_n=350,
+                retrieval_pivot_k=334,
+                retrieval_pivot_rate=0.02,
+                retrieval_pivot_rate_ci=(0.019, 0.021),
+            )
+        )
+    )
+    assert line is not None
+    assert line.startswith("95.4%"), line
+    assert "1.9%" not in line and "2.1%" not in line
+
+    # No counts: the rate is all the record has, and any interval it asserts is
+    # uncheckable, so it is shown bare rather than dressed in one.
+    bare = _retrieval_pivot_summary(
+        _rpr_run(RunMetrics(retrieval_pivot_rate=0.125, retrieval_pivot_rate_ci=(0.124, 0.126)))
+    )
+    assert bare == "12.5%"
+
+    # Counts that contradict themselves state nothing.
+    assert (
+        _retrieval_pivot_summary(_rpr_run(RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=99)))
+        is None
+    )
+
+
+def test_both_pdf_engines_state_the_same_summary_facts() -> None:
+    # `pdf_weasyprint` promises it "mirrors the reportlab renderer's sections and
+    # reuses its shared content ... so both engines assert the same facts", and it
+    # had silently dropped the flagship Retrieval-Pivot Rate row: two packs of the
+    # same run said different things depending on an optional dependency. Compare
+    # the row LABELS rather than the rendered bytes, which legitimately differ.
+    from sectum_ai.evidence.pdf_weasyprint import build_audit_html
+
+    metrics = RunMetrics(retrieval_pivot_n=48, retrieval_pivot_k=39)
+    run = _rpr_run(metrics)
+    html = build_audit_html(EvidencePack(run_result=run, manifest_hash=run.manifest_hash))
+    for label in (
+        "Run started",
+        "Run finished",
+        "Probes exercised",
+        "Findings recorded",
+        "Confirmed findings",
+        "Retrieval-Pivot Rate",
+    ):
+        assert label in html, f"the weasyprint engine omits the {label!r} summary row"
+    rpr = _retrieval_pivot_summary(run)
+    assert rpr is not None and rpr in html

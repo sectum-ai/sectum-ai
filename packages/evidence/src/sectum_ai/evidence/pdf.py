@@ -29,6 +29,7 @@ from sectum_ai.spec import (
     RunResult,
     SurfaceProvenance,
     sha256_hex,
+    wilson_interval,
 )
 
 # Canonical erasure-surface order for the coverage matrix, kept here (rather than
@@ -63,8 +64,11 @@ _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
 # it did NOT verify, so a NOT_COVERED surface is never read as erased.
 _COVERAGE_CAVEAT = (
     "Coverage states what this attestation verified, surface by surface. A "
-    "NOT_COVERED surface was out of scope, had no configured adapter, or showed "
-    "no pre-erasure baseline - it is explicitly not evidence of erasure and must "
+    "NOT_COVERED surface was out of scope, had no configured adapter, showed "
+    "no pre-erasure baseline, or was scanned without establishing the markers' "
+    "absence (the backend returned a full page of results without them, which a "
+    "marker still stored but ranked below the page produces too) - it is "
+    "explicitly not evidence of erasure and must "
     "not be read as erased. ERASED is measured through the erased tenant's own read "
     "path: a backend that retains the data while revoking that path is "
     "indistinguishable from one that purged it, from outside. ATTESTABLE WITH "
@@ -342,13 +346,25 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
         The formatted rate string, or ``None`` when the run recorded no rate.
     """
     metrics = run.metrics
+    # Recomputed from the record's binomial COUNTS, never relayed from the rate and
+    # interval the record asserts about itself - the rule `score._headline` already
+    # follows, and for the same reason: the counts are the evidence, the rate and
+    # interval are bookkeeping. Relaying them let a record whose counts said 334 of
+    # 350 print `2.0% (95% CI 1.9%-2.1%, n=350)` into the auditor's signed PDF,
+    # while `score` read the same record as 95.4%. Refusing to invent an interval
+    # while faithfully relaying a fabricated one reads identically to the auditor.
+    if metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+        # The record contradicts its own counts, so there is nothing here to state.
+        return None
+    if metrics.retrieval_pivot_n > 0:
+        rate = metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
+        low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
+        return f"{rate:.1%} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
     if metrics.retrieval_pivot_rate is None:
         return None
-    rate = f"{metrics.retrieval_pivot_rate:.1%}"
-    if metrics.retrieval_pivot_rate_ci is None:
-        return rate
-    low, high = metrics.retrieval_pivot_rate_ci
-    return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+    # No counts, so the rate is all the record has, and any interval it asserts is
+    # uncheckable - there is no sample size to compute one from. Shown bare.
+    return f"{metrics.retrieval_pivot_rate:.1%}"
 
 
 def _render_reportlab(pack: EvidencePack) -> bytes:

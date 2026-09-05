@@ -32,6 +32,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Class 5 timing probe manufactured 12 confirmed cross-tenant findings
+  against a model with no cache.** The ABBA schedule derived arm order from
+  `trial % 2`, which pins each arm to a fixed pair of residues mod 4 — primed at
+  call indices {0,3}, control at {1,2}. Behind a four-way round-robin dispatcher,
+  where the replica *is* the call index mod 4, the arms sit on disjoint replica
+  sets, so any spread across the pool lands entirely on one arm: a pool with two
+  fast replicas where the primed arm falls gave Cohen's d = 19.5 and 12 CONFIRMED
+  HIGH findings. ABBA cancels a linear drift; a period-4 systematic it does not
+  touch. The order is now shuffled from a seed derived from the tenant pair —
+  still reproducible, still balanced 12/12.
+- **A Weaviate read created the tenant's collection.** A post-erasure re-scan
+  therefore recreated the namespace it was attesting purged, so `list_namespaces`
+  showed the tenant again — and a cross-tenant Class 1 fetch did the same for a
+  tenant the operator never provisioned: a read that WRITES to the customer's
+  production store. Chroma, Qdrant, Milvus and Azure AI Search all guard their
+  reads; this was the one that did not.
+- **The auditor's PDF relayed the rate and confidence interval the record asserts
+  about itself.** A record whose own counts said 334 of 350 printed `2.0% (95% CI
+  1.9%-2.1%, n=350)` into the signed pack, while `score` — which recomputes from
+  the counts — read the same record as 95.4%. The PDF now recomputes too, shows a
+  bare rate when there are no counts rather than dressing it in an uncheckable
+  interval, and states nothing at all when the counts contradict themselves.
+- **`erasure_coverage` accepted any key and any verdict string**, while its
+  identical-shaped sibling `surface_provenance` validates both — and the PDF
+  prints the block verbatim into the "Coverage & caveats" matrix an auditor
+  reads, so a record could invent a surface and give it the verdict
+  "FULLY ERASED" and still verify clean.
+- The weasyprint engine dropped the flagship Retrieval-Pivot Rate row, so two
+  packs of the same run asserted different things depending on an optional
+  dependency; a test now pins both engines to the same summary rows. The PDF's
+  `NOT_COVERED` caveat names the fourth cause (a scan that could not establish
+  the markers' absence), which the previous cycle added to the code and not to
+  the artifact.
 - **A capped listing attested ERASED because the refusal was gated on a hit the
   caller never counts.** The eval-set and memory adapters report hits by token
   overlap; the Class 11 probe counts an exact substring. Every hard canary shares

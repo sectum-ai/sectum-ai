@@ -25,6 +25,7 @@ SciPy/NumPy dependency (the spec, section 13: dependency discipline).
 
 import hashlib
 import math
+import random
 import statistics
 from dataclasses import dataclass
 from uuid import UUID
@@ -329,13 +330,26 @@ class KvCacheTimingProbe:
         # Manufacturing a cross-tenant finding out of ambient machine noise is the
         # worst direction for a signed evidence pack to be wrong in.
         #
-        # Alternating (ABBA rather than ABAB) makes the two arms' mean measurement
-        # positions equal, so a linear drift cancels exactly rather than merely
-        # shrinking - which is why _TRIALS must stay even. Higher-order drift (a GC
-        # pause mid-run) is damped, not eliminated; the Bonferroni-corrected alpha
-        # and the effect-size floor remain the guards against that.
+        # Alternating makes the two arms' mean measurement positions equal, so a
+        # linear drift cancels exactly rather than merely shrinking - which is why
+        # _TRIALS must stay even. Higher-order drift (a GC pause mid-run) is damped,
+        # not eliminated; the Bonferroni-corrected alpha and the effect-size floor
+        # remain the guards against that.
+        #
+        # The order is SHUFFLED, not `trial % 2`. A fixed ABBA schedule puts each
+        # arm on a fixed pair of residues mod 4 - primed at call indices {0,3},
+        # control at {1,2} - so behind a 4-way round-robin dispatcher, where the
+        # replica IS the call index mod 4, the two arms are pinned to disjoint
+        # replica sets. A 5% spread across the pool, or one slow node in four, then
+        # manufactured 12 CONFIRMED cross-tenant findings against a model with no
+        # cache at all. A period-4 systematic is not damped by ABBA; it lands
+        # entirely on one arm. The shuffle is seeded from the pair, so the run stays
+        # reproducible, and stays balanced 12/12 so the mean-position argument above
+        # still holds.
         primed: list[float] = []
         control: list[float] = []
+        primed_first = [True] * (_TRIALS // 2) + [False] * (_TRIALS - _TRIALS // 2)
+        random.Random(owner.bytes + observer.bytes).shuffle(primed_first)
         for trial in range(_TRIALS):
             primed_prompt = f"{prefixes[trial]} probe {trial}"
             # Unique per (owner, observer, trial): a control prefix reused across
@@ -344,7 +358,7 @@ class KvCacheTimingProbe:
                 f"u{_key(observer)[:6]}{_key(owner)[:6]}-{trial:02d}-ctl {_PREFIX_FILLER} "
                 f"probe {trial}"
             )
-            if trial % 2 == 0:
+            if primed_first[trial]:
                 primed.append(self._model.measure_latency(observer, primed_prompt))
                 control.append(self._model.measure_latency(observer, control_prompt))
             else:

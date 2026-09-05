@@ -89,6 +89,22 @@ class WeaviateVectorStore(VectorStoreAdapter):
     def _vector(self, text: str) -> list[float]:
         return [float(value) for value in self._embed(text)]
 
+    def _existing_collection(self, tenant: UUID) -> Any | None:
+        """The tenant's collection, or ``None`` - a read must never create one.
+
+        `_collection` creates on first use, which is right for a write and wrong
+        for a read: a post-erasure re-scan recreated the (empty) collection it was
+        checking, so `list_namespaces` showed the purged tenant again and the
+        Class 11 attestation described a namespace its own scan had just made. A
+        cross-tenant Class 1 fetch did the same to a tenant the operator never
+        provisioned - a read that WRITES to the customer's production store. The
+        Chroma adapter was retrofitted for exactly this; this is its sibling.
+        """
+        name = self._collection_name(tenant)
+        if not self._client.collections.exists(name):
+            return None
+        return self._client.collections.get(name)
+
     def _collection(self, tenant: UUID) -> Any:
         """Return the tenant's collection, creating it on first use."""
         name = self._collection_name(tenant)
@@ -134,7 +150,9 @@ class WeaviateVectorStore(VectorStoreAdapter):
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
     ) -> list[VectorHit]:
-        collection = self._collection(tenant)
+        collection = self._existing_collection(tenant)
+        if collection is None:
+            return []
         user_filter = self._user_filter(user)
         result = collection.query.near_vector(
             self._vector(text),
@@ -153,7 +171,9 @@ class WeaviateVectorStore(VectorStoreAdapter):
         ]
 
     def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
-        collection = self._collection(tenant)
+        collection = self._existing_collection(tenant)
+        if collection is None:
+            return None
         obj = collection.query.fetch_object_by_id(generate_uuid5(doc_id))
         if obj is None:
             return None

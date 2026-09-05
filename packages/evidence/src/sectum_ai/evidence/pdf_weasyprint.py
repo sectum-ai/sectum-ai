@@ -27,6 +27,7 @@ from sectum_ai.evidence.pdf import (
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    _retrieval_pivot_summary,
     confirmed_by_kind,
     probes_exercised,
     provenance_statement,
@@ -164,13 +165,20 @@ def build_audit_html(pack: EvidencePack) -> str:
     """
     run = pack.run_result
 
-    summary = (
+    summary_rows = [
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
         ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed findings", confirmed_by_kind(run)),
-    )
+    ]
+    # The flagship Class 2 metric. Its absence here meant the two engines' packs
+    # asserted different things about the same run, against this module's own
+    # promise that they "assert the same facts".
+    rpr_line = _retrieval_pivot_summary(run)
+    if rpr_line is not None:
+        summary_rows.append(("Retrieval-Pivot Rate", rpr_line))
+    summary = tuple(summary_rows)
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),

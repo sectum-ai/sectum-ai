@@ -15,6 +15,7 @@ from sectum_ai.spec.enums import (
     AccessOutcome,
     ClassVerdict,
     Confidence,
+    CoverageVerdict,
     FindingStatus,
     Grade,
     MarkerType,
@@ -377,6 +378,30 @@ class RunMetrics(SectumModel):
     # carry the user (``Adapter.carries_user``). Inside the canonical hash, so a
     # narrowed run cannot pass for one that exercised the user boundary.
     user_steps_dropped: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("erasure_coverage")
+    @classmethod
+    def _coverage_keys_and_verdicts_are_members(cls, value: dict[str, str]) -> dict[str, str]:
+        # The identical-shaped `surface_provenance` validates both halves; this
+        # block did neither, and the auditor PDF prints it verbatim into the
+        # "Coverage & caveats" matrix. A record could name a surface that does not
+        # exist and give it a verdict that is not one - "FULLY ERASED" - and the
+        # pack verified clean with the invention drawn into the artifact.
+        surfaces = {member.value for member in Surface}
+        verdicts = {member.value for member in CoverageVerdict}
+        bad_keys = sorted(key for key in value if key not in surfaces)
+        if bad_keys:
+            raise ValueError(
+                f"erasure_coverage keys must be surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad_keys)}"
+            )
+        bad_values = sorted(key for key, verdict in value.items() if verdict not in verdicts)
+        if bad_values:
+            raise ValueError(
+                f"erasure_coverage values must be one of {sorted(verdicts)}; "
+                f"not so for: {', '.join(bad_values)}"
+            )
+        return value
 
 
 class RunResult(SectumModel):
