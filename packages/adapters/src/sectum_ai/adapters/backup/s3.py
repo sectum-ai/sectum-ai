@@ -22,7 +22,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # S3 caps a single delete_objects request at 1000 keys; boto3's low-level client
@@ -56,6 +56,7 @@ class S3Backup(BackupAdapter):
         self._prefix = prefix
         self._no_erasure = no_erasure
         self._soft_delete = soft_delete
+        self._versioned: bool | None = None
 
     @classmethod
     def connect(
@@ -98,12 +99,31 @@ class S3Backup(BackupAdapter):
     def _tenant_prefix(self, tenant: UUID) -> str:
         return f"{self._prefix}/{tenant.hex}/"
 
-    def _keys(self, tenant: UUID) -> list[str]:
-        keys: list[str] = []
+    def _is_versioned(self) -> bool:
+        # On a versioned bucket (Object Lock implies versioning) a plain delete
+        # inserts a delete marker and keeps every version; list_objects_v2 then
+        # omits the key, so a scan read the retained data as gone and the
+        # erasure verified. Versions are listed and deleted explicitly instead.
+        if self._versioned is None:
+            status = self._client.get_bucket_versioning(Bucket=self._bucket).get("Status")
+            self._versioned = status in ("Enabled", "Suspended")
+        return self._versioned
+
+    def _objects(self, tenant: UUID) -> list[tuple[str, str | None]]:
+        """Every (key, version id) holding the tenant's data; version id None when unversioned."""
+        prefix = self._tenant_prefix(tenant)
+        objects: list[tuple[str, str | None]] = []
+        if self._is_versioned():
+            paginator = self._client.get_paginator("list_object_versions")
+            for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+                objects.extend(
+                    (version["Key"], version["VersionId"]) for version in page.get("Versions", [])
+                )
+            return objects
         paginator = self._client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=self._bucket, Prefix=self._tenant_prefix(tenant)):
-            keys.extend(obj["Key"] for obj in page.get("Contents", []))
-        return keys
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+            objects.extend((obj["Key"], None) for obj in page.get("Contents", []))
+        return objects
 
     def add(self, tenant: UUID, text: str) -> None:
         # Key the object by a content hash so re-adding the same snapshot is
@@ -118,8 +138,12 @@ class S3Backup(BackupAdapter):
     def search(self, tenant: UUID, query: str) -> list[str]:
         query_tokens = _tokens(query)
         hits: list[str] = []
-        for key in self._keys(tenant):
-            body = self._client.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+        for key, version_id in self._objects(tenant):
+            body = self._client.get_object(
+                Bucket=self._bucket,
+                Key=key,
+                **({"VersionId": version_id} if version_id is not None else {}),
+            )["Body"].read()
             # tolerate a non-text object under the prefix rather than crashing the scan
             text = body.decode("utf-8", errors="replace")
             if query_tokens & _tokens(text):
@@ -138,9 +162,26 @@ class S3Backup(BackupAdapter):
         # residue Class 11 erasure verification is built to catch.
         if self._soft_delete:
             return
-        keys = self._keys(tenant)
-        for start in range(0, len(keys), _DELETE_BATCH):
-            batch = keys[start : start + _DELETE_BATCH]
-            self._client.delete_objects(
-                Bucket=self._bucket, Delete={"Objects": [{"Key": key} for key in batch]}
+        objects = self._objects(tenant)
+        for start in range(0, len(objects), _DELETE_BATCH):
+            batch = objects[start : start + _DELETE_BATCH]
+            response = self._client.delete_objects(
+                Bucket=self._bucket,
+                Delete={
+                    "Objects": [
+                        {"Key": key, **({"VersionId": vid} if vid is not None else {})}
+                        for key, vid in batch
+                    ]
+                },
             )
+            # A per-key failure (a retained version under Object Lock, a denied
+            # key) is not a purge; silently continuing let the re-scan decide,
+            # and on a versioned bucket the re-scan could not see the version.
+            errors = (response or {}).get("Errors") or []
+            if errors:
+                codes = sorted({str(error.get("Code", "?")) for error in errors})
+                raise AdapterError(
+                    f"S3 purge left {len(errors)} object(s) in place ({', '.join(codes)}); "
+                    "an object-lock / WORM bucket has no per-tenant purge - configure "
+                    "`no_erasure: true` so the surface is attestable-with-caveat"
+                )

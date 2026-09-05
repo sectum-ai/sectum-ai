@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
 from sectum_ai.adapters.observability.langfuse import LangfuseObservability
 
@@ -36,9 +38,11 @@ class _FakeTraceApi:
     def add(self, trace: SimpleNamespace) -> None:
         self._traces[str(trace.id)] = trace
 
-    def list(self, *, user_id: str | None = None, limit: int = 50, **_: Any) -> SimpleNamespace:
+    def list(
+        self, *, user_id: str | None = None, limit: int = 50, page: int = 1, **_: Any
+    ) -> SimpleNamespace:
         data = [t for t in self._traces.values() if user_id is None or t.user_id == user_id]
-        return SimpleNamespace(data=data[:limit])
+        return SimpleNamespace(data=data[(page - 1) * limit : page * limit])
 
     def delete_multiple(self, *, trace_ids: Sequence[str]) -> None:
         for trace_id in trace_ids:
@@ -109,3 +113,46 @@ def test_langfuse_search_tolerates_a_trace_missing_text_fields() -> None:
     # a sparse trace with no name/input/output/metadata attributes must not crash
     client.trace_api.add(SimpleNamespace(id="sparse-1", user_id=_TENANT_A.hex))
     assert LangfuseObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
+
+
+def test_langfuse_delete_purges_a_tenant_spanning_several_pages() -> None:
+    client = _FakeLangfuse()
+    for index in range(250):
+        client.trace_api.record(user_id=_TENANT_A.hex, text=f"trace {index}")
+    LangfuseObservability(client).delete(_TENANT_A)
+    assert client.trace_api.list(user_id=_TENANT_A.hex).data == []
+
+
+def test_langfuse_refuses_a_listing_that_exhausted_its_budget() -> None:
+    # The listing stopped at 1000 traces and the callers went on as if that were
+    # the tenant: `delete` purged the first thousand and returned silently, the
+    # re-scan (now the older page) showed no marker, and `fetch_trace` read a
+    # trace beyond the budget as erased.
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeLangfuse()
+    for index in range(1001):
+        client.trace_api.record(user_id=_TENANT_A.hex, text=f"trace {index}")
+    adapter = LangfuseObservability(client)
+    with pytest.raises(AdapterError, match="more than 1000"):
+        adapter.fetch_trace(_TENANT_A, "trace-1001")
+    with pytest.raises(AdapterError, match="more than 1000"):
+        adapter.delete(_TENANT_A)
+
+
+def test_langfuse_delete_that_never_settles_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A settle timeout used to return silently, so the re-scan confirmed a
+    # residual the backend was still processing (a wrong-direction HIGH).
+    from sectum_ai.spec import AdapterError
+
+    class _StuckTraceApi(_FakeTraceApi):
+        def delete_multiple(self, *, trace_ids: Sequence[str]) -> None:
+            return None  # accepted, never applied
+
+    client = _FakeLangfuse()
+    client.trace_api = _StuckTraceApi()
+    client.api = SimpleNamespace(trace=client.trace_api, projects=_FakeProjectApi())
+    client.trace_api.record(user_id=_TENANT_A.hex, text="stuck")
+    monkeypatch.setattr("sectum_ai.adapters.observability.langfuse.time.sleep", lambda _s: None)
+    with pytest.raises(AdapterError, match="cannot be confirmed"):
+        LangfuseObservability(client).delete(_TENANT_A)

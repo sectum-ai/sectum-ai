@@ -19,6 +19,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.adapters.vector._settle import settle
 from sectum_ai.spec import CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
@@ -117,6 +118,15 @@ class PineconeVectorStore(VectorStoreAdapter):
         ]
         if vectors:
             self._index.upsert(vectors=vectors, namespace=tenant.hex)
+            # Pinecone is eventually consistent: a probe that queried right after
+            # the upsert saw nothing (no baseline, INCONCLUSIVE), and one that
+            # re-scanned right after a delete saw the not-yet-purged vectors as a
+            # RESIDUAL erasure failure. Wait, bounded, for the write to land.
+            last = vectors[-1]["id"]
+            settle(
+                lambda: last in self._index.fetch(ids=[last], namespace=tenant.hex).vectors,
+                f"Pinecone namespace {tenant.hex} did not reflect the upsert",
+            )
 
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
@@ -163,6 +173,17 @@ class PineconeVectorStore(VectorStoreAdapter):
 
     def delete(self, tenant: UUID) -> None:
         self._index.delete(delete_all=True, namespace=tenant.hex)
+        settle(
+            lambda: self._namespace_count(tenant) == 0,
+            f"Pinecone namespace {tenant.hex} still holds vectors after the delete",
+        )
+
+    def _namespace_count(self, tenant: UUID) -> int:
+        stats = self._index.describe_index_stats().namespaces
+        summary = stats.get(tenant.hex) if hasattr(stats, "get") else None
+        if summary is None:
+            return 0
+        return int(getattr(summary, "vector_count", None) or summary.get("vector_count", 0))
 
     def list_namespaces(self) -> list[str]:
         stats = self._index.describe_index_stats()

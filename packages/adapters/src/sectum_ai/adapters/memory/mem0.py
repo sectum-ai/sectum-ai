@@ -31,7 +31,6 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # The single shared scope every tenant collapses to under shared_memory - the
 # space with no tenant boundary that Class 8 is built to catch.
 _SHARED_SCOPE = "sectum-ai-shared"
-_SEARCH_LIMIT = 100
 
 
 def _tokens(text: str) -> set[str]:
@@ -100,10 +99,13 @@ class Mem0Memory(MemoryAdapter):
         self._client.add(text, user_id=self._scope(tenant), infer=False)
 
     def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
-        result = self._client.search(query, user_id=self._scope(tenant), limit=_SEARCH_LIMIT)
+        # The whole scope, not a ranked top-N: a semantic `search(limit=N)` can
+        # rank a planted marker out of its window in a tenant with more than N
+        # memories, and the miss read as "not recalled". The keyword filter is the
+        # contract (matching the fake and the Redis adapter), so the exhaustive
+        # listing is the faithful primitive.
+        result = self._client.get_all(user_id=self._scope(tenant))
         query_tokens = _tokens(query)
-        # Post-filter mem0's ranked hits by keyword overlap so a planted marker is
-        # found by its own text (matching the fake and the Redis adapter).
         return [text for text in self._memories(result) if query_tokens & _tokens(text)]
 
     def delete(self, tenant: UUID) -> None:

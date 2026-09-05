@@ -19,6 +19,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.spec import AdapterError
 
 _TRACE_LIMIT = 1000
 """How many of a tenant's most recent traces to scan or purge per call."""
@@ -82,7 +83,7 @@ class LangfuseObservability(ObservabilityAdapter):
         # budget is reached.
         traces: list[Any] = []
         page = 1
-        while len(traces) < _TRACE_LIMIT:
+        while True:
             batch = self._client.api.trace.list(
                 user_id=tenant.hex, limit=_TRACE_PAGE, page=page
             ).data
@@ -91,8 +92,17 @@ class LangfuseObservability(ObservabilityAdapter):
             traces.extend(batch)
             if len(batch) < _TRACE_PAGE:
                 break
+            if len(traces) >= _TRACE_LIMIT:
+                # A truncated listing is not a scan: a trace beyond the budget read
+                # as absent, so `fetch_trace` attested it erased and `delete` purged
+                # the first thousand and reported the tenant clean.
+                raise AdapterError(
+                    f"tenant {tenant.hex} has more than {_TRACE_LIMIT} Langfuse traces; "
+                    "the listing budget was exhausted before the tenant's traces were, "
+                    "so no verdict about them can be complete"
+                )
             page += 1
-        return traces[:_TRACE_LIMIT]
+        return traces
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         project = self._project_name()
@@ -142,8 +152,15 @@ class LangfuseObservability(ObservabilityAdapter):
         # Langfuse processes trace deletion asynchronously, so a caller that
         # re-scans immediately would see the not-yet-purged traces and wrongly
         # report residual data. Wait, bounded, until the tenant's traces are no
-        # longer listed before returning.
+        # longer listed before returning - and say so if they never are: returning
+        # silently on the timeout let the re-scan confirm a residual the backend
+        # was still processing.
         for _ in range(_DELETE_SETTLE_TRIES):
             if not self._tenant_traces(tenant):
                 return
             time.sleep(_DELETE_SETTLE_INTERVAL)
+        raise AdapterError(
+            f"Langfuse still lists traces for tenant {tenant.hex} "
+            f"{_DELETE_SETTLE_TRIES * _DELETE_SETTLE_INTERVAL:.0f} s after the delete was "
+            "accepted; the purge cannot be confirmed"
+        )

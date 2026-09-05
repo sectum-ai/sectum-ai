@@ -190,14 +190,19 @@ def test_pack_requires_a_prior_report(tmp_path: Path) -> None:
 
 
 def test_pack_bundles_the_redacted_config(tmp_path: Path) -> None:
+    # An inline secret on a live adapter block (a builder that reads the field:
+    # an unread `api_key` on a fake is refused at build since the field guard).
+    # The HTTP RAG pipeline is constructed without a network call and never
+    # driven, since only the vector probe runs.
     config = tmp_path / "sectum-ai.yaml"
     config.write_text(
-        "adapters:\n  vector_store:\n    kind: fake\n    api_key: sk-LEAKME\n",
+        "adapters:\n  rag:\n    kind: http\n    url: http://127.0.0.1:9/rag\n"
+        "    headers:\n      Authorization: Bearer sk-LEAKME\n",
         encoding="utf-8",
     )
     args = ["--workdir", str(tmp_path), "--config", str(config)]
     _runner.invoke(app, ["seed", *args])
-    _runner.invoke(app, ["probe", *args])
+    _runner.invoke(app, ["probe", *args, "--probe", "tenant-boundary-fetch"])
     _runner.invoke(app, ["report", *args])
     result = _runner.invoke(app, ["pack", *args])
     assert result.exit_code == 0, result.output

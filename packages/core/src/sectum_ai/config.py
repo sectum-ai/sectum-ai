@@ -25,7 +25,7 @@ adapter resolver can look them up at run time without storing secrets.
 import hashlib
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from difflib import get_close_matches
@@ -663,7 +663,7 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 user=_optional_str(extras, "user"),
                 password=opensearch_password,
                 use_ssl=_bool(extras, "use_ssl", False),
-                verify_certs=_bool(extras, "verify_certs", False),
+                verify_certs=_bool(extras, "verify_certs", True),
                 user_scoped=_bool(extras, "user_scoped", False),
             )
     if config.kind == "azure-search":
@@ -884,7 +884,7 @@ def build_search_index(config: AdapterConfig) -> SearchIndexAdapter:
                 user=_optional_str(extras, "user"),
                 password=password,
                 use_ssl=_bool(extras, "use_ssl", False),
-                verify_certs=_bool(extras, "verify_certs", False),
+                verify_certs=_bool(extras, "verify_certs", True),
                 prefix=_str(extras, "prefix", "sectum-ai-search"),
                 soft_delete=_bool(extras, "soft_delete", False),
             )
@@ -1267,6 +1267,57 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
     raise _unsupported("agent", config.kind)
 
 
+class _ReadExtras(dict[str, Any]):
+    """An adapter's extra fields, recording which keys a builder read."""
+
+    def __init__(self, extras: Mapping[str, Any]) -> None:
+        super().__init__(extras)
+        self.read: set[str] = set()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        self.read.add(key)
+        return super().get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        self.read.add(key)
+        return super().__getitem__(key)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            self.read.add(key)
+        return super().__contains__(key)
+
+
+@contextmanager
+def adapter_config(
+    config: SectumConfig, family: str, default: AdapterConfig
+) -> Iterator[AdapterConfig]:
+    """The config to build ``family`` from; refuses a user-supplied field nothing read.
+
+    Adapter blocks accept any field, and the builders read only the ones they
+    know, so a misspelled knob - ``shared_idx: true``, ``confused-deputy: true``,
+    a ``collection`` that never reached the store - was silently ignored and the
+    run graded the default it fell back to. The family-level guard rejects an
+    unknown family key; this is its field-level sibling. Only the operator's own
+    block is held to it: the CLI's internal defaults are not.
+    """
+    supplied = config.adapters.get(family)
+    if supplied is None:
+        yield default
+        return
+    tracker = _ReadExtras(supplied.model_extra or {})
+    tracked = supplied.model_copy()
+    object.__setattr__(tracked, "__pydantic_extra__", tracker)
+    yield tracked
+    unread = sorted(set(tracker) - tracker.read)
+    if unread:
+        raise ConfigError(
+            f"adapter '{family}' (kind {supplied.kind!r}) does not read: "
+            f"{', '.join(unread)}; a field the builder never reads changes nothing, "
+            "so the run would measure the default instead - fix or remove it"
+        )
+
+
 def build_adapters(config: SectumConfig) -> AdapterBundle:
     """Build every adapter the CLI's probe suite needs.
 
@@ -1282,20 +1333,35 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
             "configure either 'app' or 'vector_store', not both: each fills the same "
             "adapter slot, so a run carrying both cannot say which system it probed"
         )
-    vector = (
-        build_app(app)
-        if app is not None
-        else build_vector_store(config.adapters.get("vector_store", fake))
-    )
+    if app is not None:
+        with adapter_config(config, "app", fake) as cfg:
+            vector: VectorStoreAdapter = build_app(cfg)
+    else:
+        with adapter_config(config, "vector_store", fake) as cfg:
+            vector = build_vector_store(cfg)
+    with adapter_config(config, "cache", fake) as cfg:
+        cache = build_cache(cfg)
+    with adapter_config(config, "model", fake) as cfg:
+        model = build_model(cfg)
+    with adapter_config(config, "mcp", fake) as cfg:
+        mcp = build_mcp(cfg)
+    with adapter_config(config, "memory", fake) as cfg:
+        memory = build_memory(cfg)
+    with adapter_config(config, "rag", fake) as cfg:
+        rag = build_rag(cfg)
+    with adapter_config(config, "observability", fake) as cfg:
+        observability = build_observability(cfg)
+    with adapter_config(config, "agent", fake) as cfg:
+        agent = build_agent(cfg)
     return AdapterBundle(
         vector=vector,
-        cache=build_cache(config.adapters.get("cache", fake)),
-        model=build_model(config.adapters.get("model", fake)),
-        mcp=build_mcp(config.adapters.get("mcp", fake)),
-        memory=build_memory(config.adapters.get("memory", fake)),
-        rag=build_rag(config.adapters.get("rag", fake)),
-        observability=build_observability(config.adapters.get("observability", fake)),
-        agent=build_agent(config.adapters.get("agent", fake)),
+        cache=cache,
+        model=model,
+        mcp=mcp,
+        memory=memory,
+        rag=rag,
+        observability=observability,
+        agent=agent,
     )
 
 

@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
-from sectum_ai.config import EvidenceConfig
+from sectum_ai.config import AdapterConfig, EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
 from sectum_ai.spec import RunMetrics, RunResult, SyntheticUserSpec
 
@@ -720,7 +720,12 @@ def test_probe_with_a_serving_only_model_skips_class_9(
         def first_token_latency_ms(self, prompt: str) -> float:
             return 5.0
 
-    def _serving_model(_config: object) -> VLLMModel:
+    def _serving_model(config: AdapterConfig) -> VLLMModel:
+        # Read the demo block's knobs like the real builder does, so the stand-in
+        # is not refused for leaving the operator's fields unread.
+        extras = config.model_extra or {}
+        for knob in ("adapter_bleed", "prefix_cache", "soft_delete", "user_scoped"):
+            extras.get(knob)
         return VLLMModel(_FakeServingBackend())
 
     # build_adapters (config) builds the suite model; the probe command builds a

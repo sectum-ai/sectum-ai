@@ -42,7 +42,7 @@ class LiveAssistantsClient:
     Assistant.
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, *, run_timeout_s: float = 300.0) -> None:
         try:
             from openai import OpenAI
         except ImportError as error:
@@ -52,6 +52,7 @@ class LiveAssistantsClient:
             ) from error
         self._openai = OpenAI(api_key=api_key) if api_key else OpenAI()
         self._tools: dict[str, Any] = {}
+        self._run_timeout_s = run_timeout_s
 
     def create_assistant(
         self,
@@ -94,7 +95,14 @@ class LiveAssistantsClient:
         run = self._openai.beta.threads.runs.create(thread_id=thread_id, assistant_id=assistant_id)
         tool_names: list[str] = []
         attempt = 0
+        deadline = time.monotonic() + self._run_timeout_s
         while True:
+            # A run parked in `queued` / `in_progress` used to be polled forever.
+            if time.monotonic() > deadline:
+                raise AdapterError(
+                    f"openai assistants run {run.id} did not complete within "
+                    f"{self._run_timeout_s:.0f} s"
+                )
             run = self._openai.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
             status = getattr(run, "status", None)
             if status == "completed":

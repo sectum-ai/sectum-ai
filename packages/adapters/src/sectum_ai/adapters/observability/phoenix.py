@@ -14,6 +14,7 @@ import httpx
 from phoenix.client import Client
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.adapters.observability._listing import _refuse_capped
 
 _SPAN_LIMIT = 1000
 """How many spans to scan per project when searching for a marker."""
@@ -60,9 +61,12 @@ class PhoenixObservability(ObservabilityAdapter):
         project = self._project_name(tenant)
         if project not in self._project_names():
             return None
+        seen = 0
         for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
+            seen += 1
             if str(span["context"]["trace_id"]) == trace_id:
                 return TraceHit(trace_id=trace_id, project=project, snippet=self._snippet(span))
+        _refuse_capped("Phoenix", seen, _SPAN_LIMIT)
         return None
 
     @staticmethod

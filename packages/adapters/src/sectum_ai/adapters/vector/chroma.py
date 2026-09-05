@@ -8,6 +8,7 @@ Requires the ``chroma`` optional dependency: ``pip install sectum-ai-adapters[ch
 """
 
 from collections.abc import Callable, Sequence
+from typing import Any
 from uuid import UUID
 
 import chromadb
@@ -86,12 +87,21 @@ class ChromaVectorStore(VectorStoreAdapter):
             ],
         )
 
+    def _existing_collection(self, tenant: UUID) -> Any | None:
+        # A read must not `get_or_create`: after an erasure that recreated the
+        # deleted tenant's (empty) collection as a side effect, so the namespace
+        # listing showed the tenant again.
+        name = self._collection_name(tenant)
+        if name not in {collection.name for collection in self._client.list_collections()}:
+            return None
+        return self._client.get_collection(name, embedding_function=None)
+
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
     ) -> list[VectorHit]:
-        collection = self._client.get_or_create_collection(
-            self._collection_name(tenant), embedding_function=None
-        )
+        collection = self._existing_collection(tenant)
+        if collection is None:
+            return []
         where = self._user_where(user)
         result = collection.query(
             query_embeddings=[self._vector(text)],
@@ -112,9 +122,9 @@ class ChromaVectorStore(VectorStoreAdapter):
         ]
 
     def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
-        collection = self._client.get_or_create_collection(
-            self._collection_name(tenant), embedding_function=None
-        )
+        collection = self._existing_collection(tenant)
+        if collection is None:
+            return None
         where = self._user_where(user)
         result = collection.get(ids=[doc_id], **({"where": where} if where is not None else {}))
         ids = result["ids"]

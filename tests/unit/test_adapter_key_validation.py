@@ -36,7 +36,9 @@ def test_the_family_set_matches_every_key_the_resolvers_read() -> None:
     """
     read: set[str] = set()
     for path in (_REPO_ROOT / "packages").rglob("*.py"):
-        read |= set(re.findall(r'adapters\.get\(\s*"([a-z_]+)"', path.read_text()))
+        text = path.read_text()
+        read |= set(re.findall(r'adapters\.get\(\s*"([a-z_]+)"', text))
+        read |= set(re.findall(r'adapter_config\(\s*\w+,\s*"([a-z_]+)"', text))
     assert read, "found no adapters.get call sites - the introspection broke"
     assert read == set(ADAPTER_FAMILIES), (
         f"declared but never read: {sorted(set(ADAPTER_FAMILIES) - read)}; "
@@ -122,3 +124,32 @@ def test_a_typo_in_a_real_config_file_names_the_file(tmp_path: Path) -> None:
     message = str(excinfo.value)
     assert str(config) in message
     assert "did you mean 'vector_store'?" in message
+
+
+def test_a_field_the_builder_never_reads_is_rejected() -> None:
+    # The field-level sibling of the family guard: `shared_idx: true` loaded
+    # without error and built a FakeVectorStore with shared_index=False, so the run
+    # measured the default and graded a stack the operator never configured.
+    from sectum_ai.config import build_adapters
+
+    config = SectumConfig(adapters={"vector_store": AdapterConfig(kind="fake", shared_idx=True)})
+    with pytest.raises(ConfigError, match="does not read: shared_idx"):
+        build_adapters(config)
+
+
+def test_a_field_the_builder_reads_is_accepted() -> None:
+    from sectum_ai.config import build_adapters
+
+    config = SectumConfig(adapters={"vector_store": AdapterConfig(kind="fake", shared_index=True)})
+    assert build_adapters(config).vector.name == "fake-vector"
+
+
+def test_the_clis_own_default_block_is_not_held_to_the_field_check() -> None:
+    # `erasure --soft-delete` passes `AdapterConfig(kind="fake", soft_delete=True)`
+    # to every family, including ones that never read soft_delete; only the
+    # operator's own blocks are checked.
+    from sectum_ai.config import adapter_config, build_mcp
+
+    default = AdapterConfig(kind="fake", soft_delete=True)
+    with adapter_config(SectumConfig(), "mcp", default) as cfg:
+        build_mcp(cfg)  # must not raise

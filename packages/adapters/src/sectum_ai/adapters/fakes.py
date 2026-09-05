@@ -72,8 +72,10 @@ def _overlap(query_tokens: set[str], document: CorpusDocument) -> float:
     return float(len(query_tokens & _tokens(_searchable_text(document))))
 
 
-def _rank(query: str, candidates: list[tuple[UUID, CorpusDocument]], k: int) -> list[VectorHit]:
-    """Score candidates by lexical overlap and return the top ``k`` hits."""
+def _rank(
+    query: str, candidates: list[tuple[UUID, CorpusDocument]], k: int | None
+) -> list[VectorHit]:
+    """Score candidates by lexical overlap and return the top ``k`` hits (all when ``None``)."""
     query_tokens = _tokens(query)
     hits: list[VectorHit] = []
     for owner, document in candidates:
@@ -88,7 +90,7 @@ def _rank(query: str, candidates: list[tuple[UUID, CorpusDocument]], k: int) -> 
                 )
             )
     hits.sort(key=lambda hit: (-hit.score, hit.doc_id))
-    return hits[:k]
+    return hits if k is None else hits[:k]
 
 
 def _recall_keep(query: str, doc_id: str) -> float:
@@ -137,14 +139,21 @@ class FakeVectorStore(VectorStoreAdapter):
         self._documents: dict[UUID, list[CorpusDocument]] = {}
 
     def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
-        self._documents.setdefault(tenant, []).extend(documents)
+        # An upsert replaces by id: appending duplicated hits on a re-upsert and
+        # left `fetch` returning the stale copy.
+        held = self._documents.setdefault(tenant, [])
+        incoming = {document.doc_id: document for document in documents}
+        held[:] = [document for document in held if document.doc_id not in incoming]
+        held.extend(incoming.values())
 
     def _scope(self, tenant: UUID, user: UUID | None) -> list[tuple[UUID, CorpusDocument]]:
         """The (owner, document) pairs reachable from the principal's session."""
         if self._shared_index:
+            # A snapshot: a concurrent first upsert for a new tenant (--max-concurrency)
+            # otherwise raised "dictionary changed size during iteration".
             candidates = [
                 (owner, document)
-                for owner, documents in self._documents.items()
+                for owner, documents in list(self._documents.items())
                 for document in documents
             ]
         else:
@@ -163,18 +172,20 @@ class FakeVectorStore(VectorStoreAdapter):
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
     ) -> list[VectorHit]:
-        hits = _rank(text, self._scope(tenant, user), k)
         if self._recall >= 1.0:
-            return hits
+            return _rank(text, self._scope(tenant, user), k)
         # Model embedding-model strength: a weaker model misses some cross-tenant
         # documents. Own-tenant hits always survive; each cross-tenant hit
         # survives deterministically with probability ``recall`` (the engineering
-        # spec, section 7 - "stronger embeddings leak more").
-        return [
+        # spec, section 7 - "stronger embeddings leak more"). The recall filter
+        # runs BEFORE the top-k cut: cutting first returned fewer than k and could
+        # drop the tenant's own hit behind a foreign one the filter then removed.
+        surviving = [
             hit
-            for hit in hits
+            for hit in _rank(text, self._scope(tenant, user), None)
             if hit.tenant_id == tenant or _recall_keep(text, hit.doc_id) < self._recall
         ]
+        return surviving[:k]
 
     def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit | None:
         for owner, document in self._scope(tenant, user):

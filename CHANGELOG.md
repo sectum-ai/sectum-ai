@@ -149,6 +149,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `ERASED` verdict's gloss (audit PDF, catalog) now says what it measures:
   no marker retrievable through the erased tenant's own read path. A backend that
   retains data while revoking that path is indistinguishable from outside.
+- **The HuggingFace LoRA `soft_delete` hid the retained weights from the erasure
+  scan.** A soft delete re-routed inference to the base model while the LoRA
+  stayed on disk, so the model surface's post-erasure scan (`marker in
+  infer(...)`) found nothing and signed ERASED for weights still there — the
+  inverse of the built-in fake, which keeps recalling. A soft delete now keeps the
+  LoRA serving, and a hard `delete(tenant)` removes every scope under the tenant
+  (the per-user `<tenant>/<user>` LoRAs used to survive a tenant erasure).
+- **S3 and GCS backups verified erasure on versioned buckets that kept every
+  byte.** On a versioned S3 bucket (Object Lock implies versioning) a plain
+  delete inserts a delete marker and keeps the versions, and `list_objects_v2`
+  hides the key, so the re-scan read the retained snapshot as gone. The adapter
+  now lists and deletes every version, reads versions in its scan, and refuses a
+  `delete_objects` call that leaves any key in place. GCS with object versioning
+  is the same shape (every generation is listed and deleted), and a bucket whose
+  soft-delete policy keeps deleted objects restorable — the default for buckets
+  created since 2024 — reports attestable-with-caveat instead of an erasure.
+- **Langfuse stopped at 1000 traces and gave up silently.** The listing was
+  capped, so `delete` purged the first thousand, waited for a tenant that could
+  never empty, and returned; the re-scan (now the older page) showed no marker
+  and the tenant verified erased. The listing is paged to exhaustion and refused
+  past its budget, `delete` raises when the purge does not settle, and the docs
+  name the `user_id` tagging precondition and the observation-level scan gap.
+- **A by-id miss on a capped page attested erasure** on Datadog, Helicone,
+  LangSmith, and Phoenix (one page of 1000); a miss on a full page is now refused.
+  A 200 carrying an error envelope (or no `data` list) is an error, not an empty
+  tenant, on Helicone, Datadog, and the OpenTelemetry reader; the OpenTelemetry
+  reader treats a `DELETE` `404` as a purge only when its query then shows no
+  spans (a router that never implemented DELETE answers 404 too).
+- **Pinecone and Azure AI Search read back before the write landed.** Both index
+  asynchronously; an upsert followed by an immediate query found no baseline, and
+  a delete followed by an immediate re-scan reported the not-yet-purged vectors as
+  an erasure failure. `upsert` and `delete` now wait (bounded) for the index to
+  reflect them, and raise when it never does.
+- **A misspelled adapter field was silently ignored.** `shared_idx: true` built a
+  fake with `shared_index=False`; `confused-deputy: true` a fake with no deputy;
+  the run then graded the default. A field in an operator's block that the family's
+  builder never reads is refused at build (exit 3, naming it) — the field-level
+  sibling of the v0.10.0 unknown-family check. The CLI's own internal defaults are
+  not held to it.
+- mem0 `recall` lists the scope exhaustively instead of a ranked 100-hit window a
+  planted marker could fall out of; the OpenSearch search index refuses a search
+  whose matches exceed the returned page; the OpenAI Assistants run loop gives up
+  after a timeout instead of polling a parked run forever; both OpenSearch
+  adapters verify TLS certificates by default; the Chroma adapter no longer
+  recreates a deleted tenant's collection on a read.
+- The built-in fake vector store now replaces a document on re-upsert (it
+  appended, duplicating hits), applies its recall filter before the top-k cut (the
+  tenant's own hit could be dropped), and iterates a snapshot under
+  `--max-concurrency` (a concurrent first upsert raised mid-scan).
+- docs/adapters.md states that the user filter on a by-id `fetch` is applied by the
+  adapter, not the store, on six of the eight vector stores, and the two limits of
+  the in-band agent tenant scope.
 
 
 ## [0.11.0] - 2026-09-01

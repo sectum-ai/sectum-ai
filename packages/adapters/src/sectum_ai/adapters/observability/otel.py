@@ -122,6 +122,11 @@ class OtelObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         body = self._store.query(tenant.hex, marker)
+        if "resourceSpans" not in body:
+            # A 200 with an error envelope (or the wrong shape) read as "no traces"
+            # - in the A3 check, as the subject's trace having been erased.
+            detail = body.get("error") or body.get("errors") or sorted(body)
+            raise AdapterError(f"OTel query returned no resourceSpans: {str(detail)[:200]}")
         hits: list[TraceHit] = []
         for resource_span in _as_list(body.get("resourceSpans")):
             resource = resource_span.get("resource") or {}
@@ -201,9 +206,22 @@ class _HttpOtelTraceStore:
             with urllib.request.urlopen(request, timeout=self._timeout):
                 return
         except urllib.error.HTTPError as error:
-            # 404 means the spans are already gone - erasure is an idempotent
-            # no-op success.
+            # 404 is idempotent success only when the spans are in fact gone. A
+            # router that never implemented DELETE answers 404 for the method+path
+            # too, and reading that as a purge recorded the surface erasable and
+            # the re-scan's residue as an erasure FAILURE instead of a caveat.
             if error.code == 404:
+                remaining = self.query(tenant_hex, "")
+                if any(
+                    _as_list(scope.get("spans"))
+                    for resource in _as_list(remaining.get("resourceSpans"))
+                    for scope in _as_list(resource.get("scopeSpans"))
+                ):
+                    raise ErasureUnsupported(
+                        f"OTel trace store at {self._url} answered 404 to DELETE while the "
+                        "tenant's spans remain: it exposes no programmatic delete, so "
+                        "erasure is attestable-with-caveat"
+                    ) from error
                 return
             # 405 (Method Not Allowed) / 501 (Not Implemented) mean the store
             # exposes no programmatic delete - the same "no per-tenant erasure
