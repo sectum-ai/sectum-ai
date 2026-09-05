@@ -154,6 +154,14 @@ runs:
           echo "sectum-ai: no confirmed findings."
           exit 0
         fi
+        # Exit 2 is BOTH "confirmed finding" and Click's usage-error code, so a
+        # probe that never ran (an unknown flag against a pinned older version)
+        # reported a confirmed leak over a zero-byte results file. A real finding
+        # always leaves a report behind.
+        if [ "${EXIT_CODE}" = "2" ] && [ ! -s "${RESULTS}" ]; then
+          echo "::error::sectum-ai exited 2 but wrote no report to ${RESULTS}: the probe did not run (check the step log; exit 2 is also the CLI usage error)."
+          exit 1
+        fi
         if [ "${EXIT_CODE}" = "2" ]; then
           if [ "${FAIL_ON_LEAK}" = "true" ]; then
             echo "::error::sectum-ai confirmed a finding (see ${RESULTS}; a fake-surface finding describes the built-in fake). Set fail-on-leak: false to report without failing."

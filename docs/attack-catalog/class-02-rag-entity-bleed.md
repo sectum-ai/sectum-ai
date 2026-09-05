@@ -36,7 +36,10 @@ per-tenant-namespace store.
 The rate is a binomial proportion (`k` of `n` benign cross-tenant queries
 surfaced a foreign marker), where `n` pools the steps of *both* Class 2 probes —
 the vector-index queries and the pipeline-end `rag.ask` steps — so the headline
-does not separate the two ends of the retrieval path. So a bare point estimate over-claims precision when
+does not separate the two ends of the retrieval path. On a run with any live
+surface, `n` counts only the live surfaces' steps: a leaking fake beside a clean
+live backend must not be reported as the configured stack's rate
+([the scorecard](../scorecard.md)). So a bare point estimate over-claims precision when
 `n` is small. Every run therefore reports a **95% Wilson score confidence
 interval** alongside the rate — for example `81.2% (95% CI 68.1%-89.8%, n=48)` —
 so the headline is never read as a precise number without its sample size and

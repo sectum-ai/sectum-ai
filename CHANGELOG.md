@@ -16,6 +16,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`calibrate` published a threshold its own run measured as admitting 25 of 32
+  negatives, and called it "conservative".** When no threshold separated the
+  classes, the shipped default was printed as the recommendation with an
+  "apply it in sectum-ai.yaml" block, unscored — and that threshold gates which
+  semantic candidates become CONFIRMED findings. The fallback is now scored on
+  the run's own labeled set, the output says how many negatives it admits, and
+  the command exits 3 without an apply block when that number is not zero. (The
+  message also blamed "the offline fake embedder" for a run that used a real
+  hashing embedder.)
+- **The GitHub Action reported a confirmed leak for a probe that never ran.**
+  Exit 2 is both "confirmed finding" and Click's usage-error code, so a `version`
+  input pinning an older CLI that lacks a flag this Action passes produced
+  `::error::sectum-ai confirmed a finding` over a zero-byte report. Exit 2 with
+  no report is now reported as a probe that did not run.
+- `untrusted()`'s escaping is injective for astral codepoints (`\uXXXX` is a
+  minimum width, so U+E0001 and U+E000 followed by "1" rendered identically —
+  the property the module argues for at length). The `jobs` docstring no longer
+  claims concurrent probes share no mutable state (they share the adapter
+  bundle, which is what the plant/read flow needs), and the synthetic-surface
+  warning points at the configuration reference rather than at `sectum-ai
+  adapters`, which lists only the built-in fakes.
+- Docs: the JSON summary's per-model gradient is modelled, not a breakdown of
+  the measured rate; the sample PDF's findings carry OWASP and NIST ids, with
+  ATLAS ids and remediation pointers only where the probe declares them; the
+  threat model, glossary, and substrate reference state that the user boundary
+  is verified only where the adapter carries the user; ADR-0008 has an update
+  appendix; Class 2's `n` is live-only on a mixed run; the release checklist
+  names `docs/index.md`; the compliance table splits the isolation and erasure
+  rows and restores "tested" to the EU AI Act row; the scorecard names both
+  exit-3 refusals; the evidence-chain PDF section list matches the renderer; the
+  extras list includes `gcs`; PHASES states its real vintage; and the README
+  counts twelve attack classes, as the catalog index already did.
 - **`verify` could not see an unstamped run record.** Deleting
   `run_result.schema_version` leaves the parsed pack — and therefore the attested
   digest — byte-identical, so the cycle-5 check (which reads the parsed model,

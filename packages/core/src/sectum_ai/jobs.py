@@ -43,7 +43,9 @@ class ThreadJobRunner:
     """Runs jobs on a bounded thread pool; results preserve input order.
 
     Suitable when the jobs release the GIL (network or subprocess I/O, as the
-    live adapters do) and do not interact through shared mutable state.
+    live adapters do) and share the adapter bundle, so a job's writes are visible to the
+    others - what the probes' plant/read flow needs; concurrency changes
+    their interleaving.
     """
 
     def __init__(self, max_workers: int) -> None:

@@ -244,9 +244,11 @@ substrate. Class 13 is measured by its own
 CLI probe suite, so a plain `sectum-ai probe` run records it `NOT_COVERED` — honestly
 lowering confidence rather than quietly passing.
 
-**A run that exercised no catalog class at all is not graded.** `sectum-ai score` exits
-`3` instead: grading nothing would emit a letter that means nothing, and `F` would
-falsely read as "failed" when the truth is "never tested". It also exits `3` for a run
+**A run with no gradeable class is not graded.** `sectum-ai score` exits `3` when no
+probe ran at all, and equally when every class that ran was backed only by the
+built-in fakes (their verdicts describe that fake, not your stack): grading nothing
+would emit a letter that means nothing, and `F` would falsely read as "failed" when
+the truth is "never tested". It also exits `3` for a run
 carrying a confirmed finding the catalog cannot attribute (rule 4), and for
 `--output sarif/oscal`, which project findings and have no rendering for a graded posture.
 

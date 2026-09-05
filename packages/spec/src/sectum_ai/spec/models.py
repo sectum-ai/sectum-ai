@@ -46,6 +46,8 @@ which surfaced a foreign marker) and a Wilson score interval on the rate
 signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
 
+(newest first)
+
 0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
 the user-level steps the runner did not run because the adapter cannot carry a
 user identity to its backend. Without it a run that quietly stopped exercising

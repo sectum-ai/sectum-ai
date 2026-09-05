@@ -111,8 +111,9 @@ test condition cryptographically.
 ## Outputs
 
 - `evidence.json` — machine-readable and schema-versioned.
-- `audit-pack.pdf` — an executive summary, scope, methodology, findings table,
-  and a control-by-control coverage appendix.
+- `audit-pack.pdf` — a verification summary (including the probes exercised and
+  the confirmed findings by kind), scope and methodology, the findings, the
+  compliance control coverage, and an integrity / independent-verification block.
 - `attestation.intoto.json` — the same evidence re-expressed as an
   [in-toto Attestation](https://github.com/in-toto/attestation) Statement (v1):
   a tool-agnostic envelope whose *subject* is the run (bound by its canonical

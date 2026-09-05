@@ -231,7 +231,7 @@ extras, imported lazily so the base install stays light:
 `pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`, `tgi`,
 `rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`,
 `anthropic-tooluse`, `mcp` (both MCP clients), `langsmith` (the eval-set adapter),
-`boto3` (the S3 backup), or `mem0` (the mem0 memory store).
+`boto3` (the S3 backup), `gcs` (the GCS backup), or `mem0` (the mem0 memory store).
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent
 adapters use only the standard library; both MCP clients need the `mcp` extra. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI

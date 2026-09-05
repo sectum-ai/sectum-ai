@@ -97,7 +97,7 @@ two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
 `## [0.11.0-rc.1]`, but `pyproject.toml` must carry the PEP 440 form `0.11.0rc1` —
 `scripts/check_release_version.py` normalises the tag and compares against that.
 
-Then bump the **same version** in four more places — surfaces this list used to
+Then bump the **same version** in these places — surfaces this list used to
 omit, each of which shipped stale at least once:
 
 - `action.yml` — the `version` input's `default`, **and** the "(for example X.Y.Z)"
@@ -106,6 +106,8 @@ omit, each of which shipped stale at least once:
   `sectum-ai/sectum-ai@vX.Y.Z` pin example
 - `README.md` — the `> **Status: vX.Y.Z.**` line (it read v0.8.1 while the repo
   shipped 0.10.0)
+- `docs/index.md` — the "Sectum AI is at vX.Y.Z" line (unguarded by the test
+  below, so check it by hand)
 
 That default is passed straight to `pip install "sectum-ai==<version>"`, so a
 caller who does not override it gets exactly this string. Leaving it behind means

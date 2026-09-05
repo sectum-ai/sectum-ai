@@ -602,7 +602,7 @@ def _format_rpr(metrics: RunMetrics) -> str:
     """Render the Retrieval-Pivot Rate with its Wilson interval and sample size.
 
     Shows the point estimate, the 95% confidence interval, and ``n`` - for
-    example ``95.4% (95% CI 92.1-97.3%, n=350)`` - so the headline rate is never
+    example ``95.4% (95% CI 92.1%-97.3%, n=350)`` - so the headline rate is never
     presented as a precise number without its uncertainty (the spec's "avoid
     over-claiming"). Falls back to a bare percentage if the interval is absent
     (an older record), so the line is always safe to print.
@@ -1196,7 +1196,8 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     typer.echo(
         f"warning: no live adapter configured for {scope} - these verdicts describe "
         "the built-in synthetic stack, not your production systems. Configure real "
-        "adapters via --config; `sectum-ai adapters` shows the kinds available.",
+        "adapters via --config; docs/configuration.md lists every kind "
+        "(`sectum-ai adapters` shows only the built-in fakes' capabilities).",
         err=True,
     )
 
@@ -2364,12 +2365,23 @@ def _render_calibration_text(result: CalibrationResult) -> None:
         )
     typer.echo("")
     if result.recommended_score is None:
+        admitted = result.fallback_score.false_positives if result.fallback_score else 0
         typer.echo(
-            f"no threshold separated the classes with zero false positives; "
-            f"recommending the conservative default {result.recommended_threshold:g} "
-            "(a stronger, real embedding model is expected to separate cleanly - "
-            "the offline fake embedder cannot)."
+            "no threshold separated the classes with zero false positives, so this "
+            f"run recommends nothing. The shipped default {result.recommended_threshold:g} "
+            f"admits {admitted} of {result.negatives} negatives on this set"
+            + (
+                " - applying it would confirm those as leaks. Calibrate against the "
+                "embedding model you will run with, on a substrate whose foreign "
+                "entities it can separate."
+                if admitted
+                else "."
+            ),
+            err=admitted > 0,
         )
+        if admitted:
+            # No "apply it" block: the number this run measured is the reason not to.
+            raise typer.Exit(code=3)
     else:
         typer.echo(
             f"recommended semantic_threshold: {result.recommended_threshold:g} "

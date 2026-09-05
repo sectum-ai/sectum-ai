@@ -4,7 +4,8 @@
 another user's data — and no customer another customer's — through your vector
 DB, RAG pipeline, agent framework, semantic cache, fine-tunes, or MCP servers.
 It provisions synthetic tenants on a live stack, seeds them with cryptographic
-canary markers, runs an 11-class attack catalog across 13 surfaces, and produces
+canary markers, runs a 12-class attack catalog (Classes 1-11 and 13) across 13
+surfaces, and produces
 a tamper-evident PDF plus a machine-readable evidence pack that auditors,
 customer security teams, and DPOs accept — and that anyone can verify
 independently, without trusting us.
@@ -52,7 +53,7 @@ memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
 indexes, tracing pipelines, agent frameworks, API. Live adapters for the
 common backends.
 
-**11 attack classes.** Direct tenant-boundary fetch, organic entity-bleed RAG
+**12 attack classes** (1-11 and 13). Direct tenant-boundary fetch, organic entity-bleed RAG
 (the flagship), semantic-cache contamination, KV-cache timing side channel,
 embedding inversion, MCP confused-deputy + token passthrough, persistent memory
 contamination, LoRA cross-tenant influence, IKEA benign extraction, RAG
@@ -145,7 +146,8 @@ sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
 ```
 
 Without `--config`, `probe` runs against the built-in demo stack with every leak
-knob on — that is what produces the findings above (and a non-zero exit, since
+knob on — that is what produces the confirmed findings the run reports (and a
+non-zero exit, since
 confirmed leaks exit `2`). `verify` needs both flags for a demo pack: its timestamp
 is the reproducible local-dev token (`--allow-unanchored`), and no surface was a
 live backend (`--allow-synthetic`). A pack from a configured, anchored run needs

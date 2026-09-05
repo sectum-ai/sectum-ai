@@ -32,8 +32,15 @@ The boundary Sectum AI verifies is a **principal**, not only a tenant
 Detection and every probe share one predicate (`is_cross_principal`), and the
 adapter SDK carries an optional user scope
 ([ADR-0008](adr/0008-adapter-user-dimension.md)), so a probe verifies isolation
-at both granularities against a store that is — or is not — user-aware. With no
-users declared, behaviour is exactly the tenant-level case.
+at both granularities — **but only where the adapter carries the calling user to
+its backend** (`carries_user`, which a live adapter sets from its `user_scoped`
+knob). Where it does not, a user-level step would run as the tenant and be judged
+as the user, so the runner does not run it: the run exercises the tenant boundary
+alone, records the count in `RunMetrics.user_steps_dropped`, warns on stderr, and
+`diff` / `baseline --compare` report a run that stopped exercising it as
+`[BOUNDARY LOST]`. A probe left with no judged step runs nothing at all rather
+than grading its class off its plants. With no users declared, behaviour is
+exactly the tenant-level case.
 
 ## What Sectum AI is not — out of scope
 

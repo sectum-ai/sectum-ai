@@ -352,3 +352,36 @@ def test_published_threshold_is_full_precision_and_admits_no_negative() -> None:
     assert recommended.false_positives == 0
     # The published gate (>= comparison, as in detection) must exclude the negative.
     assert 0.730004 < recommended.threshold <= 0.730012
+
+
+def test_the_fallback_threshold_is_scored_and_never_offered_for_application() -> None:
+    # The fallback was published unscored and rendered as "the conservative
+    # default" with an `apply it` block, while admitting 25 of 32 negatives on
+    # the run's own labeled set - and that threshold gates which candidates
+    # become CONFIRMED findings.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    result = CliRunner().invoke(app, ["calibrate", "--embedder", "hash-64", "--seed", "1337"])
+    assert result.exit_code == 3, result.output
+    assert "recommends nothing" in result.output
+    assert "admits" in result.output and "negatives on this set" in result.output
+    assert "apply it in sectum-ai.yaml" not in result.output
+
+
+def test_a_scored_fallback_reports_what_it_admits() -> None:
+    # The fallback carries its own score, so a caller of the library sees what
+    # the shipped default admits on this run rather than a bare number.
+    from sectum_ai.cli.app import _resolve_calibration_embedder
+    from sectum_ai.config import EmbedderConfig
+    from sectum_ai.probes.detection import DEFAULT_SEMANTIC_THRESHOLD
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=1337, corpus_size=24))
+    provider, model_name = _resolve_calibration_embedder("hash-64", EmbedderConfig())
+    outcome = calibrate_threshold(substrate, model_name=model_name, embedder=provider)
+    assert (outcome.fallback_score is None) is (outcome.recommended_score is not None)
+    if outcome.fallback_score is not None:
+        assert outcome.fallback_score.threshold == DEFAULT_SEMANTIC_THRESHOLD
+        assert outcome.fallback_score.false_positives >= 0

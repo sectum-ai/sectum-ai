@@ -22,10 +22,17 @@ the conditions of the Retrieval Pivot finding (a benign query naming a shared
 entity pulls a *foreign* tenant's document into the answer), which the flagship
 [Class 2 probe](attack-catalog/class-02-rag-entity-bleed.md) measures.
 
+A scenario with no `shared_entities` plants nothing in the corpus (a pivot
+document exists per shared entity), so the probes that query the corpus plan no
+step and their classes read `NOT_COVERED` — never a pass. The probes provisioned
+from the manifest (MCP, agent, memory, cache, model) still have markers to find.
+
 A scenario may also declare **users within a tenant**. Markers and documents are
 then owned by a specific user, and the same machinery verifies the user boundary
-exactly as it verifies the tenant boundary — a principal is just the owner of a
-marker and the actor in a session (ADR-0006).
+as it verifies the tenant boundary — a principal is just the owner of a marker
+and the actor in a session (ADR-0006) — wherever the adapter carries the user to
+its backend; where it does not, the run exercises the tenant boundary alone and
+says so (see [the threat model](threat-model.md)).
 
 ## Corpus generation
 

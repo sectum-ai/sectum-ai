@@ -3,7 +3,8 @@
 Sectum AI was built in six phases (the engineering spec, §14), each closed by a
 STOP-and-summarize against its acceptance criteria. This file is the durable
 record of that gate: what each phase committed to, and where the evidence lives.
-Status as of v0.1.0 plus the post-release hardening on `main`.
+Status as of the current `main` (the phase gates below closed at v0.1.0; every
+release since has added to them — see the CHANGELOG for what each one shipped).
 
 | Phase | Acceptance criterion | Status | Evidence |
 |---|---|---|---|

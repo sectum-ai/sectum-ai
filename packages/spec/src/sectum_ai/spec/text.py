@@ -27,10 +27,20 @@ def untrusted(text: str) -> str:
     mislead a human reading a name, but cannot forge structure in our output.
     """
     return "".join(
-        "\\\\"
-        if char == "\\"
-        else char
-        if char.isprintable()
-        else (f"\\x{ord(char):02x}" if ord(char) < 0x100 else f"\\u{ord(char):04x}")
-        for char in text
+        "\\\\" if char == "\\" else char if char.isprintable() else _escape(char) for char in text
     )
+
+
+def _escape(char: str) -> str:
+    """One escape per non-printable character, injectively.
+
+    ``:04x`` is a MINIMUM width, so an astral codepoint emitted five hex digits
+    and collided with a BMP escape followed by a digit (U+E0001 and U+E000 then
+    "1" both rendered ``\\ue0001``) - the injectivity this module argues for.
+    """
+    code = ord(char)
+    if code < 0x100:
+        return f"\\x{code:02x}"
+    if code < 0x10000:
+        return f"\\u{code:04x}"
+    return f"\\U{code:08x}"

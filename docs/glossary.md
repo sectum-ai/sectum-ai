@@ -15,7 +15,9 @@ The isolation boundary, generalized: either a tenant or a user within a
 tenant ([ADR-0006](adr/0006-principal-isolation-model.md)). The detection
 pipeline flags a marker owned by one principal surfacing in another
 principal's session, so the same probes verify both tenant-level and
-user-level isolation depending on how the substrate is seeded.
+user-level isolation depending on how the substrate is seeded — and, for the
+user boundary, on whether the adapter carries the user to its backend (see
+[the threat model](threat-model.md)).
 
 ## Marker / canary
 A planted, ground-truth-known artifact whose appearance in the wrong
