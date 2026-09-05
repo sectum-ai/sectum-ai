@@ -1194,7 +1194,13 @@ def _exercised_surfaces(
 def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
     if not dropped:
         return
-    names = ", ".join(f"{probe_id} ({count})" for probe_id, count in sorted(dropped.items()))
+    # Escaped like every other renderer of a record-derived string: the keys are
+    # probe ids the runner produced today, but the rule is uniform or it is not a
+    # rule - a scorecard renderer that was the one exception let a record forge
+    # its own PASS lines.
+    names = ", ".join(
+        f"{untrusted(probe_id)} ({count})" for probe_id, count in sorted(dropped.items())
+    )
     typer.echo(
         f"warning: user-level steps were not run for {names}: the adapter cannot carry "
         "a user identity to its backend (set its user_argument, where the family has "

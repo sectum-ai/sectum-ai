@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The fifth trace backend still discarded a hit it had already found.** Cycle
+  6 taught Datadog, Helicone, LangSmith and Phoenix to refuse only a *miss* on a
+  capped listing, because a marker found on a partial page is a definite
+  residual. Langfuse raised from inside its pager, before `search_traces` could
+  report what it held — so a canary sitting in the scanned pages of a
+  >1000-trace tenant became an error rather than the erasure failure it is. It
+  now follows the same rule: `search_traces` refuses a miss, `fetch_trace`
+  refuses an absence it cannot establish, and `delete` refuses either way,
+  because a purge over a partial listing leaves the rest.
 - **The wedge SKU signed `ERASURE VERIFIED` over a canary it could still
   retrieve.** Class 11's vector scan read a full `k=10` similarity page as
   absence — a marker still stored but ranked below the page looks exactly like a
