@@ -284,7 +284,8 @@ def test_a_caveat_surface_does_not_verify_the_erasure() -> None:
     result = run_to_oscal(run)["assessment-results"]["results"][0]
     assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
     assert all("presumed retained" in f["target"]["description"] for f in result["findings"])
-    assert "verified an erasure" in result["description"]
+    assert "scanned an erasure" in result["description"]
+    assert "verified an erasure" not in result["description"]
     assert "presumed retained, on backup" in result["description"]
     assert "cross-principal" not in result["description"]
 
@@ -304,3 +305,37 @@ def test_a_control_about_the_vector_surface_needs_a_live_vector_surface() -> Non
     assert not any("LLM08" in t for t in titles), titles
     assert titles, "the generic rows still speak for the live MCP surface"
     assert all("Live surfaces: mcp." in f["description"] for f in findings)
+
+
+def test_a_kv_cache_finding_counts_against_the_live_model_adapter() -> None:
+    # KV-cache findings name the cache surface while provenance is keyed by the
+    # model adapter that ran, so every live-surface gate dropped them: OSCAL said
+    # `satisfied` over twelve confirmed side channels on the only live surface.
+    kv = _finding("kv", probe_id="kv-cache-timing").model_copy(update={"surface": Surface.KV_CACHE})
+    run = _run(kv).model_copy(
+        update={
+            "probe_versions": {"kv-cache-timing": "1"},
+            "surface_provenance": {"model_adapter": "LIVE"},
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert result["findings"]
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
+
+
+def test_the_live_surface_suffix_and_the_erasure_verdict_agree() -> None:
+    # The "Live surfaces:" suffix kept ERASED/RESIDUAL surfaces while the verdict
+    # kept caveat surfaces too, so one description named a surface its own
+    # verdict then contradicted.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "tracing": "LIVE"},
+            "metrics": RunMetrics(
+                erasure_coverage={"vector_db": "ERASED", "tracing": "ATTESTABLE_WITH_CAVEAT"}
+            ),
+        }
+    )
+    finding = run_to_oscal(run)["assessment-results"]["results"][0]["findings"][0]
+    assert "Live surfaces: tracing, vector_db." in finding["description"]
+    assert "presumed retained, after the erasure on tracing" in finding["target"]["description"]

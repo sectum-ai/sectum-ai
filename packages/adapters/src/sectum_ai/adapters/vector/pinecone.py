@@ -58,6 +58,9 @@ class PineconeVectorStore(VectorStoreAdapter):
             capabilities.add(Capability.USER_SCOPED)
         super().__init__(name, frozenset(capabilities))
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
         self._index = index
         self._embed = embed
 

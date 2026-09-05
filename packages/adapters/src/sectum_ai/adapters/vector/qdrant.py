@@ -72,6 +72,9 @@ class QdrantVectorStore(VectorStoreAdapter):
         self._dim = dim
         self._prefix = prefix
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
 
     def _collection_name(self, tenant: UUID) -> str:
         return f"{self._prefix}-{tenant.hex}"

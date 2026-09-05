@@ -265,6 +265,10 @@ class RunDiff:
     # cannot carry the user) where the earlier run did. Twelve resolved
     # cross-user leaks used to read as a fix.
     boundary_lost: tuple[str, ...] = ()
+    # The two runs used different scenarios (a re-seed, other tenants or users).
+    # Finding ids embed markers and principals, so every finding "resolves"; a
+    # later run with no users read every cross-user leak as fixed.
+    scenario_changed: bool = False
 
     @property
     def regressed(self) -> bool:
@@ -293,6 +297,7 @@ class RunDiff:
             or bool(self.coverage_lost)
             or bool(self.scope_lost)
             or bool(self.boundary_lost)
+            or self.scenario_changed
         )
 
 
@@ -368,6 +373,7 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
                 if count and not earlier.metrics.user_steps_dropped.get(probe_id)
             )
         ),
+        scenario_changed=earlier.scenario_hash != later.scenario_hash,
     )
 
 

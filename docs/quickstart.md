@@ -67,7 +67,10 @@ result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake
 between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level steps
 the later run did not run because its adapter cannot carry a user, reported as
-`[BOUNDARY LOST]`), or residual / attestable-with-caveat data on an erased surface
+`[BOUNDARY LOST]`, and two runs of different scenarios — a re-seed, other tenants
+or users, where every finding "resolves" because its id embeds the markers and
+principals — reported as `[SCENARIO CHANGED]`; a record from another schema line
+is refused outright), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
 including a `probe` run in which nothing interrogated the stack, and a `report` on
 a run that names no probe (or was recorded against a since re-seeded substrate);

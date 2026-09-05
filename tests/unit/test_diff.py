@@ -455,3 +455,36 @@ def test_a_probe_that_stopped_running_user_steps_is_a_regression(tmp_path: Path)
     )
     assert cli.exit_code == 2
     assert "[BOUNDARY LOST] agent-tool-hijack" in cli.output
+
+
+def test_a_scenario_change_is_flagged_and_gates(tmp_path: Path) -> None:
+    # Finding ids embed markers and principals, so across a re-seed every finding
+    # "resolves": a later run with no users read every cross-user leak as fixed
+    # (+0 appeared, -213 resolved, RESULT: no regression).
+    earlier = _run(_finding("f-1"))
+    later = _run().model_copy(update={"scenario_hash": "another"})
+    result = diff_runs(earlier, later)
+    assert result.scenario_changed and result.regressed
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2
+    assert "[SCENARIO CHANGED]" in cli.output
+
+
+def test_a_record_from_another_schema_line_is_refused(tmp_path: Path) -> None:
+    # A 0.6.x run recorded every adapter slot, so a diff against it flagged
+    # surfaces the baseline never exercised as lost.
+    old = _run().model_dump()
+    old["schema_version"] = "0.6.0"
+    old["surface_provenance"] = {"tracing": "LIVE"}
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(old, default=str))
+    cli = CliRunner().invoke(app, ["diff", str(path), str(_write(tmp_path / "l.json", _run()))])
+    assert cli.exit_code == 3, cli.output
+    assert "schema 0.6.0" in cli.output

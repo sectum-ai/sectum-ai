@@ -20,6 +20,11 @@ Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""
 
 
+def _collection_name(collection: Any) -> str:
+    """chromadb >= 0.6 lists names; earlier clients list Collection objects."""
+    return collection if isinstance(collection, str) else str(collection.name)
+
+
 class ChromaVectorStore(VectorStoreAdapter):
     """A vector store backed by a ChromaDB server.
 
@@ -53,6 +58,9 @@ class ChromaVectorStore(VectorStoreAdapter):
         self._embed = embed
         self._prefix = prefix
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
 
     def _collection_name(self, tenant: UUID) -> str:
         return f"{self._prefix}-{tenant.hex}"
@@ -92,7 +100,9 @@ class ChromaVectorStore(VectorStoreAdapter):
         # deleted tenant's (empty) collection as a side effect, so the namespace
         # listing showed the tenant again.
         name = self._collection_name(tenant)
-        if name not in {collection.name for collection in self._client.list_collections()}:
+        if name not in {
+            _collection_name(collection) for collection in self._client.list_collections()
+        }:
             return None
         return self._client.get_collection(name, embedding_function=None)
 
@@ -135,8 +145,10 @@ class ChromaVectorStore(VectorStoreAdapter):
 
     def delete(self, tenant: UUID) -> None:
         name = self._collection_name(tenant)
-        if name in {collection.name for collection in self._client.list_collections()}:
+        if name in {_collection_name(collection) for collection in self._client.list_collections()}:
             self._client.delete_collection(name)
 
     def list_namespaces(self) -> list[str]:
-        return sorted(collection.name for collection in self._client.list_collections())
+        return sorted(
+            _collection_name(collection) for collection in self._client.list_collections()
+        )

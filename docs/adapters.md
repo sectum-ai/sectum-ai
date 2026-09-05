@@ -200,16 +200,21 @@ identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
 **Which boundary a run can claim.** Every adapter declares whether a call made as a
 user reaches the backend *as that user* (`carries_user`). The RAG, agent, and
 observability contracts carry no user at all, the live MCP clients carry one
-only with `user_argument`, and the mem0 memory store (a flat `user_id` space that
-*is* the tenant) and the serving-only models never do. The runner drops user-level
+only with `user_argument`, every live vector store, both Redis adapters, and the
+HuggingFace model carry one only with `user_scoped: true` (with the knob off,
+nothing user-specific reaches the backend), and the mem0 memory store (a flat
+`user_id` space that *is* the tenant) and the serving-only models never do. The
+runner drops user-level
 *read* steps for an adapter that does not carry the user (a user-owned plant still
 runs, as the tenant), records the count in the signed run (`user_steps_dropped`),
 and warns; the run claims the tenant boundary alone there, and `diff` /
 `baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
 Run as the tenant and judged as the user, such a step confirmed cross-user leaks of
 a session that never existed. The built-in fakes carry the user wherever their
-family contract does (vector, app, cache, model, MCP, memory); the RAG,
-observability, and agent fakes cannot, like their contracts.
+family contract does (vector, app, cache, model, MCP, memory) — the fake *is* the
+backend, and `user_scoped: false` on a fake models a backend that receives the
+user and ignores it; the RAG, observability, and agent fakes cannot, like their
+contracts.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:

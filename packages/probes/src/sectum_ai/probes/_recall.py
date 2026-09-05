@@ -104,7 +104,13 @@ def _reproduced(model: ModelAdapter, target: UUID, prompt: str, needle: str) -> 
     if control is None:
         # A prompt with no scrambled form has no control: not evidence either way.
         return False
-    if needle in model.infer(target, control).casefold():
+    control_completion = model.infer(target, control).casefold()
+    if needle in control_completion:
+        return False
+    if prompt.casefold() == needle and control.casefold() in control_completion:
+        # The model restates its prompt (the scrambled one came back too): a
+        # whole-phrase echo is not recall, on shared weights included, where the
+        # base-tenant control below cannot tell.
         return False
     if model.supports(Capability.PER_TENANT_ADAPTER) and not model.supports(
         Capability.SHARED_WEIGHTS

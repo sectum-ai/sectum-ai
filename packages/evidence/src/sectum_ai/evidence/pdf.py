@@ -147,7 +147,7 @@ def probes_exercised(run: RunResult) -> str:
     text = f"{len(ids)}: {', '.join(ids)}"
     dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
     if dropped:
-        text += f"; user-level steps not run (tenant boundary only) for: {', '.join(dropped)}"
+        text += f"; user-level steps not run (tenant-level steps only) for: {', '.join(dropped)}"
     return text
 
 

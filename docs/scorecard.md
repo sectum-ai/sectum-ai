@@ -48,6 +48,16 @@ which reads to an auditor exactly like one we invented. Counts that cannot be tr
 (`k > n`) are refused rather than fallen back on, so a record cannot opt out of the
 recompute by corrupting them.
 
+On a run with some live surfaces, a class backed by both a live surface and a
+built-in fake is graded on the live surface's findings only: a confirmed finding
+on the fake is withheld (the class note says how many), so a leaking fake vector
+store beside a clean live RAG pipeline no longer fails Class 2 — the OSCAL and the
+JSON summary for the same record already said no leak was confirmed on a live
+surface. The Retrieval-Pivot Rate follows the same rule: on a mixed run it is
+computed over the live surfaces' query steps only. A finding's surface maps to
+the adapter that produced it (a KV-cache timing finding rests on the model
+adapter), so those findings count against a live model adapter everywhere.
+
 `probe` refuses a substrate in which **no marker is foreign to any principal** (exit `3`),
 so no such run reaches the scorecard. It likewise records no run at all when every
 selected probe was skipped or planned nothing (exit `3`), and `report` refuses a run

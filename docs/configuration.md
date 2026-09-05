@@ -121,8 +121,11 @@ deliberate, and the run records it as `SYNTHETIC` in its
 Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
 that support them), beyond the per-family fields the tables below highlight:
 `user_scoped: bool = false` switches isolation from tenant-level to per-user
-within a tenant (ADR-0006), and `soft_delete: bool = false` makes an erasure a
-no-op that the surface still acknowledges — the Class 11 residue. Not every
+within a tenant (ADR-0006) — on a live adapter it is also what makes the adapter
+carry the calling user to the backend at all, so with it off the run exercises
+the tenant boundary only (user-level steps are not run, and the run says so) —
+and `soft_delete: bool = false` makes an erasure a no-op that the surface still
+acknowledges — the Class 11 residue. Not every
 resolver reads them. `user_scoped` is read by `vector_store`, `app`, `cache`,
 `model`, `mcp`, and `memory`. `soft_delete` is read by `vector_store`, `app`,
 `cache`, `model`, `memory`, `observability`, `search_index`, `eval_set`, and

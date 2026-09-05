@@ -129,7 +129,13 @@ class Adapter(ABC):
     backend every sibling user's marker confirmed as a CRITICAL cross-user leak.
     The runner drops user-level steps for an adapter that does not carry the
     user, so the run claims only the boundary it could exercise. Declared, like
-    ``synthetic`` and ``surface``, rather than inferred.
+    ``synthetic`` and ``surface``, rather than inferred. A live adapter carries
+    the user only when it scopes by user (``user_scoped=True``): with the knob
+    off nothing user-specific reaches the backend, and every live vector store,
+    both Redis adapters, and the HuggingFace model used to inherit True there and
+    confirm cross-user leaks of sessions that never existed. The built-in fakes
+    keep True: the fake *is* the backend, and ``user_scoped=False`` on a fake
+    models a backend that receives the user and ignores it.
     """
 
     surface: Surface

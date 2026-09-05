@@ -70,6 +70,9 @@ class RedisMemory(MemoryAdapter):
         self._client = redis.Redis(host=host, port=port, decode_responses=True)
         self._shared_memory = shared_memory
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
         self._soft_delete = soft_delete
         self._prefix = prefix
 

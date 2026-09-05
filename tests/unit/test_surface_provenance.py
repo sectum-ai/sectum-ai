@@ -171,3 +171,35 @@ def test_the_json_summary_says_what_its_counts_describe(tmp_path: Path) -> None:
     assert summary["confirmed_findings"] > 0
     assert summary["confirmed_on_live_surfaces"] == 0
     assert summary["user_steps_dropped"] == {}
+
+
+def test_kv_cache_findings_count_as_live_when_the_model_adapter_is_live(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The KV probe stamps its findings with the cache surface while provenance is
+    # keyed by the model adapter, so `confirmed_on_live_surfaces` was 0 for twelve
+    # confirmed side channels on the only live surface.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeModel
+    from sectum_ai.cli import app as app_module
+    from sectum_ai.config import AdapterConfig
+
+    class _LiveSharedCache(FakeModel):
+        synthetic = False
+
+    def _live_model(cfg: AdapterConfig) -> _LiveSharedCache:
+        extras = cfg.model_extra or {}
+        for knob in ("adapter_bleed", "prefix_cache", "soft_delete", "user_scoped"):
+            extras.get(knob)
+        return _LiveSharedCache(prefix_cache=True)
+
+    monkeypatch.setattr(config_module, "build_model", _live_model)
+    monkeypatch.setattr(app_module, "build_model", _live_model)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["probe", "--workdir", str(tmp_path), "--probe", "kv-cache-timing", "--output", "json"]
+    )
+    summary = json.loads(result.stdout)
+    assert summary["surface_provenance"] == {"model_adapter": "LIVE"}
+    assert summary["confirmed_findings"] > 0
+    assert summary["confirmed_on_live_surfaces"] == summary["confirmed_findings"]
