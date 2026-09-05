@@ -49,3 +49,13 @@ def test_mcp_forwards_the_tenant_when_configured() -> None:
 def test_mcp_raises_on_a_failed_tool_call() -> None:
     with pytest.raises(AdapterError, match="failed"):
         _client().invoke(_TENANT, "nonexistent", {})
+
+
+def test_mcp_forwards_the_user_only_when_configured() -> None:
+    from uuid import UUID
+
+    user = UUID(int=0xB1)
+    assert not _client().carries_user
+    client = StdioMCPClient(sys.executable, [_STUB], tenant_argument="tenant", user_argument="user")
+    assert client.carries_user
+    assert client.invoke(_TENANT, "whoami", {}, user=user).output == f"tenant={_TENANT} user={user}"

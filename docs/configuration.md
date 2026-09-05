@@ -167,8 +167,8 @@ the default. This is the field-level sibling of the unknown-family check.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `confused_deputy: bool = false`, `token_passthrough: bool = false` | In-memory MCP server; both knobs reproduce the Class 7 flaws. |
-| `stdio` | `command: str` *(required)*, `args: list[str] = []`, `tenant_argument: str \| null = null` | Launches an MCP server as a subprocess and speaks MCP over stdio. |
-| `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0`, `tenant_argument: str \| null = null` | `HttpMCPClient` — opens a streamable HTTP session against a remote MCP server. |
+| `stdio` | `command: str` *(required)*, `args: list[str] = []`, `tenant_argument: str \| null = null`, `user_argument: str \| null = null` | Launches an MCP server as a subprocess and speaks MCP over stdio. `user_argument` names the tool argument that carries the calling user; without it the adapter cannot carry a user, and the runner drops user-level steps rather than running them as the tenant. |
+| `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0`, `tenant_argument: str \| null = null`, `user_argument: str \| null = null` | `HttpMCPClient` — opens a streamable HTTP session against a remote MCP server. `user_argument` as for `stdio`. |
 
 ### `memory`
 

@@ -62,7 +62,12 @@ class _OtelTraceStore(Protocol):
     """
 
     def query(self, tenant_hex: str, marker: str) -> dict[str, Any]:
-        """Return OTLP-JSON ``{"resourceSpans": [...]}`` for the tenant + marker."""
+        """Return OTLP-JSON ``{"resourceSpans": [...]}`` for the tenant + marker.
+
+        An empty ``marker`` matches every span of the tenant: ``purge`` asks it
+        after a ``404`` to tell an already-empty tenant from a store that never
+        implemented DELETE. A store that answers nothing to it reads as purged.
+        """
 
     def tenant_values(self) -> set[str]:
         """Return every distinct tenant attribute value the store has seen."""

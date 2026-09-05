@@ -9,8 +9,8 @@ than a plan/detect probe, so it exposes its own ``run`` entry point and returns
 an ``ErasureReport`` instead of a flat finding list.
 """
 
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sectum_ai.adapters import (
@@ -24,6 +24,7 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
+from sectum_ai.probes._recall import content_recalled
 from sectum_ai.spec import (
     CoverageVerdict,
     ErasureUnsupported,
@@ -142,6 +143,10 @@ class ErasureReport:
     target_tenant: UUID
     surfaces: tuple[SurfaceErasure, ...]
     findings: tuple[Finding, ...]
+    # Supplied content the run could not check, per surface (the subject probe's
+    # model fingerprints too short for a continuation check). Such a surface reads
+    # NOT_COVERED; this says why, without the content.
+    unverifiable: Mapping[Surface, int] = field(default_factory=dict)
 
     @property
     def erased(self) -> bool:
@@ -395,11 +400,10 @@ class ErasureProbe:
         if self._model is None or not self._model_can_memorize(self._model):
             return []
         model = self._model
-        return [
-            marker
-            for marker in markers
-            if marker.plaintext in model.infer(target, marker.plaintext)
-        ]
+        # The same recall test as the subject check: a real autoregressive LoRA
+        # continues a prompt rather than echoing it, so the whole-canary echo alone
+        # read a memorized canary as absent (NOT_COVERED, never RESIDUAL).
+        return [marker for marker in markers if content_recalled(model, target, marker.plaintext)]
 
     def _scan_search(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the search index."""

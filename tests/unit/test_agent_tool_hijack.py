@@ -238,3 +238,47 @@ def test_only_the_injection_sub_probe_is_stamped_as_indirect_prompt_injection() 
         {"tool": "lookup", "key": marker.marker_id, "via": "downstream"},
     ):
         assert stamp(payload) == ("AML.T0024", "AML.T0053")
+
+
+def test_user_level_steps_are_dropped_for_an_adapter_that_cannot_carry_the_user() -> None:
+    # The live MCP clients accepted `user` and dropped it, so every user-level
+    # step ran as the tenant and was judged as the user: on a correctly
+    # tenant-scoped server, 12 CONFIRMED CRITICAL "cross-user" leaks of sessions
+    # that never existed. The runner now drops such steps for an adapter that
+    # declares `carries_user = False`, and the run claims only the tenant boundary.
+    class _TenantOnlyMCP(FakeMCP):
+        carries_user = False
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="mcp-two-tenants-of-users",
+            seed=7,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=n),
+                    display_name=f"T{n}",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+                    ),
+                )
+                for n in (1, 2)
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    mcp = _TenantOnlyMCP(user_scoped=False)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            mcp.provision(
+                marker.owner_tenant_id, marker.marker_id, f"Reference: {marker.plaintext}"
+            )
+    results = Runner(substrate, mcp=mcp).run_per_step(AgentToolHijackProbe())
+    assert results, "the tenant-level steps still run"
+    assert all(step.actor_user_id is None for step, _ in results)
+    assert confirmed_findings([f for _, fs in results for f in fs]) == []
+    # the same fake carrying the user reports the cross-user leak it really has
+    leaky = _seeded_mcp_users(substrate, user_scoped=False)
+    assert confirmed_findings(Runner(substrate, mcp=leaky).run(AgentToolHijackProbe()))

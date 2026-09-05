@@ -802,7 +802,10 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
             raise ConfigError(f"mcp 'args' must be a list, got {raw_args!r}")
         args = [str(item) for item in raw_args]
         tenant_argument = _optional_str(extras, "tenant_argument")
-        return StdioMCPClient(command, args, tenant_argument=tenant_argument)
+        user_argument = _optional_str(extras, "user_argument")
+        return StdioMCPClient(
+            command, args, tenant_argument=tenant_argument, user_argument=user_argument
+        )
     if config.kind == "http":
         with _optional_extra("mcp"):
             from sectum_ai.adapters.mcp.http import HttpMCPClient
@@ -811,7 +814,14 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         headers = _str_dict(extras, "headers")
         timeout = _float(extras, "timeout", 30.0)
         tenant_argument = _optional_str(extras, "tenant_argument")
-        return HttpMCPClient(url, headers=headers, timeout=timeout, tenant_argument=tenant_argument)
+        user_argument = _optional_str(extras, "user_argument")
+        return HttpMCPClient(
+            url,
+            headers=headers,
+            timeout=timeout,
+            tenant_argument=tenant_argument,
+            user_argument=user_argument,
+        )
     raise _unsupported("mcp", config.kind)
 
 

@@ -33,8 +33,8 @@ def _server() -> FastMCP:
         return text
 
     @server.tool()
-    def whoami(tenant: str = "anonymous") -> str:
-        return f"tenant={tenant}"
+    def whoami(tenant: str = "anonymous", user: str | None = None) -> str:
+        return f"tenant={tenant}" + (f" user={user}" if user is not None else "")
 
     return server
 
@@ -109,3 +109,16 @@ def test_http_mcp_forwards_the_tenant_when_configured(patched: None) -> None:
 def test_http_mcp_raises_on_a_failed_tool_call(patched: None) -> None:
     with pytest.raises(AdapterError, match="failed"):
         _client().invoke(_TENANT, "nonexistent", {})
+
+
+def test_http_mcp_forwards_the_user_only_when_configured(patched: None) -> None:
+    # `invoke(..., user=)` was accepted and dropped, so a probe's user-level step
+    # reached the server as the tenant and was judged as the user. The adapter
+    # declares whether it carries the user, and does so only via `user_argument`.
+    user = UUID(int=0xB1)
+    default = _client()
+    assert not default.carries_user
+    assert default.invoke(_TENANT, "whoami", {}, user=user).output == "tenant=anonymous"
+    client = HttpMCPClient(_URL, tenant_argument="tenant", user_argument="user")
+    assert client.carries_user
+    assert client.invoke(_TENANT, "whoami", {}, user=user).output == f"tenant={_TENANT} user={user}"

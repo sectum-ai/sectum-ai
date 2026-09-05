@@ -25,8 +25,10 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, MemoryAdapter
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
+# get_all(limit=) is capped by mem0 itself; the default (100) silently truncated.
+_GET_ALL_LIMIT = 10000
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # The single shared scope every tenant collapses to under shared_memory - the
 # space with no tenant boundary that Class 8 is built to catch.
@@ -104,9 +106,17 @@ class Mem0Memory(MemoryAdapter):
         # memories, and the miss read as "not recalled". The keyword filter is the
         # contract (matching the fake and the Redis adapter), so the exhaustive
         # listing is the faithful primitive.
-        result = self._client.get_all(user_id=self._scope(tenant))
+        result = self._client.get_all(user_id=self._scope(tenant), limit=_GET_ALL_LIMIT)
+        memories = self._memories(result)
+        if len(memories) >= _GET_ALL_LIMIT:
+            # mem0's get_all defaults to limit=100 and pages no further; a
+            # subject's memory past the window read as not recalled - ERASED.
+            raise AdapterError(
+                f"mem0 returned {len(memories)} memories for the scope, its listing "
+                "limit, so the recall would be incomplete"
+            )
         query_tokens = _tokens(query)
-        return [text for text in self._memories(result) if query_tokens & _tokens(text)]
+        return [text for text in memories if query_tokens & _tokens(text)]
 
     def delete(self, tenant: UUID) -> None:
         if self._shared_memory:

@@ -316,9 +316,14 @@ def test_subject_erasure_model_fingerprint_detects_prefix_continuation() -> None
     # that detection path deterministically, without a real model.
     class _Continuation(FakeModel):
         def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
-            # Regurgitate the memorized remainder for a leading slice of the phrase;
-            # never echo the whole phrase back.
-            if prompt and prompt != _EXTRACTION_PHRASE and _EXTRACTION_PHRASE.startswith(prompt):
+            # Regurgitate the memorized remainder for a leading slice of the phrase
+            # (the trained tenant only); never echo the whole phrase back.
+            if (
+                tenant == UUID(int=7)
+                and prompt
+                and prompt != _EXTRACTION_PHRASE
+                and _EXTRACTION_PHRASE.startswith(prompt)
+            ):
                 return _EXTRACTION_PHRASE[len(prompt) :] + " and further clinical notes"
             return "an unrelated model continuation"
 
@@ -504,16 +509,23 @@ def test_subject_erasure_search_not_covered_without_fingerprints() -> None:
 class _MemorizingModel(FakeModel):
     """A real autoregressive model: it CONTINUES a prompt, it never echoes it.
 
-    It has memorized ``secret``, so a prompt that is a proper prefix of it comes
-    back completed with the remainder - the textbook extraction signal.
+    The tenant's adapter has memorized ``secret``, so a prompt that is a proper
+    prefix of it comes back completed with the remainder - the textbook
+    extraction signal. Any other tenant answers from the base weights.
     """
 
-    def __init__(self, secret: str) -> None:
+    def __init__(self, secret: str, tenant: UUID | None = None) -> None:
         super().__init__()
         self._secret = secret
+        self._tenant = tenant if tenant is not None else UUID(int=0xA)
 
     def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
-        if prompt and self._secret.startswith(prompt) and prompt != self._secret:
+        if (
+            tenant == self._tenant
+            and prompt
+            and self._secret.startswith(prompt)
+            and prompt != self._secret
+        ):
             return self._secret[len(prompt) :]
         return "I cannot help with that."
 
@@ -596,3 +608,47 @@ def test_an_email_is_cut_inside_its_local_part() -> None:
     assert SubjectErasureProbe._content_recalled(
         memorized, UUID(int=0xA), "alice.brown@example.com"
     )
+
+
+def test_a_non_latin_subject_is_still_caught() -> None:
+    # The ASCII-only scramble left a Cyrillic / CJK prefix identical to the
+    # subject's, so the control arm vetoed every genuine recall: a memorized
+    # non-Latin subject attested ERASED on the model surface.
+    from sectum_ai.probes._recall import scramble
+
+    target = UUID(int=0xA)
+    for secret in ("Иван Петрович Сидоров", "田中太郎 東京都千代田区", "Γιώργος Παπαδόπουλος"):
+        assert scramble(secret.split()[0]) not in (None, secret.split()[0])
+        assert SubjectErasureProbe._content_recalled(_MemorizingModel(secret), target, secret)
+    assert scramble("x²y") is not None  # a superscript digit is not int()-able
+
+
+def test_world_knowledge_is_not_the_tenants_residual() -> None:
+    # A base model completes "Barack" -> "Hussein Obama" for any tenant; the
+    # scrambled-prefix control cannot see that, so a public-figure fingerprint
+    # signed a CONFIRMED HIGH residual memorization by the tenant's adapter.
+    class _WorldModel(FakeModel):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "Hussein Obama" if prompt.endswith("Barack") else "I cannot help with that."
+
+    target = UUID(int=0xA)
+    assert not SubjectErasureProbe._content_recalled(_WorldModel(), target, "Barack Hussein Obama")
+    # ... while a tenant-specific recall (base answers nothing) still counts.
+    assert SubjectErasureProbe._content_recalled(
+        _MemorizingModel("Barack Hussein Obama"), target, "Barack Hussein Obama"
+    )
+
+
+def test_unverifiable_fingerprints_make_the_surface_not_covered() -> None:
+    # Fingerprints the split refused were dropped silently and the surface still
+    # read ERASED "for the subject" on the ones that survived.
+    report = SubjectErasureProbe(model=_MemorizingModel("nothing here")).verify(
+        UUID(int=0xA),
+        SubjectManifest(
+            subject_ref="u-u1",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: ("John Smith", "Ana Li", _EXTRACTION_PHRASE)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert report.unverifiable == {Surface.MODEL_ADAPTER: 2}

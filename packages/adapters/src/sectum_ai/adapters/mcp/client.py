@@ -41,8 +41,14 @@ class StdioMCPClient(MCPAdapter):
         name: str = "mcp",
         env: dict[str, str] | None = None,
         tenant_argument: str | None = None,
+        user_argument: str | None = None,
     ) -> None:
         super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
+        # A generic MCP call carries no user identity; the probes' user-level
+        # steps used to run as the tenant and be judged as the user. Only with a
+        # ``user_argument`` does a call reach the server as the user.
+        self._user_argument = user_argument
+        self.carries_user = user_argument is not None
         self._params = StdioServerParameters(command=command, args=list(args), env=env)
         self._tenant_argument = tenant_argument
 
@@ -52,7 +58,7 @@ class StdioMCPClient(MCPAdapter):
     def invoke(
         self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
     ) -> McpResult:
-        return asyncio.run(self._invoke(tenant, tool, arguments))
+        return asyncio.run(self._invoke(tenant, tool, arguments, user))
 
     async def _list_tools(self) -> list[str]:
         async with (
@@ -63,10 +69,14 @@ class StdioMCPClient(MCPAdapter):
             result = await session.list_tools()
         return sorted(tool.name for tool in result.tools)
 
-    async def _invoke(self, tenant: UUID, tool: str, arguments: dict[str, str]) -> McpResult:
+    async def _invoke(
+        self, tenant: UUID, tool: str, arguments: dict[str, str], user: UUID | None
+    ) -> McpResult:
         call_arguments: dict[str, str] = dict(arguments)
         if self._tenant_argument is not None:
             call_arguments[self._tenant_argument] = str(tenant)
+        if self._user_argument is not None and user is not None:
+            call_arguments[self._user_argument] = str(user)
         async with (
             stdio_client(self._params) as (read, write),
             ClientSession(read, write) as session,

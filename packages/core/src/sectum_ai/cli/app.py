@@ -1840,6 +1840,13 @@ def _emit_erasure_attestation(
     if report.not_covered:
         not_covered_names = ", ".join(surface.value for surface in report.not_covered)
         typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
+    for unchecked, count in sorted(report.unverifiable.items(), key=lambda item: item[0].value):
+        typer.echo(
+            f"  {unchecked.value}: {count} supplied fingerprint(s) could not be checked "
+            "(trailing part too short, or no control form for the prefix), so the "
+            "surface reads NOT_COVERED",
+            err=True,
+        )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
     if report.genuine_residual:
         typer.echo("ERASURE FAILED: residual data remains.", err=True)
