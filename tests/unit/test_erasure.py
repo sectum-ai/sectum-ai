@@ -668,3 +668,43 @@ def test_coverage_verdict_maps_residual_and_caveat() -> None:
         observability=_no_erasure_observability(substrate),
     ).run(target)
     assert caveat.coverage()[Surface.TRACING] is CoverageVerdict.ATTESTABLE_WITH_CAVEAT
+
+
+def test_a_continuing_model_that_kept_the_canary_is_residual() -> None:
+    # The canary scan was whole-phrase echo only; a real autoregressive LoRA that
+    # memorized the canary continues a prefix of it and never echoes it, so a
+    # retained LoRA read as absent (NOT_COVERED), never RESIDUAL.
+    from collections.abc import Sequence
+    from uuid import UUID
+
+    from sectum_ai.adapters import FakeModel
+
+    class _ContinuingLora(FakeModel):
+        def __init__(self) -> None:
+            super().__init__()
+            self._memory: dict[UUID, list[str]] = {}
+
+        def train_adapter(
+            self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+        ) -> None:
+            self._memory.setdefault(tenant, []).extend(texts)
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            for text in self._memory.get(tenant, []):
+                for token in text.split():
+                    if len(prompt) >= 3 and token.startswith(prompt) and token != prompt:
+                        return token[len(prompt) :]
+            return "nothing comes to mind"
+
+        def delete(self, tenant: UUID) -> None:
+            return None  # a soft delete: the LoRA keeps serving
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    model = _ContinuingLora()
+    for marker in substrate.manifest.markers:
+        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY:
+            model.train_adapter(target, [marker.plaintext])
+    store = _seeded_store(substrate, soft_delete=False)
+    report = ErasureProbe(substrate, vector=store, model=model).run(target)
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL

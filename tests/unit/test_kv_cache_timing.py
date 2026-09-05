@@ -263,10 +263,10 @@ def test_welch_handles_zero_variance_samples() -> None:
     assert _student_t_sf(t_eq, df_eq) == 1.0
 
     t_ne, df_ne, se_ne = _welch([7.0, 7.0, 7.0, 7.0], [5.0, 5.0, 5.0, 5.0])
-    assert math.isfinite(t_ne) and t_ne > 1e5
+    assert math.isfinite(t_ne) and t_ne > 1e3
     assert df_ne > 0.0 and se_ne > 0.0
     assert _student_t_sf(t_ne, df_ne) < 1e-9
-    assert _cohens_d([7.0, 7.0], [5.0, 5.0]) > 1e5
+    assert _cohens_d([7.0, 7.0], [5.0, 5.0]) > 1e3
 
 
 def test_welch_handles_a_single_sample_group() -> None:
@@ -389,3 +389,63 @@ def test_a_measurement_that_warms_the_cache_still_detects_a_shared_cache() -> No
     scoped = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=False)).run()
     assert scoped.findings == ()
     assert all(signal.mean_gap_ms == 0.0 for signal in scoped.signals)
+
+
+class _BlockCacheBackend:
+    """A serving backend with a block-granular shared prefix cache (vLLM's APC).
+
+    Only whole 16-token blocks are cached, chained on the previous block's hash,
+    and a partial block never is - so a 20-character prefix (9-12 tokens) could
+    not produce a single hit and the probe recorded Class 5 PASS against it.
+    """
+
+    block = 16
+
+    def __init__(self) -> None:
+        self._warm: set[tuple[str, ...]] = set()
+
+    def _blocks(self, prompt: str) -> list[tuple[str, ...]]:
+        tokens = prompt.split()
+        full = len(tokens) // self.block * self.block
+        return [tuple(tokens[: i + self.block]) for i in range(0, full, self.block)]
+
+    def complete(self, prompt: str) -> str:
+        self._warm.update(self._blocks(prompt))
+        return ""
+
+    def first_token_latency_ms(self, prompt: str) -> float:
+        hits = sum(1 for chain in self._blocks(prompt) if chain in self._warm)
+        self._warm.update(self._blocks(prompt))
+        return 100.0 - 15.0 * hits
+
+
+def test_a_block_granular_shared_cache_is_detected() -> None:
+    from sectum_ai.adapters.model.vllm import VLLMModel
+
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=VLLMModel(_BlockCacheBackend())).run()
+    assert len(report.findings) == len(report.signals) > 0
+    assert all(signal.mean_gap_ms > 0.0 for signal in report.signals)
+
+
+def test_two_low_valued_tenants_do_not_share_a_warm_up_prefix() -> None:
+    # Prefixes keyed on the leading 8 hex characters collided for low-int ids, so
+    # the second owner's own warm-up primed the (tenant, prefix) key its later
+    # observer measurement hit on a correctly tenant-scoped cache.
+    scenario = Scenario(
+        scenario_id="kv-low-ids-scoped",
+        seed=1,
+        tenants=(
+            SyntheticTenantSpec(
+                tenant_id=UUID(int=0xA), display_name="Acme", industry="robotics", corpus_size=24
+            ),
+            SyntheticTenantSpec(
+                tenant_id=UUID(int=0xC), display_name="Globex", industry="finance", corpus_size=24
+            ),
+        ),
+        shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+    )
+    substrate = build_substrate(scenario)
+    report = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=False)).run()
+    assert report.findings == ()
+    assert all(signal.mean_gap_ms == 0.0 for signal in report.signals)

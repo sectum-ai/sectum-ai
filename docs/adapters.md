@@ -74,8 +74,9 @@ product that keeps per-user memory in mem0 can be probed for the same Class 8 le
 Class 11 erasure `delete` reports *attestable-with-caveat* rather than wiping every
 tenant's shared memory); it does not model `user_scoped` (mem0's flat `user_id` space
 has no per-user erasure boundary — use the Redis store for that). Its `recall` lists
-the scope exhaustively (`get_all`) and keyword-filters it, rather than a ranked
-`search` window a planted marker could fall out of. Redis runs against a
+the scope (`get_all`, with an explicit 10 000-entry limit that is refused when hit
+rather than silently truncated — the SDK's own default is 100) and keyword-filters
+it, rather than a ranked `search` window a planted marker could fall out of. Redis runs against a
 docker-compose backend in CI; mem0 needs an embedder (its default is OpenAI), so it
 is opt-in live.
 
@@ -147,8 +148,9 @@ full page (or past the budget) is refused (an `AdapterError`) rather than read a
 "erased", since a trace beyond it is indistinguishable from a deleted one. A search response that is
 an error envelope (a 200 carrying `error`/`errors`, or no `data` list) is likewise an
 error, not an empty tenant; the generic OpenTelemetry reader treats a `DELETE` that
-answers `404` as a purge only when its query then shows no spans, and as "no delete
-API" (attestable-with-caveat) otherwise. The OpenTelemetry reader queries by
+answers `404` as a purge only when its query then shows no spans — it asks with an
+empty marker, which a conforming query endpoint answers with every span of the
+tenant — and as "no delete API" (attestable-with-caveat) otherwise. The OpenTelemetry reader queries by
 content, not id, so it has no by-id lookup and that surface reads `NOT_COVERED`.
 
 **RAG.** The HTTP RAG pipeline reaches any retrieval backend that adopts its
@@ -191,7 +193,16 @@ HuggingFace Text Generation Inference's native text-generation API.
 
 **MCP.** The MCP client speaks the Model Context Protocol over either a stdio
 subprocess or a streamable HTTP session; a generic MCP call carries no tenant
-identity, which is the confused-deputy gap Class 7 examines.
+identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
+*user* identity unless `user_argument` names the tool argument to put it in.
+
+**Which boundary a run can claim.** Every adapter declares whether a call made as a
+user reaches the backend *as that user* (`carries_user`). The RAG, agent, and
+observability contracts carry no user at all, and the live MCP clients carry one
+only with `user_argument`; the runner drops user-level steps for an adapter that
+does not carry the user, so the run claims the tenant boundary alone there. Run as
+the tenant and judged as the user, such a step confirmed cross-user leaks of a
+session that never existed. The built-in fakes all carry the user.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:

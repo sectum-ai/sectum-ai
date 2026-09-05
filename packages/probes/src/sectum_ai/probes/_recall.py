@@ -1,0 +1,100 @@
+"""Does a model still reproduce a phrase - as recall, not as a guess.
+
+Shared by the Class 11 canary scan and the A3 subject check. A real
+autoregressive model continues a prompt rather than echoing it, so the whole
+phrase never comes back; the signal is the phrase's trailing part regurgitated
+after its leading part. That signal has two control arms:
+
+- the same model with a same-shaped prefix that names nobody (``scramble``):
+  a completion any prefix of that shape produces - ``@example.com`` after a
+  local part, ``Smith`` after ``John`` - is a generic continuation;
+- for a model that routes per tenant, the same prefix as a tenant that trained
+  nothing: a completion the base weights already produce - ``Hussein Obama``
+  after ``Barack`` - is world knowledge, not the tenant's residual.
+
+A phrase whose trailing part is too short to be evidence, or whose prefix has no
+scrambled form (it must differ), is *unverifiable*: the caller reports it as not
+checked rather than as a verdict a guess could produce.
+"""
+
+from __future__ import annotations
+
+from uuid import UUID, uuid4
+
+from sectum_ai.adapters import Capability, ModelAdapter
+
+# "Smith" for "John", "@example.com" for a local part: any base model produces
+# those, so a phrase whose trailing part is shorter than this is not checked.
+MIN_CONTINUATION_CHARS = 6
+
+
+def continuation_split(phrase: str) -> tuple[str, str] | None:
+    """The (prefix, casefolded suffix) a prefix-continuation check prompts with.
+
+    ``None`` when the phrase's trailing part is shorter than
+    ``MIN_CONTINUATION_CHARS``, or when its prefix cannot be scrambled.
+    """
+    tokens = phrase.split()
+    if len(tokens) >= 2:
+        cut = max(1, len(tokens) // 2)
+        prefix, suffix = " ".join(tokens[:cut]), " ".join(tokens[cut:])
+    elif "@" in phrase:
+        # An email: cut inside the local part, so the suffix carries the
+        # subject-specific characters and not just the domain every address shares.
+        local, domain = phrase.split("@", 1)
+        cut = max(1, len(local) // 3)
+        prefix, suffix = local[:cut], f"{local[cut:]}@{domain}"
+    else:
+        # A single token (an account number, a national id): the leading third.
+        cut = max(1, len(phrase) // 3)
+        prefix, suffix = phrase[:cut], phrase[cut:]
+    if len(suffix.strip()) < MIN_CONTINUATION_CHARS or scramble(prefix) is None:
+        return None
+    return prefix, suffix.casefold()
+
+
+def scramble(prefix: str) -> str | None:
+    """A same-shaped prefix that identifies nobody, or ``None`` when none exists.
+
+    ASCII letters rotate by 13, decimal digits by 5, and every other letter
+    (any script) is replaced by the next such letter in the prefix, so a
+    Cyrillic or CJK prefix changes too - the ASCII-only rotation left those
+    identical to the subject's prefix, and the control arm then vetoed every
+    genuine recall. A prefix the transform leaves unchanged has no control.
+    """
+    others = [ch for ch in prefix if ch.isalpha() and not ch.isascii()]
+    rotated = others[1:] + others[:1]
+    out: list[str] = []
+    for ch in prefix:
+        if ch.isascii() and ch.isalpha():
+            base = ord("A") if ch.isupper() else ord("a")
+            out.append(chr(base + (ord(ch) - base + 13) % 26))
+        elif ch.isascii() and ch.isdecimal():
+            out.append(str((int(ch) + 5) % 10))
+        elif ch.isalpha():
+            out.append(rotated.pop(0))
+        else:
+            out.append(ch)
+    control = "".join(out)
+    return None if control == prefix else control
+
+
+def content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
+    """Whether ``model`` still reproduces ``phrase`` for ``target``, controls applied."""
+    if phrase.casefold() in model.infer(target, phrase).casefold():
+        return True
+    split = continuation_split(phrase)
+    if split is None:
+        return False
+    prefix, suffix = split
+    if suffix not in model.infer(target, prefix).casefold():
+        return False
+    control = scramble(prefix)
+    if control is not None and suffix in model.infer(target, control).casefold():
+        return False
+    if model.supports(Capability.PER_TENANT_ADAPTER) and not model.supports(
+        Capability.SHARED_WEIGHTS
+    ):
+        # A tenant that trained nothing answers from the base weights.
+        return suffix not in model.infer(uuid4(), prefix).casefold()
+    return True

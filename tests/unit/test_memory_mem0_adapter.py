@@ -29,9 +29,10 @@ class _FakeMem0:
         assert infer is False, "the adapter must store verbatim (infer=False)"
         self._by_user.setdefault(user_id, []).append(messages)
 
-    def get_all(self, *, user_id: str, **_: Any) -> Any:
-        # The adapter lists the scope exhaustively and keyword-filters it itself.
-        return {"results": [{"memory": text} for text in self._by_user.get(user_id, [])]}
+    def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+        # mem0's signature: get_all(user_id=..., limit=100) - it pages no further.
+        rows = [{"memory": text} for text in self._by_user.get(user_id, [])]
+        return {"results": rows[:limit]}
 
     def delete_all(self, *, user_id: str) -> None:
         self._by_user.pop(user_id, None)
@@ -148,3 +149,21 @@ def test_mem0_recall_is_exhaustive_not_a_ranked_window() -> None:
         adapter.remember(_TENANT_A, f"filler note number {index}")
     adapter.remember(_TENANT_A, "note about canary OMEGA-9")
     assert any("OMEGA-9" in entry for entry in adapter.recall(_TENANT_A, "canary OMEGA-9"))
+
+
+def test_mem0_refuses_a_listing_that_hit_its_limit() -> None:
+    # get_all defaults to limit=100 in the SDK, so the "exhaustive" recall was
+    # capped at 100 and a subject's memory past that read as not recalled.
+    from sectum_ai.adapters.memory.mem0 import _GET_ALL_LIMIT
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeMem0()
+    adapter = Mem0Memory(client)
+    for index in range(150):
+        adapter.remember(_TENANT_A, f"filler note number {index}")
+    adapter.remember(_TENANT_A, "note about canary OMEGA-9")
+    assert any("OMEGA-9" in entry for entry in adapter.recall(_TENANT_A, "canary OMEGA-9"))
+    for index in range(_GET_ALL_LIMIT):
+        client._by_user[_TENANT_A.hex].append(f"bulk {index}")
+    with pytest.raises(AdapterError, match="listing limit"):
+        adapter.recall(_TENANT_A, "anything")

@@ -234,6 +234,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[not measured]` when *any* of its feeding probes was lost, not only when all were.
 - The in-toto verifier requires the subject's `name` to be the pack's run id, not
   only its digest.
+- **The live MCP clients dropped the user, and the MCP probe confirmed cross-user
+  leaks of sessions that never existed.** `invoke(..., user=)` was accepted "for
+  interface conformance" and never transmitted, so every user-level Class 7 step
+  ran as the tenant and was judged as the user: on a correctly tenant-scoped
+  server, two tenants of two users produced 12 CONFIRMED CRITICAL "cross-user"
+  findings. Every adapter now declares whether it carries the user
+  (`carries_user`); the RAG, agent, and observability contracts never do, the
+  live MCP clients do only with the new `user_argument` (the tool argument that
+  carries the calling user, beside `tenant_argument`), and the runner drops
+  user-level steps for an adapter that does not, so a run claims only the
+  boundary it could exercise.
+- **Class 5 could not hit a block-granular prefix cache.** vLLM's automatic
+  prefix caching hashes whole 16-token blocks and never a partial one; the
+  20-character prefix (9-12 tokens) could not produce a single hit, and the probe
+  recorded Class 5 PASS against a backend with a shared cache. Each prefix now
+  opens with its 20-character key and continues with filler spanning several
+  full blocks. The key is a hash of the tenant id (two low-valued ids shared
+  their leading hex, so one owner's warm-up primed the other's measurement on a
+  correctly scoped cache), and the variance floor is a 1 µs resolution, not the
+  1 ns the constant encoded.
+- **The subject-erasure control arm was a no-op for non-Latin subjects, and blind
+  to world knowledge.** The scramble rotated ASCII letters only, so a Cyrillic,
+  Greek, or CJK prefix was its own control and every genuine recall was vetoed —
+  a memorised non-Latin subject attested ERASED (and a superscript digit crashed
+  it). It now scrambles any script and refuses a prefix it cannot change. A
+  second control on per-tenant models asks the same prefix as a tenant that
+  trained nothing, so `Hussein Obama` after `Barack` is the base model's
+  knowledge, not a CONFIRMED HIGH residual. Fingerprints the check cannot verify
+  no longer drop silently: the model surface reads NOT_COVERED for the subject
+  and the report counts them. The tenant probe's canary model scan uses the same
+  continuation test, so a real LoRA that continues a memorised canary rather than
+  echoing it is RESIDUAL, not invisible.
+- mem0's `get_all` defaults to a 100-entry limit the SDK pages no further, so the
+  "exhaustive" recall was capped at 100; the adapter asks for 10 000 and refuses
+  a listing that hits it. The OpenTelemetry query contract states that an empty
+  marker matches every span of the tenant (what the 404 check relies on).
 - Docs: the schema-reference paragraph said a misspelled adapter field is silently
   ignored (it is refused); the example config's `openai-assistants` and
   `anthropic-tooluse` blocks said the YAML "only flips the kind" (a `factory` is

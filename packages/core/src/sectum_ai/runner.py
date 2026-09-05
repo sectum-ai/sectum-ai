@@ -5,6 +5,7 @@ package graph stays acyclic (core depends on probes, never the reverse).
 """
 
 from sectum_ai.adapters import (
+    Adapter,
     AgentAdapter,
     CacheAdapter,
     MCPAdapter,
@@ -102,12 +103,24 @@ class Runner:
             )
 
     def run_per_step(self, probe: Probe) -> list[StepResult]:
-        """Plan and run the probe, pairing each step with the findings it produced."""
+        """Plan and run the probe, pairing each step with the findings it produced.
+
+        A user-level step whose adapter does not carry the user (``carries_user``)
+        is dropped, not run as the tenant: judged as the user it would confirm
+        leaks of a session that never existed, and the run may claim only the
+        boundary it could exercise.
+        """
         self.preflight(probe)
         results: list[StepResult] = []
+        dropped = 0
         for step in probe.plan(self._substrate):
+            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
+                dropped += 1
+                continue
             observation = self._execute(step)
             results.append((step, probe.detect(step, observation, self._substrate)))
+        if dropped:
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
         # Operational metadata only — step payloads and observations (tenant
         # content) are never logged here (the engineering spec, section 16).
         confirmed = sum(len(confirmed_findings(findings)) for _, findings in results)
@@ -123,6 +136,13 @@ class Runner:
     def run(self, probe: Probe) -> list[Finding]:
         """Plan the probe, execute every step, and return all findings."""
         return [finding for _, findings in self.run_per_step(probe) for finding in findings]
+
+    def _adapter_for(self, action: str) -> Adapter:
+        family = action.split(".", 1)[0]
+        adapter: Adapter | None = getattr(self, f"_{family}", None)
+        if adapter is None:
+            raise AdapterError(f"a {action} step needs a {family} adapter")
+        return adapter
 
     def _execute(self, step: ProbeStep) -> Observation:
         if step.action == "vector.query":

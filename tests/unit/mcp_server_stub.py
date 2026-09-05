@@ -17,9 +17,9 @@ def echo(text: str) -> str:
 
 
 @server.tool()
-def whoami(tenant: str = "anonymous") -> str:
-    """Return the tenant the caller passed, or ``anonymous`` when none was given."""
-    return f"tenant={tenant}"
+def whoami(tenant: str = "anonymous", user: str | None = None) -> str:
+    """Return the tenant (and user, when passed) the caller identified as."""
+    return f"tenant={tenant}" + (f" user={user}" if user is not None else "")
 
 
 if __name__ == "__main__":

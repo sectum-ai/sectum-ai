@@ -119,6 +119,19 @@ class Adapter(ABC):
     the name is a constructor argument any caller can set to anything.
     """
 
+    carries_user: bool = True
+    """Whether a call made as a user reaches the backend AS that user.
+
+    A probe plans user-level steps from every user principal (ADR-0006). An
+    adapter that accepts ``user`` and never transmits it - or whose interface has
+    no ``user`` at all - runs such a step as the tenant, and the observation is
+    then judged as a user whose session never existed: on a tenant-isolated
+    backend every sibling user's marker confirmed as a CRITICAL cross-user leak.
+    The runner drops user-level steps for an adapter that does not carry the
+    user, so the run claims only the boundary it could exercise. Declared, like
+    ``synthetic`` and ``surface``, rather than inferred.
+    """
+
     surface: Surface
     """The place tenant data can leak that this adapter speaks for.
 
@@ -212,6 +225,7 @@ class RAGPipelineAdapter(Adapter):
 
     family = AdapterFamily.RAG_PIPELINE
     surface = Surface.RAG_PIPELINE
+    carries_user = False  # ``ask(tenant, query)`` carries no user
 
     @abstractmethod
     def ask(self, tenant: UUID, query: str) -> RagAnswer:
@@ -223,6 +237,7 @@ class ObservabilityAdapter(Adapter):
 
     family = AdapterFamily.OBSERVABILITY
     surface = Surface.TRACING
+    carries_user = False  # ``search_traces(tenant, marker)`` carries no user
 
     @abstractmethod
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
@@ -259,6 +274,7 @@ class AgentAdapter(Adapter):
 
     family = AdapterFamily.AGENT
     surface = Surface.AGENT_FRAMEWORK
+    carries_user = False  # ``run(tenant, task)`` carries no user
 
     @abstractmethod
     def run(self, tenant: UUID, task: str) -> AgentResult:

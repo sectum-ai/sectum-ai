@@ -23,6 +23,7 @@ fraction), and the confidence-interval critical value is found by bisection - no
 SciPy/NumPy dependency (the spec, section 13: dependency discipline).
 """
 
+import hashlib
 import math
 import statistics
 from dataclasses import dataclass
@@ -37,11 +38,19 @@ from sectum_ai.spec import Finding, FindingStatus, Severity, Substrate, Surface
 # mean measurement positions, which is what makes a linear drift cancel exactly.
 _TRIALS = 24
 # No latency is measured finer than the clock: variances are floored at the
-# square of perf_counter's ~1 us resolution (in ms). A jitter-free backend used
-# to yield zero spread, an infinite t with zero degrees of freedom, p = 1.0, and
-# Cohen's d = 0 - so a perfect, constant 60 ms side channel produced no finding.
-_RESOLUTION_MS = 1e-6
+# square of a 1 us resolution (perf_counter's is tens of ns), in ms. A jitter-free
+# backend used to yield zero spread, an infinite t with zero degrees of freedom,
+# p = 1.0, and Cohen's d = 0 - so a perfect, constant 60 ms side channel produced
+# no finding.
+_RESOLUTION_MS = 1e-3
 _VARIANCE_FLOOR = _RESOLUTION_MS**2
+# A shared prefix long enough for a block-granular cache to hit. vLLM's automatic
+# prefix caching hashes whole 16-token blocks and never caches a partial one, so
+# a 20-character prefix (9-12 tokens) could not produce a single hit: the probe
+# recorded Class 5 PASS against a backend with a shared cache. The first 20
+# characters stay a unique key (what the built-in fake and the serving test
+# doubles key on); the filler behind them spans several full blocks.
+_PREFIX_FILLER = " ".join(["sectum prefix cache probe context"] * 24)
 # Cohen's d: 0.8 is the conventional "large effect" boundary. A timing gap above
 # it stands clear of the per-prompt jitter noise floor (practical significance).
 _EFFECT_THRESHOLD = 0.8
@@ -240,6 +249,10 @@ def _welch(slow: list[float], fast: list[float]) -> tuple[float, float, float]:
     return t_statistic, df, std_error
 
 
+def _key(tenant: UUID) -> str:
+    return hashlib.sha256(tenant.bytes).hexdigest()[:8]
+
+
 class KvCacheTimingProbe:
     """Class 5: a statistical timing test for a shared KV prefix cache."""
 
@@ -271,14 +284,19 @@ class KvCacheTimingProbe:
         single control prefix - for every later trial, so both arms were cache
         hits from trial 1 and a real shared cache survived only in trial 0
         (d ~ 0.25, no finding). Now only the owner's warm-up can prime the primed
-        arm, and the control arm is cold every trial. Prefixes are 20 characters,
-        the cache key the built-in fake and the serving test doubles use.
+        arm, and the control arm is cold every trial. Each prefix opens with a
+        20-character key (what the built-in fake and the serving test doubles key
+        on) and continues with filler spanning several full 16-token blocks, so a
+        block-granular cache (vLLM) can hit it too. The key is a hash of the
+        tenant id, not its leading hex: two low-valued ids share those.
         """
         tenants = [tenant.tenant_id for tenant in self._substrate.tenants]
         signals: list[TimingSignal] = []
         findings: list[Finding] = []
         for owner in tenants:
-            prefixes = [f"t{owner.hex[:8]}-{trial:02d}-session" for trial in range(_TRIALS)]
+            prefixes = [
+                f"t{_key(owner)}-{trial:02d}-session {_PREFIX_FILLER}" for trial in range(_TRIALS)
+            ]
             for prefix in prefixes:
                 self._model.infer(owner, f"{prefix} context warm-up prompt")
             for observer in tenants:
@@ -322,7 +340,10 @@ class KvCacheTimingProbe:
             primed_prompt = f"{prefixes[trial]} probe {trial}"
             # Unique per (owner, observer, trial): a control prefix reused across
             # owners is warmed by the observer's own earlier measurement.
-            control_prompt = f"u{observer.hex[:6]}{owner.hex[:6]}-{trial:02d}-ctl probe {trial}"
+            control_prompt = (
+                f"u{_key(observer)[:6]}{_key(owner)[:6]}-{trial:02d}-ctl {_PREFIX_FILLER} "
+                f"probe {trial}"
+            )
             if trial % 2 == 0:
                 primed.append(self._model.measure_latency(observer, primed_prompt))
                 control.append(self._model.measure_latency(observer, control_prompt))

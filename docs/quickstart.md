@@ -120,12 +120,15 @@ A surface is `ERASED` only when every supplied id is gone **and** no supplied co
 still surfaces; every other surface reads `NOT_COVERED`, so the attestation never
 implies coverage it did not verify. Fingerprint probing is best-effort — a clean
 result is evidence the content no longer surfaces, not proof of absence. On the
-model surface the check is prefix-continuation against a control prefix, so a
-completion any model would produce (`@example.com`, a common surname) is not
-counted as recall; give it a specific phrase, since one whose trailing part is
-under six characters (a bare two-word name) is not checked there and reads
-`NOT_COVERED`. Exit codes match the canary flow: `0` clean, `2` residual remains,
-`3` nothing could be verified.
+model surface the check is prefix-continuation against two controls — a
+same-shaped prefix naming nobody, and (on a per-tenant model) the same prefix as
+a tenant that trained nothing — so a completion any model would produce
+(`@example.com`, a common surname, a public figure's full name) is not counted as
+recall; give it a specific phrase, since one the check cannot verify (a trailing
+part under six characters, a bare two-word name) makes the model surface read
+`NOT_COVERED` for the subject, and the run says how many it could not check. Exit
+codes match the canary flow: `0` clean, `2` residual remains, `3` nothing could be
+verified.
 
 ## Bundle a portable run pack
 

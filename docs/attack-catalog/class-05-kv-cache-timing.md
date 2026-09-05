@@ -17,6 +17,11 @@ inference (the HuggingFace adapter), the observer's own first trial would
 otherwise warm a single shared prefix — and the control prefix — for every later
 trial, leaving both arms as cache hits and the side channel visible in one trial
 of twenty-four. The control prefix is fresh per trial and never warmed by anyone.
+Each prefix opens with a 20-character key (a hash of the tenant id, so two
+low-valued ids do not share it) and continues with filler spanning several full
+16-token blocks: a block-granular cache such as vLLM's automatic prefix caching
+hashes whole blocks and never a partial one, so a short prefix could not produce
+a single hit and the probe recorded a PASS against a backend with a shared cache.
 
 ## Detection
 

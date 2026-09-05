@@ -49,6 +49,7 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
+from sectum_ai.probes._recall import content_recalled, continuation_split
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
 
@@ -76,12 +77,6 @@ SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
 _FINGERPRINT_QUERY_K = 10
-# The shortest completion a prefix-continuation hit may rest on. "Smith" for "John",
-# "@example.com" for a local part: any base model produces those, so a phrase whose
-# trailing part is shorter than this is not checked on the model surface (it reads
-# NOT_COVERED there) rather than checked with a detector that cannot tell recall
-# from a guess.
-_MIN_CONTINUATION_CHARS = 6
 
 _REMEDIATION = {
     Surface.VECTOR_DB: (
@@ -123,45 +118,6 @@ _FINGERPRINT_PROBE_LABEL = {
     Surface.AGENT_MEMORY: "memory recall probe",
     Surface.SEARCH_INDEX: "search-index probe",
 }
-
-
-def _continuation_split(phrase: str) -> tuple[str, str] | None:
-    """The (prefix, casefolded suffix) a prefix-continuation check prompts with.
-
-    ``None`` when the phrase's trailing part is shorter than
-    ``_MIN_CONTINUATION_CHARS``: too little to tell recall from a guess.
-    """
-    tokens = phrase.split()
-    if len(tokens) >= 2:
-        cut = max(1, len(tokens) // 2)
-        prefix, suffix = " ".join(tokens[:cut]), " ".join(tokens[cut:])
-    elif "@" in phrase:
-        # An email: cut inside the local part, so the suffix carries the
-        # subject-specific characters and not just the domain every address shares.
-        local, domain = phrase.split("@", 1)
-        cut = max(1, len(local) // 3)
-        prefix, suffix = local[:cut], f"{local[cut:]}@{domain}"
-    else:
-        # A single token (an account number, a national id): the leading third.
-        cut = max(1, len(phrase) // 3)
-        prefix, suffix = phrase[:cut], phrase[cut:]
-    if len(suffix.strip()) < _MIN_CONTINUATION_CHARS:
-        return None
-    return prefix, suffix.casefold()
-
-
-def _scramble(prefix: str) -> str:
-    """A same-shaped prefix that identifies nobody (letters and digits rotated)."""
-    out: list[str] = []
-    for ch in prefix:
-        if ch.isascii() and ch.isalpha():
-            base = ord("A") if ch.isupper() else ord("a")
-            out.append(chr(base + (ord(ch) - base + 13) % 26))
-        elif ch.isdigit():
-            out.append(str((int(ch) + 5) % 10))
-        else:
-            out.append(ch)
-    return "".join(out)
 
 
 @dataclass(frozen=True)
@@ -219,6 +175,7 @@ class SubjectErasureProbe:
         """
         surfaces: list[SurfaceErasure] = []
         findings: list[Finding] = []
+        unverifiable: dict[Surface, int] = {}
 
         vector = self._vector
         if vector is not None:
@@ -288,12 +245,16 @@ class SubjectErasureProbe:
             # endpoint trained nothing, so the surface is left unscanned and reads
             # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
             # canary model scan.
-            phrases = tuple(
-                p
-                for p in dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ()))
-                if _continuation_split(p) is not None
-            )
-            if phrases and self._model_can_memorize(model):
+            supplied = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ())))
+            phrases = tuple(p for p in supplied if continuation_split(p) is not None)
+            if len(phrases) < len(supplied):
+                # A fingerprint the continuation check cannot verify (a bare
+                # two-word name; a prefix with no control form). Dropping it
+                # silently left the surface reading ERASED "for the subject" on
+                # the phrases that survived; the surface reads NOT_COVERED and the
+                # report says how many were not checked.
+                unverifiable[Surface.MODEL_ADAPTER] = len(supplied) - len(phrases)
+            elif phrases and self._model_can_memorize(model):
                 recalled = [p for p in phrases if self._content_recalled(model, target, p)]
                 surfaces.append(
                     SurfaceErasure(
@@ -350,7 +311,10 @@ class SubjectErasureProbe:
                 )
 
         return ErasureReport(
-            target_tenant=target, surfaces=tuple(surfaces), findings=tuple(findings)
+            target_tenant=target,
+            surfaces=tuple(surfaces),
+            findings=tuple(findings),
+            unverifiable=unverifiable,
         )
 
     @staticmethod
@@ -378,37 +342,11 @@ class SubjectErasureProbe:
 
     @staticmethod
     def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
-        # ``infer`` returns the completion only (never an echo of the prompt), so a
-        # model surfaces residual memorization of the subject's content two ways:
-        #  (1) direct recall - a model whose adapter returns the memorized text (the
-        #      in-memory fake) surfaces the whole phrase when prompted with it; and
-        #  (2) prefix-continuation extraction - a real autoregressive model does not
-        #      echo, it *continues*, so the whole-phrase prompt is stripped from the
-        #      completion and never matches; prompting with the phrase's leading half
-        #      and seeing its trailing (sensitive) half regurgitated is the
-        #      memorization/extraction signal a whole-phrase probe alone misses.
-        # Either hit is residual; a clean result on both is best-effort evidence.
-        #
-        # (2) has a control arm. A completion the model produces for a prefix that
-        # names nobody is a generic continuation, not recall: "@example.com" after
-        # any local part, "Smith" after "John". So the suffix counts only when the
-        # subject's prefix produces it and a same-shaped prefix that identifies
-        # no one does not. The cut keeps the subject-specific part on both sides
-        # (an email is cut inside its local part, never at the "@"), and a phrase
-        # whose trailing part is too short to be evidence is not checked at all.
-        if phrase.casefold() in model.infer(target, phrase).casefold():
-            return True
-        split = _continuation_split(phrase)
-        if split is None:
-            return False
-        prefix, suffix = split
-        if suffix not in model.infer(target, prefix).casefold():
-            return False
-        return suffix not in model.infer(target, _scramble(prefix)).casefold()
+        return content_recalled(model, target, phrase)
 
     @staticmethod
     def _continuation_split(phrase: str) -> tuple[str, str] | None:
-        return _continuation_split(phrase)
+        return continuation_split(phrase)
 
     @staticmethod
     def _model_can_memorize(model: ModelAdapter) -> bool:

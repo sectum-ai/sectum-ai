@@ -13,7 +13,10 @@ Two probes exercise the same attack pattern from opposite ends.
 
 **MCP end (`agent-tool-hijack`)** — verifies the *server* the agent calls.
 Each tenant's hard canary is provisioned as an MCP resource. From every other
-tenant's session the probe issues four sub-probes:
+principal's session — a tenant, or a user within a tenant when the MCP adapter
+carries the user (the built-in fake does; the live clients only with
+`user_argument`, else the runner drops the user-level steps) — the probe issues
+four sub-probes:
 
 - a **direct lookup** of the foreign resource key — the confused-deputy pattern;
 - the same lookup **carrying the owner's token** — the Asana-class

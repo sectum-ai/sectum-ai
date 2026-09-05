@@ -18,12 +18,19 @@ the vector DB, semantic cache, and tracing, and by content fingerprint on the
 vector DB, model adapter, agent memory, and search index. The eval set and backup
 surfaces are not scanned by the subject probe and read `NOT_COVERED` in its
 attestation; only the tenant probe covers all eight. On the model adapter the
-fingerprint check is prefix-continuation with a control arm: the subject's
-prefix must complete to the trailing part *and* a same-shaped prefix naming
-nobody must not (so `@example.com` after any local part, or `Smith` after
-`John`, is a generic completion, not recall). An email is cut inside its local
-part, and a phrase whose trailing part is under six characters — a bare
-two-word name — is not checked on that surface and reads `NOT_COVERED` there.
+fingerprint check is prefix-continuation with two control arms: the subject's
+prefix must complete to the trailing part; a same-shaped prefix naming nobody
+must not (so `@example.com` after any local part, or `Smith` after `John`, is a
+generic completion, not recall); and on a model that routes per tenant, the same
+prefix as a tenant that trained nothing must not either (so `Hussein Obama`
+after `Barack` is the base model's world knowledge, not the tenant's residual).
+The scrambled control works for any script, not only Latin. An email is cut
+inside its local part. A phrase the check cannot verify — a trailing part under
+six characters, a bare two-word name, a prefix with no scrambled form — makes
+the whole model surface `NOT_COVERED` for the subject, and the run says how many
+supplied fingerprints it could not check. The tenant probe's canary scan uses the
+same continuation test, so a real LoRA that memorised a canary and continues it
+(rather than echoing it) is `RESIDUAL`, not invisible.
 
 ## Goal
 
