@@ -126,10 +126,17 @@ carry the calling user to the backend at all, so with it off the run exercises
 the tenant boundary only (user-level steps are not run, and the run says so) —
 and `soft_delete: bool = false` makes an erasure a no-op that the surface still
 acknowledges — the Class 11 residue. Not every
-resolver reads them. `user_scoped` is read by `vector_store`, `app`, `cache`,
-`model`, `mcp`, and `memory`. `soft_delete` is read by `vector_store`, `app`,
-`cache`, `model`, `memory`, `observability`, `search_index`, `eval_set`, and
-`backup` — but not by `mcp`. The `rag` and `agent` resolvers read neither.
+resolver reads them, **and the guard is per `kind`, not per family**: the lists
+below say where the knob exists at all, not that every backend in the family takes
+it. `user_scoped` is read by kinds under `vector_store`, `app`, `cache`, `model`,
+`mcp`, and `memory`; `soft_delete` by kinds under `vector_store`, `app`, `cache`,
+`model`, `memory`, `observability`, `search_index`, `eval_set`, and `backup`. The
+`rag` and `agent` resolvers read neither. Within a family the live backends are
+narrower than the fake: `soft_delete` models a store that acknowledges a delete
+and keeps the data, which only the built-in fakes and a few live backends can do,
+so `cache: {kind: redis, soft_delete: true}` and
+`observability: {kind: phoenix, soft_delete: true}` are both rejected, as is
+`mcp: {kind: stdio, user_scoped: true}` — the MCP clients take no such knob.
 A field in your block that the family's resolver never reads is **rejected** when
 the adapter is built (exit `3`, naming the field): `shared_idx: true`, or
 `soft_delete` under `rag`, would otherwise change nothing and the run would measure
@@ -233,7 +240,7 @@ is a Python object, not a YAML value. Omitting `factory` fails at config load wi
 | `fake` | `confused_deputy: bool = false`, `tool_call_passthrough: bool = false` | `FakeAgent`. Both knobs reproduce the Class 7 flaws — a tool that lost tenant scope (confused deputy) and a server that trusts a caller-supplied token (token passthrough). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
 | `langgraph` | `factory: str` *(required)* — `module.path:callable` returning the compiled graph; `recursion_limit: int = 25` | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The resolver imports `factory` and calls it with no arguments. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
-| `autogen` | `factory: str` *(required)* — `module.path:callable` returning the agent; `max_turns: int = 0` | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
+| `autogen` | `factory: str` *(required)* — `module.path:callable` returning the agent; `max_turns: int \| null = null` (omitted, the SDK's own default applies; a literal `0` runs a **zero-turn** conversation, so the probe observes nothing) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
 | `crewai` | `factory: str` *(required)* — `module.path:callable` returning the `Crew`; `input_key: str = "task"`, `tenant_key: str = "tenant_id"` | `CrewAIAgent` — a CrewAI `Crew` of agents + tasks kicked off per tenant via `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so templated task descriptions interpolate the tenant id and tenant-aware tools read the scope from their call arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `crewai` extra: `pip install sectum-ai-adapters[crewai]`. |
 | `openai-assistants` | `factory: str` *(required)* — `module.path:callable` returning the configured client/assistant | `OpenAIAssistantsAgent` — an OpenAI Assistant with one `Thread` cached per tenant, posted via `OpenAI().beta.threads.messages.create` + `runs.create`; each user message is prefixed with `[tenant:<hex>]` so a tenant-aware tool reads the scope from its call arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `openai-assistants` extra: `pip install sectum-ai-adapters[openai-assistants]`. |
 | `anthropic-tooluse` | `factory: str` *(required)* — `module.path:callable` returning the configured client/tools | `AnthropicToolUseAgent` — the Anthropic Messages API in native tool-use mode with one conversation history cached per tenant; each per-tenant user message is prefixed with `[tenant:<hex>]` and the tool-use loop runs to `stop_reason: end_turn` per turn, executing the python callable each registered tool spec carries on its `__sectum_callable__` sidecar. The resolver imports `factory` and calls it with no arguments. Requires the optional `anthropic-tooluse` extra: `pip install sectum-ai-adapters[anthropic-tooluse]`. |

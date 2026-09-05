@@ -1,8 +1,12 @@
 # Evidence chain
 
-Every run produces an `EvidencePack` — a tamper-evident, control-mapped bundle
-that an auditor or Data Protection Officer accepts and that a third party
-verifies independently.
+A completed run can be assembled into an `EvidencePack` — a bundle a third
+party verifies independently with `sectum-ai verify`, no trust in Sectum AI
+required. Two things must be true before it is evidence *about your systems*:
+the digest must be bound by an independent anchor (a real RFC 3161 timestamp or
+a Rekor inclusion proof — the development default is neither), and at least one
+surface must have been live. `verify` refuses a pack missing either, and a run
+with no live surface carries no control mappings at all.
 
 ## Construction
 
@@ -18,9 +22,11 @@ verifies independently.
    timestamper (a JSON record of the digest and a wall-clock time, with no
    external anchor). Production configures an RFC 3161 Time-Stamp Authority (see
    below) and, optionally, records the digest in a Sigstore Rekor transparency log.
-4. The pack bundles the canonical run, the manifest hash, the timestamp token,
+4. The pack carries the canonical run, the manifest hash, the timestamp token,
    the Rekor inclusion proof (when enabled), the control mappings, the
-   `anchored_in_log` flag, and a human-readable PDF.
+   `anchored_in_log` and `anchored_with_timestamp` flags, and `pdf_ref` — the
+   SHA-256 of the audit PDF's bytes. The PDF travels beside the pack, not within
+   it (`sectum-ai pack` is what puts the two in one zip).
 
 ## Trusted timestamping (RFC 3161)
 

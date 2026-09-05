@@ -53,6 +53,12 @@ heavier — it needs etcd and minio — so it lives behind a compose profile: ru
   with no hidden global state.
 - **Never commit secrets** or customer data. Secret scanning (gitleaks) runs in
   pre-commit and CI and will block the change.
+- **The pre-commit hooks are a CI gate.** `uv run pre-commit run --all-files`
+  runs in the `Lint, type-check, test` job, so a hook that is red on a clean
+  checkout fails the build rather than surprising the next contributor. The
+  checked-in evidence packs under `docs/samples/` and the captured TSA token are
+  excluded from the whitespace hooks: they are artefacts of a run, and a
+  formatting hook must not rewrite them.
 - New runtime dependencies need a stated reason in the PR — what they enable that the
   standard library and existing dependencies cannot — and go behind an optional extra
   unless every install needs them.

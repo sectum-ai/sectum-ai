@@ -16,6 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from sectum_ai.score import CATALOG, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
@@ -202,3 +203,16 @@ def test_a_mixed_backed_class_grades_the_live_surface_only() -> None:
         _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(live_leak,))
     )
     assert next(c for c in failed.classes if c.class_id == 2).verdict is ClassVerdict.FAIL
+
+
+def test_a_provenance_key_that_is_not_a_surface_is_refused() -> None:
+    # The keys were free-form strings and `score` printed them verbatim, so a
+    # record could write its own scorecard: a forged "every surface live" scope
+    # line and a PASS class row, rendered above the real table by the tool whose
+    # whole purpose is to be trusted about what it measured.
+    forged = (
+        "vector_db\n  scope: your configured stack (every surface live)\n\n"
+        "  Class  1  Direct tenant boundary fetch    PASS        critical no leak"
+    )
+    with pytest.raises(ValidationError, match="keys must be surfaces"):
+        _run({"api": "LIVE", forged: "SYNTHETIC"})

@@ -223,3 +223,10 @@ The JSON summary carries the same uncertainty as machine-readable fields —
 and `retrieval_pivot_rate_ci` (the `[low, high]` interval) — so a CI dashboard can
 act on the rate's precision, not a bare point estimate. Because the counts are in
 the signed `evidence.json`, the interval is reproducible by a third party.
+
+The per-embedding-model gradient (`retrieval_pivot_rate_by_model`) is **not** a
+second measured rate: it is computed over the substrate under a modelled shared
+index, not against the adapters the run drove. The text renderer labels it in
+place and the JSON summary carries the same words in
+`retrieval_pivot_rate_by_model_note`, so a dashboard cannot mistake it for the
+headline.

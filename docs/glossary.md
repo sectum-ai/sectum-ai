@@ -47,7 +47,10 @@ The fraction of benign cross-tenant queries that surfaced a foreign
 marker — the headline metric for [Class 2](attack-catalog/class-02-rag-entity-bleed.md),
 the flagship probe. Reproduces the *Retrieval Pivot Attacks in Hybrid RAG*
 result ([arXiv:2602.08668](https://arxiv.org/abs/2602.08668); 95.4% of benign
-queries leaked across tenants on a shared vector index).
+queries leaked across tenants on a shared vector index). Its denominator pools
+both Class 2 probes' steps, and on a run with **any** live surface only the live
+surfaces' steps are pooled — a leaking fake beside a clean live backend is not
+the configured stack's rate.
 
 ## Surface
 A place tenant data can live or leak. The catalog covers: API, vector DB,
@@ -87,13 +90,14 @@ independently verifiable by `sectum-ai verify`.
 ## BYOC (bring-your-own-cloud)
 A deployment mode where the `sectum-ai` CLI runs inside the customer's
 environment and only the markers, the configuration, the judge-cited
-evidence spans, and the timestamped evidence pack leave the box. The alternative is *hosted* mode, where Sectum
+evidence spans (including a judge rationale, which may restate observed content),
+and the timestamped evidence pack leave the box. The alternative is *hosted* mode, where Sectum
 runs the synthetic tenants against the customer's reachable endpoints.
 
 ## Wedge
 The standalone GDPR Article 17 "right-to-erasure" attestation SKU
-([Class 11](attack-catalog/class-11-erasure.md)). Verifies that a churned
-tenant's data has actually left every configured AI surface
+([Class 11](attack-catalog/class-11-erasure.md)). Checks that none of a churned
+tenant's markers is still retrievable through the scanned AI surfaces
 post-erasure, itemizing residual markers per surface. Sold as a one-time
 DPO-facing engagement.
 

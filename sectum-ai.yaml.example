@@ -48,7 +48,8 @@ adapters:
     # kind: fake               # in-memory, deterministic (the default)
     # kind: pgvector           # Postgres + pgvector
     #   dsn_env: SECTUM_PGVECTOR_DSN
-    #   shared_index: false    # set true to reproduce a leaky multi-tenant setup
+    #   user_scoped: false     # true isolates by user within a tenant
+    #   (shared_index is a `fake`-only knob: a live store's tenancy is its own)
     # kind: chroma             # Chroma server
     #   host: localhost
     #   port: 8000

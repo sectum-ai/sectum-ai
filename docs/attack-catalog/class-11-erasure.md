@@ -2,8 +2,9 @@
 
 **OWASP:** LLM08:2025 · **ATLAS:** — (a control check, not an attack technique) · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune, search index, eval set, backup · **Probe ids:** `gdpr-erasure-verification`, `gdpr-subject-erasure-verification`
 
-Proving a tenant's data has actually left an AI system after a right-to-erasure
-request.
+Checking, surface by surface, that none of a tenant's markers is still
+retrievable after a right-to-erasure request — and stating explicitly which
+surfaces were not checked.
 
 Two probes verify erasure at two granularities. `gdpr-erasure-verification`
 verifies **tenant-level** erasure — none of a tenant's markers remain after the

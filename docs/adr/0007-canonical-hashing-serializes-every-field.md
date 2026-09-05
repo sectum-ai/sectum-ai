@@ -26,8 +26,10 @@ Keep total serialization. **Reject `exclude_none` and `exclude_defaults`.**
 ## Consequences
 
 - **Changing the rule would break every previously issued pack.** `verify_pack`
-  recomputes `run_digest = canonical_hash(pack.run_result)` from the model and
-  matches it against the timestamp token issued at build time. Any change to
+  recomputes `attested_digest(pack)` — the canonical hash over the whole attested
+  content, of which `pack.run_result` is one member (see
+  [ADR-0016](0016-anchor-the-whole-pack.md)) — and matches it against the
+  timestamp token issued at build time. Any change to
   `to_canonical_json` changes that recomputed digest, so every prior pack would
   fail verification. Adopting exclusion is a one-time break of the verification
   contract — strictly worse than the harmless additive-field shift it avoids,

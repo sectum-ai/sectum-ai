@@ -23,7 +23,7 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   ...
   Class 13  Multi-modal RAG entity-bleed    NOT_COVERED critical probe did not run - ...
 
-  Methodology: docs/scorecard.md (v1.2) - weighted 0.00 over the covered classes; coverage 0.88.
+  Methodology: docs/scorecard.md (v1.3) - weighted 0.00 over the covered classes; coverage 0.88.
   Untested classes lower confidence, never the grade.
 ```
 
@@ -266,5 +266,7 @@ carry the currently-unreachable `low`/`info` weight bands).
 grade/confidence/cap tests beside them — so changing one fails CI until this page and the
 version move too.
 Any change to them is a change to what a published grade means, so bump
-`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.2` must always
-recompute to the same letter.
+`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.3` must always
+recompute to the same letter. **What counts as evidence is part of the methodology,
+not just the weights**: `v1.3` withholds findings whose backing surface was the
+built-in fake, so a run that graded `F` under `v1.2` can grade differently here.

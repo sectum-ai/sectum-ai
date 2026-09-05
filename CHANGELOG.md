@@ -13,9 +13,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user-level steps the runner did not run because the adapter cannot carry a user
   identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
   longer accepted by `verify` (the usual minor-bump rule); regenerate them.
+- **Scorecard methodology `1.3`.** What counts as evidence is part of the
+  methodology, not only the weights: `1.2` graded a class on findings whose
+  backing surface was the built-in fake, `1.3` withholds them. A run that graded
+  `F` under `1.2` can grade differently here, so the stamp moves with the rule
+  that a given version always recomputes to the same letter.
+- **The Action's output strings changed.** The step summary now reads
+  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
+  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
+  built-in fakes too. A workflow grepping the old text needs updating.
+- **`surface_provenance` keys must be surfaces.** The values were validated and
+  the keys were not, so a hand-edited record could name anything — and `score`
+  printed it verbatim, letting a record forge its own scorecard lines. A key that
+  is not a `Surface` is now a validation error.
+- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
+  the same "modelled shared index, not the configured store" caveat the text
+  renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
 
+- **The wedge SKU signed `ERASURE VERIFIED` over a canary it could still
+  retrieve.** Class 11's vector scan read a full `k=10` similarity page as
+  absence — a marker still stored but ranked below the page looks exactly like a
+  purged one — so a partial purge attested ERASED under GDPR Article 17 and CCPA
+  1798.105. The A3 sibling had already moved to `k=50` with an inconclusive
+  verdict; Class 11 now has the same contract, and a surface whose absence was
+  never established reads NOT_COVERED, never ERASED.
+- **A run record could forge its own scorecard.** `surface_provenance` validated
+  its values and not its keys, and `score` printed the keys verbatim while every
+  sibling renderer escapes them — so a record carrying a multi-line key wrote a
+  fake "every surface live" scope line and fake `PASS` class rows above the real
+  table. Keys must now be surfaces, and the renderer escapes like its siblings.
+- **`pre-commit run --all-files` — the gate CONTRIBUTING tells a contributor to
+  run — was red on a clean checkout**, and the hook that failed rewrote five
+  checked-in evidence packs and a captured TSA token. Those are artefacts, not
+  source; the whitespace hooks skip them. CI now runs the whole hook set rather
+  than the one hook (`codespell`) the previous cycle wired up, so the next hook
+  to go red fails the build instead of the next contributor's first commit.
+- Docs: the storefront said Sectum AI *proves* no user can read another's data;
+  the evidence chain promised "every run produces a tamper-evident,
+  control-mapped bundle" on a path that produces neither and that `verify`
+  refuses; Class 1 claimed the evidence distinguishes an enforced `403` from a
+  200-empty (nothing produces `AccessOutcome.DENIED`); Class 11 and three other
+  pages claimed to *prove* a tenant's data "has actually left every configured AI
+  surface". ADR-0008 listed the MCP clients among the adapters that report
+  `USER_SCOPED`, which they never do; ADR-0007 gave a digest formula `verify_pack`
+  does not use, so a third party implementing it would reject every genuine pack.
+  The recording script seeded without the example config, so its cast shows 12.5%
+  while `RECORDING.md` sells it as proof of the 81.2% headline. The run pack's own
+  README gave a `verify` recipe that exits 4 on a synthetic-stack pack, and said
+  the pack carries the ground-truth manifest when it carries it only with
+  `--include-manifest`. Also: the unread-field guard is per adapter *kind*, not
+  per family; `pgvector` reads neither `shared_index` nor `soft_delete`; AutoGen's
+  `max_turns` defaults to null, not `0` (a literal `0` runs no turns); the extras
+  list omitted every backend client; Class 5 on HuggingFace can only ever pass;
+  Class 4 measures cache-*key* tenancy, not semantic collapse; and BYOC egress
+  includes unverified findings' judge rationales.
+- `SECURITY.md` and `docs/index.md` state the shipped version and drifted
+  unguarded; both are now pinned by `tests/unit/test_action_version.py`.
 - **A lost live surface still printed `[ok]` for the metrics that matter most.**
   The cycle-6 rule marked a probe unmeasured only when *every* surface it lists
   was lost, but `PROBE_SURFACES` lists alternatives and a run drives one of them,
@@ -201,7 +256,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conditions"*, on the strength of a deletion check. The isolation requirement now
   excludes the two erasure probe ids (pinned in `controls.py`, since the evidence
   package cannot import the probes, and held to the probes' declarations by a
-  test). An erasure-only run asserts exactly GDPR Article 17 and CCPA 1798.105.
+  test). An erasure-only run asserts **at most** GDPR Article 17 and CCPA
+  1798.105, and only for a surface scanned on a live backend — the two shipped
+  sample packs, being all-synthetic, assert nothing at all.
   The sample packs are regenerated.
 - **The erasure attestation recorded no surface provenance.** v0.9.0 said a run
   "now records what it actually interrogated" and that the fix "closes that at

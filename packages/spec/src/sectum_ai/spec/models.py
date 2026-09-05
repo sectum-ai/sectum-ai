@@ -403,6 +403,23 @@ class RunResult(SectumModel):
 
     @field_validator("surface_provenance")
     @classmethod
+    def _provenance_keys_are_surfaces(cls, value: dict[str, str]) -> dict[str, str]:
+        # The keys are free-form strings only because a `dict[str, str]` keeps the
+        # canonical-hash form identical to the other blocks - a key that is not a
+        # Surface names nothing this build can reason about, and `score` printed it
+        # verbatim, so a record could inject whole scorecard lines (a forged "every
+        # surface live" scope line and a PASS class row) into its own grade.
+        surfaces = {member.value for member in Surface}
+        bad = sorted(key for key in value if key not in surfaces)
+        if bad:
+            raise ValueError(
+                f"surface_provenance keys must be surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad)}"
+            )
+        return value
+
+    @field_validator("surface_provenance")
+    @classmethod
     def _provenance_values_are_members(cls, value: dict[str, str]) -> dict[str, str]:
         # Every gate downstream compares against the exact member strings, so a
         # value that is neither ("synthetic", "Live", "bogus") read as not-synthetic

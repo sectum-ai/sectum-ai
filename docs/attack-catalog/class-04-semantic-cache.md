@@ -10,8 +10,12 @@ answer to another tenant.
 ## Method
 
 A semantic cache collapses near-identical queries onto a single stored entry.
-The probe primes such an entry as one tenant — with an answer carrying that
-tenant's hard canary — then reads it from every other tenant's session.
+What the probe measures is the tenancy of the **cache key**, not that collapse:
+it primes one entry as one tenant — with an answer carrying that tenant's hard
+canary — then reads the *same* key from every other tenant's session. Similarity
+matching is assumed, not modelled, and the shipped Redis backend is a plain
+key-value store. A cache that keys per tenant passes here whatever its similarity
+threshold does.
 
 ## Detection
 

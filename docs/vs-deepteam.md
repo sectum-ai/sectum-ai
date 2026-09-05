@@ -15,9 +15,11 @@ different thing from infrastructure verification.
 ## The difference in one line
 
 DeepTeam asks a model *"did this one answer leak?"* and judges the text. Sectum
-AI provisions a multi-tenant substrate, runs a catalog of probes across every
-surface, and proves — with ground-truth markers and a tamper-evident,
-control-mapped evidence pack — *whether the system isolates tenants at all*.
+AI provisions a multi-tenant substrate, runs a catalog of probes across the
+surfaces your adapters reach, and produces — with ground-truth markers and a
+tamper-evident, control-mapped evidence pack — evidence of *which cross-tenant
+leaks it found, and which checks it was able to perform*. The surfaces it could
+not reach are recorded `NOT_COVERED`, never as a pass.
 
 ## Side by side
 

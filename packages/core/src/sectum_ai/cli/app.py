@@ -1048,6 +1048,17 @@ def probe(
                 else None
             ),
             "retrieval_pivot_rate_by_model": run.metrics.retrieval_pivot_rate_by_model,
+            # The text renderer labels this gradient "modelled shared index, not the
+            # configured store"; without the same words here a CI dashboard reads a
+            # modelled number as a second measured leak rate, which is the one thing
+            # the field's own docstring says must never happen.
+            "retrieval_pivot_rate_by_model_note": (
+                "modelled shared index, not the configured store: a per-model "
+                "gradient computed over the substrate, not measured against the "
+                "adapters this run drove"
+                if run.metrics.retrieval_pivot_rate_by_model
+                else None
+            ),
             "poisoning_bleed_delta": run.metrics.poisoning_bleed_delta,
             "inversion_reconstruction_rate": run.metrics.inversion_reconstruction_rate,
             "extraction_efficiency": run.metrics.extraction_efficiency,
@@ -1134,7 +1145,7 @@ def _scope_lines(card: IsolationScore) -> list[str]:
         "surface(s) -",
         "         any class resting only on these is excluded from the grade:",
     ]
-    lines.extend(f"           {surface}" for surface in card.synthetic_surfaces)
+    lines.extend(f"           {untrusted(surface)}" for surface in card.synthetic_surfaces)
     return lines
 
 
@@ -1487,19 +1498,29 @@ def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) ->
         if sealed_manifest
         else ""
     )
+    # The manifest travels only with `--include-manifest`; saying otherwise told an
+    # auditor to look for a member the pack does not carry.
+    carries = (
+        "evidence spans) and the sealed ground-truth marker manifest - material Sectum\n"
+        if sealed_manifest
+        else "evidence spans) - material Sectum\n"
+    )
     return (
         f"# Sectum AI run pack - {untrusted(run_id)}\n\n"
         "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
         "Sectum AI verification run. It carries the run details (`run.json`, including\n"
-        "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
-        "redacts. Share it only with trusted parties (for example, your auditor under NDA).\n\n"
+        f"{carries}"
+        "normally redacts. Share it only with trusted parties (for example, your auditor\n"
+        "under NDA).\n\n"
         "## Verify\n\n"
         "```sh\n"
         "sectum-ai verify run-pack.zip\n"
         "```\n\n"
-        "A pack built with `report --tsa <url> --rekor` verifies as independently anchored tamper\n"
-        "evidence; otherwise add `--allow-unanchored` (the local-dev timestamp is\n"
-        "regenerable, so it is an integrity-only check).\n\n"
+        "A pack built with `report --tsa <url> --rekor` against live adapters verifies as\n"
+        "independently anchored tamper evidence. Otherwise add `--allow-unanchored` (the\n"
+        "local-dev timestamp is regenerable, so it is an integrity-only check), and\n"
+        "`--allow-synthetic` if no surface in the run was a live backend (the verdicts then\n"
+        "describe Sectum's built-in stack, not your systems).\n\n"
         "## Contents\n\n"
         "- `evidence.json` - the signed, tamper-evident evidence pack (the canonical record)\n"
         "- `audit-pack.pdf` - the human-readable audit pack\n"
@@ -1949,6 +1970,15 @@ def _emit_erasure_attestation(
             f"{surface.surface.value}: {surface.markers_before} markers before, "
             f"{surface.residual_after} after -> {surface.verdict}"
         )
+        # "0 after" reads as a purge; say when it only means "not in the page".
+        if surface.unverifiable_after:
+            typer.echo(
+                f"  {surface.unverifiable_after} marker(s) were neither found nor ruled "
+                "out: the backend returned a full similarity page without them, which a "
+                "still-stored marker ranked below the page produces too. The surface "
+                "reads NOT_COVERED, not ERASED.",
+                err=True,
+            )
     if report.not_covered:
         not_covered_names = ", ".join(surface.value for surface in report.not_covered)
         typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
@@ -1991,6 +2021,18 @@ def _emit_erasure_attestation(
                 f"{not_covered_names}.",
             )
         return
+    unverified = [
+        surface.surface.value for surface in report.surfaces if surface.unverifiable_after
+    ]
+    if unverified:
+        typer.echo(
+            f"ERASURE INCONCLUSIVE: {', '.join(unverified)} returned a full similarity "
+            "page without the tenant's markers, so their absence was never established "
+            "- a marker ranked below the page looks the same. Erasure is not attested "
+            "on those surfaces.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]

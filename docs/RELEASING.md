@@ -106,8 +106,9 @@ omit, each of which shipped stale at least once:
   `sectum-ai/sectum-ai@vX.Y.Z` pin example
 - `README.md` — the `> **Status: vX.Y.Z.**` line (it read v0.8.1 while the repo
   shipped 0.10.0)
-- `docs/index.md` — the "Sectum AI is at vX.Y.Z" line (unguarded by the test
-  below, so check it by hand)
+- `docs/index.md` — the "Sectum AI is at vX.Y.Z" line
+- `SECURITY.md` — the "Latest `0.x` minor (currently `0.Y.x`)" row of the
+  supported-versions table
 
 That default is passed straight to `pip install "sectum-ai==<version>"`, so a
 caller who does not override it gets exactly this string. Leaving it behind means
@@ -115,9 +116,10 @@ every default run of the Action installs the *previous* release: v0.7.0 through
 v0.8.3 all shipped while the Action kept installing 0.6.0, handing users a CLI
 that predated the correctness fixes those releases existed to deliver.
 `tests/unit/test_action_version.py` now fails the build if the Action default, the
-docs table, the docs pin, or the README status line drifts from the package
-version, so this step cannot be silently skipped again. (The `action.yml` prose
-is unguarded — check it by hand.)
+docs table, the docs pin, the README status line, the `docs/index.md` version
+line, or the `SECURITY.md` supported-minor row drifts from the package version,
+so this step cannot be silently skipped again. (The `action.yml` prose is
+unguarded — check it by hand.)
 
 ### 2. Re-validate the ATLAS technique catalog
 

@@ -1,5 +1,7 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
+from uuid import UUID
+
 from sectum_ai.adapters import (
     FakeBackup,
     FakeCache,
@@ -10,7 +12,7 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum_ai.adapters.base import ObservabilityAdapter
+from sectum_ai.adapters.base import ObservabilityAdapter, VectorHit
 from sectum_ai.probes import ERASURE_SURFACES, ErasureProbe
 from sectum_ai.spec import CoverageVerdict, MarkerType, Substrate, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -708,3 +710,50 @@ def test_a_continuing_model_that_kept_the_canary_is_residual() -> None:
     store = _seeded_store(substrate, soft_delete=False)
     report = ErasureProbe(substrate, vector=store, model=model).run(target)
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
+
+
+def test_a_marker_ranked_past_the_page_is_not_attested_erased() -> None:
+    # The Class 11 vector scan read a full similarity page as absence, and did it
+    # at k=10 while its A3 sibling had already moved to k=50 with an inconclusive
+    # verdict. A canary the store still returns - just below the page - therefore
+    # attested ERASED under GDPR Article 17 and CCPA 1798.105.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=True)  # nothing is really deleted
+
+    class _PagedStore(FakeVectorStore):
+        """Answers every query with a FULL page that never holds the canary."""
+
+        def __init__(self, inner: FakeVectorStore) -> None:
+            self._inner = inner
+            self._truncate = False
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def delete(self, tenant: UUID) -> None:
+            self._inner.delete(tenant)
+            self._truncate = True
+
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            hits = self._inner.query(tenant, text, k, user=user)
+            if not self._truncate:
+                return hits
+            # Still stored, but every canary now ranks past the page.
+            return [
+                VectorHit(doc_id=f"filler-{index}", tenant_id=tenant, score=1.0, content="filler")
+                for index in range(k)
+            ]
+
+    paged = _PagedStore(store)
+    report = ErasureProbe(substrate, vector=paged).run(target)
+    surface = report.surfaces[0]
+    assert surface.markers_before > 0
+    assert surface.residual_after == 0  # nothing was FOUND
+    assert surface.unverifiable_after > 0  # but absence was never established
+    assert surface.verdict == "NOT VERIFIED"
+    assert surface.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not surface.erased
+    assert not report.erased

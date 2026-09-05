@@ -99,8 +99,13 @@ for conformance without yet enforcing it (the per-backend follow-on above).
 > adapters still accept `user` for conformance without yet enforcing it" is no
 > longer true: the live vector stores (pgvector, Pinecone, Qdrant, Milvus,
 > OpenSearch, Chroma, Weaviate, Azure AI Search), the Redis cache and memory
-> adapters, the MCP clients, and the HuggingFace model adapter all enforce and
-> report `USER_SCOPED` behind an opt-in `user_scoped=True`.
+> adapters and the HuggingFace model adapter all enforce and report
+> `USER_SCOPED` behind an opt-in `user_scoped=True`. *(Correction, 2026-09-05:
+> this update originally listed the live MCP clients here. They are the
+> exception — they take no `user_scoped` knob and never report `USER_SCOPED`.
+> With `user_argument` set they forward the calling user as a tool argument, so
+> `carries_user` is true, but enforcement is the MCP server's, not the
+> adapter's.)*
 
 ## Update (2026-09-05)
 

@@ -57,6 +57,12 @@ ERASURE_SURFACES: tuple[Surface, ...] = (
 
 # One surface's pre/post scan (target + markers -> the markers still present)
 # and its erasure callable, threaded through the uniform _erase_surface helper.
+# The similarity page the vector scan reads. A marker that is still stored but
+# ranks past the page is invisible to `query`, so a SHORT page without it is
+# absence and a FULL one is only "not in the top k" - the same contract, and the
+# same constant, as the subject probe's fingerprint check.
+_FINGERPRINT_QUERY_K = 50
+
 _Scan = Callable[[UUID, tuple[Marker, ...]], list[Marker]]
 _Delete = Callable[[UUID], None]
 
@@ -79,6 +85,11 @@ class SurfaceErasure:
     markers_before: int
     residual_after: int
     erasure_supported: bool = True
+    # Markers whose post-erasure absence could not be established because the
+    # backend returned a full similarity page without them: still stored and
+    # ranked past the page reads exactly like purged. Such a surface is NOT
+    # attested ERASED.
+    unverifiable_after: int = 0
 
     @property
     def erased(self) -> bool:
@@ -90,6 +101,8 @@ class SurfaceErasure:
         never ``erased``: its data is presumed retained.
         """
         if not self.erasure_supported:
+            return False
+        if self.unverifiable_after:
             return False
         return self.markers_before > 0 and self.residual_after == 0
 
@@ -111,9 +124,11 @@ class SurfaceErasure:
             return "NO BASELINE"
         if not self.erasure_supported:
             return "ATTESTABLE WITH CAVEAT"
-        if self.residual_after == 0:
-            return "ERASED"
-        return "RESIDUAL DATA"
+        if self.residual_after > 0:
+            return "RESIDUAL DATA"
+        if self.unverifiable_after:
+            return "NOT VERIFIED"
+        return "ERASED"
 
     @property
     def coverage_verdict(self) -> CoverageVerdict:
@@ -131,9 +146,11 @@ class SurfaceErasure:
             return CoverageVerdict.NOT_COVERED
         if not self.erasure_supported:
             return CoverageVerdict.ATTESTABLE_WITH_CAVEAT
-        if self.residual_after == 0:
-            return CoverageVerdict.ERASED
-        return CoverageVerdict.RESIDUAL
+        if self.residual_after > 0:
+            return CoverageVerdict.RESIDUAL
+        if self.unverifiable_after:
+            return CoverageVerdict.NOT_COVERED
+        return CoverageVerdict.ERASED
 
 
 @dataclass(frozen=True)
@@ -240,6 +257,9 @@ class ErasureProbe:
         self._eval_set = eval_set
         self._backup = backup
         self._documents = {document.doc_id: document for document in substrate.documents}
+        # Per-surface count of markers the last scan could neither find nor rule
+        # out; `_erase_surface` reads it straight after the post-erasure scan.
+        self._inconclusive: dict[Surface, int] = {}
 
     def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
         """Confirm the target's markers, run the erasure, and re-scan each surface.
@@ -335,12 +355,14 @@ class ErasureProbe:
             delete(target)
         except ErasureUnsupported:
             supported = False
+        self._inconclusive.pop(surface, None)
         residual = scan(target, markers)
         surface_result = SurfaceErasure(
             surface=surface,
             markers_before=len(before),
             residual_after=len(residual),
             erasure_supported=supported,
+            unverifiable_after=self._inconclusive.get(surface, 0),
         )
         if supported:
             surface_findings = [
@@ -353,8 +375,23 @@ class ErasureProbe:
         return surface_result, surface_findings
 
     def _scan_vector(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
-        """Return the target's hard-canary markers still observable on the vector store."""
-        return [marker for marker in markers if self._marker_observable(target, marker)]
+        """Return the target's hard-canary markers still observable on the vector store.
+
+        A marker whose absence the page could not establish is neither returned
+        (that would be a residual finding the run did not observe) nor forgotten:
+        it is counted in :attr:`_inconclusive`, which makes the surface
+        NOT_COVERED rather than ERASED.
+        """
+        observable: list[Marker] = []
+        inconclusive = 0
+        for marker in markers:
+            seen = self._marker_observable(target, marker)
+            if seen:
+                observable.append(marker)
+            elif seen is None:
+                inconclusive += 1
+        self._inconclusive[Surface.VECTOR_DB] = inconclusive
+        return observable
 
     def _scan_observability(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still observable in tracing."""
@@ -445,15 +482,25 @@ class ErasureProbe:
             for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
         )
 
-    def _marker_observable(self, target: UUID, marker: Marker) -> bool:
+    def _marker_observable(self, target: UUID, marker: Marker) -> bool | None:
+        """Whether ``marker`` is still retrievable: ``None`` when that is unknowable.
+
+        ``None`` means every location came back as a *full* page without the
+        marker: it may be gone, or stored and ranked past the page. Reading that
+        as absence is what let a partial purge attest ERASED over a canary the
+        same store still returns.
+        """
+        inconclusive = False
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
             if document is None:
                 continue
-            hits = self._vector.query(target, document.title, k=10)
+            hits = self._vector.query(target, document.title, k=_FINGERPRINT_QUERY_K)
             if any(marker.plaintext in hit.content for hit in hits):
                 return True
-        return False
+            if len(hits) >= _FINGERPRINT_QUERY_K:
+                inconclusive = True
+        return None if inconclusive else False
 
     def _residual_finding(self, target: UUID, marker: Marker, surface: Surface) -> Finding:
         remediation = {

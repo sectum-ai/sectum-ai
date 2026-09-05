@@ -89,10 +89,13 @@ scanning adapter yet, so it is out of scope, not fake; see the
   against docker-compose backends in CI every push. The agent-memory surface also has a
   live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow
   the same seam.
-- **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
-  require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
-  HuggingFace + PEFT. A stack that reaches generation only through a hosted API
-  (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
+- **The model probes need a self-hosted model.** Class 9 (LoRA) requires per-tenant
+  adapters — vLLM, TGI, or HuggingFace + PEFT. Class 5 (KV timing) requires a prefix
+  cache *shared across principals*, which only the serving backends (vLLM, TGI)
+  declare: HuggingFace + PEFT loads per tenant, so the probe runs there but can find
+  nothing by construction, and its PASS is a property of the deployment, not a
+  measurement. A stack that reaches generation only through a hosted API (OpenAI /
+  Anthropic) cannot run either as-is; the Class 2 embedding sweep still does.
 - **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
   (local, BYOC-safe) plus the hosted `openai`, `cohere`, `voyage`, and `bedrock`
   (all opt-in live and key/region-gated). The Bedrock adapter covers both invoke-body

@@ -1,8 +1,9 @@
 # Sectum AI
 
-**AI data-isolation verification.** Sectum AI proves that no user can read
-another user's data — and no customer another customer's — through your vector
-DB, RAG pipeline, agent framework, semantic cache, fine-tunes, or MCP servers.
+**AI data-isolation verification.** Sectum AI tests whether one user can read
+another user's data — and one customer another customer's — through your vector
+DB, RAG pipeline, agent framework, semantic cache, fine-tunes, or MCP servers,
+and records exactly which checks it was able to run.
 It provisions synthetic tenants on a live stack, seeds them with cryptographic
 canary markers, runs a 12-class attack catalog (Classes 1-11 and 13) across 13
 surfaces, and produces
@@ -75,7 +76,7 @@ account is involved.
 | **SOC 2 audit evidence** | Plug a control-mapped AI isolation attestation into your Type II audit — CC6.1, CC6.6, CC6.7 evidence the auditor accepts as testing coverage of your AI features. |
 | **Pre-launch verification** | Run the probe suite against a new AI feature before launch. Catch the cross-tenant retrieval pivot, the cache contamination, the MCP confused-deputy bug while there's still time to fix it. |
 | **CI regression baselines** | Save a baseline, re-run on every prompt / embedding / model change. Sectum AI flags the regression when a stronger embedding model accidentally raises your Retrieval-Pivot Rate. |
-| **GDPR Article 17 erasure** | A churned tenant invoked their right to be forgotten. Prove their data has actually left every AI surface, in a DPO-ready cryptographically-timestamped attestation pack. |
+| **GDPR Article 17 erasure** | A churned tenant invoked their right to be forgotten. Scan every AI surface you can reach for their markers and record what came back — surface by surface, with the unscanned ones named — in a DPO-ready cryptographically-timestamped attestation pack. |
 | **EU AI Act Article 15** | Documented cybersecurity and robustness measurements for high-risk AI systems. Tamper-evident, control-mapped, and independently verifiable. |
 
 ## Scope

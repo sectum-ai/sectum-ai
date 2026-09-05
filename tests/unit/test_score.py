@@ -560,12 +560,13 @@ def test_the_published_total_catalog_weight_is_41() -> None:
 
 def test_the_catalog_matches_the_published_methodology() -> None:
     # docs/scorecard.md publishes these exact values, and promises that a scorecard
-    # stamped v1.2 always recomputes to the same letter. The other tests compare the
+    # stamped with a given methodology version always recomputes to the same letter.
+    # The other tests compare the
     # output to the implementation's own constants, so both sides move together and a
     # silent change to what a published grade MEANS stays green. This pins the contract:
     # changing the catalog, a weight, or a threshold must break here and force a
     # METHODOLOGY_VERSION bump (and a docs update) rather than sliding through.
-    assert METHODOLOGY_VERSION == "1.2"
+    assert METHODOLOGY_VERSION == "1.3"
     assert [(entry.class_id, entry.severity) for entry in CATALOG] == [
         (1, Severity.CRITICAL),
         (2, Severity.CRITICAL),

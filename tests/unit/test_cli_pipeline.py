@@ -773,7 +773,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     payload = json.loads(result.output)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"] == "1.2"  # pinned; see docs/scorecard.md
+    assert payload["methodology_version"] == "1.3"  # pinned; see docs/scorecard.md
     # The demo leaks on every surface it exercised, so the covered classes all fail.
     assert payload["weighted_score"] == 0.0
     assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
@@ -1736,8 +1736,9 @@ def test_verify_on_a_non_utf8_file_exits_cleanly(tmp_path: Path) -> None:
     bad = tmp_path / "evidence.json"
     bad.write_bytes(b"\xff\xfe\x00binary")
     result = _runner.invoke(app, ["verify", str(bad)])
-    assert result.exit_code in (3, 4), result.output
-    assert "Traceback" not in result.output
+    assert result.exit_code == 3, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "not a valid evidence pack" in result.output, result.output
 
 
 def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> None:

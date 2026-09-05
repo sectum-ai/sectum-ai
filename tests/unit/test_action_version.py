@@ -85,3 +85,33 @@ def test_the_readme_status_matches_the_shipped_version() -> None:
         f"README.md status line says v{status}, but this repo ships {shipped}; "
         "bump the `**Status: vX.Y.Z**` line in README.md as part of the release"
     )
+
+
+def test_the_docs_landing_page_states_the_shipped_version() -> None:
+    # docs/index.md is the docs site's front page and states the version in prose.
+    # RELEASING.md listed it with "unguarded by the test below, so check it by
+    # hand" - the same arrangement that let the Action sit six releases stale.
+    shipped = _package_version()
+    match = re.search(
+        r"Sectum AI is at v(\d+\.\d+\.\d+)", (_ROOT / "docs" / "index.md").read_text()
+    )
+    assert match is not None, "docs/index.md has no `Sectum AI is at vX.Y.Z` line"
+    assert match.group(1) == shipped, (
+        f"docs/index.md says v{match.group(1)}, but this repo ships {shipped}; "
+        "bump it as part of the release"
+    )
+
+
+def test_the_security_policy_supports_the_shipped_minor() -> None:
+    # SECURITY.md tells a reporter which versions get fixes. Left stale it points
+    # them at a minor that is no longer current - and it was in neither the
+    # release recipe nor a test.
+    shipped = _package_version()
+    text = (_ROOT / "SECURITY.md").read_text()
+    match = re.search(r"currently `(\d+\.\d+)\.x`", text)
+    assert match is not None, "SECURITY.md has no ``currently `X.Y.x` `` supported-versions row"
+    minor = ".".join(shipped.split(".")[:2])
+    assert match.group(1) == minor, (
+        f"SECURITY.md says the supported minor is {match.group(1)}.x, but this repo "
+        f"ships {shipped}; bump the supported-versions table as part of the release"
+    )

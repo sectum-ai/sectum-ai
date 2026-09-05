@@ -86,7 +86,7 @@ __all__ = [
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.2"
+METHODOLOGY_VERSION = "1.3"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same

@@ -37,13 +37,20 @@ jobs:
       - name: Type-check (mypy strict)
         run: uv run mypy
 
-      # The pre-commit hook CONTRIBUTING tells a contributor to run; without it
-      # here, their first gate run was red on code they had not touched.
-      - name: Spell check
-        run: >-
-          uvx --from "codespell[toml]==2.4.2" codespell
-          packages/ tests/ docs/ scripts/ .github/
-          README.md CONTRIBUTING.md CHANGELOG.md SECURITY.md PHASES.md
+      # CONTRIBUTING tells a contributor to run these hooks, and nothing here ran
+      # them: codespell was red on a clean checkout for months, and so was
+      # end-of-file-fixer (it rewrote five checked-in evidence packs). Running the
+      # whole hook set is the only version that stays true as hooks are added.
+      # `--show-diff-on-failure` prints what a hook would have rewritten, since a
+      # formatting hook "fails" by editing rather than by saying anything.
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Pre-commit hooks
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Tests
         run: uv run pytest -n auto --cov=sectum_ai --cov-report=term-missing

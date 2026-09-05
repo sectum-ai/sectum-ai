@@ -4,8 +4,8 @@
 # This script drives the same workflow the README quickstart promises:
 #
 #   sectum-ai seed   --workdir .sectum-ai --config sectum-ai.yaml
-#   sectum-ai probe  --workdir .sectum-ai --config sectum-ai.yaml --output json
-#   sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml
+#   sectum-ai probe  --workdir .sectum-ai --output json
+#   sectum-ai report --workdir .sectum-ai
 #   sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
 #
 # Wrapped with `asciinema rec`, the run produces a deterministic
@@ -54,18 +54,18 @@ cd "$(dirname "$0")"
 # Fresh substrate each recording.
 rm -rf .sectum-ai
 
-# The recording uses the built-in leaky-fakes defaults — the same path
-# `examples/retrieval-pivot/run.sh` drives. Earlier revisions of this
-# script supplied a custom `sectum-ai.yaml`; that turned out to override
-# the substrate flags that make the demo *leaky*, and the resulting
-# cast showed 0 findings — directly contradicting the title. The
-# in-memory leaky fakes are what produce the 264-finding pack the
-# website promises; do not re-introduce a config override here without
-# also reproducing the run.sh output.
+# The recording drives exactly `examples/retrieval-pivot/run.sh`'s recipe:
+# `sectum-ai.yaml` goes to `seed` ONLY, and `probe` runs without it. The config
+# pins corpus_size to 24, which is what puts the headline rate at 81.2%; seeding
+# without it drops the cast to 12.5% while RECORDING.md sells the cast as proof
+# of 81.2%. Passing the config to `probe` as well is the *other* mistake an
+# earlier revision made: it builds non-leaky fakes for every omitted family and
+# the cast showed 0 findings, contradicting the title. Change neither without
+# re-recording and re-checking the rate the cast prints.
 cast=demo.cast
 asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --command "bash -c '
   # === 1. Seed a 4-tenant marker substrate (Acme, Globex, Initech, Hooli)
-  sectum-ai seed --workdir .sectum-ai
+  sectum-ai seed --workdir .sectum-ai --config sectum-ai.yaml
   echo
   # === 2. Run the cross-tenant probe suite. The default in-memory
   #        substrate is deliberately leaky so the headline RPR shows

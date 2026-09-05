@@ -5,8 +5,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # The sample packs and the captured TSA token are ARTEFACTS, not source:
+      # `docs/samples/` holds real `report`/`erasure` output checked in byte for
+      # byte, and the fixer appended a newline to five of them on a clean
+      # checkout. A formatting hook must not rewrite the product's own evidence.
       - id: trailing-whitespace
+        exclude: &generated ^(docs/samples/.*\.json|tests/fixtures/freetsa-token\.b64)$
       - id: end-of-file-fixer
+        exclude: *generated
       - id: check-yaml
       - id: check-toml
       - id: check-json
