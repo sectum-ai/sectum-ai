@@ -22,6 +22,7 @@ import yaml
 from pydantic import ValidationError
 
 from sectum_ai.adapters import (
+    Adapter,
     AdapterRegistry,
     FakeAgent,
     FakeAppApi,
@@ -88,7 +89,7 @@ from sectum_ai.evidence import (
     verify_in_toto_statement,
     verify_pack,
 )
-from sectum_ai.evidence.labels import leak_label
+from sectum_ai.evidence.labels import backing_surface, leak_label
 from sectum_ai.jobs import build_job_runner
 from sectum_ai.probes import (
     ERASURE_SURFACES,
@@ -129,6 +130,7 @@ from sectum_ai.runner import (
 )
 from sectum_ai.score import score_run
 from sectum_ai.spec import (
+    SCHEMA_VERSION,
     ClassVerdict,
     ConfigError,
     EvidenceError,
@@ -855,6 +857,15 @@ def probe(
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
     bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
+    # On a run with any live surface the headline describes the live surfaces
+    # only: pooling the fake vector store's hits into the live pipeline's rate
+    # presented a demo leak as the configured stack's Retrieval-Pivot Rate.
+    if any(not adapter.synthetic for adapter in _slot_adapters(bundle).values()):
+        bleed_steps = [
+            result
+            for result in bleed_steps
+            if not _slot_adapters(bundle)[result[0].action.split(".", 1)[0]].synthetic
+        ]
     # The Retrieval-Pivot Rate is a binomial proportion (k of n benign cross-tenant
     # query steps surfaced a foreign canary). Record k and n so the rate's Wilson
     # confidence interval is reproducible from the signed evidence, and compute the
@@ -998,7 +1009,8 @@ def probe(
             "confirmed_on_live_surfaces": sum(
                 1
                 for finding in confirmed
-                if run.surface_provenance.get(finding.surface.value) == SurfaceProvenance.LIVE.value
+                if run.surface_provenance.get(backing_surface(finding))
+                == SurfaceProvenance.LIVE.value
             ),
             "user_steps_dropped": run.metrics.user_steps_dropped,
             "run_path": str(path),
@@ -1082,11 +1094,9 @@ def _confirmed_summary(confirmed: Sequence[Finding]) -> str:
     return f"{len(confirmed)} confirmed findings ({parts})"
 
 
-def _exercised_surfaces(
-    bundle: AdapterBundle, step_results: list[StepResult], kv_report: KvCacheTimingReport | None
-) -> set[str]:
-    """The surfaces the executed steps actually touched, by each step's action family."""
-    adapters = {
+def _slot_adapters(bundle: AdapterBundle) -> dict[str, Adapter]:
+    """The adapter behind each step-action family."""
+    return {
         "vector": bundle.vector,
         "cache": bundle.cache,
         "model": bundle.model,
@@ -1096,6 +1106,13 @@ def _exercised_surfaces(
         "observability": bundle.observability,
         "agent": bundle.agent,
     }
+
+
+def _exercised_surfaces(
+    bundle: AdapterBundle, step_results: list[StepResult], kv_report: KvCacheTimingReport | None
+) -> set[str]:
+    """The surfaces the executed steps actually touched, by each step's action family."""
+    adapters = _slot_adapters(bundle)
     exercised = {adapters[step.action.split(".", 1)[0]].surface.value for step, _ in step_results}
     if kv_report is not None and kv_report.signals:
         exercised.add(bundle.model.surface.value)
@@ -1109,7 +1126,7 @@ def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
     typer.echo(
         f"warning: user-level steps were not run for {names}: the adapter cannot carry "
         "a user identity to its backend (set its user_argument, where the family has "
-        "one), so these probes verified the tenant boundary only",
+        "one), so these probes ran their tenant-level steps only",
         err=True,
     )
 
@@ -2501,12 +2518,18 @@ def baseline(
             "this run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
         )
+    if result.scenario_changed:
+        typer.echo(
+            "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
+            "tenants or users): finding-level comparison is not meaningful, and a leak the "
+            "baseline found may simply have nowhere to appear; re-baseline deliberately"
+        )
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
             "a confirmed leak escalated in severity, a probe the baseline "
-            "covered was not run, a live surface fell back to the fake, or a probe's "
-            "user-level steps were not run.",
+            "covered was not run, a live surface fell back to the fake, a probe's "
+            "user-level steps were not run, or the scenario changed.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -2527,6 +2550,15 @@ def _load_run_artifact(path: Path) -> RunResult:
         data = json.loads(path.read_text())
     except json.JSONDecodeError as error:
         raise ConfigError(f"{path} is not valid JSON: {error}") from error
+    # A record from another schema line means another set of fields: a run that
+    # recorded every adapter slot (0.6.x) read as having exercised them all, and
+    # a `diff` against it flagged surfaces the baseline never touched.
+    recorded = data.get("schema_version") if isinstance(data, dict) else None
+    if isinstance(recorded, str) and recorded.rsplit(".", 1)[0] != SCHEMA_VERSION.rsplit(".", 1)[0]:
+        raise ConfigError(
+            f"{path} is a schema {recorded} record; this build compares {SCHEMA_VERSION} "
+            "records only - re-run 'sectum-ai probe' to produce a comparable one"
+        )
     try:
         if isinstance(data, dict) and "run_result" in data:
             return EvidencePack.model_validate(data).run_result
@@ -2643,6 +2675,12 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "the later run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
         )
+    if result.scenario_changed:
+        typer.echo(
+            "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
+            "tenants or users): finding-level comparison is not meaningful, and a leak the "
+            "earlier run found may simply have nowhere to appear"
+        )
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -2672,6 +2710,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "coverage_lost": list(result.coverage_lost),
         "scope_lost": list(result.scope_lost),
         "boundary_lost": list(result.boundary_lost),
+        "scenario_changed": result.scenario_changed,
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))

@@ -53,10 +53,11 @@ from sectum_ai.evidence.controls import (
     COVERAGE_DISCLAIMER,
     ERASURE,
     control_mappings,
+    erasure_scanned_surfaces,
     live_surfaces,
     mapping_requirement,
 )
-from sectum_ai.evidence.labels import leak_label
+from sectum_ai.evidence.labels import backing_surface, leak_label
 from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus
 
 if TYPE_CHECKING:
@@ -306,7 +307,9 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # erasure controls only.
     live = live_surfaces(run)
     attested = [
-        f for f in run.findings if f.status is FindingStatus.CONFIRMED and f.surface.value in live
+        f
+        for f in run.findings
+        if f.status is FindingStatus.CONFIRMED and backing_surface(f) in live
     ]
     # An erasure verdict comes from the coverage block, not from findings alone:
     # a caveat surface (no per-tenant erasure API, data presumed retained) emits
@@ -316,9 +319,7 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         sorted(
             s
             for s, v in run.metrics.erasure_coverage.items()
-            if s in live
-            and v != CoverageVerdict.ERASED.value
-            and v != CoverageVerdict.NOT_COVERED.value
+            if s in erasure_scanned_surfaces(run) and v != CoverageVerdict.ERASED.value
         )
     )
     has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)
@@ -368,7 +369,7 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         )
     elif erasure_run and not has_confirmed_leak:
         result_description = (
-            "Sectum AI verified an erasure across the live configured AI surfaces. "
+            "Sectum AI scanned an erasure across the live configured AI surfaces. "
             + (
                 f"Markers remained, or were presumed retained, on {', '.join(residual_surfaces)}; "
                 "see the observations and findings."

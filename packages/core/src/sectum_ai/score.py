@@ -59,6 +59,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sectum_ai.evidence import run_digest
+from sectum_ai.evidence.labels import backing_surface
 from sectum_ai.spec import (
     ClassScore,
     ClassVerdict,
@@ -389,10 +390,23 @@ def _score_class(
         )
     # A confirmed finding fails the class it belongs to, whether or not the run's
     # bookkeeping recorded that probe as having run - never drop contradicting evidence.
-    confirmed = sum(
+    # On a mixed run only the findings on a LIVE backing surface count: a class
+    # backed by a leaking fake and a clean live surface failed on the fake's
+    # findings, the grade the pack's OSCAL and summary contradicted.
+    withheld = sum(
         1
         for finding in run.findings
-        if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) in synthetic
+    )
+    confirmed = (
+        sum(
+            1
+            for finding in run.findings
+            if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+        )
+        - withheld
     )
     if not ran:
         # Rule 1: a class whose probe never ran can only be NOT_COVERED - never PASS.
@@ -415,6 +429,12 @@ def _score_class(
         probe_ids=tuple(ran),
         confirmed_findings=confirmed,
         headline=_headline(entry, run.metrics),
+        note=(
+            f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
+            "that fake, not your stack"
+            if withheld
+            else None
+        ),
     )
 
 

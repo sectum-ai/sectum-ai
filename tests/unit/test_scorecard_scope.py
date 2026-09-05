@@ -182,3 +182,23 @@ def test_classes_off_the_vector_store_are_withheld_when_only_vector_is_live(
     card = score_run(_run(provenance))
     entry = next(c for c in card.classes if c.class_id == class_id)
     assert entry.verdict is ClassVerdict.NOT_COVERED
+
+
+def test_a_mixed_backed_class_grades_the_live_surface_only() -> None:
+    # Class 2 is backed by the vector store (rag-entity-bleed) and the RAG
+    # pipeline (rag-pipeline-bleed). With a leaking FAKE vector store beside a
+    # clean LIVE pipeline the class failed on the fake's findings - the grade the
+    # pack's OSCAL and JSON summary contradicted for the same record.
+    fake_leak = _finding("rag-entity-bleed").model_copy(update={"surface": Surface.VECTOR_DB})
+    run = _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(fake_leak,))
+    score = score_run(run)
+    class2 = next(c for c in score.classes if c.class_id == 2)
+    assert class2.verdict is ClassVerdict.PASS, class2
+    assert class2.confirmed_findings == 0
+    assert class2.note is not None and "withheld" in class2.note
+    # the same finding on the live surface still fails the class
+    live_leak = fake_leak.model_copy(update={"surface": Surface.RAG_PIPELINE})
+    failed = score_run(
+        _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(live_leak,))
+    )
+    assert next(c for c in failed.classes if c.class_id == 2).verdict is ClassVerdict.FAIL

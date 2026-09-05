@@ -693,3 +693,54 @@ def test_unverifiable_fingerprints_do_not_hide_a_residual_one() -> None:
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
     assert report.unverifiable == {Surface.MODEL_ADAPTER: 1}
     assert report.findings and "fingerprint" in report.findings[0].finding_id
+
+
+def test_an_echo_on_shared_weights_is_not_recall_either() -> None:
+    # The scrambled control searched for the ORIGINAL phrase in the scrambled
+    # prompt's completion, so an echoing model always passed it, and on shared
+    # weights (no base-tenant control) the echo signed a CONFIRMED HIGH residual
+    # and a Class 11 erasure failure.
+    class _EchoingShared(FakeModel):
+        def __init__(self) -> None:
+            super().__init__(adapter_bleed=True)
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return f'I have no record matching "{prompt}".'
+
+    target = UUID(int=0xA)
+    assert not SubjectErasureProbe._content_recalled(_EchoingShared(), target, _EXTRACTION_PHRASE)
+
+
+def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
+    # The vector fingerprint check was a top-k similarity query: a stored subject
+    # document ranked past k read as absent, and the surface attested ERASED.
+    from sectum_ai.probes.subject_erasure.probe import _FINGERPRINT_QUERY_K
+    from sectum_ai.spec import CorpusDocument
+
+    store = FakeVectorStore()
+    tenant = UUID(int=0xA)
+    phrase = "maria chen clinical intake note reference"
+    docs = [
+        CorpusDocument(
+            doc_id=f"sib-{i}",
+            tenant_id=tenant,
+            doc_type="note",
+            title="maria chen clinical intake note",
+            content="maria chen clinical intake note filler",
+        )
+        for i in range(_FINGERPRINT_QUERY_K + 5)
+    ]
+    docs.append(
+        CorpusDocument(
+            doc_id="subject", tenant_id=tenant, doc_type="note", title="zz", content=phrase
+        )
+    )
+    store.upsert(tenant, docs)
+    report = SubjectErasureProbe(vector=store).verify(
+        tenant,
+        SubjectManifest(
+            subject_ref="u-v1", records={}, fingerprints={Surface.VECTOR_DB: (phrase,)}
+        ),
+    )
+    assert report.coverage()[Surface.VECTOR_DB] is not CoverageVerdict.ERASED
+    assert report.unverifiable.get(Surface.VECTOR_DB, 0) == 1 or report.findings

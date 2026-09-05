@@ -43,6 +43,9 @@ class RedisCache(CacheAdapter):
         self._client = redis.Redis(host=host, port=port, decode_responses=True)
         self._tenant_scoped = tenant_scoped
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
         self._prefix = prefix
 
     def _key(self, tenant: UUID, key: str, user: UUID | None = None) -> str:

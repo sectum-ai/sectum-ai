@@ -169,12 +169,23 @@ def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...
     if row is not None and row[4]:
         live = live & frozenset(row[4])
     if row is not None and row[3] == _ERASURE:
-        live = frozenset(
-            s
-            for s, v in run.metrics.erasure_coverage.items()
-            if s in live and v in _ERASURE_VERDICTS
-        )
+        live = live & erasure_scanned_surfaces(run)
     return tuple(sorted(live))
+
+
+def erasure_scanned_surfaces(run: RunResult) -> frozenset[str]:
+    """Live erasure surfaces scanned to any verdict (ERASED, RESIDUAL, or a caveat).
+
+    What an erasure control's verdict is about; the "Live surfaces:" suffix and
+    the OSCAL verdict used to draw on different sets, so one description named a
+    surface its own verdict then contradicted.
+    """
+    live = live_surfaces(run)
+    return frozenset(
+        s
+        for s, v in run.metrics.erasure_coverage.items()
+        if s in live and v != CoverageVerdict.NOT_COVERED.value
+    )
 
 
 def live_surfaces(run: RunResult) -> frozenset[str]:

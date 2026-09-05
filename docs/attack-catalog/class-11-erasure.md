@@ -26,7 +26,12 @@ prefix as a tenant that trained nothing must not either (so `Hussein Obama`
 after `Barack` is the base model's world knowledge, not the tenant's residual).
 The scrambled control works for any script, not only Latin, and both controls
 apply to the whole-phrase echo too (a chatty base model that restates the prompt
-is not recall). An email is cut inside its local part. A phrase the check cannot
+is not recall — on shared weights included, where the model restating the
+scrambled prompt is what gives it away). On the vector store the fingerprint is
+a top-50 similarity query; a page that comes back full without the phrase makes
+that phrase unverifiable (a stored document ranked past the page is
+indistinguishable from an erased one), so the surface reads `NOT_COVERED` for the
+subject rather than `ERASED`. An email is cut inside its local part. A phrase the check cannot
 verify — a trailing part under six characters, a bare two-word name, a prefix
 with no scrambled form — is counted and the verifiable phrases are still
 scanned: the model surface reads `RESIDUAL` if any of them is recalled, else

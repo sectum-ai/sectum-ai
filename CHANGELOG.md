@@ -16,6 +16,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every live vector store, both Redis adapters, and the HuggingFace model
+  claimed to carry the user while discarding it.** With `user_scoped: false`
+  (the default) nothing user-specific reaches the backend, yet the adapters
+  inherited `carries_user = True`, so with users declared the runner ran
+  user-level reads as the tenant and judged them as the user: 12 CONFIRMED
+  CRITICAL cross-user leaks on a perfectly tenant-isolated Qdrant — the mem0/MCP
+  defect on the default configuration. A live adapter now carries the user only
+  when it scopes by user; a source-level test holds every adapter with the knob
+  to it. The built-in fakes keep carrying it (the fake is the backend).
+- **KV-cache timing findings never counted as live-surface findings.** They name
+  the cache surface while provenance is keyed by the model adapter that ran, so
+  every live-surface gate dropped them: the JSON summary said 0 confirmed on live
+  surfaces and OSCAL rendered `satisfied` over twelve confirmed side channels on
+  the only live surface. A finding's surface now maps to the adapter that
+  produced it everywhere.
+- **`score` graded a mixed-backed class on the fake's findings, and pooled the
+  fake's hits into the Retrieval-Pivot Rate.** A leaking fake vector store
+  beside a clean live RAG pipeline failed Class 2 and reported the fake's hits as
+  the live pipeline's rate — the grade the pack's OSCAL and summary contradicted.
+  Only findings on a live backing surface count (the class note says how many
+  were withheld), and on a mixed run the rate is computed over the live surfaces'
+  steps.
+- **A re-seeded later run read every cross-user leak as resolved.** Finding ids
+  embed markers and principals, so across a scenario change every finding
+  "resolves" and `boundary_lost` could not fire (the later run planned no user
+  steps to drop). `diff`/`baseline --compare` flag `[SCENARIO CHANGED]` as a
+  regression, and refuse a record from another schema line (a 0.6.x run that
+  recorded every adapter slot read as having exercised them all).
+- **The recall check's echo branch was still uncontrolled on shared weights.**
+  The scrambled control searched for the original phrase in the scrambled
+  prompt's completion, which an echo never contains; a model that restates its
+  prompt on shared weights (no base-tenant control) signed a CONFIRMED HIGH
+  residual and an erasure failure. An echo of the scrambled prompt now voids the
+  whole-phrase branch.
+- **The A3 vector fingerprint check read a full similarity page as absence.** A
+  stored subject document ranked past the top 10 attested ERASED; the page is
+  now 50 and a full page without the phrase is unverifiable (NOT_COVERED), never
+  erased.
+- The "Live surfaces:" suffix and the OSCAL erasure verdict drew on different
+  live sets (one kept caveat surfaces, one did not), so a description named a
+  surface its own verdict then contradicted; one helper feeds both, and a
+  caveat-only erasure run is described as scanned, not verified. The Chroma
+  adapter accepts both shapes `list_collections` has returned across chromadb
+  releases.
 - **An erasure-only attestation asserted every isolation control it never tested.**
   `controls.py` treated any executed probe as isolation evidence, and the erasure
   probe counted — so both shipped erasure sample packs carried all eleven

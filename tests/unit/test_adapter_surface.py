@@ -133,3 +133,46 @@ def test_the_runner_holds_no_hardcoded_surface_literal() -> None:
     source = Path(runner_module.__file__).read_text()
     literals = re.findall(r"surface=Surface\.[A-Z_]+", source)
     assert not literals, f"runner hardcodes surfaces instead of reading the adapter: {literals}"
+
+
+def test_a_live_adapter_carries_the_user_only_when_it_scopes_by_user() -> None:
+    # Every live vector store, both Redis adapters, and the HuggingFace model
+    # inherited carries_user=True while discarding `user` with user_scoped=False,
+    # so with users declared the runner ran user-level reads as the tenant and
+    # judged them as the user: 12 CONFIRMED CRITICAL cross-user leaks on a
+    # perfectly tenant-isolated Qdrant. The declaration follows the knob.
+    from uuid import UUID
+
+    from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
+
+    class _Index:
+        def describe_index_stats(self) -> object:
+            return type("S", (), {"namespaces": {}})()
+
+    def _embed(text: str) -> list[float]:
+        return [0.0]
+
+    tenant_only = PineconeVectorStore(_Index(), _embed)
+    assert tenant_only.carries_user is False
+    assert PineconeVectorStore(_Index(), _embed, user_scoped=True).carries_user is True
+    _ = UUID(int=1)
+
+
+def test_every_live_adapter_with_a_user_scope_knob_declares_the_boundary_it_carries() -> None:
+    # The contract, read off the source: any live adapter class that stores
+    # `_user_scoped` must also declare `carries_user` from it (the fakes keep the
+    # inherited True on purpose: the fake IS the backend).
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "packages" / "adapters" / "src"
+    offenders = []
+    for path in root.rglob("*.py"):
+        if path.name == "fakes.py":
+            continue
+        text = path.read_text()
+        if "self._user_scoped = user_scoped" in text and not re.search(
+            r"self\.carries_user = user_scoped", text
+        ):
+            offenders.append(str(path.relative_to(root)))
+    assert offenders == [], offenders

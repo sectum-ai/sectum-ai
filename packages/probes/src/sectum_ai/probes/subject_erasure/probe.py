@@ -76,7 +76,7 @@ SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (
 )
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
-_FINGERPRINT_QUERY_K = 10
+_FINGERPRINT_QUERY_K = 50
 
 _REMEDIATION = {
     Surface.VECTOR_DB: (
@@ -185,16 +185,22 @@ class SubjectErasureProbe:
             phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.VECTOR_DB, ())))
             if ids or phrases:
                 present = [rid for rid in ids if vector.fetch(target, rid) is not None]
-                surfacing = [p for p in phrases if self._content_surfaces(vector, target, p)]
+                verdicts = {p: self._content_surfaces(vector, target, p) for p in phrases}
+                surfacing = [p for p, v in verdicts.items() if v]
+                inconclusive = sum(1 for v in verdicts.values() if v is None)
+                if inconclusive:
+                    unverifiable[Surface.VECTOR_DB] = inconclusive
                 # By-id and content residual both count against the vector surface:
-                # it is ERASED only when no id remains AND no content still surfaces.
-                surfaces.append(
-                    SurfaceErasure(
-                        surface=Surface.VECTOR_DB,
-                        markers_before=len(ids) + len(phrases),
-                        residual_after=len(present) + len(surfacing),
+                # it is ERASED only when no id remains AND no content still surfaces -
+                # and never while a phrase could not be checked.
+                if present or surfacing or not inconclusive:
+                    surfaces.append(
+                        SurfaceErasure(
+                            surface=Surface.VECTOR_DB,
+                            markers_before=len(ids) + len(phrases),
+                            residual_after=len(present) + len(surfacing),
+                        )
                     )
-                )
                 findings.extend(
                     self._residual_finding(target, Surface.VECTOR_DB, manifest.subject_ref, rid)
                     for rid in present
@@ -319,13 +325,17 @@ class SubjectErasureProbe:
         )
 
     @staticmethod
-    def _content_surfaces(vector: VectorStoreAdapter, target: UUID, phrase: str) -> bool:
+    def _content_surfaces(vector: VectorStoreAdapter, target: UUID, phrase: str) -> bool | None:
         # A semantic query for the subject's content: if the phrase still appears in
         # any returned document, that content is residual in the vector store - a
-        # derived copy the by-id check would miss.
+        # derived copy the by-id check would miss. ``None`` when the page came back
+        # full without it: a stored document ranked past k is indistinguishable
+        # from an erased one, and read as erased.
         needle = phrase.casefold()
         hits = vector.query(target, phrase, k=_FINGERPRINT_QUERY_K)
-        return any(needle in hit.content.casefold() for hit in hits)
+        if any(needle in hit.content.casefold() for hit in hits):
+            return True
+        return None if len(hits) >= _FINGERPRINT_QUERY_K else False
 
     @staticmethod
     def _content_in_memory(memory: MemoryAdapter, target: UUID, phrase: str) -> bool:

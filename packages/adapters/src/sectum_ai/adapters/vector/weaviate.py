@@ -67,6 +67,9 @@ class WeaviateVectorStore(VectorStoreAdapter):
         self._embed = embed
         self._prefix = prefix
         self._user_scoped = user_scoped
+        # Without a user scope nothing user-specific reaches the backend: a call
+        # made as a user is the tenant's call, so user-level steps are not run.
+        self.carries_user = user_scoped
 
     def _user_filter(self, user: UUID | None) -> Filter | None:
         """A Weaviate filter for the user's own + tenant-shared documents."""

@@ -1614,3 +1614,29 @@ def test_a_run_records_the_user_steps_it_did_not_run(
     compared = _runner.invoke(app, ["baseline", *args, "--compare"])
     assert compared.exit_code == 2, compared.output
     assert "[BOUNDARY LOST] agent-tool-hijack" in compared.output
+
+
+def test_the_retrieval_pivot_rate_describes_the_live_surfaces_on_a_mixed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The rate pooled every bleed step: a leaking fake vector store's hits were
+    # presented as the clean live RAG pipeline's Retrieval-Pivot Rate.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    summary = json.loads(result.stdout)
+    assert summary["surface_provenance"]["rag_pipeline"] == "LIVE"
+    assert summary["surface_provenance"]["vector_db"] == "SYNTHETIC"
+    assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
+    assert summary["retrieval_pivot_rate"] == 0.0  # the live pipeline did not
+    assert summary["retrieval_pivot_k"] == 0
