@@ -41,7 +41,13 @@ def test_disclaimer_states_the_mappings_are_not_certification() -> None:
     assert "not a legal certification" in COVERAGE_DISCLAIMER
 
 
-def _run(*, probes: bool = True, erasure: bool = False, erasure_only: bool = False) -> RunResult:
+def _run(
+    *,
+    probes: bool = True,
+    erasure: bool = False,
+    erasure_only: bool = False,
+    provenance: dict[str, str] | None = None,
+) -> RunResult:
     moment = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
     if erasure_only:
         ran = {"gdpr-erasure-verification": "0.11.0"}
@@ -57,6 +63,9 @@ def _run(*, probes: bool = True, erasure: bool = False, erasure_only: bool = Fal
             erasure_coverage={"vector_db": "ERASED"} if (erasure or erasure_only) else {}
         ),
         probe_versions=ran,
+        # The mappings need evidence from a LIVE surface; a fixture without
+        # provenance would assert nothing.
+        surface_provenance={"vector_db": "LIVE"} if provenance is None else provenance,
     )
 
 
@@ -155,3 +164,18 @@ def test_an_erasure_run_that_verified_nothing_asserts_no_deletion_control() -> N
         "Article 17",
         "1798.105",
     }
+
+
+def test_a_mapping_needs_evidence_from_a_live_surface() -> None:
+    # A verdict from the built-in fake describes nothing the operator runs, so a
+    # run whose every surface was synthetic (or whose provenance is unrecorded)
+    # asserts no control at all - the answer `verify` and `score` already gave it,
+    # while the pack, the PDF appendix, and OSCAL still carried every framework.
+    assert control_mappings(_run(provenance={"vector_db": "SYNTHETIC"})) == ()
+    assert control_mappings(_run(provenance={})) == ()
+    # and an erasure verdict counts only on a live surface
+    live_elsewhere = _run(
+        erasure_only=True, provenance={"tracing": "LIVE", "vector_db": "SYNTHETIC"}
+    )
+    assert control_mappings(live_elsewhere) == ()
+    assert control_mappings(_run(erasure_only=True, provenance={"vector_db": "LIVE"}))

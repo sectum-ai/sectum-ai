@@ -162,3 +162,15 @@ def test_the_run_carries_its_surface_provenance() -> None:
     assert run_to_sarif(run)["runs"][0]["properties"]["surfaceProvenance"] == {
         "vector_db": "SYNTHETIC"
     }
+
+
+def test_rule_text_names_the_probe_kind() -> None:
+    residual = _finding("r", probe_id="gdpr-erasure-verification").model_copy(
+        update={"observed_in_tenant_id": _OWNER}
+    )
+    rules = {
+        r["id"]: r["shortDescription"]["text"]
+        for r in run_to_sarif(_run(residual, _finding("t")))["runs"][0]["tool"]["driver"]["rules"]
+    }
+    assert rules["gdpr-erasure-verification"].startswith("Residual-data finding")
+    assert rules["rag-entity-bleed"].startswith("Cross-principal leak finding")

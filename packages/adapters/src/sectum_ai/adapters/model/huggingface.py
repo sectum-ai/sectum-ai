@@ -23,8 +23,8 @@ Scope of this v0.1 of the adapter:
 - Train + infer + delete + measure-latency contract methods
 - Real LoRA training via PEFT's ``LoraConfig`` + ``Trainer`` on the
   ``connect``-time path
-- ``soft_delete=True`` keeps the LoRA dir on disk but routes new
-  inference back to the base model (the Class 11 residue knob)
+- ``soft_delete=True`` keeps the LoRA dir on disk and serving, so the
+  memorized text still surfaces (the Class 11 residue knob)
 - ``adapter_bleed=True`` runs every inference with EVERY tenant's
   LoRA merged in — the weight-bleed condition Class 9 catches when
   a real LoRA stack is mis-routed

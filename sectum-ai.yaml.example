@@ -37,6 +37,13 @@ workdir: .sectum-ai
 # -----------------------------------------------------------------------------
 adapters:
 
+  # app: the application's own resource API, probed through the vector-store
+  # contract (it fills the same slot, so configure `app` OR `vector_store`, not
+  # both). `kind: fake` is the only kind today; a live HTTP adapter is not
+  # implemented and the resolver says so rather than falling back.
+  # app:
+  #   kind: fake
+
   vector_store:
     # kind: fake               # in-memory, deterministic (the default)
     # kind: pgvector           # Postgres + pgvector
@@ -128,20 +135,17 @@ adapters:
     #                          # extra: `pip install sectum-ai-adapters[crewai]`.
     # kind: openai-assistants  # an OpenAI Assistant + per-tenant Thread (the API
     #                          # caches Threads server-side; one per tenant.hex)
-    #                          # construct via `OpenAIAssistantsAgent.connect(model, tools)`
-    #                          # in Python — sectum-ai.yaml only flips the kind so the
-    #                          # config validator accepts an openai-assistants
-    #                          # adapter built by the caller. Requires the optional
-    #                          # `openai-assistants` extra:
+    #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning
+    #                          # (client, assistant_id) - see docs/configuration.md.
+    #                          # Requires the optional `openai-assistants` extra:
     #                          # `pip install sectum-ai-adapters[openai-assistants]`.
     # kind: anthropic-tooluse  # the Anthropic Messages API in native tool-use mode
     #                          # with one conversation history cached per tenant; each
     #                          # per-tenant user message is prefixed with [tenant:<hex>]
     #                          # and the loop runs to `stop_reason: end_turn` per turn.
-    #                          # construct via `AnthropicToolUseAgent.connect(model, tools)`
-    #                          # in Python — sectum-ai.yaml only flips the kind so the
-    #                          # config validator accepts an anthropic-tooluse adapter
-    #                          # built by the caller. Requires the optional
+    #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
+    #                          # (client, model, tools) the adapter wraps - see
+    #                          # docs/configuration.md. Requires the optional
     #                          # `anthropic-tooluse` extra:
     #                          # `pip install sectum-ai-adapters[anthropic-tooluse]`.
     kind: fake

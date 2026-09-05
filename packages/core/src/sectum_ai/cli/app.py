@@ -8,6 +8,7 @@ and ``score``.
 import functools
 import json
 import re
+from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -87,6 +88,7 @@ from sectum_ai.evidence import (
     verify_in_toto_statement,
     verify_pack,
 )
+from sectum_ai.evidence.labels import leak_label
 from sectum_ai.jobs import build_job_runner
 from sectum_ai.probes import (
     ERASURE_SURFACES,
@@ -1002,9 +1004,7 @@ def probe(
         typer.echo(json.dumps(run_to_oscal(run, tool_version=__version__), indent=2))
     else:
         plural = "" if probe_count == 1 else "s"
-        typer.echo(
-            f"ran {probe_count} probe{plural}: {len(confirmed)} confirmed cross-tenant findings"
-        )
+        typer.echo(f"ran {probe_count} probe{plural}: {_confirmed_summary(confirmed)}")
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         if run.metrics.retrieval_pivot_rate_by_model:
@@ -1059,6 +1059,15 @@ def _scope_lines(card: IsolationScore) -> list[str]:
     ]
     lines.extend(f"           {surface}" for surface in card.synthetic_surfaces)
     return lines
+
+
+def _confirmed_summary(confirmed: Sequence[Finding]) -> str:
+    """``"3 confirmed cross-tenant findings"``, or by kind when they are not all that."""
+    kinds = Counter(leak_label(f) for f in confirmed)
+    if set(kinds) <= {"cross-tenant leak"}:
+        return f"{len(confirmed)} confirmed cross-tenant findings"
+    parts = ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
+    return f"{len(confirmed)} confirmed findings ({parts})"
 
 
 def _exercised_surfaces(
@@ -1920,8 +1929,9 @@ def erasure(
             help=(
                 "Verify a REAL data subject's erasure by record id (A3 Phase 0), instead "
                 "of the synthetic-canary scan. Reads a YAML manifest with 'subject_ref' "
-                "(an opaque DSR reference, no PII) and 'records' mapping a surface "
-                "(vector_db, semantic_cache) to the subject's record ids, then checks each "
+                "(an opaque DSR reference, no PII) and 'records' mapping an erasure surface "
+                "(vector_db, semantic_cache, tracing, ...) to the subject's record ids, then "
+                "checks each "
                 "id is gone after your own deletion ran. Surfaces with no by-id check or no "
                 "ids read NOT_COVERED. Ignores --scope and --soft-delete."
             ),
@@ -2372,7 +2382,9 @@ def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str
     """
     lost = set(coverage_lost)
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
-    if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by and fed_by <= lost):
+    # ANY feeding probe lost: losing one of the two bleed probes changes the
+    # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
+    if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by & lost):
         return "not measured"
     if delta.informational:
         return "info"
@@ -2445,11 +2457,16 @@ def baseline(
             f"[COVERAGE LOST] {untrusted(probe_id)}: the baseline exercised this probe "
             "and this run did not; its metrics read as 0, not as improved"
         )
+    for surface in result.scope_lost:
+        typer.echo(
+            f"[SCOPE LOST] {untrusted(surface)}: live in the baseline, the built-in fake "
+            "(or absent) in this run; its verdicts describe the fake, not your stack"
+        )
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
-            "a confirmed leak escalated in severity, or a probe the baseline "
-            "covered was not run.",
+            "a confirmed leak escalated in severity, a probe the baseline "
+            "covered was not run, or a live surface fell back to the fake.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -2575,6 +2592,11 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f"[COVERAGE LOST] {untrusted(probe_id)}: exercised by the earlier run, "
             "not by this one; its metrics read as 0, not as improved"
         )
+    for surface in result.scope_lost:
+        typer.echo(
+            f"[SCOPE LOST] {untrusted(surface)}: live in the earlier run, the built-in "
+            "fake (or absent) in this one; its verdicts describe the fake, not your stack"
+        )
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -2602,6 +2624,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
             for delta in result.metrics.deltas
         ],
         "coverage_lost": list(result.coverage_lost),
+        "scope_lost": list(result.scope_lost),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
@@ -2726,7 +2749,8 @@ def diff(
             "--output",
             help=(
                 "Render the diff on stdout. `text` is human-readable (default); "
-                "`json` emits a single machine-parseable object for CI pipelines."
+                "`json` emits a single machine-parseable object for CI pipelines. "
+                "`sarif` and `oscal` are refused (exit 3): a diff projects no findings."
             ),
             case_sensitive=False,
         ),

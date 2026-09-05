@@ -50,7 +50,7 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 | `exit-code` | The probe exit code: `0` no confirmed leaks, `2` a confirmed leak, `3` config/adapter error. |
 | `results-file` | Path to the written report (the `output-file`). |
 | `run-path` | Path to the `run.json` the probe wrote in the workdir. |
-| `confirmed-findings` | Number of confirmed cross-tenant findings (populated when `output: json`). |
+| `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant, cross-user, or residual-data (populated when `output: json`). |
 | `retrieval-pivot-rate` | Headline Retrieval-Pivot Rate (populated when `output: json` and Class 2 ran). |
 
 ## Send findings to the Security tab (SARIF)

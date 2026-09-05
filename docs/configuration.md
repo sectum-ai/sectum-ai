@@ -384,7 +384,8 @@ The schema is implemented as pydantic models in `sectum_ai.config` —
 adapter resolver is `sectum_ai.config.build_adapters`. `AdapterConfig` accepts
 extra fields (the backend-specific `host`, `port`, `dsn_env`, leak knobs);
 the per-family `build_*` functions read and *type-check* the keys they consume.
-Because `AdapterConfig` is `extra="allow"`, an unrecognised or misspelled key —
-for example a mistyped leak knob like `confusedeputy` — is accepted and silently
-ignored (the knob stays at its non-leaky default), not rejected; double-check
-adapter field names against the tables above.
+`AdapterConfig` is `extra="allow"` at parse time so backend-specific fields reach
+the builders, but `build_adapters` (and the erasure command) refuse any
+operator-supplied field the family's builder never read — a mistyped leak knob
+like `confusedeputy` is an exit-3 error naming the field, not a silently
+non-leaky default (see the note above the family tables).

@@ -17,11 +17,16 @@ test coverage, not legal certification** — the reports say so explicitly.
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
 
-A pack carries only the mappings its run supports. The isolation rows need at
-least one isolation probe to have run (the two erasure probes do not count); the
-GDPR Art. 17 and CCPA §1798.105 rows need an erasure surface that was scanned to
-an `ERASED` or `RESIDUAL` verdict — a run whose coverage block is all
-`NOT_COVERED` or attestable-with-caveat verified no erasure and asserts neither.
+A pack carries only the mappings its run supports, and only evidence from a
+**live** surface counts: a verdict from the built-in fake describes nothing the
+operator runs, so a run whose every surface was synthetic (or whose provenance
+is unrecorded) asserts no control at all — the same answer `verify` and `score`
+give it. The isolation rows need at least one isolation probe to have run (the
+two erasure probes do not count) against a live surface; the GDPR Art. 17 and
+CCPA §1798.105 rows need a live erasure surface scanned to an `ERASED` or
+`RESIDUAL` verdict — a run whose coverage block is all `NOT_COVERED` or
+attestable-with-caveat verified no erasure and asserts neither. The demo and the
+shipped sample packs, which run against the fakes, therefore carry no mappings.
 
 The control identifiers are applied by `sectum-ai-evidence` (`controls.py`); the
 `ControlMapping` model that records them in a pack lives in `sectum-ai-spec` and

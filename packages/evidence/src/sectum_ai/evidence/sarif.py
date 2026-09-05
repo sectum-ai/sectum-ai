@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS
 from sectum_ai.evidence.labels import leak_label
 from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
 
@@ -113,7 +114,13 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
     return {
         "id": probe_id,
         "name": probe_id.replace("-", "_"),
-        "shortDescription": {"text": f"Cross-tenant finding from the {probe_id} probe"},
+        "shortDescription": {
+            "text": (
+                f"Residual-data finding from the {probe_id} probe"
+                if probe_id in _ERASURE_PROBE_IDS
+                else f"Cross-principal leak finding from the {probe_id} probe"
+            )
+        },
         "helpUri": _HELP_URI,
         "defaultConfiguration": {"level": level},
         "properties": {

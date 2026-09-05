@@ -401,3 +401,38 @@ def test_unverified_to_confirmed_with_severity_rise_is_newly_confirmed_not_escal
     # It is still reported as an in-place change for visibility.
     assert [c.current.finding_id for c in result.findings.changed] == ["x"]
     assert result.regressed
+
+
+def test_a_live_surface_falling_back_to_the_fake_is_a_regression(tmp_path: Path) -> None:
+    # Two records identical except that every surface went LIVE -> SYNTHETIC (a CI
+    # config that quietly fell back to the demo fakes) diffed as clean, exit 0.
+    live = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    fake = _run().model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    result = diff_runs(live, fake)
+    assert result.scope_lost == ("vector_db",)
+    assert result.regressed
+    assert diff_runs(fake, live).scope_lost == ()
+    earlier, later = _write(tmp_path / "e.json", live), _write(tmp_path / "l.json", fake)
+    cli = CliRunner().invoke(app, ["diff", str(earlier), str(later)])
+    assert cli.exit_code == 2, cli.output
+    assert "[SCOPE LOST] vector_db" in cli.output
+
+
+def test_losing_one_of_a_metrics_feeding_probes_is_not_measured(tmp_path: Path) -> None:
+    # Losing one of the two bleed probes changes the Retrieval-Pivot Rate's
+    # denominator; the line still read "[ok]" (an improvement).
+    earlier = _run(metrics=RunMetrics(retrieval_pivot_rate=0.5)).model_copy(
+        update={"probe_versions": {"rag-entity-bleed": "1", "rag-pipeline-bleed": "1"}}
+    )
+    later = _run(metrics=RunMetrics(retrieval_pivot_rate=0.1)).model_copy(
+        update={"probe_versions": {"rag-entity-bleed": "1"}}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[not measured] retrieval_pivot_rate" in cli.output, cli.output

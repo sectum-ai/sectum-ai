@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
     "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-09-05T08:17:43.406439+00:00",
-    "finished_at": "2026-09-05T08:17:43.407314+00:00",
+    "started_at": "2026-09-05T12:30:38.148575+00:00",
+    "finished_at": "2026-09-05T12:30:38.149535+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -435,25 +435,10 @@
     "schema_version": "0.6.0"
   },
   "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-  "tsa_token": "{\"digest\":\"5793c3a6ac044b1d38d4af5ab3b2e1a4f16b6140e7c9a85a2c2364d35e45fbb1\",\"timestamped_at\":\"2026-09-05T08:17:43.421375+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"a3d0cddda9e6e4b36d248c46e21f79f84d3eda8778c214545baae7b0408d3525\",\"timestamped_at\":\"2026-09-05T12:30:38.163099+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
-  "control_mappings": [
-    {
-      "framework": "GDPR",
-      "control_ids": [
-        "Article 17"
-      ],
-      "assertion": "Erasure across the AI surfaces verified."
-    },
-    {
-      "framework": "CCPA/CPRA",
-      "control_ids": [
-        "1798.105"
-      ],
-      "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
-    }
-  ],
-  "pdf_ref": "2a8861cc117160eb77b2f92a539d071295c08312de8d191c082facf1ddf1de81",
+  "control_mappings": [],
+  "pdf_ref": "d3ea8cfc6ff13e8386cffe87431b71adf7365ce3272009f352b6ce83b3e8c28a",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.6.0"

@@ -83,7 +83,7 @@ def test_a_freshly_built_bundle_verifies() -> None:
     assert all(check.ok for check in result.checks)
     # The audit-PDF binding and both sidecar bindings actually ran (not absent).
     names = {check.name for check in result.checks}
-    assert {"audit-pdf", "in-toto-attestation", "dsse-envelope"} <= names
+    assert {"audit-pdf", "in-toto-attestation:attestation.intoto.json", "dsse-envelope"} <= names
 
 
 def test_a_bundle_must_contain_the_evidence_member() -> None:
@@ -153,7 +153,7 @@ def test_a_bundled_sidecar_binding_a_different_run_fails() -> None:
     members["evidence.dsse.json"] = json.dumps(build_dsse_envelope(other)).encode("utf-8")
     result = verify_bundle(build_bundle(members))
     assert not result.passed
-    assert not _check(result, "in-toto-attestation").ok
+    assert not _check(result, "in-toto-attestation:attestation.intoto.json").ok
     assert not _check(result, "dsse-envelope").ok
 
 
@@ -317,3 +317,34 @@ def test_a_member_name_cannot_forge_a_verify_line(tmp_path: Path) -> None:
     lines = result.output.splitlines()
     assert not any(line.startswith("[ok] independent-anchor") for line in lines), result.output
     assert any("member:notes.txt\\x0a[ok]" in line for line in lines), result.output
+
+
+def test_a_listed_forged_member_is_refused() -> None:
+    # The manifest is unsigned, so a member it lists is not thereby vouched for: a
+    # genuine pack plus a forged erasure-attestation.pdf and an arbitrary
+    # summary-for-auditor.pdf, each listed, printed `[ok] ... digest matches` for
+    # every one and passed. Only the names Sectum writes are admitted, and every
+    # present PDF and in-toto member is bound to the pack.
+    forged = {
+        **_members(),
+        "erasure-attestation.pdf": b"%PDF-1.4 FORGED: all data erased",
+        "erasure-attestation.intoto.json": b"{}",
+        "summary-for-auditor.pdf": b"%PDF-1.4 arbitrary",
+    }
+    result = verify_bundle(build_bundle(forged), require_anchored=False, require_live=False)
+    assert not result.passed
+    failed = {c.name: c.detail for c in result.checks if not c.ok}
+    assert "not a member Sectum writes" in failed["member:summary-for-auditor.pdf"]
+    assert "audit-pdf:erasure-attestation.pdf" in failed
+    assert "in-toto-attestation:erasure-attestation.intoto.json" in failed
+
+
+def test_unbound_members_are_named_as_such() -> None:
+    result = verify_bundle(
+        build_bundle({**_members(), "PACK-README.md": b"# readme"}),
+        require_anchored=False,
+        require_live=False,
+    )
+    assert result.passed
+    assert "not bound to the pack" in _check(result, "member:PACK-README.md").detail
+    assert "unsigned manifest" in _check(result, "member:audit-pack.pdf").detail

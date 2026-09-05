@@ -64,7 +64,8 @@ pack, and verifies it.
 
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
-`baseline --compare`), or residual / attestable-with-caveat data on an erased surface
+`baseline --compare` — including a live surface that fell back to the built-in fake
+between the two runs, reported as `[SCOPE LOST]`), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
 including a `probe` run in which nothing interrogated the stack, and a `report` on
 a run that names no probe (or was recorded against a since re-seeded substrate);
@@ -173,15 +174,20 @@ sectum-ai probe --workdir .sectum-ai --output oscal > assessment-results.json
 
 It carries one OSCAL *observation* per finding (the marker-grounded evidence) and
 one OSCAL *finding* per mapped framework control (SOC 2, ISO 27001, GDPR, …) whose
-`status.state` reflects the run honestly — `not-satisfied` when a cross-tenant leak
-was *confirmed*, otherwise `satisfied` ("tested, no confirmed cross-tenant
-leakage"). An unverified candidate is recorded as evidence but never on its own
-flips a control to failed, and the coverage disclaimer (these mappings are
-test-coverage assertions, not legal certification) rides in the metadata remarks.
-A run whose every surface was the built-in fake states **no** control finding: its
-observations still ship, the result says no control objective was assessed, and
-the metadata props carry the run's surface provenance (the SARIF carries it as a
-run property) so a GRC platform cannot read a demo as a production assessment.
+`status.state` reflects the run honestly — an isolation control is
+`not-satisfied` when a cross-principal leak was *confirmed on a live surface*,
+otherwise `satisfied`; an erasure control (GDPR Art. 17, CCPA §1798.105, titled
+"erasure verification") is `not-satisfied` when a live surface kept a residual
+marker after the erasure. A finding from a surface that ran against the built-in
+fake moves no control (the result names those surfaces as excluded), an
+unverified candidate is recorded as evidence but never on its own flips a control
+to failed, and the coverage disclaimer (these mappings are test-coverage
+assertions, not legal certification) rides in the metadata remarks. A run with no
+live surface — every surface the built-in fake, or provenance unrecorded — states
+**no** control finding: its observations still ship, the result says no control
+objective was assessed, and the metadata props carry the run's surface provenance
+(the SARIF carries it as a run property) so a GRC platform cannot read a demo as
+a production assessment.
 The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays the
 canonical record.
 

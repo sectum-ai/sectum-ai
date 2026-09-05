@@ -198,3 +198,23 @@ def test_the_summary_names_the_probes_exercised() -> None:
     assert probes_exercised(run) == "2: rag-poisoning, tenant-boundary-fetch"
     html = build_audit_html(_pack().model_copy(update={"run_result": run}))
     assert "Probes exercised" in html and "rag-poisoning, tenant-boundary-fetch" in html
+
+
+def test_the_summary_counts_confirmed_findings_by_what_they_are() -> None:
+    # "Confirmed cross-tenant findings: 16" headed the DPO-facing erasure
+    # attestation whose sixteen findings were the tenant's own residual markers.
+    from sectum_ai.evidence.pdf import confirmed_by_kind
+
+    pack = _pack()
+    residual = (
+        pack.run_result.findings[0].model_copy(
+            update={"observed_in_tenant_id": pack.run_result.findings[0].owner_tenant_id}
+        )
+        if pack.run_result.findings
+        else None
+    )
+    assert residual is not None
+    run = pack.run_result.model_copy(update={"findings": (residual, pack.run_result.findings[0])})
+    assert confirmed_by_kind(run) == "2 (cross-tenant 1, residual-data 1)"
+    html = build_audit_html(pack.model_copy(update={"run_result": run}))
+    assert "Confirmed findings" in html and "Confirmed cross-tenant findings" not in html

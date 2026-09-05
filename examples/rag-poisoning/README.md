@@ -33,7 +33,8 @@ Poisoning)**.
 2. **`sectum-ai probe --probe rag-poisoning`** plants one poison
    document per hard canary (carrying that marker's owning
    principal's canary under the lure phrase) into the shared index,
-   then queries the lure from every principal. A finding lands
+   then queries the lure from every principal foreign to at least one
+   planted poison. A finding lands
    whenever a query's retrieved context carries a canary owned by a
    *different* principal — the cross-tenant poison pivot.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack.

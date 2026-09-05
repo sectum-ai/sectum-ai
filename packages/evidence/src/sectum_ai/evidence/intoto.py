@@ -111,6 +111,9 @@ def verify_in_toto_statement(statement: Mapping[str, Any], pack: EvidencePack) -
         not isinstance(subjects, list)
         or len(subjects) != 1
         or not _subject_binds_digest(subjects, digest)
+        or not (
+            isinstance(subjects[0], Mapping) and subjects[0].get("name") == pack.run_result.run_id
+        )
     ):
         raise EvidenceError("the attestation subject does not match the pack's run digest")
     expected = to_in_toto_statement(pack)["predicate"]

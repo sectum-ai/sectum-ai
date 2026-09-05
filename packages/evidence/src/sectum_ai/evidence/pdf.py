@@ -6,6 +6,7 @@ HTML-templated theme is a later refinement.
 """
 
 import io
+from collections import Counter
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
+from sectum_ai.evidence.labels import leak_label
 from sectum_ai.spec import (
     ControlMapping,
     CoverageVerdict,
@@ -113,6 +115,23 @@ def provenance_statement(run: RunResult) -> str:
         f"({', '.join(synthetic)}) were Sectum's built-in synthetic stores; results "
         "attributed to them describe that fake and not a production system."
     )
+
+
+def confirmed_by_kind(run: RunResult) -> str:
+    """``"16 (residual-data 16)"``: confirmed findings, and what each is.
+
+    The summary row read "Confirmed cross-tenant findings: 16" for an erasure
+    attestation whose sixteen findings were all the target tenant's own residual
+    markers - a DPO-facing document asserting a breach the run never saw.
+    """
+    confirmed = [f for f in run.findings if f.status is FindingStatus.CONFIRMED]
+    counts = Counter(
+        leak_label(f).removesuffix(" finding").removesuffix(" leak") for f in confirmed
+    )
+    if not confirmed:
+        return "0"
+    parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+    return f"{len(confirmed)} ({parts})"
 
 
 def probes_exercised(run: RunResult) -> str:
@@ -330,7 +349,6 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     heading = styles["Heading2"]
     body = styles["BodyText"]
     run = pack.run_result
-    confirmed = sum(1 for finding in run.findings if finding.status is FindingStatus.CONFIRMED)
 
     flow: list[Any] = [
         Paragraph("Sectum AI - Verification Evidence Pack", styles["Title"]),
@@ -343,7 +361,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         ("Run finished", run.finished_at.isoformat()),
         ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
-        ("Confirmed cross-tenant findings", str(confirmed)),
+        ("Confirmed findings", confirmed_by_kind(run)),
     ]
     rpr_line = _retrieval_pivot_summary(run)
     if rpr_line is not None:

@@ -13,7 +13,7 @@ single probe emitted the same fully-satisfied 9-framework assessment as a full
 suite, which is the over-claim this product exists to refuse.
 """
 
-from sectum_ai.spec import ControlMapping, CoverageVerdict, RunResult
+from sectum_ai.spec import ControlMapping, CoverageVerdict, RunResult, SurfaceProvenance
 
 COVERAGE_DISCLAIMER = (
     "These control mappings assert that Sectum AI produced test-coverage "
@@ -23,8 +23,10 @@ COVERAGE_DISCLAIMER = (
 )
 
 # What a mapping needs before a run may assert it.
-_ISOLATION = "isolation"  # at least one isolation probe ran
-_ERASURE = "erasure"  # the run carries erasure coverage (the `erasure` workflow)
+ISOLATION = "isolation"  # at least one isolation probe ran, against a live surface
+ERASURE = "erasure"  # an erasure surface scanned to a verdict, on a live backend
+_ISOLATION = ISOLATION
+_ERASURE = ERASURE
 
 # The erasure probes are control checks, not isolation probes, so a run in which
 # only they executed has produced no isolation evidence. Their ids are pinned here
@@ -122,15 +124,38 @@ def _run_supports(run: RunResult, requirement: str) -> bool:
     ship SOC 2 / ISO / EU AI Act mappings asserting "tested by adversarial probing"
     on the strength of a deletion check, in the artifact built for auditors.
     """
+    live = live_surfaces(run)
     if requirement == _ERASURE:
         # The coverage block names every erasure surface, so it is non-empty for a
         # run that verified nothing (all NOT_COVERED, or only caveats). Only a
-        # surface that was actually scanned to a verdict is erasure evidence.
+        # surface that was actually scanned to a verdict - on a live backend - is
+        # erasure evidence.
         return any(
-            verdict in _ERASURE_VERDICTS for verdict in run.metrics.erasure_coverage.values()
+            verdict in _ERASURE_VERDICTS and surface in live
+            for surface, verdict in run.metrics.erasure_coverage.items()
         )
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
-    return bool(exercised - _ERASURE_PROBE_IDS)
+    # A verdict from the built-in fake describes nothing the operator runs, so a
+    # run whose every surface was synthetic (or whose provenance is unrecorded)
+    # asserts no control at all - the same answer `verify` and `score` give it.
+    return bool(exercised - _ERASURE_PROBE_IDS) and bool(live)
+
+
+def live_surfaces(run: RunResult) -> frozenset[str]:
+    """The surfaces this run exercised against a live backend."""
+    return frozenset(
+        surface
+        for surface, provenance in run.surface_provenance.items()
+        if provenance == SurfaceProvenance.LIVE.value
+    )
+
+
+def mapping_requirement(mapping: ControlMapping) -> str:
+    """Whether ``mapping`` rests on isolation evidence or on erasure evidence."""
+    for framework, control_ids, _assertion, requirement in _CONTROL_TABLE:
+        if framework == mapping.framework and control_ids == mapping.control_ids:
+            return requirement
+    return _ISOLATION
 
 
 def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:

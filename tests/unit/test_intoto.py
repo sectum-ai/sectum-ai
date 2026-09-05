@@ -201,3 +201,13 @@ def test_a_statement_with_an_extra_subject_is_rejected() -> None:
     statement["subject"].append({"name": "other", "digest": {"sha256": "00" * 32}})
     with pytest.raises(EvidenceError, match="subject"):
         verify_in_toto_statement(statement, pack)
+
+
+def test_a_subject_naming_another_run_is_rejected() -> None:
+    # Only the digest was checked; a sidecar naming another run with the right
+    # digest verified, and `verify` printed "binds this pack's run digest".
+    pack = _pack()
+    statement = to_in_toto_statement(pack)
+    statement["subject"][0]["name"] = "some-other-run"
+    with pytest.raises(EvidenceError, match="subject"):
+        verify_in_toto_statement(statement, pack)
