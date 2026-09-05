@@ -25,8 +25,8 @@ from __future__ import annotations
 from typing import Any
 
 from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS
-from sectum_ai.evidence.labels import leak_label
-from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
+from sectum_ai.evidence.labels import backing_surface, leak_label
+from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity, SurfaceProvenance
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
@@ -69,14 +69,38 @@ _SEVERITY_ORDER: dict[Severity, int] = {
 _UNVERIFIED_SECURITY_SEVERITY = _SECURITY_SEVERITY[Severity.INFO]
 
 
-def _result_level(finding: Finding) -> str:
-    """SARIF level for a finding; unverified candidates never exceed ``note``."""
+def _synthetic_surfaces(run: RunResult) -> frozenset[str]:
+    """The surfaces this run drove against the built-in fake."""
+    return frozenset(
+        surface
+        for surface, provenance in run.surface_provenance.items()
+        if provenance == SurfaceProvenance.SYNTHETIC.value
+    )
+
+
+def _describes_a_fake(finding: Finding, synthetic: frozenset[str]) -> bool:
+    """Whether this finding's backing surface was the built-in fake.
+
+    GitHub renders one alert per result, so a run-level provenance property is
+    invisible where it matters: an all-synthetic demo raised 229 `error` alerts
+    at `security-severity: 9.5`, indistinguishable from a production scan's.
+    Every other renderer says so inline - the text summary warns, the JSON
+    carries `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF says
+    "a demonstration, not an attestation".
+    """
+    return backing_surface(finding) in synthetic
+
+
+def _result_level(finding: Finding, synthetic: frozenset[str] = frozenset()) -> str:
+    """SARIF level for a finding; unverified and fake-backed never exceed ``note``."""
     if finding.status is not FindingStatus.CONFIRMED:
+        return "note"
+    if _describes_a_fake(finding, synthetic):
         return "note"
     return _LEVEL_BY_SEVERITY[finding.severity]
 
 
-def _security_severity(finding: Finding) -> str:
+def _security_severity(finding: Finding, synthetic: frozenset[str] = frozenset()) -> str:
     """GitHub ``security-severity`` for a finding; unverified candidates are floored.
 
     A CONFIRMED finding reports its severity bucket. An UNVERIFIED candidate is
@@ -87,10 +111,14 @@ def _security_severity(finding: Finding) -> str:
     """
     if finding.status is not FindingStatus.CONFIRMED:
         return _UNVERIFIED_SECURITY_SEVERITY
+    if _describes_a_fake(finding, synthetic):
+        return _UNVERIFIED_SECURITY_SEVERITY
     return _SECURITY_SEVERITY[finding.severity]
 
 
-def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
+def _rule(
+    probe_id: str, findings: list[Finding], synthetic: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     """Build the SARIF reporting descriptor (rule) for one probe id.
 
     The rule's ``security-severity`` and default ``level`` track the worst
@@ -99,7 +127,13 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
     unverified-only rule never renders as a high-severity GitHub alert (which is
     badged by the rule's ``security-severity``, not its ``level``).
     """
-    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    # A rule whose every confirmed finding sits on a fake advertises the
+    # informational bucket, for the same reason an unverified-only rule does.
+    confirmed = [
+        f
+        for f in findings
+        if f.status is FindingStatus.CONFIRMED and not _describes_a_fake(f, synthetic)
+    ]
     if confirmed:
         worst = max(confirmed, key=lambda f: _SEVERITY_ORDER[f.severity])
         level = _LEVEL_BY_SEVERITY[worst.severity]
@@ -130,18 +164,24 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
     }
 
 
-def _result(finding: Finding) -> dict[str, Any]:
+def _result(finding: Finding, synthetic: frozenset[str] = frozenset()) -> dict[str, Any]:
     """Build the SARIF result for a single finding."""
+    on_a_fake = _describes_a_fake(finding, synthetic)
     detail = finding.evidence_span or (
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
         f"observed in tenant {finding.observed_in_tenant_id}"
     )
     return {
         "ruleId": finding.probe_id,
-        "level": _result_level(finding),
+        "level": _result_level(finding, synthetic),
         "message": {
             "text": (
-                f"{finding.severity.value.upper()} {leak_label(finding)} on "
+                (
+                    "[synthetic surface - describes Sectum's built-in fake, not your stack] "
+                    if on_a_fake
+                    else ""
+                )
+                + f"{finding.severity.value.upper()} {leak_label(finding)} on "
                 f"{finding.surface.value}: {detail}"
             )
         },
@@ -157,7 +197,11 @@ def _result(finding: Finding) -> dict[str, Any]:
             "owaspLlm": finding.owasp_llm,
             "atlas": list(finding.atlas),
             "nist": list(finding.nist),
-            "security-severity": _security_severity(finding),
+            "security-severity": _security_severity(finding, synthetic),
+            "backingSurface": backing_surface(finding),
+            "surfaceProvenance": (
+                SurfaceProvenance.SYNTHETIC.value if on_a_fake else SurfaceProvenance.LIVE.value
+            ),
         },
     }
 
@@ -175,6 +219,7 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         still ``evidence.json``; this projection is for code-scanning visibility.
     """
     findings = list(run.findings)
+    synthetic = _synthetic_surfaces(run)
     by_probe: dict[str, list[Finding]] = {}
     for finding in findings:
         by_probe.setdefault(finding.probe_id, []).append(finding)
@@ -188,10 +233,10 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                         "name": "Sectum AI",
                         "informationUri": _INFORMATION_URI,
                         "version": tool_version,
-                        "rules": [_rule(pid, fs) for pid, fs in by_probe.items()],
+                        "rules": [_rule(pid, fs, synthetic) for pid, fs in by_probe.items()],
                     }
                 },
-                "results": [_result(finding) for finding in findings],
+                "results": [_result(finding, synthetic) for finding in findings],
                 "properties": {
                     "runId": run.run_id,
                     "scenarioHash": run.scenario_hash,

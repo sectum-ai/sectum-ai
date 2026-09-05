@@ -91,7 +91,9 @@ Edit `[project] version` in each of:
 - `packages/adapters/pyproject.toml`
 - `packages/evidence/pyproject.toml`
 
-All five must be the same string. The first release is `0.1.0`. Subsequent
+All five must be the same string, and `uv lock` must be re-run after editing
+them (the recipe stages `uv.lock`, and nothing in CI runs `uv sync --locked`, so
+a stale lock would ship unnoticed). The first release is `0.1.0`. Subsequent
 releases follow [Semantic Versioning](https://semver.org/). For a pre-release the
 two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
 `## [0.11.0-rc.1]`, but `pyproject.toml` must carry the PEP 440 form `0.11.0rc1` —
@@ -144,7 +146,7 @@ the release notes must exist somewhere.
 
 ```sh
 git checkout -b release/v0.1.0
-git add packages/*/pyproject.toml action.yml docs/github-action.md docs/index.md README.md CHANGELOG.md uv.lock
+git add packages/*/pyproject.toml action.yml docs/github-action.md docs/index.md README.md SECURITY.md CHANGELOG.md uv.lock
 git commit -m "chore(release): v0.1.0"
 git push -u origin release/v0.1.0
 gh pr create --title "chore(release): v0.1.0" --body "ATLAS sweep: ..."
@@ -192,9 +194,17 @@ is created automatically with the CHANGELOG section as its body.
 | `v0.1.0-alpha.2` | Pre-release (`alpha`) | Falls back to `## [Unreleased]`. |
 | `v0.1.0-beta.3` | Pre-release (`beta`) | Falls back to `## [Unreleased]`. |
 
-Other forms never reach the workflow: it triggers only on `v*` tags, and
-`scripts/check_release_version.py` additionally rejects a `v*` tag that is not
+Other tag forms never reach the workflow: the `push` trigger is `v*` tags only,
+and `scripts/check_release_version.py` additionally rejects a `v*` tag that is not
 `vX.Y.Z[-pre]` (such as `v0.1`).
+
+**The workflow has a second trigger.** `workflow_dispatch` runs the staged
+bootstrap: with `publish_package` set to one distribution it publishes exactly
+that one, so the project exists and its pending Trusted Publisher activates;
+with `none` it builds and signs without publishing. That path carries no tag, so
+`check_release_version.py` does not run and nothing verifies the version being
+shipped — the `pypi` environment's required reviewer is the only gate. Use it to
+create a project, never to ship a release.
 
 ## Verifying a released artifact
 

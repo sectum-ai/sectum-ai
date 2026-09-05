@@ -32,6 +32,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every SARIF alert from a demo run looked like a production one.** GitHub
+  renders one alert per *result*, so the run-level provenance property was
+  invisible where it counts: an all-synthetic run raised 256 `error` alerts at
+  `security-severity: 9.5`, indistinguishable from a real scan's. Every other
+  renderer says so inline — the text summary warns, the JSON carries
+  `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
+  demonstration. A fake-backed finding is now floored to `note` at the
+  informational bucket, its message says which stack it describes, and each
+  result carries its `backingSurface` and `surfaceProvenance` — the same cap the
+  projection already applied to unverified candidates.
+- **The pre-commit ruff hooks were green on a tree CI's own `ruff format --check`
+  rejects.** They pinned `v0.15.13`, older than the `ruff>=0.16.3` this repo
+  installs, and filtered to Python files, so they never saw the code inside the
+  repo's Markdown — which the CI step does check. Both hooks now run the
+  workspace's own ruff, the way the mypy hook already did.
+- The `Extras API contract` job could pass having installed nothing: its
+  `grep | tee` exits 0 on no match under GitHub's default shell, and the contract
+  tests then skip for the missing imports while the job reports success. It now
+  runs under `pipefail` and asserts the tests ran, like the integration job.
+- `report` and `pack` say when every surface was the built-in fake; only `probe`
+  and `erasure` did. The erasure diagnostic for an unverifiable fingerprint named
+  its two phrase-level causes and not the model-level one, so an operator edited
+  a phrase that was already fine when the fix was a per-tenant adapter.
+- Docs: the quickstart said a shared-weights model is checked for subject
+  erasure, which it never is (there is no untrained tenant to use as a control);
+  the release workflow's own comment claimed a manual run cannot publish, which
+  it can, and `RELEASING.md` said the workflow triggers only on tags; the release
+  recipe stages every file it tells you to bump except `SECURITY.md`, and never
+  says to re-run `uv lock`; `CONTRIBUTING.md` omitted three gates CI enforces and
+  two workflows from the required-check list it calls the source of truth; the
+  extras list omitted `azure-search`. `docs/data-models.md` states the schema
+  version in prose and is now pinned by a test.
 - **The fifth trace backend still discarded a hit it had already found.** Cycle
   6 taught Datadog, Helicone, LangSmith and Phoenix to refuse only a *miss* on a
   capped listing, because a marker found on a partial page is a definite

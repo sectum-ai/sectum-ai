@@ -48,8 +48,12 @@ jobs:
           enable-cache: true
 
       # Tag-triggered runs must publish exactly the version a human approved.
-      # `workflow_dispatch` carries no tag and skips this gate; the build still
-      # runs, but the publish-pypi job below refuses to ship a manual run.
+      # `workflow_dispatch` carries no tag, so there is nothing to compare against
+      # and this gate is skipped. A manual run CAN still publish (the staged
+      # bootstrap below, one distribution at a time) - the check that stands in
+      # for this one there is the `pypi` environment's required reviewer, who is
+      # approving a version no script has verified. Keep the bootstrap for
+      # creating a project, not for shipping a release.
       - name: Verify pyproject.toml versions match the tag
         if: github.event_name == 'push'
         run: uv run python scripts/check_release_version.py "${GITHUB_REF_NAME}"

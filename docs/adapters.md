@@ -233,9 +233,9 @@ extras, imported lazily so the base install stays light:
 `anthropic-tooluse`, `mcp` (both MCP clients), `langsmith` (the eval-set adapter),
 `boto3` (the S3 backup), `gcs` (the GCS backup), or `mem0` (the mem0 memory store).
 The backend clients are extras too — `pgvector`, `chroma`, `weaviate`, `qdrant`,
-`milvus`, `opensearch`, `pinecone`, `redis`, `phoenix`, and `langfuse` — and a
-missing one is an exit-`3` `AdapterError` naming the extra, not an import
-traceback.
+`milvus`, `opensearch`, `pinecone`, `azure-search`, `redis`, `phoenix`, and
+`langfuse` — and a missing one is an exit-`3` `AdapterError` naming the extra,
+not an import traceback.
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent
 adapters use only the standard library; both MCP clients need the `mcp` extra. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI

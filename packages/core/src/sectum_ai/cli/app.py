@@ -1325,6 +1325,10 @@ def report(
             "is nothing to attest; run 'sectum-ai probe' against a stack the selected "
             "probes can interrogate"
         )
+    # The artifacts disclose it (the PDF calls itself a demonstration, `verify`
+    # fails run-scope), but the operator building a pack to hand to an auditor
+    # should hear it here, the way `probe` and `erasure` say it.
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     if run.manifest_hash != canonical_hash(substrate.manifest) or run.scenario_hash != (
         canonical_hash(substrate.scenario)
     ):
@@ -1608,6 +1612,7 @@ def pack(
 
     out_path = out if out is not None else workdir / "run-pack.zip"
     out_path.write_bytes(build_bundle(members))
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     typer.echo(f"run pack -> {out_path}")
     typer.echo(
         "SENSITIVE: this pack carries the run details and ground-truth markers; "
@@ -1989,10 +1994,22 @@ def _emit_erasure_attestation(
         not_covered_names = ", ".join(surface.value for surface in report.not_covered)
         typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
     for unchecked, count in sorted(report.unverifiable.items(), key=lambda item: item[0].value):
+        # The two phrase-level causes are what an operator can fix by editing the
+        # fingerprint. On the model surface there is a third, and it is the common
+        # one: a shared-weights model has no untrained tenant to use as a
+        # base-knowledge control, so EVERY phrase is unverifiable no matter how it
+        # is written. Naming only the phrase-level causes sent operators to edit a
+        # phrase that was already fine.
+        causes = "trailing part too short, or no control form for the prefix"
+        if unchecked is Surface.MODEL_ADAPTER:
+            causes += (
+                "; or the model merges every tenant's weights, so there is no untrained "
+                "tenant to serve as a base-knowledge control - a per-tenant adapter is "
+                "what makes this surface checkable"
+            )
         typer.echo(
             f"  {unchecked.value}: {count} supplied fingerprint(s) could not be checked "
-            "(trailing part too short, or no control form for the prefix), so the "
-            "surface reads NOT_COVERED",
+            f"({causes}), so the surface reads NOT_COVERED",
             err=True,
         )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")

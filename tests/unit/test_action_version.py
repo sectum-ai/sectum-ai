@@ -115,3 +115,20 @@ def test_the_security_policy_supports_the_shipped_minor() -> None:
         f"SECURITY.md says the supported minor is {match.group(1)}.x, but this repo "
         f"ships {shipped}; bump the supported-versions table as part of the release"
     )
+
+
+def test_the_data_models_page_states_the_shipped_schema_version() -> None:
+    # docs/data-models.md states the schema version in prose, in a file the
+    # release recipe never names and no test read. It is what an integrator
+    # checks their parser against.
+    from sectum_ai.spec import SCHEMA_VERSION
+
+    text = (_ROOT / "docs" / "data-models.md").read_text()
+    match = re.search(r"current `SCHEMA_VERSION` is \*\*(\d+\.\d+\.\d+)\*\*", text)
+    assert match is not None, (
+        "docs/data-models.md has no `current SCHEMA_VERSION is **X.Y.Z**` line"
+    )
+    assert match.group(1) == SCHEMA_VERSION, (
+        f"docs/data-models.md says {match.group(1)}, but the spec ships {SCHEMA_VERSION}; "
+        "bump it with the schema"
+    )

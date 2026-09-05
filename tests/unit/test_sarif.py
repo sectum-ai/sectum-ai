@@ -174,3 +174,36 @@ def test_rule_text_names_the_probe_kind() -> None:
     }
     assert rules["gdpr-erasure-verification"].startswith("Residual-data finding")
     assert rules["rag-entity-bleed"].startswith("Cross-principal leak finding")
+
+
+def _run_with_provenance(*findings: Finding, **provenance: str) -> RunResult:
+    return _run(*findings).model_copy(update={"surface_provenance": provenance})
+
+
+def test_a_finding_on_a_fake_surface_is_not_a_high_severity_alert() -> None:
+    # GitHub renders one alert per RESULT, so the run-level provenance property is
+    # invisible where it matters: the demo run raised 256 `error` alerts at
+    # security-severity 9.5, indistinguishable from a production scan's. Every
+    # other renderer says so inline - the text summary warns, the JSON carries
+    # `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
+    # demonstration.
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="SYNTHETIC"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "note"
+    assert result["properties"]["security-severity"] == "1.0"
+    assert result["properties"]["surfaceProvenance"] == "SYNTHETIC"
+    assert result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "note"
+    assert rule["properties"]["security-severity"] == "1.0"
+
+
+def test_the_same_finding_on_a_live_surface_is_a_critical_alert() -> None:
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="LIVE"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "error"
+    assert result["properties"]["security-severity"] == "9.5"
+    assert result["properties"]["surfaceProvenance"] == "LIVE"
+    assert not result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "error"

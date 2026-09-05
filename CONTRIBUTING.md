@@ -28,6 +28,9 @@ uv run pre-commit install   # enable git hooks
 | Format | `uv run ruff format .` |
 | Type-check | `uv run mypy` |
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
+| Run the example walkthroughs | `SECTUM_RUN_E2E=1 uv run pytest -m e2e` |
+| Build the docs site | `uv run mkdocs build --strict` |
+| Check the coverage floors | `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` (core, probes, evidence) |
 | Run the CLI | `uv run sectum-ai --help` |
 
 The default `uv run pytest` stays fully offline: the integration tests in
@@ -82,7 +85,8 @@ section is the source of truth for that configuration:
 - Require **CODEOWNERS** review.
 - Require status checks to pass before merging: the `CI` workflow
   (lint, type-check, test; the docker-compose `Integration` job; the
-  `Extras API contract` job), the `secret-scan` job, and `CodeQL`.
+  `Extras API contract` job), the `secret-scan` job, `CodeQL`, the `Docs`
+  workflow (`mkdocs build --strict`), and the `Action self-test` workflow.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).

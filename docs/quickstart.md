@@ -98,9 +98,11 @@ attestation, using two methods:
   full-text search index (a search) with the subject's known content and check whether
   it still surfaces, catching *derived* residual — an embedding copy, residual
   *memorization* in a fine-tune/adapter, a lingering memory entry, or an un-purged
-  index document — that a by-id check would miss. The model is checked only when it is
-  trainable (a per-tenant adapter or shared weights); a serving-only endpoint reads
-  `NOT_COVERED`.
+  index document — that a by-id check would miss. The model is checked only on a
+  **per-tenant adapter**: a shared-weights model has no untrained tenant to serve
+  as a base-knowledge control, so a completion cannot be told apart from what the
+  base model already knew, and it reads `NOT_COVERED` — as does a serving-only
+  endpoint, which trained nothing.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the

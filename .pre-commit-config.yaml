@@ -20,12 +20,27 @@ repos:
       - id: check-added-large-files
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
+  # Run the WORKSPACE's ruff, the way the mypy hook below runs the workspace's
+  # mypy. The upstream hooks pinned their own rev (v0.15.13, older than the
+  # `ruff>=0.16.3` this repo installs) and filtered to `types_or: [python, pyi,
+  # jupyter]`, so they never saw the Python inside the repo's 85 Markdown files -
+  # which `ruff format --check .` in CI does check. The gate a contributor runs
+  # was green on a tree CI rejected, which is the whole failure this hook set
+  # exists to prevent.
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff (lint, workspace)
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
       - id: ruff-format
+        name: ruff format (workspace)
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
