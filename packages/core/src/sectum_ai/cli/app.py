@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from sectum_ai.adapters import (
     AdapterRegistry,
     FakeAgent,
+    FakeAppApi,
     FakeBackup,
     FakeCache,
     FakeEvalSet,
@@ -60,6 +61,7 @@ from sectum_ai.config import (
     embedder_model_name,
     load_config,
     surface_provenance,
+    surface_provenance_of,
 )
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum_ai.embeddings import EmbeddingModel, resolve_embedding_model, validate_embedding_spec
@@ -288,7 +290,7 @@ adapters:
     kind: fake
     shared_memory: true      # demo leak: long-term memory crosses tenants
   rag:
-    kind: fake               # fake | http | langchain
+    kind: fake               # fake | http | langchain (langchain needs factory: module:callable)
     # url: http://localhost:8080/rag
   observability:
     kind: fake               # fake | phoenix | langfuse | langsmith | otel | helicone | datadog
@@ -406,13 +408,17 @@ def main(
 
 @app.command(name="adapters")
 def list_adapters() -> None:
-    """List the installed adapters and their capabilities."""
+    """List the adapter families and the capabilities each built-in fake reports.
+
+    Installed live backends are not inspected; see docs/adapters.md for those.
+    """
     registry = AdapterRegistry()
     for fake in (
         FakeVectorStore(),
         FakeRAGPipeline(),
         FakeObservability(),
         FakeAgent(),
+        FakeAppApi(),
         FakeMCP(),
         FakeCache(),
         FakeModel(),
@@ -1051,7 +1057,7 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     typer.echo(
         f"warning: no live adapter configured for {scope} - these verdicts describe "
         "the built-in synthetic stack, not your production systems. Configure real "
-        "adapters via --config; `sectum-ai list-adapters` shows the kinds available.",
+        "adapters via --config; `sectum-ai adapters` shows the kinds available.",
         err=True,
     )
 
@@ -1322,7 +1328,7 @@ def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) ->
         "```sh\n"
         "sectum-ai verify run-pack.zip\n"
         "```\n\n"
-        "A pack built with `report --tsa --rekor` verifies as independently anchored tamper\n"
+        "A pack built with `report --tsa <url> --rekor` verifies as independently anchored tamper\n"
         "evidence; otherwise add `--allow-unanchored` (the local-dev timestamp is\n"
         "regenerable, so it is an integrity-only check).\n\n"
         "## Contents\n\n"
@@ -1691,6 +1697,7 @@ def _emit_erasure_attestation(
     loaded: SectumConfig,
     started: datetime,
     finished: datetime,
+    surface_provenance: dict[str, str],
 ) -> None:
     """Build and write the signed erasure attestation for a report, then report it.
 
@@ -1707,6 +1714,7 @@ def _emit_erasure_attestation(
         finished_at=finished,
         adapter_versions=adapter_versions,
         probe_versions={probe_id: __version__},
+        surface_provenance=surface_provenance,
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
@@ -1971,6 +1979,16 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
+            surface_provenance=surface_provenance_of(
+                (
+                    subject_store,
+                    subject_cache,
+                    subject_obs,
+                    subject_model,
+                    subject_memory,
+                    subject_search,
+                )
+            ),
         )
         return
     store = build_vector_store(loaded.adapters.get("vector_store", fake_default))
@@ -1985,6 +2003,8 @@ def erasure(
     search = build_search_index(loaded.adapters.get("search_index", fake_default))
     evalset = build_eval_set(loaded.adapters.get("eval_set", fake_default))
     backup = build_backup(loaded.adapters.get("backup", fake_default))
+    provenance = surface_provenance_of((store, obs, memory, cache, model, search, evalset, backup))
+    _warn_on_synthetic_surfaces(provenance)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
@@ -2044,6 +2064,7 @@ def erasure(
         loaded=loaded,
         started=started,
         finished=finished,
+        surface_provenance=provenance,
     )
 
 

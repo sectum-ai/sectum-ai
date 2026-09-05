@@ -26,6 +26,13 @@ COVERAGE_DISCLAIMER = (
 _ISOLATION = "isolation"  # at least one isolation probe ran
 _ERASURE = "erasure"  # the run carries erasure coverage (the `erasure` workflow)
 
+# The erasure probes are control checks, not isolation probes, so a run in which
+# only they executed has produced no isolation evidence. Their ids are pinned here
+# rather than imported: the evidence package sits below probes in the package graph
+# (ADR-0004). tests/unit/test_controls.py holds this set to the probes' own
+# declarations so the two cannot drift.
+_ERASURE_PROBE_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
+
 # Framework -> control IDs -> what a Sectum AI verification run asserts about
 # them -> the evidence required to assert it (the engineering spec, section 18).
 _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
@@ -106,11 +113,15 @@ def _run_supports(run: RunResult, requirement: str) -> bool:
     Isolation evidence counts a finding as well as ``probe_versions``: a finding is
     itself proof its probe executed, the same reasoning ``score._confirmed_probe_ids``
     applies, so a record whose bookkeeping disagrees with its own findings cannot
-    drop a control it demonstrably tested.
+    drop a control it demonstrably tested. An erasure probe is neither: a run in
+    which only ``gdpr-erasure-verification`` executed used to satisfy this test and
+    ship SOC 2 / ISO / EU AI Act mappings asserting "tested by adversarial probing"
+    on the strength of a deletion check, in the artifact built for auditors.
     """
     if requirement == _ERASURE:
         return bool(run.metrics.erasure_coverage)
-    return bool(run.probe_versions or run.findings)
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    return bool(exercised - _ERASURE_PROBE_IDS)
 
 
 def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:

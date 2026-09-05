@@ -3,21 +3,30 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
     "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-08-15T22:02:59.519352+00:00",
-    "finished_at": "2026-08-15T22:02:59.521301+00:00",
+    "started_at": "2026-09-05T07:04:29.744582+00:00",
+    "finished_at": "2026-09-05T07:04:29.746318+00:00",
     "adapter_versions": {
-      "fake-vector": "0.8.4",
-      "fake-observability": "0.8.4",
-      "fake-memory": "0.8.4",
-      "fake-cache": "0.8.4",
-      "fake-model": "0.8.4",
-      "fake-search": "0.8.4",
-      "fake-eval-set": "0.8.4",
-      "fake-backup": "0.8.4"
+      "fake-vector": "0.11.0",
+      "fake-observability": "0.11.0",
+      "fake-memory": "0.11.0",
+      "fake-cache": "0.11.0",
+      "fake-model": "0.11.0",
+      "fake-search": "0.11.0",
+      "fake-eval-set": "0.11.0",
+      "fake-backup": "0.11.0"
     },
-    "surface_provenance": {},
+    "surface_provenance": {
+      "vector_db": "SYNTHETIC",
+      "tracing": "SYNTHETIC",
+      "agent_memory": "SYNTHETIC",
+      "semantic_cache": "SYNTHETIC",
+      "model_adapter": "SYNTHETIC",
+      "search_index": "SYNTHETIC",
+      "eval_set": "SYNTHETIC",
+      "backup": "SYNTHETIC"
+    },
     "probe_versions": {
-      "gdpr-erasure-verification": "0.8.4"
+      "gdpr-erasure-verification": "0.11.0"
     },
     "findings": [
       {
@@ -426,44 +435,9 @@
     "schema_version": "0.6.0"
   },
   "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-  "tsa_token": "{\"digest\":\"ba6bbafd7c8355e440762f85d6903e6c6b1332fd9edbb49c255ddc1882e8cb98\",\"timestamped_at\":\"2026-08-15T22:02:59.554419+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"b9cf440986e4c9ef327492010e544e9907ab716465937a2406e061dded009119\",\"timestamped_at\":\"2026-09-05T07:04:29.775066+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
-    {
-      "framework": "SOC 2 (TSC)",
-      "control_ids": [
-        "CC6.1",
-        "CC6.6",
-        "CC6.7"
-      ],
-      "assertion": "Tenant logical separation tested by benign and adversarial probing across the AI surfaces."
-    },
-    {
-      "framework": "ISO/IEC 27001:2022",
-      "control_ids": [
-        "A.5.15",
-        "A.8.3",
-        "A.8.12"
-      ],
-      "assertion": "Cross-tenant information leakage tested; residual leakage itemized."
-    },
-    {
-      "framework": "ISO/IEC 42001:2023",
-      "control_ids": [
-        "A.6.2.6",
-        "A.7.2",
-        "A.7.5"
-      ],
-      "assertion": "Per-tenant data management and provenance in the AI system tested; isolation verified under AI system operation and monitoring."
-    },
-    {
-      "framework": "GDPR",
-      "control_ids": [
-        "Article 25",
-        "Article 32"
-      ],
-      "assertion": "Tenant isolation tested across the AI surfaces."
-    },
     {
       "framework": "GDPR",
       "control_ids": [
@@ -474,51 +448,12 @@
     {
       "framework": "CCPA/CPRA",
       "control_ids": [
-        "1798.100",
-        "1798.150"
-      ],
-      "assertion": "Segregation of consumer data tested across the AI surfaces."
-    },
-    {
-      "framework": "CCPA/CPRA",
-      "control_ids": [
         "1798.105"
       ],
       "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
-    },
-    {
-      "framework": "EU AI Act",
-      "control_ids": [
-        "Article 15"
-      ],
-      "assertion": "Robustness of tenant isolation tested under benign and adversarial conditions."
-    },
-    {
-      "framework": "HIPAA",
-      "control_ids": [
-        "164.312(a)(1)",
-        "164.312(c)(1)",
-        "164.312(e)(1)"
-      ],
-      "assertion": "Segregation of regulated tenant data verified across the AI surfaces."
-    },
-    {
-      "framework": "NIST AI RMF",
-      "control_ids": [
-        "MEASURE 2.7",
-        "MANAGE 2.x"
-      ],
-      "assertion": "Documented measurement of multi-tenant security risk."
-    },
-    {
-      "framework": "OWASP LLM Top 10",
-      "control_ids": [
-        "LLM08:2025"
-      ],
-      "assertion": "Direct test coverage of vector and embedding multi-tenant weaknesses."
     }
   ],
-  "pdf_ref": "1d454884dad344acc36cd9ede4b796e9ad0b001957c52cc3838878ab6e7de903",
+  "pdf_ref": "4d1032664e5e10081a0c1210a34c138e6017bc86c439601e80add84bd6f9465e",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.6.0"

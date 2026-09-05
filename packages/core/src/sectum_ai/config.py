@@ -25,7 +25,7 @@ adapter resolver can look them up at run time without storing secrets.
 import hashlib
 import os
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from difflib import get_close_matches
@@ -43,6 +43,7 @@ from pydantic import (
 )
 
 from sectum_ai.adapters import (
+    Adapter,
     AgentAdapter,
     BackupAdapter,
     CacheAdapter,
@@ -375,7 +376,7 @@ _BUNDLE_SLOTS: tuple[str, ...] = (
 
 
 def surface_provenance(bundle: AdapterBundle) -> dict[str, str]:
-    """Map each exercised surface to whether its adapter was live or synthetic.
+    """Map each surface a probe run exercised to whether its adapter was live or synthetic.
 
     Both halves come off the adapter instance. Liveness, so a family that fell
     back to a fake - an omitted key, a misspelled one - is recorded as what it
@@ -386,11 +387,21 @@ def surface_provenance(bundle: AdapterBundle) -> dict[str, str]:
     provenance of an API-backed store under ``vector_db`` while its own findings
     said ``api``.
     """
+    return surface_provenance_of(getattr(bundle, field) for field in _BUNDLE_SLOTS)
+
+
+def surface_provenance_of(adapters: Iterable[Adapter]) -> dict[str, str]:
+    """The provenance block for any set of built adapters - the erasure paths' too.
+
+    The erasure attestation built its run record without this block, so its packs
+    said "predates surface provenance" while stamped with the schema that carries
+    it, and its audit PDF printed that sentence as fact.
+    """
     return {
-        (adapter := getattr(bundle, field)).surface.value: (
+        adapter.surface.value: (
             SurfaceProvenance.SYNTHETIC if adapter.synthetic else SurfaceProvenance.LIVE
         ).value
-        for field in _BUNDLE_SLOTS
+        for adapter in adapters
     }
 
 
@@ -782,7 +793,8 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
             user_scoped=_bool(extras, "user_scoped", False),
         )
     if config.kind == "stdio":
-        from sectum_ai.adapters.mcp.client import StdioMCPClient
+        with _optional_extra("mcp"):
+            from sectum_ai.adapters.mcp.client import StdioMCPClient
 
         command = _required_str(extras, "command")
         raw_args = extras.get("args", [])
@@ -792,7 +804,8 @@ def build_mcp(config: AdapterConfig) -> MCPAdapter:
         tenant_argument = _optional_str(extras, "tenant_argument")
         return StdioMCPClient(command, args, tenant_argument=tenant_argument)
     if config.kind == "http":
-        from sectum_ai.adapters.mcp.http import HttpMCPClient
+        with _optional_extra("mcp"):
+            from sectum_ai.adapters.mcp.http import HttpMCPClient
 
         url = _required_str(extras, "url")
         headers = _str_dict(extras, "headers")

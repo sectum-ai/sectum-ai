@@ -331,3 +331,37 @@ def test_erasure_scoped_pack_still_verifies(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     assert "INTEGRITY OK - UNANCHORED" in result.output
+
+
+def test_the_erasure_attestation_records_surface_provenance(tmp_path: Path) -> None:
+    """The erasure path built its run record without the provenance block.
+
+    Its packs therefore said "predates surface provenance" while stamped with the
+    schema that carries it, and the audit PDF printed that sentence as fact - the
+    one deliverable whose whole point is saying what it ran against.
+    """
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", "Acme Robotics"]
+    )
+    assert result.exit_code == 0, result.output
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    provenance = pack["run_result"]["surface_provenance"]
+    assert len(provenance) == 8, provenance
+    assert set(provenance.values()) == {"SYNTHETIC"}
+    # The tenant path now says so on stderr, as the subject path always did.
+    assert "no live adapter configured for every surface" in result.output
+    verified = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert verified.exit_code == 0, verified.output
+    assert "predates" not in verified.output
+    assert "NO surface was live" in verified.output
