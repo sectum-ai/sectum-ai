@@ -280,7 +280,12 @@ class ErasureProbe:
             plan.append((Surface.AGENT_MEMORY, self._scan_memory, self._memory.delete))
         if self._cache is not None:
             plan.append((Surface.SEMANTIC_CACHE, self._scan_cache, self._cache.delete))
-        if self._model is not None:
+        if self._model is not None and self._model_can_memorize(self._model):
+            # A serving-only model trained nothing that could hold a canary. In the
+            # plan it scanned to a zero baseline, which is NOT_COVERED - but a
+            # zero-baseline surface also makes `erased` false, so configuring a
+            # vLLM/TGI model turned an otherwise ERASED run INCONCLUSIVE (exit 3).
+            # Left out of the plan it is NOT_COVERED through `coverage()` alone.
             plan.append((Surface.MODEL_ADAPTER, self._scan_model, self._model.delete))
         if self._search_index is not None:
             plan.append((Surface.SEARCH_INDEX, self._scan_search, self._search_index.delete))
@@ -387,14 +392,9 @@ class ErasureProbe:
         ERASED), and a transient backend error can't abort the run over a scan that
         is structurally empty anyway.
         """
-        if self._model is None:
+        if self._model is None or not self._model_can_memorize(self._model):
             return []
         model = self._model
-        if not any(
-            model.supports(cap)
-            for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
-        ):
-            return []
         return [
             marker
             for marker in markers
@@ -433,6 +433,13 @@ class ErasureProbe:
             for marker in markers
             if any(marker.plaintext in hit for hit in backup.search(target, marker.plaintext))
         ]
+
+    @staticmethod
+    def _model_can_memorize(model: ModelAdapter) -> bool:
+        return any(
+            model.supports(cap)
+            for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
+        )
 
     def _marker_observable(self, target: UUID, marker: Marker) -> bool:
         for location in marker.planted_locations:

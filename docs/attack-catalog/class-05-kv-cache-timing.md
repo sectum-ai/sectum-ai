@@ -11,7 +11,12 @@ to another through KV prefix-cache timing.
 
 Class 5 is a statistical timing test. It warms the cache as one tenant, then, as
 another tenant, measures inference latency over many trials for prompts that do
-and do not share the warmed prefix.
+and do not share a warmed prefix. The owner warms one prefix **per trial**, and
+each is measured exactly once, by one arm: on a backend whose latency call runs
+inference (the HuggingFace adapter), the observer's own first trial would
+otherwise warm a single shared prefix — and the control prefix — for every later
+trial, leaving both arms as cache hits and the side channel visible in one trial
+of twenty-four. The control prefix is fresh per trial and never warmed by anyone.
 
 ## Detection
 
@@ -29,7 +34,11 @@ d**). A pair is a confirmed side-channel finding only when the gap is
 - **directional** — the primed prompt is the faster one (a positive gap),
 
 so a coincidental or wrong-direction gap is not over-claimed (the spec,
-section 7). Severity scales with the effect size; the per-pair effect sizes are
+section 7). Within-arm variances are floored at the timer's resolution (about a
+microsecond), so a jitter-free backend — zero spread, a constant gap — is the
+cleanest side channel rather than an undefined test: it used to yield an infinite
+t with zero degrees of freedom, read as p = 1, and no finding. Severity scales
+with the effect size; the per-pair effect sizes are
 recorded in the run metrics, and the finding's evidence span quotes the full
 test result (means, gap, CI, t, df, p, d) for the auditor.
 

@@ -1139,3 +1139,20 @@ def test_markers_naming_entity_is_empty_for_an_unmentioned_entity() -> None:
 
     absent = SharedEntity(kind="person", value="Nobody Mentioned Anywhere 9Z9Z")
     assert markers_naming_entity(substrate, absent) == []
+
+
+@pytest.mark.parametrize("separator", [" ", "\u2013", "_"])
+def test_a_token_identical_foreign_entity_confirms_even_when_the_judge_says_no(
+    separator: str,
+) -> None:
+    # The verbatim rule was a normalized-substring test, so the same entity with
+    # its separator changed ("Quasar7K2Q 00001" for "Quasar7K2Q-00001") reached the
+    # judge alone; the fake judge confirmed it and a cautious real one did not.
+    # The marker's tokens contiguous and in order are the entity, to any reader.
+    substrate = _entity_substrate("Project Quasar7K2Q-00001")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DenyingJudge(), 0.0)
+    text = f"retrieved: Project Quasar7K2Q{separator}00001 status green"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    assert confirmed, "a token-identical foreign entity is a leak by observation"
+    assert confirmed[0].confidence == 1.0

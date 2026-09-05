@@ -249,22 +249,24 @@ def test_bonferroni_corrected_level_is_stricter_than_the_per_pair_alpha() -> Non
 
 
 def test_welch_handles_zero_variance_samples() -> None:
-    # A constant-latency backend yields zero within-group spread. The Welch test
-    # must not crash or claim a side channel: identical samples -> t=0, df=0;
-    # different-but-constant means -> infinite t but df=0 (conservatively p=1.0).
+    # A constant-latency backend yields zero within-group spread. Identical samples
+    # are indistinguishable (t=0, p=1). Different-but-constant means used to give an
+    # infinite t with ZERO degrees of freedom, read as p=1.0 - so a perfect,
+    # jitter-free side channel produced no finding. Variances are floored at the
+    # timer's resolution instead: the gap is then as significant as it looks.
     import math
 
-    from sectum_ai.probes.kv_cache_timing.probe import _student_t_sf
+    from sectum_ai.probes.kv_cache_timing.probe import _cohens_d, _student_t_sf
 
     t_eq, df_eq, se_eq = _welch([5.0, 5.0, 5.0, 5.0], [5.0, 5.0, 5.0, 5.0])
-    assert (t_eq, df_eq, se_eq) == (0.0, 0.0, 0.0)
+    assert t_eq == 0.0 and df_eq > 0.0 and se_eq > 0.0
     assert _student_t_sf(t_eq, df_eq) == 1.0
 
     t_ne, df_ne, se_ne = _welch([7.0, 7.0, 7.0, 7.0], [5.0, 5.0, 5.0, 5.0])
-    assert math.isinf(t_ne)
-    assert df_ne == 0.0 and se_ne == 0.0
-    # df <= 0 is conservatively non-significant, never a crash or false positive.
-    assert _student_t_sf(t_ne, df_ne) == 1.0
+    assert math.isfinite(t_ne) and t_ne > 1e5
+    assert df_ne > 0.0 and se_ne > 0.0
+    assert _student_t_sf(t_ne, df_ne) < 1e-9
+    assert _cohens_d([7.0, 7.0], [5.0, 5.0]) > 1e5
 
 
 def test_welch_handles_a_single_sample_group() -> None:
@@ -328,3 +330,62 @@ def test_interleaving_still_detects_a_real_shared_cache() -> None:
     report = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
     assert len(report.findings) == len(report.signals)
     assert all(signal.mean_gap_ms > 0.0 for signal in report.signals)
+
+
+class _JitterFreeModel(FakeModel):
+    """A shared prefix cache with NO per-prompt jitter: a perfect side channel."""
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        warm = self._prefix(prompt) in self._warmed_prefixes
+        return 40.0 if warm else 100.0
+
+
+def test_a_jitter_free_shared_cache_is_still_a_side_channel() -> None:
+    # Zero within-arm spread gave an infinite t with zero df (p=1.0) and d=0, so
+    # the cleanest possible 60 ms cross-tenant gap produced no finding.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=_JitterFreeModel(prefix_cache=True)).run()
+    assert len(report.findings) == len(report.signals) > 0
+    assert all(signal.mean_gap_ms == 60.0 for signal in report.signals)
+
+
+class _WarmingModel(FakeModel):
+    """A backend whose latency call runs inference and so warms the cache (HF).
+
+    ``shared`` keys the cache on the prompt alone (the side channel); otherwise
+    on (tenant, prompt) - a correctly scoped cache that must NOT be flagged.
+    """
+
+    def __init__(self, *, shared: bool) -> None:
+        super().__init__()
+        self._shared = shared
+        self._warm: set[tuple[UUID | None, str]] = set()
+
+    def _key(self, tenant: UUID, prompt: str) -> tuple[UUID | None, str]:
+        return (None if self._shared else tenant, self._prefix(prompt))
+
+    def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+        self._warm.add(self._key(tenant, prompt))
+        return "completion"
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        hit = self._key(tenant, prompt) in self._warm
+        self.infer(tenant, prompt)
+        return 40.0 if hit else 100.0
+
+
+def test_a_measurement_that_warms_the_cache_still_detects_a_shared_cache() -> None:
+    # With one prefix per pair, the observer's own trial 0 warmed both the primed
+    # and the control prefix for every later trial, so both arms were cache hits
+    # from trial 1 on and a genuine shared cache survived only in trial 0 (d~0.25,
+    # no finding). One owner-warmed prefix per trial, measured exactly once, and a
+    # fresh control prefix per trial keep the signal in every trial.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    leaky = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=True)).run()
+    assert len(leaky.findings) == len(leaky.signals) > 0
+    assert all(signal.mean_gap_ms == 60.0 for signal in leaky.signals)
+    # and a correctly tenant-scoped cache, which the observer also warms, is not
+    # mistaken for one: neither arm is ever a hit.
+    scoped = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=False)).run()
+    assert scoped.findings == ()
+    assert all(signal.mean_gap_ms == 0.0 for signal in scoped.signals)

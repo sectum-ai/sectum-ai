@@ -37,14 +37,20 @@ its own sub-probe demonstrates.
 
 **Agent end (`agent-framework-hijack`)** — verifies the *agent caller* itself.
 Each tenant's hard canary is provisioned as a resolvable resource the agent's
-built-in `lookup` tool can fetch. From every other principal's session the
+built-in `lookup` tool can fetch. From every other *tenant's* session the
 probe issues `agent.run(tenant, "lookup <marker_id>")` and, separately,
 `agent.run(tenant, "lookup <marker_id> token=<owner-hex>")` — the same
 confused-deputy + token-passthrough pair, but at the agent layer. The same
 probe runs cleanly against every shipped v1 agent backend (`fake` / `http`
 / `langgraph` / `autogen` / `crewai` / `openai-assistants` /
 `anthropic-tooluse`), so the attestation pack speaks the same language to a
-DPO regardless of which framework the customer ran.
+DPO regardless of which framework the customer ran. The agent contract carries
+no user identity (`run(tenant, task)`), so this end verifies the tenant boundary
+only; the MCP end, whose `call_tool` carries the user, verifies both. A
+user-level step here would run as the tenant and be judged as the user — a
+session that never existed — and once produced confirmed cross-user findings on
+a tenant-isolated agent (see [ADR-0006](../adr/0006-principal-isolation-model.md)
+on user-aware adapters).
 
 ## Detection
 

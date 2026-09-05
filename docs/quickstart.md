@@ -106,7 +106,7 @@ records:
   semantic_cache: ["qa:7f3e", "qa:1b09"]
 fingerprints:
   vector_db: ["Maria Chen", "maria@example.com"]   # content to probe; hashed in the attestation
-  model_adapter: ["Maria Chen"]                    # probe the fine-tune for residual memorization
+  model_adapter: ["Maria Chen, 12 Elm Street, Springfield"]  # a specific phrase: see below
   agent_memory: ["Maria Chen"]                     # probe long-term agent memory (recall)
   search_index: ["Maria Chen"]                     # probe the derived full-text search index
 ```
@@ -118,8 +118,13 @@ sectum-ai erasure --subject subject.yaml --config sectum-ai.yaml
 A surface is `ERASED` only when every supplied id is gone **and** no supplied content
 still surfaces; every other surface reads `NOT_COVERED`, so the attestation never
 implies coverage it did not verify. Fingerprint probing is best-effort — a clean
-result is evidence the content no longer surfaces, not proof of absence. Exit codes
-match the canary flow: `0` clean, `2` residual remains, `3` nothing could be verified.
+result is evidence the content no longer surfaces, not proof of absence. On the
+model surface the check is prefix-continuation against a control prefix, so a
+completion any model would produce (`@example.com`, a common surname) is not
+counted as recall; give it a specific phrase, since one whose trailing part is
+under six characters (a bare two-word name) is not checked there and reads
+`NOT_COVERED`. Exit codes match the canary flow: `0` clean, `2` residual remains,
+`3` nothing could be verified.
 
 ## Bundle a portable run pack
 

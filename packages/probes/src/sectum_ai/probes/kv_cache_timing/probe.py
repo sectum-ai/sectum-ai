@@ -36,6 +36,12 @@ from sectum_ai.spec import Finding, FindingStatus, Severity, Substrate, Surface
 # which arm it times first, and only an even count leaves the two arms with equal
 # mean measurement positions, which is what makes a linear drift cancel exactly.
 _TRIALS = 24
+# No latency is measured finer than the clock: variances are floored at the
+# square of perf_counter's ~1 us resolution (in ms). A jitter-free backend used
+# to yield zero spread, an infinite t with zero degrees of freedom, p = 1.0, and
+# Cohen's d = 0 - so a perfect, constant 60 ms side channel produced no finding.
+_RESOLUTION_MS = 1e-6
+_VARIANCE_FLOOR = _RESOLUTION_MS**2
 # Cohen's d: 0.8 is the conventional "large effect" boundary. A timing gap above
 # it stands clear of the per-prompt jitter noise floor (practical significance).
 _EFFECT_THRESHOLD = 0.8
@@ -114,11 +120,11 @@ class KvCacheTimingReport:
 
 
 def _cohens_d(slow: list[float], fast: list[float]) -> float:
-    """Standardised mean difference (slow minus fast); 0 when indistinguishable."""
+    """Standardised mean difference (slow minus fast); 0 when the means agree."""
     pooled_variance = (statistics.pvariance(slow) + statistics.pvariance(fast)) / 2.0
-    if pooled_variance == 0.0:
-        return 0.0
-    return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(pooled_variance)
+    return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(
+        max(pooled_variance, _VARIANCE_FLOOR)
+    )
 
 
 def _betacf(a: float, b: float, x: float) -> float:
@@ -207,12 +213,15 @@ def _welch(slow: list[float], fast: list[float]) -> tuple[float, float, float]:
 
     Unequal-variance (Welch) form, so the two conditions need not share a
     variance. ``std_error`` is the standard error of the mean difference, reused
-    for the confidence interval. A zero standard error (no within-group spread)
-    yields an infinite t and zero df-less significance, handled by the callers.
+    for the confidence interval. A group's variance is floored at the timer's
+    resolution, so a constant-latency backend yields a finite, large t rather
+    than a degenerate one; only when neither group has two samples is the
+    standard error zero (an infinite t with zero df, which the callers read as
+    not significant).
     """
     n_slow, n_fast = len(slow), len(fast)
-    var_slow = statistics.variance(slow) if n_slow > 1 else 0.0
-    var_fast = statistics.variance(fast) if n_fast > 1 else 0.0
+    var_slow = max(statistics.variance(slow), _VARIANCE_FLOOR) if n_slow > 1 else 0.0
+    var_fast = max(statistics.variance(fast), _VARIANCE_FLOOR) if n_fast > 1 else 0.0
     term_slow = var_slow / n_slow
     term_fast = var_fast / n_fast
     std_error = math.sqrt(term_slow + term_fast)
@@ -250,22 +259,32 @@ class KvCacheTimingProbe:
     def run(self) -> KvCacheTimingReport:
         """Warm the cache per tenant, then time prefix-sharing prompts from every other.
 
-        Warm-up primes the owner's prefix via ``ModelAdapter.infer`` while the
+        Warm-up primes the owner's prefixes via ``ModelAdapter.infer`` while the
         measurement reads latency via ``measure_latency``; this assumes the
         adapter contract that both touch the *same* prefix cache (the fake and the
         HuggingFace adapter comply - HF's ``measure_latency_ms`` calls ``infer``).
         An adapter whose two paths use independent caches would show no signal.
+
+        The owner warms one prefix per trial and each is measured exactly once,
+        by one observer arm: on a backend whose latency call runs inference (HF),
+        the observer's own trial 0 used to warm the single shared prefix - and the
+        single control prefix - for every later trial, so both arms were cache
+        hits from trial 1 and a real shared cache survived only in trial 0
+        (d ~ 0.25, no finding). Now only the owner's warm-up can prime the primed
+        arm, and the control arm is cold every trial. Prefixes are 20 characters,
+        the cache key the built-in fake and the serving test doubles use.
         """
         tenants = [tenant.tenant_id for tenant in self._substrate.tenants]
         signals: list[TimingSignal] = []
         findings: list[Finding] = []
         for owner in tenants:
-            prefix = f"tenant-{owner.hex[:8]}-session"
-            self._model.infer(owner, f"{prefix} context warm-up prompt")
+            prefixes = [f"t{owner.hex[:8]}-{trial:02d}-session" for trial in range(_TRIALS)]
+            for prefix in prefixes:
+                self._model.infer(owner, f"{prefix} context warm-up prompt")
             for observer in tenants:
                 if observer == owner:
                     continue
-                signals.append(self._measure(owner, observer, prefix))
+                signals.append(self._measure(owner, observer, prefixes))
         # Bonferroni correction: a run performs one Welch's t-test per ordered
         # tenant pair, so judging each at _ALPHA would inflate the family-wise
         # false-positive rate (roughly comparisons * _ALPHA). Dividing the level
@@ -278,7 +297,7 @@ class KvCacheTimingProbe:
                 findings.append(self._finding(signal, alpha))
         return KvCacheTimingReport(signals=tuple(signals), findings=tuple(findings))
 
-    def _measure(self, owner: UUID, observer: UUID, prefix: str) -> TimingSignal:
+    def _measure(self, owner: UUID, observer: UUID, prefixes: list[str]) -> TimingSignal:
         # Interleave the two arms, alternating which is measured first, instead of
         # timing all primed trials and then all control trials.
         #
@@ -300,8 +319,10 @@ class KvCacheTimingProbe:
         primed: list[float] = []
         control: list[float] = []
         for trial in range(_TRIALS):
-            primed_prompt = f"{prefix} probe {trial}"
-            control_prompt = f"unrelated-{observer.hex[:8]} probe {trial}"
+            primed_prompt = f"{prefixes[trial]} probe {trial}"
+            # Unique per (owner, observer, trial): a control prefix reused across
+            # owners is warmed by the observer's own earlier measurement.
+            control_prompt = f"u{observer.hex[:6]}{owner.hex[:6]}-{trial:02d}-ctl probe {trial}"
             if trial % 2 == 0:
                 primed.append(self._model.measure_latency(observer, primed_prompt))
                 control.append(self._model.measure_latency(observer, control_prompt))

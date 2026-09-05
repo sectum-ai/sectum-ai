@@ -741,7 +741,18 @@ class DetectionPipeline:
             # model) silently downgraded a real cross-tenant leak to a candidate.
             # The threshold could also skip it before the judge ever saw it.
             needle = _normalize_for_match(marker.plaintext)
-            verbatim = bool(needle) and needle in haystack
+            # Substring, or the marker's tokens contiguous and in order: the entity
+            # with its separator changed ("Quasar7K2Q 00001" for "Quasar7K2Q-00001")
+            # is the same text to a reader, and reached the judge alone - where a
+            # cautious "no" downgraded it - while the fake judge confirmed it.
+            marker_tokens = _tokenize(marker.plaintext)
+            verbatim = bool(needle) and (
+                needle in haystack
+                or (
+                    bool(marker_tokens)
+                    and _ordered_within_span(observation_tokens, marker_tokens, 0)
+                )
+            )
             similarity = self._best_window_similarity(observation_tokens, marker, window_cache)
             # The threshold gates which *semantic* candidates reach the judge. With
             # the deterministic fake providers the judge (a full marker-phrase

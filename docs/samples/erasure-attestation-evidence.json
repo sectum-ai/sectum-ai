@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
     "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-09-05T07:57:16.141680+00:00",
-    "finished_at": "2026-09-05T07:57:16.142373+00:00",
+    "started_at": "2026-09-05T08:17:42.413813+00:00",
+    "finished_at": "2026-09-05T08:17:42.414425+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -66,7 +66,7 @@
     "schema_version": "0.6.0"
   },
   "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-  "tsa_token": "{\"digest\":\"10613c94983e0f7b3e1680b9e7daea15fa4911a2d0c90f18f76d4f43e7e4d4ef\",\"timestamped_at\":\"2026-09-05T07:57:16.150377+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"7eb68b360cf04e19d73544f2ec1a71a85ca0312b298fb1fe4dfece6c516720a7\",\"timestamped_at\":\"2026-09-05T08:17:42.422006+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [
     {
@@ -84,7 +84,7 @@
       "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
     }
   ],
-  "pdf_ref": "af1fd18160f4d177c02a709abbf5d5c24a7f88a59bdc01efef9e374248b1ef36",
+  "pdf_ref": "c5a9788f7bc76c8d6035cc593e2533e7b092f4018a116508dbf830a6946e5bb9",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.6.0"

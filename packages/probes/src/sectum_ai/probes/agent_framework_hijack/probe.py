@@ -36,16 +36,18 @@ class AgentFrameworkHijackProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ("agent",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan a direct and a token-bearing ``agent.run`` per hard canary per foreign principal.
+        """Plan a direct and a token-bearing ``agent.run`` per hard canary per foreign tenant.
 
         Each step asks the agent to ``lookup <marker_id>``; the token-bearing
         variant appends ``token=<owner-hex>`` so a token-passthrough agent
         forwards the owner's identity to the tool. The lookups are issued
-        from every principal to which the marker is foreign - another tenant,
-        or another user within the tenant (ADR-0006) - so tool-call scope is
-        verified at both granularities.
+        from every *tenant* to which the marker is foreign. ``AgentAdapter.run``
+        carries no user, so a user-level step would run as the tenant and be
+        judged as the user - on a tenant-isolated agent every sibling user's
+        marker then confirmed as a CRITICAL cross-user leak of a session that
+        never existed (ADR-0006: user-aware adapters are the next increment).
         """
-        principals = substrate.principals()
+        principals = [p for p in substrate.principals() if p.user_id is None]
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:

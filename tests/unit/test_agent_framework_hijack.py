@@ -100,20 +100,18 @@ def test_probe_findings_carry_the_agent_framework_surface() -> None:
     assert all(finding.surface.value == "agent_framework" for finding in findings)
 
 
-def test_tenant_scoped_agent_still_surfaces_cross_user_via_tenant_scope() -> None:
-    # A FakeAgent that scopes only by tenant (no user-scope knob, by design) resolves
-    # *any* same-tenant marker for a sibling-user caller - so a probe whose
-    # foreign principals include the sibling user records cross-user findings
-    # even when the confused-deputy / token-passthrough knobs are off.
-    # (The MCP variant of Class 7 owns the user-scope test.)
+def test_user_level_steps_are_not_planned_for_an_interface_that_carries_no_user() -> None:
+    # `AgentAdapter.run(tenant, task)` carries no user, so a user-level step ran as
+    # the tenant and was judged as the user: on a tenant-isolated agent every
+    # sibling user's marker in the tenant's own answer confirmed as a CRITICAL
+    # cross-user leak - of a session that never existed. The probe plans from
+    # tenants only; the MCP variant of Class 7 (whose `call_tool` carries `user`)
+    # owns the user-scope test.
     substrate = _users_substrate()
-    agent = _seeded_agent(substrate)
-    findings = confirmed_findings(Runner(substrate, agent=agent).run(AgentFrameworkHijackProbe()))
-    assert findings
-    assert all(
-        finding.owner_user_id is not None and finding.owner_user_id != finding.observed_in_user_id
-        for finding in findings
-    )
+    steps = AgentFrameworkHijackProbe().plan(substrate)
+    assert all(step.actor_user_id is None for step in steps)
+    findings = Runner(substrate, agent=_seeded_agent(substrate)).run(AgentFrameworkHijackProbe())
+    assert confirmed_findings(findings) == []
 
 
 def test_fake_agent_default_is_non_leaky() -> None:
