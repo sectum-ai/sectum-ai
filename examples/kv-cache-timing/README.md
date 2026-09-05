@@ -106,7 +106,7 @@ shared deployments.
   prefix cache to time, so there is no adapter for one.
 - **A statistical baseline against load.** A noisy production
   endpoint may swamp the signal even when the cache is leaky; the
-  probe's 24 trials + (p < 0.01, d ≥ 0.8) gate is calibrated for the
+  probe's 24 trials + (p < 0.01 / ordered tenant pairs, Bonferroni; d ≥ 0.8) gate is calibrated for the
   in-memory fake's clean noise floor. Production runs warrant more
   trials and a re-baselined threshold.
 - **Mitigation of the side channel.** Sectum verifies and attests;

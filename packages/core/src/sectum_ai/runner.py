@@ -112,9 +112,9 @@ class Runner:
         """Plan and run the probe, pairing each step with the findings it produced.
 
         A user-level step whose adapter does not carry the user (``carries_user``)
-        is dropped, not run as the tenant: judged as the user it would confirm
-        leaks of a session that never existed, and the run may claim only the
-        boundary it could exercise.
+        is dropped unless it is a plant, which runs as the tenant: judged as the
+        user it would confirm leaks of a session that never existed, and the run
+        may claim only the boundary it could exercise.
         """
         self.preflight(probe)
         results: list[StepResult] = []

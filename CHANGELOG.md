@@ -309,9 +309,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   over three markers presumed retained, under the isolation narrative. The verdict
   comes from the coverage block and the result describes an erasure run.
 - A bundled PDF the pack binds no `pdf_ref` for is refused (the first one rode
-  unbound). The JSON summary and the Action carry `confirmed_on_live_surfaces`
-  and the run's provenance beside `confirmed_findings`, which counts every
-  surface, the fakes included. The LangSmith eval set refuses a search that hit
+  unbound). The JSON summary carries `confirmed_on_live_surfaces` and the run's
+  provenance beside `confirmed_findings` (which counts every surface, the fakes
+  included), and the Action carries the live count as an output. The LangSmith eval set refuses a search that hit
   its 1000-example cap.
 - Docs: the schema-reference paragraph said a misspelled adapter field is silently
   ignored (it is refused); the example config's `openai-assistants` and

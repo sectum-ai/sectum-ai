@@ -24,7 +24,7 @@ without running Sectum.
 | `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate, erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`), side-channel effect sizes, and the Class 3/6/10 rates. |
 | `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped`). |
 | `EvidencePack` | The attested bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, the `anchored_in_log` / `anchored_with_timestamp` downgrade guards, and `schema_version`. |
-| `ControlMapping` | A finding's mapped compliance control (framework, control id, assertion) — see the [compliance mappings](compliance-mappings.md). |
+| `ControlMapping` | A pack-level framework mapping (framework, control ids, an assertion ending in the live surfaces it rests on) — see the [compliance mappings](compliance-mappings.md). |
 | `ClassScore` | One attack class's line in an isolation scorecard: `class_id`, `name`, `verdict` (`PASS`/`FAIL`/`NOT_COVERED`), weight `severity` band, `probe_ids`, `confirmed_findings`, `headline?`, `note?`. |
 | `IsolationScore` | A graded isolation posture derived from a run: `run_id`, `run_digest`, `grade` (A–F), `confidence`, `weighted_score`, `coverage`, `classes_covered`, `classes_total`, `capped_by?`, `scope`, `synthetic_surfaces[]`, per-class `classes[]`, `methodology_version`, `schema_version` — see the [scorecard](scorecard.md). |
 

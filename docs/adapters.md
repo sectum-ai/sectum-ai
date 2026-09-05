@@ -117,7 +117,7 @@ fake-gcs-server via `STORAGE_EMULATOR_HOST` for testing.
 **Observability — and the erasure caveat.** Six trace backends are wired, and
 they split into two groups that matter for the Class 11 erasure wedge.
 *Erasable* backends expose a real per-tenant delete: Phoenix and LangSmith each
-map a tenant to its own project and delete it on erasure, while Langfuse (its v3
+map a tenant to its own project and delete it on erasure, while Langfuse (its v4
 SDK binds one project per key pair) instead scopes each tenant by trace `user_id`
 within a single project and bulk-deletes that tenant's traces — so a trace of the
 tenant's recorded *without* that `user_id` (or under an end-user's id) is invisible
@@ -207,7 +207,9 @@ runs, as the tenant), records the count in the signed run (`user_steps_dropped`)
 and warns; the run claims the tenant boundary alone there, and `diff` /
 `baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
 Run as the tenant and judged as the user, such a step confirmed cross-user leaks of
-a session that never existed. The built-in fakes all carry the user.
+a session that never existed. The built-in fakes carry the user wherever their
+family contract does (vector, app, cache, model, MCP, memory); the RAG,
+observability, and agent fakes cannot, like their contracts.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:

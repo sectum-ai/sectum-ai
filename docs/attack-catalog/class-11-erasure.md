@@ -100,7 +100,10 @@ snapshot pack still states its own boundary honestly.
 ## Output
 
 `sectum-ai erasure` produces an attestation pack — a PDF for the Data Protection
-Officer and a JSON evidence pack — control-mapped to GDPR Articles 17 and 32. The
+Officer and a JSON evidence pack — control-mapped to GDPR Article 17 and CCPA
+§1798.105 when a live surface scanned to `ERASED` or `RESIDUAL` (an erasure run
+never asserts the isolation rows such as Article 32; a run against the built-in
+fakes asserts no mapping at all). The
 pack carries the per-surface coverage block above, and the PDF renders it as a
 Coverage & caveats matrix.
 

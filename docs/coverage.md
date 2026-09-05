@@ -107,7 +107,7 @@ security reviewer, auditor, or DPO, not a hand-written summary:
 | Output | Command | For |
 |---|---|---|
 | Signed `evidence.json` | `report` (`--tsa <url> --rekor` to anchor) | Independent verification via `sectum-ai verify` |
-| DPO / executive **PDF** audit pack | `report --pdf-engine weasyprint` | Humans — DPO, security lead, buyer |
+| DPO / executive **PDF** audit pack | `report` (`--pdf-engine weasyprint` optional; `reportlab` is the default) | Humans — DPO, security lead, buyer |
 | **SARIF** 2.1.0 | `probe --output sarif` | The repository's Security → Code-scanning tab |
 | **OSCAL** 1.1.x assessment-results | `probe --output oscal` | GRC platforms, control-mapped |
 | Portable **`run-pack.zip`** | `pack` | One self-verifying bundle for the auditor |

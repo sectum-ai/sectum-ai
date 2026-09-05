@@ -1193,7 +1193,7 @@ def report(
             help=(
                 "Audit-pack PDF renderer. 'reportlab' (default) is pure Python; "
                 "'weasyprint' is an HTML/CSS-templated alternative and needs the "
-                "weasyprint extra (pip install 'sectum-ai[weasyprint]')."
+                "weasyprint extra (pip install 'sectum-ai\\[weasyprint]')."
             ),
             case_sensitive=False,
         ),
@@ -1958,13 +1958,15 @@ def erasure(
         typer.Option(
             "--subject",
             help=(
-                "Verify a REAL data subject's erasure by record id (A3 Phase 0), instead "
-                "of the synthetic-canary scan. Reads a YAML manifest with 'subject_ref' "
-                "(an opaque DSR reference, no PII) and 'records' mapping an erasure surface "
-                "(vector_db, semantic_cache, tracing, ...) to the subject's record ids, then "
-                "checks each "
-                "id is gone after your own deletion ran. Surfaces with no by-id check or no "
-                "ids read NOT_COVERED. Ignores --scope and --soft-delete."
+                "Verify a REAL data subject's erasure (A3), instead of the synthetic-canary "
+                "scan. Reads a YAML manifest with 'subject_ref' (an opaque DSR reference, no "
+                "PII), 'records' mapping an erasure surface (vector_db, semantic_cache, "
+                "tracing, ...) to the subject's record ids, and 'fingerprints' mapping a "
+                "surface (vector_db, model_adapter, agent_memory, search_index) to content "
+                "to probe for (used only to query; hashed in the attestation). Checks each id "
+                "is gone and no content still surfaces after your own deletion ran. A surface "
+                "with neither ids nor fingerprints reads NOT_COVERED. Ignores --scope and "
+                "--soft-delete."
             ),
         ),
     ] = None,
@@ -2806,8 +2808,9 @@ def diff(
     Compares metric deltas (as ``baseline --compare`` does) and, in addition, the
     findings themselves keyed by id - including in-place changes (status or
     severity). Exits with code 2 when the later run regressed - any worsened
-    metric, a newly confirmed finding, or a severity escalation of a finding
-    confirmed in both runs - else 0, so the command can gate a CI pipeline (the
+    metric, a newly confirmed finding, a severity escalation of a finding
+    confirmed in both runs, or a probe, live surface, or user boundary the later
+    run stopped exercising - else 0, so the command can gate a CI pipeline (the
     engineering spec, section 10).
     """
     if output in (OutputFormat.SARIF, OutputFormat.OSCAL):

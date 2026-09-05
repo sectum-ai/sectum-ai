@@ -41,13 +41,13 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 | `output` | `json` | Report format written to `output-file`: `text` / `json` / `sarif` / `oscal`. |
 | `output-file` | `sectum-results.json` | Where to write the report. |
 | `python-version` | `3.12` | Python to set up (`sectum-ai` requires ≥ 3.12). |
-| `fail-on-leak` | `true` | Fail the step when the probe confirms a cross-tenant leak (probe exit code 2). |
+| `fail-on-leak` | `true` | Fail the step when the probe confirms a finding — cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). |
 
 ## Outputs
 
 | Output | Description |
 |---|---|
-| `exit-code` | The probe exit code: `0` no confirmed leaks, `2` a confirmed leak, `3` config/adapter error. |
+| `exit-code` | The probe exit code: `0` no confirmed findings, `2` a confirmed finding (cross-tenant or cross-user, on any surface — check `confirmed-on-live-surfaces` for the ones that describe your stack), `3` config/adapter error. |
 | `results-file` | Path to the written report (the `output-file`). |
 | `run-path` | Path to the `run.json` the probe wrote in the workdir. |
 | `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant, cross-user, or residual-data — on every surface, the built-in fakes included (populated when `output: json`). |
@@ -98,9 +98,10 @@ custom `workdir`, match it in both the `report --workdir` and the upload `path`:
 
 ## Notes
 
-- **Exit codes** mirror the CLI: `0` (no confirmed leaks), `2` (a confirmed
-  cross-tenant leak — fails the step unless `fail-on-leak: false`), `3`
-  (config/adapter error — always fails). See [quickstart.md](quickstart.md).
+- **Exit codes** mirror the CLI: `0` (no confirmed findings), `2` (a confirmed
+  finding — cross-tenant or cross-user, on any surface, the built-in fakes
+  included — fails the step unless `fail-on-leak: false`), `3` (config/adapter
+  error — always fails). See [quickstart.md](quickstart.md).
 - The action seeds **before** it probes, using the same `config`, so the marker
   substrate it looks for is the one it planted.
 - For live backends (a real vector store, model, or agent framework), put the
