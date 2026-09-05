@@ -123,7 +123,12 @@ def test_probe_records_the_provenance_block_in_the_run(tmp_path: Path) -> None:
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     recorded = json.loads((tmp_path / "run.json").read_text())["surface_provenance"]
-    assert len(recorded) == len(_BUNDLE_SLOTS)
+    # Only the surfaces a probe drove: no catalog probe touches the tracing slot,
+    # and recording it anyway let a live tracing adapter alone satisfy `verify`'s
+    # run-scope gate for a run whose every probed surface was the fake.
+    bundle = build_adapters(SectumConfig())
+    slots = {getattr(bundle, slot).surface.value for slot in _BUNDLE_SLOTS}
+    assert set(recorded) == slots - {Surface.TRACING.value}
     assert set(recorded.values()) == {SurfaceProvenance.SYNTHETIC.value}
 
 

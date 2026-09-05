@@ -84,7 +84,20 @@ def verify_dsse_envelope(envelope: Mapping[str, Any], pack: EvidencePack) -> Non
 
     Decodes the envelope payload and re-runs :func:`verify_in_toto_statement`, so a
     swapped or re-pointed envelope that no longer attests this pack's run digest is
-    rejected. Signature verification (when the envelope is Sigstore-signed) is the
-    additional concern of :mod:`sectum_ai.evidence.sigstore`.
+    rejected. This checks the binding only: no signature is verified here, whether
+    or not the envelope carries one.
     """
     verify_in_toto_statement(envelope_statement(envelope), pack)
+
+
+def dsse_binding_detail(envelope: Mapping[str, Any]) -> str:
+    """What a passed :func:`verify_dsse_envelope` established, signature included.
+
+    The check's name reads like a signature check and it is not one, so the
+    detail says so: an envelope ``report`` writes has ``signatures: []``.
+    """
+    if envelope.get("signatures"):
+        return (
+            "sidecar binds this pack's run digest (its signatures were not verified by this tool)"
+        )
+    return "sidecar binds this pack's run digest (unsigned envelope; no signature to verify)"

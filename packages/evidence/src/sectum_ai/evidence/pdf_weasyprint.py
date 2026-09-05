@@ -27,6 +27,7 @@ from sectum_ai.evidence.pdf import (
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    probes_exercised,
     provenance_statement,
 )
 from sectum_ai.spec import EvidenceError, EvidencePack, Finding, FindingStatus
@@ -166,6 +167,7 @@ def build_audit_html(pack: EvidencePack) -> str:
     summary = (
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
+        ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed cross-tenant findings", str(confirmed)),
     )

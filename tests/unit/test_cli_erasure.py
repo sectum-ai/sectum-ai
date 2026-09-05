@@ -365,3 +365,27 @@ def test_the_erasure_attestation_records_surface_provenance(tmp_path: Path) -> N
     assert verified.exit_code == 0, verified.output
     assert "predates" not in verified.output
     assert "NO surface was live" in verified.output
+
+
+def test_a_scoped_erasure_records_provenance_for_the_scanned_surfaces_only(
+    tmp_path: Path,
+) -> None:
+    # `--scope vector_db` says nothing about the other seven surfaces, live or not.
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        [
+            "erasure",
+            "--workdir",
+            str(tmp_path),
+            "--target-tenant",
+            "Acme Robotics",
+            "--scope",
+            "vector_db",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    assert set(pack["run_result"]["surface_provenance"]) == {"vector_db"}

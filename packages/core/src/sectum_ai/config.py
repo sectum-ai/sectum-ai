@@ -1011,25 +1011,30 @@ def build_observability(config: AdapterConfig) -> ObservabilityAdapter:
             no_erasure=_bool(extras, "no_erasure", False),
         )
     if config.kind == "phoenix":
-        from sectum_ai.adapters.observability.phoenix import PhoenixObservability
+        with _optional_extra("phoenix"):
+            from sectum_ai.adapters.observability.phoenix import PhoenixObservability
 
         base_url = _required_str(extras, "base_url")
         prefix = _str(extras, "prefix", "sectum-ai")
         return PhoenixObservability(base_url, prefix=prefix)
     if config.kind == "langfuse":
-        from sectum_ai.adapters.observability.langfuse import LangfuseObservability
+        with _optional_extra("langfuse"):
+            from sectum_ai.adapters.observability.langfuse import LangfuseObservability
 
         public_key = _resolve_secret(extras, "public_key", "public_key_env")
         secret_key = _resolve_secret(extras, "secret_key", "secret_key_env")
         host = _required_str(extras, "host")
-        return LangfuseObservability.connect(public_key, secret_key, host)
+        with _optional_extra("langfuse"):
+            return LangfuseObservability.connect(public_key, secret_key, host)
     if config.kind == "langsmith":
-        from sectum_ai.adapters.observability.langsmith import LangSmithObservability
+        with _optional_extra("langsmith"):
+            from sectum_ai.adapters.observability.langsmith import LangSmithObservability
 
         api_key = _resolve_secret(extras, "api_key", "api_key_env")
         api_url = _optional_str(extras, "api_url")
         prefix = _str(extras, "prefix", "sectum-ai")
-        return LangSmithObservability.connect(api_key, api_url, prefix=prefix)
+        with _optional_extra("langsmith"):
+            return LangSmithObservability.connect(api_key, api_url, prefix=prefix)
     if config.kind == "otel":
         from sectum_ai.adapters.observability.otel import OtelObservability
 

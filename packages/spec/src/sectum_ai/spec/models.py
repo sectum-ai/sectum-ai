@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from sectum_ai.spec.enums import (
     AccessOutcome,
@@ -22,6 +22,7 @@ from sectum_ai.spec.enums import (
     ScoreScope,
     Severity,
     Surface,
+    SurfaceProvenance,
 )
 
 SCHEMA_VERSION = "0.6.0"
@@ -80,7 +81,9 @@ UtcDateTime = Annotated[datetime, PlainSerializer(_to_utc_iso, return_type=str)]
 class SectumModel(BaseModel):
     """Base model for all Sectum AI schemas: immutable, rejects unknown fields."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # allow_inf_nan=False: json.loads accepts a bare NaN, and a NaN metric compared
+    # "not greater than" every baseline, so a hand-edited run read as "no regression".
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
 
 # --- Scenario inputs --------------------------------------------------------
@@ -384,6 +387,22 @@ class RunResult(SectumModel):
     findings: tuple[Finding, ...] = ()
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     schema_version: str = SCHEMA_VERSION
+
+    @field_validator("surface_provenance")
+    @classmethod
+    def _provenance_values_are_members(cls, value: dict[str, str]) -> dict[str, str]:
+        # Every gate downstream compares against the exact member strings, so a
+        # value that is neither ("synthetic", "Live", "bogus") read as not-synthetic
+        # in `score` and as live in `verify`: a hand-edited record passed a
+        # fail-closed check by misspelling the thing it was meant to disclose.
+        allowed = {member.value for member in SurfaceProvenance}
+        bad = sorted(k for k, v in value.items() if v not in allowed)
+        if bad:
+            raise ValueError(
+                f"surface_provenance values must be one of {sorted(allowed)}; "
+                f"not so for: {', '.join(bad)}"
+            )
+        return value
 
 
 class ControlMapping(SectumModel):

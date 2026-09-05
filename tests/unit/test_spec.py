@@ -166,13 +166,14 @@ def test_finding_confidence_must_be_a_probability() -> None:
         _finding_with_confidence(-0.1)
 
 
-def test_canonicalizing_a_model_with_a_non_finite_float_is_refused() -> None:
-    # The non-finite refusal must hold on the *model* path, not just a raw dict:
-    # retrieval_pivot_rate is an unconstrained float, so an inf/NaN constructs but
-    # must not yield a digest a strict third-party verifier could not reproduce.
-    metrics = RunMetrics(retrieval_pivot_rate=float("inf"))
-    with pytest.raises(ValueError, match="non-finite float"):
-        canonical_hash(metrics)
+@pytest.mark.parametrize("value", [float("inf"), float("nan")])
+def test_a_model_refuses_a_non_finite_float_on_construction(value: float) -> None:
+    # The non-finite refusal holds on the *model* path, not just a raw dict, and at
+    # construction rather than at hashing: `diff` and `baseline --compare` never
+    # hash, and a NaN metric there compared "not greater than" every baseline, so a
+    # hand-edited run read as "no regression".
+    with pytest.raises(ValueError, match="finite"):
+        RunMetrics(retrieval_pivot_rate=value)
 
 
 def test_run_metrics_records_the_rpr_counts_and_interval() -> None:

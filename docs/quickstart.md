@@ -65,7 +65,9 @@ pack, and verifies it.
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare`), or residual / attestable-with-caveat data on an erased surface
-(`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error;
+(`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
+including a `probe` run in which nothing interrogated the stack, and a `report` on
+a run that names no probe (or was recorded against a since re-seeded substrate);
 `4` evidence verification failure.
 
 `0` means "nothing this command gates on", not "no leaks": the reporting commands do
@@ -171,6 +173,10 @@ was *confirmed*, otherwise `satisfied` ("tested, no confirmed cross-tenant
 leakage"). An unverified candidate is recorded as evidence but never on its own
 flips a control to failed, and the coverage disclaimer (these mappings are
 test-coverage assertions, not legal certification) rides in the metadata remarks.
+A run whose every surface was the built-in fake states **no** control finding: its
+observations still ship, the result says no control objective was assessed, and
+the metadata props carry the run's surface provenance (the SARIF carries it as a
+run property) so a GRC platform cannot read a demo as a production assessment.
 The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays the
 canonical record.
 

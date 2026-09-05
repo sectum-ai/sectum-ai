@@ -50,7 +50,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
-from sectum_ai.spec import Finding, FindingStatus
+from sectum_ai.evidence.labels import leak_label
+from sectum_ai.spec import Finding, FindingStatus, SurfaceProvenance
 
 if TYPE_CHECKING:
     from sectum_ai.spec import ControlMapping, RunResult
@@ -133,7 +134,7 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
     description = (
         f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
         f"{finding.surface.value} surface. {finding.status.value.upper()} "
-        f"{finding.severity.value} cross-tenant observation: {evidence}"
+        f"{finding.severity.value} {leak_label(finding)}: {evidence}"
     )
     props = [
         _prop("sectum-finding-id", finding.finding_id),
@@ -238,6 +239,12 @@ def _metadata(run: RunResult, tool_version: str) -> dict[str, Any]:
             _prop("sectum-run-id", run.run_id),
             _prop("sectum-scenario-hash", run.scenario_hash),
             _prop("sectum-manifest-hash", run.manifest_hash),
+            # Which stack the document describes, surface by surface; absent, an
+            # all-synthetic demo projected exactly like a production assessment.
+            *(
+                _prop(f"sectum-surface-provenance-{surface}", provenance)
+                for surface, provenance in sorted(run.surface_provenance.items())
+            ),
         ],
         "remarks": COVERAGE_DISCLAIMER,
     }
@@ -274,7 +281,15 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
 
     findings: list[dict[str, Any]] = []
     reviewed_control_ids: list[str] = []
-    for mapping in control_mappings(run):
+    # A run that touched no live backend assessed nobody's controls: its every
+    # verdict is about Sectum's built-in fakes, so projecting the mappings as
+    # ``satisfied`` control findings asserted a production result a demo run
+    # cannot support. The observations still ship (they are what the run saw);
+    # the control findings do not.
+    synthetic_only = bool(run.surface_provenance) and not any(
+        p == SurfaceProvenance.LIVE.value for p in run.surface_provenance.values()
+    )
+    for mapping in () if synthetic_only else control_mappings(run):
         for control_id in mapping.control_ids:
             if control_id not in reviewed_control_ids:
                 reviewed_control_ids.append(control_id)
@@ -288,7 +303,14 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                 )
             )
 
-    if has_confirmed_leak:
+    if synthetic_only:
+        result_description = (
+            "Sectum AI ran its probes against its own built-in synthetic stack only: "
+            "no surface in this run was a live, configured backend, so no control "
+            "objective was assessed and no control finding is stated. The "
+            "observations describe that synthetic stack, not any production system."
+        )
+    elif has_confirmed_leak:
         result_description = (
             "Sectum AI provisioned synthetic tenants seeded with cryptographic "
             "canary markers and ran benign and adversarial probes across the "

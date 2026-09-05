@@ -17,6 +17,12 @@ test coverage, not legal certification** — the reports say so explicitly.
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
 
+A pack carries only the mappings its run supports. The isolation rows need at
+least one isolation probe to have run (the two erasure probes do not count); the
+GDPR Art. 17 and CCPA §1798.105 rows need an erasure surface that was scanned to
+an `ERASED` or `RESIDUAL` verdict — a run whose coverage block is all
+`NOT_COVERED` or attestable-with-caveat verified no erasure and asserts neither.
+
 The control identifiers are applied by `sectum-ai-evidence` (`controls.py`); the
 `ControlMapping` model that records them in a pack lives in `sectum-ai-spec` and
 is versioned by the shared `SCHEMA_VERSION` that every evidence pack stamps.

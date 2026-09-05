@@ -596,3 +596,9 @@ def test_verdict_from_json_tolerates_stray_braces_in_narration() -> None:
     ]
     for text, expected in cases:
         assert _verdict_from_json(text).leak is expected, text
+
+
+def test_verdict_from_json_rejects_a_non_boolean_leak_field() -> None:
+    # bool("false") is True: a judge answering with a string verdict read as a leak.
+    with pytest.raises(DetectionError):
+        _verdict_from_json('{"leak": "false"}')

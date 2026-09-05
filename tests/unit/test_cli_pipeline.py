@@ -356,14 +356,19 @@ def test_verify_passes_for_a_freshly_built_pack(tmp_path: Path) -> None:
 
 
 def test_verify_fails_on_a_tampered_pack(tmp_path: Path) -> None:
+    # With the demo's anchor and scope refusals waived, the untampered pack passes
+    # and only the tamper fails - so this cannot pass for the wrong reason.
     _seed_and_probe(tmp_path)
     _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
     evidence_path = tmp_path / "evidence.json"
+    waived = ["--allow-unanchored", "--allow-synthetic"]
+    assert _runner.invoke(app, ["verify", str(evidence_path), *waived]).exit_code == 0
     pack = json.loads(evidence_path.read_text())
     pack["run_result"]["run_id"] = "tampered"
     evidence_path.write_text(json.dumps(pack))
-    result = _runner.invoke(app, ["verify", str(evidence_path)])
+    result = _runner.invoke(app, ["verify", str(evidence_path), *waived])
     assert result.exit_code == 4
+    assert "[FAIL]" in result.output
 
 
 def test_report_bundle_round_trips_through_verify(tmp_path: Path) -> None:
@@ -1421,3 +1426,126 @@ def test_a_missing_mcp_extra_is_a_typed_config_error(monkeypatch: pytest.MonkeyP
     monkeypatch.setitem(sys.modules, "sectum_ai.adapters.mcp.client", None)
     with pytest.raises(SectumError, match="mcp"):
         build_mcp(AdapterConfig(kind="stdio", command="server"))
+
+
+def test_probe_refuses_to_record_a_run_that_asked_the_stack_nothing(tmp_path: Path) -> None:
+    # A single selected probe the stack cannot satisfy emptied the suite; `probe`
+    # then printed a clean "ran 0 probes" summary, exited 0, and wrote a run that
+    # `report` signed and `verify` passed. Only `score` refused.
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("scenario:\n  corpus_size: 24\nadapters:\n  app:\n    kind: fake\n")
+    _runner.invoke(app, ["seed", "--config", str(config), "--workdir", str(tmp_path)])
+    result = _runner.invoke(
+        app,
+        [
+            "probe",
+            "--config",
+            str(config),
+            "--workdir",
+            str(tmp_path),
+            "--probe",
+            "embedding-inversion",
+        ],
+    )
+    assert result.exit_code == 3, result.output
+    assert "no run was recorded" in result.output
+    assert not (tmp_path / "run.json").exists()
+
+
+def test_report_refuses_a_run_with_no_probe_and_no_finding(tmp_path: Path) -> None:
+    _seed_and_probe(tmp_path)
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["probe_versions"] = {}
+    run["findings"] = []
+    run["metrics"] = {}
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "nothing to attest" in result.output
+    assert not (tmp_path / "evidence.json").exists()
+
+
+def test_report_refuses_a_run_recorded_against_a_reseeded_substrate(tmp_path: Path) -> None:
+    # The PDF renders the substrate's manifest hash while the pack signs the run's;
+    # a re-seeded workdir produced a signed pack that `verify` then failed.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--seed", "7"])
+    result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "different substrate" in result.output
+    assert not (tmp_path / "evidence.json").exists()
+
+
+def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str, object]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "run_id": "run-x",
+                "scenario_hash": "s",
+                "manifest_hash": "m",
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "finished_at": "2026-01-01T00:00:00+00:00",
+                "probe_versions": probe_versions,
+                "metrics": metrics,
+            }
+        )
+    )
+
+
+def test_diff_tags_a_coverage_lost_headline_metric_not_measured(tmp_path: Path) -> None:
+    # `diff` rendered every delta through _delta_verdict without the coverage-lost
+    # list (the `baseline` path passed it), and the un-bracketed headline metrics
+    # never matched the `[probe-id]` rule - so a probe that did not run read as
+    # `[ok] poisoning_bleed_delta: 0.5 -> 0`, a fixed leak.
+    earlier, later = tmp_path / "earlier.json", tmp_path / "later.json"
+    _write_run(
+        earlier,
+        probe_versions={"rag-poisoning": "1"},
+        metrics={"poisoning_bleed_delta": 0.5, "per_probe_findings": {"rag-poisoning": 24}},
+    )
+    _write_run(later, probe_versions={"tenant-boundary-fetch": "1"}, metrics={})
+    result = _runner.invoke(app, ["diff", str(earlier), str(later)])
+    assert "[not measured] poisoning_bleed_delta" in result.output, result.output
+    assert "[not measured] per_probe_findings[rag-poisoning]" in result.output
+    assert "[ok] poisoning_bleed_delta" not in result.output
+
+
+def test_diff_refuses_a_nan_metric(tmp_path: Path) -> None:
+    # json.loads accepts a bare NaN and NaN is "not greater than" every baseline,
+    # so a hand-edited later run read as "no regression" (exit 0).
+    earlier, later = tmp_path / "earlier.json", tmp_path / "later.json"
+    _write_run(
+        earlier, probe_versions={"rag-entity-bleed": "1"}, metrics={"retrieval_pivot_rate": 0.5}
+    )
+    later.write_text(earlier.read_text().replace("0.5", "NaN"))
+    result = _runner.invoke(app, ["diff", str(earlier), str(later)])
+    assert result.exit_code == 3, result.output
+    assert "no regression" not in result.output
+
+
+@pytest.mark.parametrize(
+    "kind,module,fields",
+    [
+        ("phoenix", "sectum_ai.adapters.observability.phoenix", {"base_url": "http://x"}),
+        (
+            "langfuse",
+            "sectum_ai.adapters.observability.langfuse",
+            {"public_key": "pk", "secret_key": "sk", "host": "http://x"},
+        ),
+        ("langsmith", "sectum_ai.adapters.observability.langsmith", {"api_key": "k"}),
+    ],
+)
+def test_a_missing_observability_extra_is_a_typed_config_error(
+    monkeypatch: pytest.MonkeyPatch, kind: str, module: str, fields: dict[str, str]
+) -> None:
+    # The sibling of the mcp defect: three observability kinds imported their SDK
+    # outside _optional_extra, so a missing extra was a raw traceback (exit 1).
+    import sys
+
+    from sectum_ai.config import AdapterConfig, build_observability
+    from sectum_ai.spec import SectumError
+
+    monkeypatch.setitem(sys.modules, module, None)
+    with pytest.raises(SectumError, match=kind):
+        build_observability(AdapterConfig(kind=kind, **fields))

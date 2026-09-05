@@ -23,6 +23,7 @@ from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
 from sectum_ai.evidence.dsse import (
     PAYLOAD_TYPE,
     build_dsse_envelope,
+    dsse_binding_detail,
     envelope_statement,
     pae,
     verify_dsse_envelope,
@@ -63,6 +64,7 @@ __all__ = [
     "build_dsse_envelope",
     "build_evidence_pack",
     "control_mappings",
+    "dsse_binding_detail",
     "envelope_statement",
     "pae",
     "rekor_keyring",

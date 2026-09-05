@@ -185,3 +185,16 @@ def test_weasyprint_extra_chain_terminates_in_the_package() -> None:
 
     evidence_extra = evidence["project"]["optional-dependencies"]["weasyprint"]
     assert any(dep.split(">=")[0].split("[")[0].strip() == "weasyprint" for dep in evidence_extra)
+
+
+def test_the_summary_names_the_probes_exercised() -> None:
+    # "Scope is limited to the probes ... exercised in this run" was uncheckable:
+    # a one-probe pack and a twelve-probe pack rendered identically.
+    from sectum_ai.evidence.pdf import probes_exercised
+
+    run = _pack().run_result.model_copy(
+        update={"probe_versions": {"rag-poisoning": "1", "tenant-boundary-fetch": "1"}}
+    )
+    assert probes_exercised(run) == "2: rag-poisoning, tenant-boundary-fetch"
+    html = build_audit_html(_pack().model_copy(update={"run_result": run}))
+    assert "Probes exercised" in html and "rag-poisoning, tenant-boundary-fetch" in html

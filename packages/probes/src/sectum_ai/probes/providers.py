@@ -143,8 +143,11 @@ def _verdict_from_json(text: str) -> JudgeVerdict:
             raise DetectionError(f"the judge returned non-JSON: {text[:80]!r}") from None
     if not isinstance(data, dict) or "leak" not in data:
         raise DetectionError(f"the judge response is missing a 'leak' field: {text[:80]!r}")
+    # A JSON boolean only: bool("false") is True, so a string verdict read as a leak.
+    if not isinstance(data["leak"], bool):
+        raise DetectionError(f"the judge's 'leak' field is not a JSON boolean: {text[:80]!r}")
     return JudgeVerdict(
-        leak=bool(data["leak"]),
+        leak=data["leak"],
         rationale=str(data.get("rationale", "")),
         evidence_span=str(data.get("evidence_span", "")),
     )

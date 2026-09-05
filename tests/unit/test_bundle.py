@@ -269,3 +269,51 @@ def test_a_refused_bundle_exits_four_not_a_traceback(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["verify", str(bundle)])
     assert result.exit_code == 4
     assert "VERIFICATION FAILED" in result.output
+
+
+def test_a_manifest_pointing_at_another_member_is_refused() -> None:
+    # The manifest is unsigned, so it must not choose which member is "the pack":
+    # a genuine, anchored pack under real.json plus arbitrary bytes under
+    # evidence.json (the file the README and the CLI call the canonical record)
+    # verified on the strength of the member the manifest pointed at.
+    pack = _pack()
+    genuine = pack.model_dump_json().encode("utf-8")
+    forged = {
+        EVIDENCE_MEMBER: b'{"this is": "not even a pack"}',
+        "real.json": genuine,
+        "audit-pack.pdf": _PDF,
+    }
+    digests = {name: sha256_hex(data) for name, data in forged.items()}
+    manifest = json.dumps({"evidence": "real.json", "members": digests}).encode("utf-8")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, data in forged.items():
+            archive.writestr(name, data)
+        archive.writestr(MANIFEST_MEMBER, manifest)
+    result = verify_bundle(out.getvalue(), require_anchored=False, require_live=False)
+    assert not result.passed
+    refusal = _check(result, "bundle-manifest")
+    assert "real.json" in refusal.detail and EVIDENCE_MEMBER in refusal.detail
+
+
+def test_an_unsigned_dsse_sidecar_is_reported_as_unsigned() -> None:
+    # `report` writes `signatures: []`; the check name reads like a signature
+    # check, so its detail must say no signature was verified.
+    result = verify_bundle(build_bundle(_members()), require_anchored=False, require_live=False)
+    assert "unsigned envelope" in _check(result, "dsse-envelope").detail
+
+
+def test_a_member_name_cannot_forge_a_verify_line(tmp_path: Path) -> None:
+    # `member:<name>` checks carry the archive's own member names, which the
+    # bundle being verified controls; a newline in one forged whole `[ok]` lines
+    # of the verifier's output.
+    forged_name = "notes.txt\n[ok] independent-anchor: RFC 3161 timestamp verified"
+    bundle = build_bundle({**_members(), forged_name: b"x"})
+    path = tmp_path / "evidence-bundle.zip"
+    path.write_bytes(bundle)
+    result = CliRunner().invoke(
+        app, ["verify", str(path), "--allow-unanchored", "--allow-synthetic"]
+    )
+    lines = result.output.splitlines()
+    assert not any(line.startswith("[ok] independent-anchor") for line in lines), result.output
+    assert any("member:notes.txt\\x0a[ok]" in line for line in lines), result.output

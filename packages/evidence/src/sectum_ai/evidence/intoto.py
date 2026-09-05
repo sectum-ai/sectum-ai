@@ -105,7 +105,13 @@ def verify_in_toto_statement(statement: Mapping[str, Any], pack: EvidencePack) -
         raise EvidenceError(f"not a Sectum attestation: {statement.get('predicateType')!r}")
     digest = run_digest(pack.run_result)
     subjects = statement.get("subject", [])
-    if not isinstance(subjects, list) or not _subject_binds_digest(subjects, digest):
+    # Exactly one subject, and it is this run: an any-of match let a statement
+    # carry a foreign subject beside the genuine one and still verify.
+    if (
+        not isinstance(subjects, list)
+        or len(subjects) != 1
+        or not _subject_binds_digest(subjects, digest)
+    ):
         raise EvidenceError("the attestation subject does not match the pack's run digest")
     expected = to_in_toto_statement(pack)["predicate"]
     if _canonical(statement.get("predicate")) != _canonical(expected):
