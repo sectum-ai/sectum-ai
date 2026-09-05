@@ -4,7 +4,7 @@
     {
       "name": "erasure-7cd276c8",
       "digest": {
-        "sha256": "ef8877aac5c63ff5c56f606e8bcd6a1c20eff4b73562bb65758562ada907d3f2"
+        "sha256": "aca0f43ee095c2124f08c457f88434ad7b5b75bfe0b153acc8788e32afb24063"
       }
     }
   ],
@@ -13,8 +13,8 @@
     "schema_version": "0.6.0",
     "scenario_hash": "af0be545de00655054ee6a834fb1e66bd7ade634d0feb231a84cf1eb857a2257",
     "manifest_hash": "bcbdb1d5375561b325931fdf352d3ec92efd9b15e520f4f5ee9b68d568e9d455",
-    "started_at": "2026-09-05T08:17:42.413813+00:00",
-    "finished_at": "2026-09-05T08:17:42.414425+00:00",
+    "started_at": "2026-09-05T12:30:37.145693+00:00",
+    "finished_at": "2026-09-05T12:30:37.146338+00:00",
     "metrics": {
       "per_probe_findings": {},
       "confirmed_findings": 0,
@@ -50,22 +50,7 @@
       "extraction_efficiency": null
     },
     "finding_count": 0,
-    "control_mappings": [
-      {
-        "framework": "GDPR",
-        "control_ids": [
-          "Article 17"
-        ],
-        "assertion": "Erasure across the AI surfaces verified."
-      },
-      {
-        "framework": "CCPA/CPRA",
-        "control_ids": [
-          "1798.105"
-        ],
-        "assertion": "Deletion of a consumer's personal information across the AI surfaces verified."
-      }
-    ],
+    "control_mappings": [],
     "anchors": {
       "timestamp": false,
       "transparency_log": false

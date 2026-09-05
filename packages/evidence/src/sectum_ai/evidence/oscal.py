@@ -49,9 +49,15 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
+from sectum_ai.evidence.controls import (
+    COVERAGE_DISCLAIMER,
+    ERASURE,
+    control_mappings,
+    live_surfaces,
+    mapping_requirement,
+)
 from sectum_ai.evidence.labels import leak_label
-from sectum_ai.spec import Finding, FindingStatus, SurfaceProvenance
+from sectum_ai.spec import Finding, FindingStatus
 
 if TYPE_CHECKING:
     from sectum_ai.spec import ControlMapping, RunResult
@@ -170,6 +176,8 @@ def _finding(
     control_id: str,
     *,
     has_confirmed_leak: bool,
+    has_residual: bool,
+    residual_surfaces: tuple[str, ...],
     observation_uuids: list[str],
 ) -> dict[str, Any]:
     """Build one OSCAL ``finding`` for a single mapped framework control.
@@ -186,27 +194,42 @@ def _finding(
         mapping: the framework mapping this control belongs to (for its framework
             name and the coverage assertion).
         control_id: the specific control id within the framework (e.g. ``CC6.1``).
-        has_confirmed_leak: whether the run produced any *confirmed* finding; only
-            a confirmed finding flips the control to ``not-satisfied``.
+        has_confirmed_leak: whether a live surface produced a *confirmed*
+            cross-principal leak; only that flips an isolation control to
+            ``not-satisfied``.
+        has_residual: whether a live erasure surface kept a marker after the
+            erasure; only that flips an erasure control to ``not-satisfied``.
+        residual_surfaces: the surfaces the residual markers were found on.
         observation_uuids: UUIDs of every observation in the result, linked back.
 
     Returns:
         An OSCAL finding object as a JSON-serialisable ``dict``.
     """
-    state = _STATE_NOT_SATISFIED if has_confirmed_leak else _STATE_SATISFIED
-    if has_confirmed_leak:
+    if mapping_requirement(mapping) == ERASURE:
+        objective = "erasure verification"
+        failed = has_residual
         verdict = (
-            "Sectum AI confirmed at least one manifest-grounded cross-tenant "
-            "leak; the tested isolation objective is not satisfied for this run."
+            "Sectum AI found residual markers after the erasure on "
+            f"{', '.join(residual_surfaces)}; the erasure objective is not satisfied "
+            "for this run."
+            if failed
+            else "Sectum AI verified the erasure on every live surface it scanned for this run."
         )
     else:
+        objective = "tenant isolation"
+        failed = has_confirmed_leak
         verdict = (
-            "Sectum AI tested tenant isolation across the configured AI surfaces "
-            "and confirmed no cross-tenant leakage for this run."
+            "Sectum AI confirmed at least one manifest-grounded cross-principal "
+            "leak on a live surface; the tested isolation objective is not satisfied "
+            "for this run."
+            if failed
+            else "Sectum AI tested tenant isolation across the live configured AI "
+            "surfaces and confirmed no cross-principal leakage for this run."
         )
+    state = _STATE_NOT_SATISFIED if failed else _STATE_SATISFIED
     return {
         "uuid": _uuid(run.run_id, "finding", mapping.framework, control_id),
-        "title": f"{mapping.framework} {control_id} — tenant isolation",
+        "title": f"{mapping.framework} {control_id} — {objective}",
         "description": f"{mapping.assertion} {verdict}",
         "target": {
             "type": "objective-id",
@@ -275,21 +298,33 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         An OSCAL ``assessment-results`` 1.1.x document as a JSON-serialisable
         ``dict`` (top-level key ``"assessment-results"``).
     """
-    has_confirmed_leak = any(f.status is FindingStatus.CONFIRMED for f in run.findings)
+    # Only a finding from a LIVE surface speaks to the operator's controls: one
+    # from the built-in fake describes that fake (`score` withholds it too), so a
+    # confirmed leak on a fake surface used to flip every control not-satisfied on
+    # a mixed run, and a clean fake used to earn satisfied. A residual after an
+    # erasure is a different failure from a cross-principal leak and moves the
+    # erasure controls only.
+    live = live_surfaces(run)
+    attested = [
+        f for f in run.findings if f.status is FindingStatus.CONFIRMED and f.surface.value in live
+    ]
+    residual_surfaces = tuple(
+        sorted({f.surface.value for f in attested if leak_label(f) == "residual-data finding"})
+    )
+    has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)
+    has_residual = bool(residual_surfaces)
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
     findings: list[dict[str, Any]] = []
     reviewed_control_ids: list[str] = []
-    # A run that touched no live backend assessed nobody's controls: its every
-    # verdict is about Sectum's built-in fakes, so projecting the mappings as
-    # ``satisfied`` control findings asserted a production result a demo run
-    # cannot support. The observations still ship (they are what the run saw);
-    # the control findings do not.
-    synthetic_only = bool(run.surface_provenance) and not any(
-        p == SurfaceProvenance.LIVE.value for p in run.surface_provenance.values()
-    )
-    for mapping in () if synthetic_only else control_mappings(run):
+    # A run that touched no live backend (or whose provenance is unrecorded)
+    # assessed nobody's controls: its every verdict is about Sectum's built-in
+    # fakes, so projecting the mappings as ``satisfied`` control findings asserted
+    # a production result a demo run cannot support. The observations still ship
+    # (they are what the run saw); the control findings do not - and
+    # `control_mappings` returns none for such a run.
+    for mapping in control_mappings(run):
         for control_id in mapping.control_ids:
             if control_id not in reviewed_control_ids:
                 reviewed_control_ids.append(control_id)
@@ -299,30 +334,46 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     mapping,
                     control_id,
                     has_confirmed_leak=has_confirmed_leak,
+                    has_residual=has_residual,
+                    residual_surfaces=residual_surfaces,
                     observation_uuids=observation_uuids,
                 )
             )
+    synthetic = sorted(set(run.surface_provenance) - live)
+    excluded = (
+        " Surfaces that ran against the built-in fake and are excluded from every "
+        f"control verdict: {', '.join(synthetic)}."
+        if synthetic and live
+        else ""
+    )
 
-    if synthetic_only:
+    if not live:
         result_description = (
-            "Sectum AI ran its probes against its own built-in synthetic stack only: "
-            "no surface in this run was a live, configured backend, so no control "
-            "objective was assessed and no control finding is stated. The "
-            "observations describe that synthetic stack, not any production system."
+            "Sectum AI ran its probes against its own built-in synthetic stack only "
+            "(or recorded no surface provenance): no surface in this run is known to "
+            "be a live, configured backend, so no control objective was assessed and "
+            "no control finding is stated. The observations describe that synthetic "
+            "stack, not any production system."
+        )
+    elif has_residual and not has_confirmed_leak:
+        result_description = (
+            "Sectum AI verified an erasure across the live configured AI surfaces. "
+            f"Residual markers remained on {', '.join(residual_surfaces)}; see the "
+            "observations and findings." + excluded
         )
     elif has_confirmed_leak:
         result_description = (
             "Sectum AI provisioned synthetic tenants seeded with cryptographic "
             "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. At least one manifest-grounded cross-tenant "
-            "leak was confirmed; see the observations and findings."
+            "configured AI surfaces. At least one manifest-grounded cross-principal "
+            "leak was confirmed on a live surface; see the observations and findings." + excluded
         )
     else:
         result_description = (
             "Sectum AI provisioned synthetic tenants seeded with cryptographic "
             "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. No cross-tenant leakage was confirmed for "
-            "the surfaces tested."
+            "configured AI surfaces. No cross-principal leakage was confirmed on "
+            "the live surfaces tested." + excluded
         )
 
     result: dict[str, Any] = {

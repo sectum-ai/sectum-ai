@@ -161,9 +161,8 @@ def verify_pack(
     )
 
 
-def _check_pdf(pdf_ref: str, pdf_bytes: bytes) -> Check:
+def _check_pdf(pdf_ref: str, pdf_bytes: bytes, *, name: str = "audit-pdf") -> Check:
     """Re-hash the audit PDF and check it against the digest bound in the pack."""
-    name = "audit-pdf"
     if sha256_hex(pdf_bytes) != pdf_ref:
         return Check(
             name,

@@ -132,10 +132,13 @@ test condition cryptographically.
   (`reportlab` is the default; `weasyprint` needs the optional `weasyprint` extra).
 - `--bundle` — writes a single `evidence-bundle.zip` gathering all of the above,
   the artifact `sectum-ai verify <bundle.zip>` checks end to end. The bundle's
-  digest manifest is unsigned, so the verifier does not let it choose which member
-  is the pack: `evidence.json` is the pack, always, and a manifest naming another
-  member is refused. Member names are the archive's own input and are escaped in
-  the verifier's output.
+  digest manifest is unsigned, so the verifier does not let it vouch for anything:
+  `evidence.json` is the pack, always; only the member names Sectum itself writes
+  are admitted (any other listed member is refused); every present audit PDF and
+  in-toto member is bound to the pack, not just the first found; and the
+  per-member lines say "matches the unsigned manifest" — with the README, the
+  redacted config, and the sealed manifest named as unbound. Member names are the
+  archive's own input and are escaped in the verifier's output.
 - `--include-manifest` — adds the ground-truth manifest to the bundle, sealed
   AES-256-GCM under the configured `security.manifest_key_env`. Off by default:
   the manifest holds canary plaintexts (the pack otherwise carries only its

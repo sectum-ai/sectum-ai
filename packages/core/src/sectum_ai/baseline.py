@@ -10,7 +10,14 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from sectum_ai.spec import Finding, FindingStatus, RunMetrics, RunResult, Severity
+from sectum_ai.spec import (
+    Finding,
+    FindingStatus,
+    RunMetrics,
+    RunResult,
+    Severity,
+    SurfaceProvenance,
+)
 
 
 @dataclass(frozen=True)
@@ -248,6 +255,12 @@ class RunDiff:
     # is no longer being checked, and every metric those probes fed reads as an
     # improvement to zero.
     coverage_lost: tuple[str, ...] = ()
+    # Surfaces the earlier run exercised against a live backend that the later
+    # run exercised against the built-in fake, or not at all. Not a leak - but
+    # every verdict on them now describes the fake, so a run whose config quietly
+    # fell back to the demo stack read as "no regression" (or as an improvement,
+    # when the fake "resolved" every leak).
+    scope_lost: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -274,6 +287,7 @@ class RunDiff:
             or bool(self.findings.newly_confirmed)
             or bool(self.findings.severity_escalations)
             or bool(self.coverage_lost)
+            or bool(self.scope_lost)
         )
 
 
@@ -341,6 +355,19 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         metrics=compare_metrics(earlier.metrics, later.metrics),
         findings=diff_findings(earlier.findings, later.findings),
         coverage_lost=_coverage_lost(earlier, later),
+        scope_lost=_scope_lost(earlier, later),
+    )
+
+
+def _scope_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
+    """Surfaces live in the earlier run and not live in the later one."""
+    live = SurfaceProvenance.LIVE.value
+    return tuple(
+        sorted(
+            surface
+            for surface, provenance in earlier.surface_provenance.items()
+            if provenance == live and later.surface_provenance.get(surface) != live
+        )
     )
 
 

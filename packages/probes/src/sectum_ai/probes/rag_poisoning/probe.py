@@ -26,11 +26,12 @@ class RagPoisoningProbe(DetectingProbe):
     requires_adapters: tuple[str, ...] = ("vector",)
 
     def plan(self, substrate: Substrate) -> list[ProbeStep]:
-        """Plan: each hard canary's owning principal plants a poison, then all query the lure.
+        """Plan: each canary's owning principal plants a poison; foreign principals query the lure.
 
         A poison document is planted once per hard canary as the marker's owning
         principal - a tenant, or a user within a tenant (ADR-0006) - then every
-        principal queries the lure, so poisoning is tested at both granularities.
+        principal foreign to at least one planted poison queries the lure, so
+        poisoning is tested at both granularities.
         With no users declared the principals are the tenants and this is the
         original per-tenant plan.
         """

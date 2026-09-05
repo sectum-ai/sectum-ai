@@ -54,9 +54,11 @@ def _run(*findings: Finding, run_id: str = "run-1") -> RunResult:
         finished_at=moment,
         findings=tuple(findings),
         metrics=RunMetrics(),
-        # A real run always records which probes ran; the control mappings are
-        # gated on that evidence, so a fixture without it would assert nothing.
+        # A real run always records which probes ran and what they ran against;
+        # the control mappings are gated on that evidence (a live surface), so a
+        # fixture without it would assert nothing.
         probe_versions={"tenant-boundary-fetch": "0.7.1"},
+        surface_provenance={"vector_db": "LIVE"},
     )
 
 
@@ -170,7 +172,7 @@ def test_zero_findings_run_is_a_valid_tested_clean_attestation() -> None:
     assert len(result["findings"]) == sum(len(m.control_ids) for m in control_mappings(_run()))
     states = {f["target"]["status"]["state"] for f in result["findings"]}
     assert states == {"satisfied"}
-    assert "no cross-tenant leakage was confirmed" in result["description"].lower()
+    assert "no cross-principal leakage was confirmed" in result["description"].lower()
 
 
 def test_uuids_are_deterministic_from_run_id_not_random() -> None:
@@ -193,13 +195,58 @@ def test_document_is_json_serialisable() -> None:
 def test_a_synthetic_only_run_states_no_control_finding() -> None:
     # Every control rendered `satisfied` for a run whose every surface was the
     # built-in fake - a production result a demo cannot support. The observations
-    # still ship; the control findings do not, and the result says why.
-    run = _run().model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
-    result = run_to_oscal(run)["assessment-results"]["results"][0]
-    assert result["findings"] == []
-    assert "no control objective was assessed" in result["description"]
+    # still ship; the control findings do not, and the result says why. A run
+    # with NO provenance block is the same case, not "not synthetic".
+    for provenance in ({"vector_db": "SYNTHETIC"}, {}):
+        run = _run().model_copy(update={"surface_provenance": provenance})
+        result = run_to_oscal(run)["assessment-results"]["results"][0]
+        assert result["findings"] == [], provenance
+        assert "no control objective was assessed" in result["description"]
     live = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
     assert run_to_oscal(live)["assessment-results"]["results"][0]["findings"]
+
+
+def test_a_confirmed_leak_on_a_fake_surface_moves_no_control() -> None:
+    # On a mixed run a confirmed finding from the semantic-cache FAKE flipped all
+    # twenty control findings to not-satisfied - the finding `score` says
+    # "describes that fake, not your stack".
+    fake_leak = _finding("f").model_copy(update={"surface": Surface.SEMANTIC_CACHE})
+    run = _run(fake_leak).model_copy(
+        update={"surface_provenance": {"vector_db": "LIVE", "semantic_cache": "SYNTHETIC"}}
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert result["findings"]
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"satisfied"}
+    assert "excluded from every control verdict: semantic_cache" in result["description"]
+    # the same finding on the live surface does move them
+    live_leak = _finding("f")
+    moved = run_to_oscal(_run(live_leak))["assessment-results"]["results"][0]
+    assert {f["target"]["status"]["state"] for f in moved["findings"]} == {"not-satisfied"}
+
+
+def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
+    # A live erasure run with residual markers said "confirmed at least one
+    # manifest-grounded cross-tenant leak; the tested isolation objective is not
+    # satisfied" under a title of "tenant isolation" - for GDPR Article 17.
+    residual = _finding("r", probe_id="gdpr-erasure-verification").model_copy(
+        update={"observed_in_tenant_id": _OWNER}
+    )
+    run = _run(residual).model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    titles = {f["title"] for f in result["findings"]}
+    assert titles == {
+        "GDPR Article 17 — erasure verification",
+        "CCPA/CPRA 1798.105 — erasure verification",
+    }
+    verdicts = {f["target"]["description"] for f in result["findings"]}
+    assert all("residual markers" in v and "cross" not in v for v in verdicts)
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
+    assert "Residual markers remained on vector_db" in result["description"]
 
 
 def test_metadata_carries_the_surface_provenance() -> None:

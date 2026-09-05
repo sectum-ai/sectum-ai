@@ -24,7 +24,7 @@ from typing import Any
 
 from sectum_ai.evidence.dsse import dsse_binding_detail, verify_dsse_envelope
 from sectum_ai.evidence.intoto import verify_in_toto_statement
-from sectum_ai.evidence.verify import Check, VerificationResult, verify_pack
+from sectum_ai.evidence.verify import Check, VerificationResult, _check_pdf, verify_pack
 from sectum_ai.spec import EvidenceError, EvidencePack
 
 EVIDENCE_MEMBER = "evidence.json"
@@ -43,6 +43,21 @@ DSSE_MEMBER = "evidence.dsse.json"
 # The detailed run record a run pack ships beside the evidence. Bound to the pack
 # in `verify_bundle`, so it cannot be edited independently of what was signed.
 RUN_MEMBER = "run.json"
+# Members that ride unbound: covered by the (unsigned) digest manifest only.
+_UNBOUND_MEMBERS = (
+    "PACK-README.md",
+    "sectum-ai.config.redacted.yaml",
+    "ground-truth-manifest.json.aes",
+)
+# Everything `report --bundle` / `pack` / `erasure` can write. The manifest is
+# unsigned, so a member it lists is not thereby vouched for: a bundle carrying a
+# genuine pack plus a forged `erasure-attestation.pdf` and an arbitrary
+# `summary-for-auditor.pdf`, each listed, printed `[ok] ... digest matches` for
+# every one and passed. Only these names are admitted, every present PDF and
+# in-toto member is bound to the pack, and the rest are named as unbound.
+_KNOWN_MEMBERS = frozenset(
+    {EVIDENCE_MEMBER, RUN_MEMBER, DSSE_MEMBER, *_PDF_MEMBERS, *_INTOTO_MEMBERS, *_UNBOUND_MEMBERS}
+)
 
 # ZIP's epoch floor (1980-01-01). Fixing the member timestamps makes a bundle
 # byte-reproducible for identical inputs instead of embedding the build time.
@@ -60,14 +75,6 @@ def _refused(name: str, detail: str) -> VerificationResult:
     a refused bundle asserts nothing about anchoring.
     """
     return VerificationResult(passed=False, checks=(Check(name, False, detail),))
-
-
-def _first_member(member_bytes: Mapping[str, bytes], names: tuple[str, ...]) -> bytes | None:
-    """Return the bytes of the first present member among ``names``, else ``None``."""
-    for name in names:
-        if name in member_bytes:
-            return member_bytes[name]
-    return None
 
 
 def _check_sidecar(
@@ -191,12 +198,29 @@ def verify_bundle(
     checks: list[Check] = []
     for name in sorted(member_digests):
         present = member_bytes.get(name)
-        if present is None:
+        if name not in _KNOWN_MEMBERS:
+            checks.append(
+                Check(
+                    f"member:{name}",
+                    False,
+                    "not a member Sectum writes; the manifest is unsigned, so a listed "
+                    "digest vouches for nothing - refused",
+                )
+            )
+        elif present is None:
             checks.append(Check(f"member:{name}", False, "listed in manifest but missing"))
-        elif _sha256(present) == member_digests[name]:
-            checks.append(Check(f"member:{name}", True, "digest matches"))
-        else:
+        elif _sha256(present) != member_digests[name]:
             checks.append(Check(f"member:{name}", False, "digest mismatch (member altered)"))
+        elif name in _UNBOUND_MEMBERS:
+            checks.append(
+                Check(
+                    f"member:{name}",
+                    True,
+                    "digest matches the unsigned manifest; this member is not bound to the pack",
+                )
+            )
+        else:
+            checks.append(Check(f"member:{name}", True, "digest matches the unsigned manifest"))
 
     # Reconcile the archive against the manifest. The loop above only covers
     # manifest-LISTED names, so a member physically present in the ZIP but absent
@@ -257,7 +281,10 @@ def verify_bundle(
                     )
                 )
 
-    pdf_bytes = _first_member(member_bytes, _PDF_MEMBERS)
+    # Every present PDF is bound, not the first one found: a second, forged PDF
+    # beside the genuine one used to ride on the first one's binding.
+    present_pdfs = [name for name in _PDF_MEMBERS if name in member_bytes]
+    pdf_bytes = member_bytes[present_pdfs[0]] if present_pdfs else None
     pack_result = verify_pack(
         pack,
         tsa_certificate=tsa_certificate,
@@ -268,6 +295,11 @@ def verify_bundle(
         require_live=require_live,
     )
     checks.extend(pack_result.checks)
+    for name in present_pdfs[1:]:
+        if pack.pdf_ref is None:
+            checks.append(Check(f"audit-pdf:{name}", False, "the pack binds no pdf_ref"))
+        else:
+            checks.append(_check_pdf(pack.pdf_ref, member_bytes[name], name=f"audit-pdf:{name}"))
     if pack.pdf_ref is not None and pdf_bytes is None:
         checks.append(
             Check(
@@ -276,13 +308,15 @@ def verify_bundle(
                 "the pack binds a pdf_ref but the bundle has no audit PDF member",
             )
         )
-    intoto_raw = _first_member(member_bytes, _INTOTO_MEMBERS)
-    if intoto_raw is not None:
-        checks.append(
-            _check_sidecar(
-                "in-toto-attestation", intoto_raw, lambda obj: verify_in_toto_statement(obj, pack)
+    for name in _INTOTO_MEMBERS:
+        if name in member_bytes:
+            checks.append(
+                _check_sidecar(
+                    f"in-toto-attestation:{name}",
+                    member_bytes[name],
+                    lambda obj: verify_in_toto_statement(obj, pack),
+                )
             )
-        )
     dsse_raw = member_bytes.get(DSSE_MEMBER)
     if dsse_raw is not None:
         checks.append(

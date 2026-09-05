@@ -9,6 +9,7 @@ capabilities it needs and an adapter reports its isolation posture honestly.
 | Family | Purpose |
 |---|---|
 | Vector store | Upsert, query, fetch a document by id, and delete a tenant's documents. |
+| App | The application's own resource API, probed through the vector-store contract (it fills the vector slot, so `sectum-ai adapters` lists its fake under `vector_store`). `kind: fake` only. |
 | RAG pipeline | Answer a query from a tenant's session. |
 | Observability | Search a tenant's traces for a marker. |
 | Agent | Run a task as a tenant. |
@@ -140,9 +141,10 @@ that quietly ignores the tenant filter is itself caught.
 For the A3 data-subject erasure check, five of the six also expose a **by-id**
 `fetch_trace` — Langfuse, LangSmith, Phoenix, Helicone, and Datadog each look a
 trace up by id within the tenant's own scope, so `erasure --subject` can verify a
-named trace is gone. Each reads one page of at most 1000 traces; a miss on a full
-page is refused (an `AdapterError`) rather than read as "erased", since a trace
-beyond the page is indistinguishable from a deleted one. A search response that is
+named trace is gone. LangSmith, Phoenix, Helicone, and Datadog each read one page
+of at most 1000 traces, and Langfuse pages to its 1000-trace budget; a miss on a
+full page (or past the budget) is refused (an `AdapterError`) rather than read as
+"erased", since a trace beyond it is indistinguishable from a deleted one. A search response that is
 an error envelope (a 200 carrying `error`/`errors`, or no `data` list) is likewise an
 error, not an empty tenant; the generic OpenTelemetry reader treats a `DELETE` that
 answers `404` as a purge only when its query then shows no spans, and as "no delete

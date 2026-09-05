@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surfaces as the subject path always did.
 - A missing `mcp` SDK is now the typed exit-3 `ConfigError` every other extra
   gives, not a raw traceback.
-- `sectum-ai adapters` lists the `app` family; its help says it lists the built-in
+- `sectum-ai adapters` lists the `app` family's fake (under `vector_store`, the
+  slot it fills); its help says it lists the built-in
   fakes' capabilities rather than "installed adapters".
 - The synthetic-surface warning named a `list-adapters` command that does not
   exist; the pack README said `report --tsa --rekor` where `--tsa` takes a URL;
@@ -201,6 +202,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - docs/adapters.md states that the user filter on a by-id `fetch` is applied by the
   adapter, not the store, on six of the eight vector stores, and the two limits of
   the in-band agent tenant scope.
+- **A bundle verified with forged auditor-facing members it listed.** The digest
+  manifest is unsigned, yet the verifier printed `[ok] member:... digest matches`
+  for any listed name and bound only the *first* PDF and in-toto member it found:
+  a genuine pack plus a forged `erasure-attestation.pdf`, a forged
+  `erasure-attestation.intoto.json`, and an arbitrary `summary-for-auditor.pdf`
+  passed. Only the member names Sectum writes are admitted; every present PDF and
+  in-toto member is bound to the pack; the per-member lines say "matches the
+  unsigned manifest" and name the README, redacted config, and sealed manifest as
+  unbound.
+- **A finding from the built-in fake moved every control.** On a mixed run, one
+  confirmed finding produced by the semantic-cache *fake* flipped all twenty OSCAL
+  control findings to `not-satisfied` (the finding `score` says "describes that
+  fake"); conversely a clean fake earned `satisfied` for every framework, and a run
+  with **no** provenance block rendered every control satisfied. Control mappings
+  now require evidence from a live surface (an isolation probe against one; an
+  erasure verdict on one), OSCAL derives its verdicts from live-surface findings
+  only and names the excluded fake surfaces, and a run with no live surface states
+  no control finding. Erasure controls are titled "erasure verification" and their
+  verdict speaks of residual markers, not of a "cross-tenant leak"; the demo and
+  sample packs, all-synthetic, now carry no mappings.
+- **The audit PDF summary called erasure residuals "Confirmed cross-tenant
+  findings".** Both engines now count confirmed findings by what they are
+  (cross-tenant, cross-user, residual-data); the SARIF rule text does likewise; and
+  `probe`'s summary line says "N confirmed findings (...)" whenever they are not
+  all cross-tenant.
+- **`diff` and `baseline --compare` read a live-to-fake fallback as "no
+  regression".** Two records identical except that every surface went LIVE to
+  SYNTHETIC diffed as clean, exit 0. A live surface that is the fake (or absent)
+  in the later run is `[SCOPE LOST]` and a regression. A headline metric now reads
+  `[not measured]` when *any* of its feeding probes was lost, not only when all were.
+- The in-toto verifier requires the subject's `name` to be the pack's run id, not
+  only its digest.
+- Docs: the schema-reference paragraph said a misspelled adapter field is silently
+  ignored (it is refused); the example config's `openai-assistants` and
+  `anthropic-tooluse` blocks said the YAML "only flips the kind" (a `factory` is
+  required) and lacked the `app` family; the HuggingFace module docstring still
+  described soft delete as routing to the base model; `sectum-ai adapters` lists
+  the app fake under `vector_store`; `erasure --help` and `diff --help` under- and
+  over-stated their inputs; the rag-poisoning plan queries from principals foreign
+  to a planted poison; Langfuse pages where the other four read one page; the
+  samples table no longer carries sizes that drift on every regeneration.
 
 
 ## [0.11.0] - 2026-09-01

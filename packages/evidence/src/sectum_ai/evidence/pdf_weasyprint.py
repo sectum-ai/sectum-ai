@@ -27,10 +27,11 @@ from sectum_ai.evidence.pdf import (
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    confirmed_by_kind,
     probes_exercised,
     provenance_statement,
 )
-from sectum_ai.spec import EvidenceError, EvidencePack, Finding, FindingStatus
+from sectum_ai.spec import EvidenceError, EvidencePack, Finding
 
 # Severity -> CSS accent colour for the finding badge. A muted, print-safe
 # palette (no neon); unknown severities fall back to the neutral grey.
@@ -162,14 +163,13 @@ def build_audit_html(pack: EvidencePack) -> str:
     coverage disclaimer) so both engines assert the same facts.
     """
     run = pack.run_result
-    confirmed = sum(1 for f in run.findings if f.status is FindingStatus.CONFIRMED)
 
     summary = (
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
         ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
-        ("Confirmed cross-tenant findings", str(confirmed)),
+        ("Confirmed findings", confirmed_by_kind(run)),
     )
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
