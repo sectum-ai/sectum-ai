@@ -127,3 +127,38 @@ def test_empty_run_has_no_results_or_rules() -> None:
     (run,) = run_to_sarif(_run())["runs"]
     assert run["results"] == []
     assert run["tool"]["driver"]["rules"] == []
+
+
+def test_messages_label_each_finding_by_what_it_is() -> None:
+    # Every result said "cross-tenant leak": an erasure residual (same tenant on
+    # both sides), a cross-user leak inside one tenant, and the informational
+    # 200-empty candidate all read as a confirmed cross-tenant breach.
+    from uuid import uuid4
+
+    residual = _finding("r").model_copy(update={"observed_in_tenant_id": _OWNER})
+    user_a, user_b = uuid4(), uuid4()
+    cross_user = _finding("u").model_copy(
+        update={
+            "observed_in_tenant_id": _OWNER,
+            "owner_user_id": user_a,
+            "observed_in_user_id": user_b,
+        }
+    )
+    candidate = _finding("c", severity=Severity.INFO, status=FindingStatus.UNVERIFIED)
+    messages = {
+        r["partialFingerprints"]["sectumFindingId"]: r["message"]["text"]
+        for r in run_to_sarif(_run(residual, cross_user, candidate, _finding("t")))["runs"][0][
+            "results"
+        ]
+    }
+    assert "residual-data finding" in messages["r"]
+    assert "cross-user leak" in messages["u"]
+    assert "cross-tenant candidate" in messages["c"]
+    assert "cross-tenant leak" in messages["t"]
+
+
+def test_the_run_carries_its_surface_provenance() -> None:
+    run = _run().model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    assert run_to_sarif(run)["runs"][0]["properties"]["surfaceProvenance"] == {
+        "vector_db": "SYNTHETIC"
+    }

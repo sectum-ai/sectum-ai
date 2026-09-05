@@ -13,7 +13,7 @@ single probe emitted the same fully-satisfied 9-framework assessment as a full
 suite, which is the over-claim this product exists to refuse.
 """
 
-from sectum_ai.spec import ControlMapping, RunResult
+from sectum_ai.spec import ControlMapping, CoverageVerdict, RunResult
 
 COVERAGE_DISCLAIMER = (
     "These control mappings assert that Sectum AI produced test-coverage "
@@ -32,6 +32,10 @@ _ERASURE = "erasure"  # the run carries erasure coverage (the `erasure` workflow
 # (ADR-0004). tests/unit/test_controls.py holds this set to the probes' own
 # declarations so the two cannot drift.
 _ERASURE_PROBE_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
+# The coverage verdicts that mean a surface was scanned and answered: a run whose
+# every surface is NOT_COVERED (or attestable-with-caveat, where nothing was
+# deleted) verified no erasure, whatever its coverage block's length.
+_ERASURE_VERDICTS = frozenset({CoverageVerdict.ERASED.value, CoverageVerdict.RESIDUAL.value})
 
 # Framework -> control IDs -> what a Sectum AI verification run asserts about
 # them -> the evidence required to assert it (the engineering spec, section 18).
@@ -119,7 +123,12 @@ def _run_supports(run: RunResult, requirement: str) -> bool:
     on the strength of a deletion check, in the artifact built for auditors.
     """
     if requirement == _ERASURE:
-        return bool(run.metrics.erasure_coverage)
+        # The coverage block names every erasure surface, so it is non-empty for a
+        # run that verified nothing (all NOT_COVERED, or only caveats). Only a
+        # surface that was actually scanned to a verdict is erasure evidence.
+        return any(
+            verdict in _ERASURE_VERDICTS for verdict in run.metrics.erasure_coverage.values()
+        )
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
     return bool(exercised - _ERASURE_PROBE_IDS)
 

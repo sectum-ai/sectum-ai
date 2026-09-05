@@ -186,10 +186,17 @@ def _check_rekor(proof: str, digest: str, rekor_keyring: Mapping[str, bytes] | N
         integrated_at = verify_rekor_proof(proof, digest, keyring=rekor_keyring)
     except EvidenceError as error:
         return Check(name, ok=False, detail=str(error))
+    # The inclusion proof binds the digest; the integration time is a bare field
+    # of the entry that nothing verified here signs (the signed entry timestamp
+    # is not stored), so it is reported as the log's claim, not as a checked fact.
     return Check(
         name,
         ok=True,
-        detail=f"pack digest recorded in the Rekor transparency log at {integrated_at.isoformat()}",
+        detail=(
+            "pack digest included in the Rekor transparency log (inclusion proof "
+            f"verified); the log reports integration at {integrated_at.isoformat()}, "
+            "which this verifier does not independently check"
+        ),
     )
 
 
@@ -336,14 +343,16 @@ def _check_run_scope(pack: EvidencePack, require_live: bool) -> Check:
                 + ("" if require_live else "; accepted by --allow-synthetic")
             ),
         )
-    synthetic = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.SYNTHETIC.value)
+    # Only an exact LIVE counts as live: the block's values are validated on the
+    # way in, but a gate that fails open on anything unexpected is still wrong.
+    live = sum(1 for p in provenance.values() if p == SurfaceProvenance.LIVE.value)
+    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
     if not synthetic:
         return Check(
             "run-scope",
             ok=True,
             detail="every surface this run exercised was a live backend",
         )
-    live = len(provenance) - len(synthetic)
     if live:
         return Check(
             "run-scope",

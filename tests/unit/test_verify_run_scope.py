@@ -125,3 +125,52 @@ def test_the_cli_refuses_a_synthetic_pack_by_default(tmp_path: Path) -> None:
     assert "NO surface was live" in refused.output
     accepted = _runner.invoke(app, ["verify", str(pack), "--allow-unanchored", "--allow-synthetic"])
     assert accepted.exit_code == 0
+
+
+@pytest.mark.parametrize("value", ["synthetic", "Live", "LIVE ", "bogus"])
+def test_a_non_member_provenance_value_is_refused_by_the_model(value: str) -> None:
+    # Both gates compare against the exact member strings, so anything else read
+    # as not-synthetic in `score` and as live in `verify`: a hand-edited record
+    # passed a fail-closed check by misspelling the thing it was meant to disclose.
+    with pytest.raises(ValueError, match="surface_provenance"):
+        _run({Surface.VECTOR_DB.value: value})
+
+
+def test_a_provenance_value_that_is_not_live_never_counts_as_live() -> None:
+    # Belt and braces under the validator: the gate itself only counts LIVE.
+    from sectum_ai.evidence.verify import _check_run_scope
+
+    pack = _pack(_LIVE).model_copy(deep=True)
+    run = pack.run_result.model_construct(
+        **{**pack.run_result.model_dump(), "surface_provenance": {"vector_db": "Live"}}
+    )
+    doctored = pack.model_construct(**{**pack.model_dump(), "run_result": run})
+    check = _check_run_scope(doctored, require_live=True)
+    assert not check.ok
+    assert "NO surface was live" in check.detail
+
+
+def test_a_live_slot_no_probe_drove_cannot_pass_the_scope_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No catalog probe drives the tracing slot. Recording every slot's provenance
+    # let a live tracing adapter alone satisfy the run-scope gate for a run whose
+    # every probed surface was the built-in fake.
+    import json
+
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeObservability
+
+    class _LiveTracing(FakeObservability):
+        synthetic = False
+
+    monkeypatch.setattr(config_module, "build_observability", lambda _cfg: _LiveTracing())
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    recorded = json.loads((tmp_path / "run.json").read_text())["surface_provenance"]
+    assert Surface.TRACING.value not in recorded, recorded
+    assert set(recorded.values()) == {SurfaceProvenance.SYNTHETIC.value}
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    refused = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
+    assert refused.exit_code == 4, refused.output
+    assert "NO surface was live" in refused.output

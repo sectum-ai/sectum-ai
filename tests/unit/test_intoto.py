@@ -191,3 +191,13 @@ def test_a_rewritten_predicate_does_not_bind_the_pack() -> None:
         forged["predicate"][key] = value
         with pytest.raises(EvidenceError, match="predicate"):
             verify_in_toto_statement(forged, pack)
+
+
+def test_a_statement_with_an_extra_subject_is_rejected() -> None:
+    # Any-of matching let a statement carry a foreign subject beside the genuine
+    # one and still verify; a statement attests exactly one run.
+    pack = _pack()
+    statement = to_in_toto_statement(pack)
+    statement["subject"].append({"name": "other", "digest": {"sha256": "00" * 32}})
+    with pytest.raises(EvidenceError, match="subject"):
+        verify_in_toto_statement(statement, pack)

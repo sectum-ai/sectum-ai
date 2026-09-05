@@ -22,7 +22,7 @@ import zipfile
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from sectum_ai.evidence.dsse import verify_dsse_envelope
+from sectum_ai.evidence.dsse import dsse_binding_detail, verify_dsse_envelope
 from sectum_ai.evidence.intoto import verify_in_toto_statement
 from sectum_ai.evidence.verify import Check, VerificationResult, verify_pack
 from sectum_ai.spec import EvidenceError, EvidencePack
@@ -70,7 +70,12 @@ def _first_member(member_bytes: Mapping[str, bytes], names: tuple[str, ...]) -> 
     return None
 
 
-def _check_sidecar(name: str, raw: bytes, bind: Callable[[Any], None]) -> Check:
+def _check_sidecar(
+    name: str,
+    raw: bytes,
+    bind: Callable[[Any], None],
+    detail: Callable[[Any], str] = lambda _obj: "sidecar binds this pack's run digest",
+) -> Check:
     """Re-bind a JSON sidecar (in-toto / DSSE) to the pack; FAIL if it no longer binds.
 
     Mirrors the standalone ``sectum-ai verify`` sidecar re-checks: a swapped or
@@ -78,10 +83,11 @@ def _check_sidecar(name: str, raw: bytes, bind: Callable[[Any], None]) -> Check:
     itemized as a failed check rather than silently trusted.
     """
     try:
-        bind(json.loads(raw))
+        obj = json.loads(raw)
+        bind(obj)
     except (ValueError, TypeError, AttributeError, EvidenceError) as error:
         return Check(name, False, f"sidecar does not bind this pack: {error}")
-    return Check(name, True, "sidecar binds this pack's run digest")
+    return Check(name, True, detail(obj))
 
 
 def build_bundle(members: Mapping[str, bytes]) -> bytes:
@@ -158,11 +164,17 @@ def verify_bundle(
             # the crash as the tool breaking, not as the bundle being bad.
             if not isinstance(manifest, dict):
                 return _refused("bundle-manifest", f"{MANIFEST_MEMBER} is not a JSON object")
+            # The manifest is unsigned, so it cannot be allowed to choose which
+            # member is "the pack": a bundle carrying a genuine, anchored pack under
+            # some other name and arbitrary bytes under evidence.json - the file the
+            # README and the CLI call the canonical record - verified on the
+            # strength of the member it pointed at.
             evidence_member = manifest.get("evidence", EVIDENCE_MEMBER)
-            if not isinstance(evidence_member, str):
+            if evidence_member != EVIDENCE_MEMBER:
                 return _refused(
                     "bundle-manifest",
-                    f"{MANIFEST_MEMBER} names a non-string evidence member",
+                    f"{MANIFEST_MEMBER} names {evidence_member!r} as the evidence "
+                    f"member; a bundle attests {EVIDENCE_MEMBER!r} and nothing else",
                 )
             member_digests = manifest.get("members", {})
             if not isinstance(member_digests, dict):
@@ -274,7 +286,12 @@ def verify_bundle(
     dsse_raw = member_bytes.get(DSSE_MEMBER)
     if dsse_raw is not None:
         checks.append(
-            _check_sidecar("dsse-envelope", dsse_raw, lambda obj: verify_dsse_envelope(obj, pack))
+            _check_sidecar(
+                "dsse-envelope",
+                dsse_raw,
+                lambda obj: verify_dsse_envelope(obj, pack),
+                dsse_binding_detail,
+            )
         )
     return VerificationResult(
         passed=all(check.ok for check in checks),

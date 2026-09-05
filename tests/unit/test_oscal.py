@@ -188,3 +188,32 @@ def test_document_is_json_serialisable() -> None:
     doc = run_to_oscal(_run(_finding("f-1")), tool_version="1.0.0")
     reloaded = json.loads(json.dumps(doc))
     assert reloaded["assessment-results"]["metadata"]["oscal-version"] == "1.1.2"
+
+
+def test_a_synthetic_only_run_states_no_control_finding() -> None:
+    # Every control rendered `satisfied` for a run whose every surface was the
+    # built-in fake - a production result a demo cannot support. The observations
+    # still ship; the control findings do not, and the result says why.
+    run = _run().model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert result["findings"] == []
+    assert "no control objective was assessed" in result["description"]
+    live = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    assert run_to_oscal(live)["assessment-results"]["results"][0]["findings"]
+
+
+def test_metadata_carries_the_surface_provenance() -> None:
+    run = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    props = run_to_oscal(run)["assessment-results"]["metadata"]["props"]
+    assert ("sectum-surface-provenance-vector_db", "LIVE") in {
+        (p["name"], p["value"]) for p in props
+    }
+
+
+def test_observations_label_a_residual_finding_as_such() -> None:
+    residual = _finding("r").model_copy(update={"observed_in_tenant_id": _OWNER})
+    observation = run_to_oscal(_run(residual))["assessment-results"]["results"][0]["observations"][
+        0
+    ]
+    assert "residual-data finding" in observation["description"]
+    assert "cross-tenant" not in observation["description"]

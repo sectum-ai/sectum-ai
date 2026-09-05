@@ -86,8 +86,8 @@ def provenance_statement(run: RunResult) -> str:
             "block, so whether it exercised live backends or the built-in synthetic "
             "stores cannot be established from this pack."
         )
-    synthetic = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.SYNTHETIC.value)
     live = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.LIVE.value)
+    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
     if not synthetic:
         return (
             "Surface provenance: every surface exercised by this run was a live, "
@@ -108,6 +108,19 @@ def provenance_statement(run: RunResult) -> str:
         f"({', '.join(synthetic)}) were Sectum's built-in synthetic stores; results "
         "attributed to them describe that fake and not a production system."
     )
+
+
+def probes_exercised(run: RunResult) -> str:
+    """The probe ids this run records, for the summary block of both PDF engines.
+
+    "Scope is limited to the probes ... exercised in this run" is only checkable
+    when the run names them: a one-probe pack and a twelve-probe pack rendered
+    identically apart from the digest.
+    """
+    if not run.probe_versions:
+        return "none recorded"
+    ids = sorted(run.probe_versions)
+    return f"{len(ids)}: {', '.join(ids)}"
 
 
 def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:
@@ -323,6 +336,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     summary: list[tuple[str, str]] = [
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
+        ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed cross-tenant findings", str(confirmed)),
     ]

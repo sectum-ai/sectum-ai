@@ -75,6 +75,7 @@ from sectum_ai.evidence import (
     build_dsse_envelope,
     build_evidence_pack,
     control_mappings,
+    dsse_binding_detail,
     rekor_keyring,
     render_audit_pack_and_hash,
     run_to_oscal,
@@ -101,6 +102,7 @@ from sectum_ai.probes import (
     FakeEmbeddingProvider,
     IkeaExtractionProbe,
     KvCacheTimingProbe,
+    KvCacheTimingReport,
     LoraCrossTenantProbe,
     MemoryContamProbe,
     Probe,
@@ -594,8 +596,8 @@ def _resolve_target(substrate: Substrate, name: str | None) -> UUID:
     for tenant in substrate.tenants:
         if tenant.display_name.lower() == name.lower():
             return tenant.tenant_id
-    available = ", ".join(tenant.display_name for tenant in substrate.tenants)
-    typer.echo(f"unknown tenant '{name}'; available: {available}", err=True)
+    available = ", ".join(untrusted(tenant.display_name) for tenant in substrate.tenants)
+    typer.echo(f"unknown tenant '{untrusted(name)}'; available: {available}", err=True)
     raise typer.Exit(code=3)
 
 
@@ -888,8 +890,15 @@ def probe(
         },
         # What the run interrogated, not just which adapters it named: a family
         # that fell back to the in-memory fake produces verdicts about nothing
-        # real, and that has to be legible to whoever reads the signed pack.
-        surface_provenance=surface_provenance(bundle),
+        # real, and that has to be legible to whoever reads the signed pack. And
+        # ONLY what it interrogated: recording every slot let a live tracing
+        # adapter no probe drives satisfy `verify`'s run-scope gate for a run whose
+        # every probed surface was the fake.
+        surface_provenance={
+            surface: provenance
+            for surface, provenance in surface_provenance(bundle).items()
+            if surface in _exercised_surfaces(bundle, step_results, kv_report)
+        },
         probe_versions={
             # What actually INTERROGATED the stack, not what the suite contained: a probe
             # whose plan comes back empty asked the stack nothing, and recording it let
@@ -940,6 +949,16 @@ def probe(
             ),
         ),
     )
+    if not run.probe_versions and not run.findings:
+        # Nothing interrogated the stack (every selected probe was skipped or planned
+        # nothing), so there is no run to record: `report` would sign it and `verify`
+        # would pass it, and only `score` refused.
+        typer.echo(
+            "no probe interrogated the stack: every selected probe was skipped or "
+            "planned nothing, so no run was recorded (nothing to attest)",
+            err=True,
+        )
+        raise typer.Exit(code=3)
     path = effective_workdir / "run.json"
     path.write_text(run.model_dump_json(indent=2))
     # What the record attests, not what the suite contained: a probe whose plan came back
@@ -1039,6 +1058,26 @@ def _scope_lines(card: IsolationScore) -> list[str]:
     ]
     lines.extend(f"           {surface}" for surface in card.synthetic_surfaces)
     return lines
+
+
+def _exercised_surfaces(
+    bundle: AdapterBundle, step_results: list[StepResult], kv_report: KvCacheTimingReport | None
+) -> set[str]:
+    """The surfaces the executed steps actually touched, by each step's action family."""
+    adapters = {
+        "vector": bundle.vector,
+        "cache": bundle.cache,
+        "model": bundle.model,
+        "mcp": bundle.mcp,
+        "memory": bundle.memory,
+        "rag": bundle.rag,
+        "observability": bundle.observability,
+        "agent": bundle.agent,
+    }
+    exercised = {adapters[step.action.split(".", 1)[0]].surface.value for step, _ in step_results}
+    if kv_report is not None and kv_report.signals:
+        exercised.add(bundle.model.surface.value)
+    return exercised
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -1150,6 +1189,23 @@ def report(
         workdir = loaded.workdir
     substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     run = _load_run(workdir)
+    if not run.probe_versions and not run.findings:
+        raise ConfigError(
+            f"the run at {workdir / 'run.json'} records no probe and no finding, so there "
+            "is nothing to attest; run 'sectum-ai probe' against a stack the selected "
+            "probes can interrogate"
+        )
+    if run.manifest_hash != canonical_hash(substrate.manifest) or run.scenario_hash != (
+        canonical_hash(substrate.scenario)
+    ):
+        # The PDF renders the substrate's manifest hash and the pack signs the run's;
+        # a re-seeded workdir would sign a pack `verify` then fails on
+        # manifest-consistency, and an auditor got a signed artifact of a mismatch.
+        raise ConfigError(
+            "the run was recorded against a different substrate than the one in "
+            f"{workdir} (its scenario or manifest hash differs); re-run "
+            "'sectum-ai probe' after re-seeding"
+        )
     timestamper = _resolve_timestamper(loaded.evidence, tsa)
     transparency_log = _resolve_transparency_log(loaded.evidence, rekor)
     controls = control_mappings(run)
@@ -1577,8 +1633,14 @@ def verify(
             require_anchored=not allow_unanchored,
             require_live=not allow_synthetic,
         )
+        # A bundle's member names come from the archive being verified, and a
+        # `member:<name>` check carries one verbatim: a newline in the name forged
+        # whole `[ok]` lines of this very output.
         for check in bundle_result.checks:
-            typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+            typer.echo(
+                f"[{'ok' if check.ok else 'FAIL'}] {untrusted(check.name)}: "
+                f"{untrusted(check.detail)}"
+            )
         if not bundle_result.passed:
             typer.echo("VERIFICATION FAILED", err=True)
             raise typer.Exit(code=4)
@@ -1604,7 +1666,9 @@ def verify(
         require_live=not allow_synthetic,
     )
     for check in result.checks:
-        typer.echo(f"[{'ok' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+        typer.echo(
+            f"[{'ok' if check.ok else 'FAIL'}] {untrusted(check.name)}: {untrusted(check.detail)}"
+        )
     passed = result.passed
     # Re-verify the in-toto sidecar if report/erasure wrote one beside the pack:
     # a swapped or corrupt statement that no longer binds this pack's run digest
@@ -1622,8 +1686,9 @@ def verify(
     dsse_path = _sibling_dsse(pack)
     if dsse_path is not None:
         try:
-            verify_dsse_envelope(json.loads(dsse_path.read_text()), evidence)
-            typer.echo("[ok] dsse-envelope: sidecar binds this pack's run digest")
+            envelope = json.loads(dsse_path.read_text())
+            verify_dsse_envelope(envelope, evidence)
+            typer.echo(f"[ok] dsse-envelope: {dsse_binding_detail(envelope)}")
         except (ValueError, EvidenceError) as error:
             typer.echo(f"[FAIL] dsse-envelope: {error}")
             passed = False
@@ -1714,7 +1779,13 @@ def _emit_erasure_attestation(
         finished_at=finished,
         adapter_versions=adapter_versions,
         probe_versions={probe_id: __version__},
-        surface_provenance=surface_provenance,
+        # Only the surfaces this run scanned: a `--scope vector_db` run says nothing
+        # about the other seven, live or not.
+        surface_provenance={
+            surface: provenance
+            for surface, provenance in surface_provenance.items()
+            if surface in {scanned.surface.value for scanned in report.surfaces}
+        },
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
@@ -2267,6 +2338,16 @@ def calibrate(
         _render_calibration_text(result)
 
 
+# The un-bracketed headline metrics and the probes that feed them; a coverage-lost
+# probe makes its metric "not measured", the same as a `[probe-id]`-keyed one.
+_HEADLINE_METRIC_PROBES: dict[str, frozenset[str]] = {
+    "retrieval_pivot_rate": BLEED_PROBE_IDS,
+    "poisoning_bleed_delta": frozenset({RagPoisoningProbe.id}),
+    "inversion_reconstruction_rate": frozenset({EmbeddingInversionProbe.id}),
+    "extraction_efficiency": frozenset({IkeaExtractionProbe.id}),
+}
+
+
 def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
@@ -2274,7 +2355,9 @@ def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str
     "ok": its drop to zero is missing coverage, not a fixed leak, and `[ok]
     per_probe_findings[rag-poisoning]: 24 -> 0` positively asserts the opposite.
     """
-    if any(f"[{probe_id}]" in delta.name for probe_id in coverage_lost):
+    lost = set(coverage_lost)
+    fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
+    if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by and fed_by <= lost):
         return "not measured"
     if delta.informational:
         return "info"
@@ -2467,7 +2550,7 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_delta_verdict(delta)}] {untrusted(delta.name)}: "
+            f"  [{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
             f"{delta.baseline:g} -> {delta.current:g}"
         )
 

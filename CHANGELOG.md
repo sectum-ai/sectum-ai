@@ -38,6 +38,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CLI's); the `init` template omitted the `factory` field `langchain` requires;
   the retrieval-pivot example config promised a rate that file alone cannot
   produce (its `run.sh` probes without it).
+- **A bundle's unsigned manifest chose which member was "the pack".**
+  `verify_bundle` verified whichever member `bundle-manifest.json` named as
+  `evidence`, so a bundle carrying a genuine (even anchored) pack under another
+  name and arbitrary bytes under `evidence.json` — the file the README and the
+  CLI call the canonical record — passed every check. The evidence member is
+  `evidence.json`, always; a manifest naming anything else is refused.
+- **Bundle member names forged `[ok]` lines in `verify`'s output.** A
+  `member:<name>` check echoed the archive's own member name raw, so a newline in
+  it printed a fabricated `[ok] independent-anchor` line. Check names and details
+  are escaped like every other record string; substrate display names in the
+  unknown-tenant message likewise.
+- **A live backend no probe drove satisfied the run-scope gate.** The provenance
+  block recorded all eight adapter slots, including the tracing slot no catalog
+  probe touches, and `verify` passes when *any* recorded surface is live — so a
+  run whose every probed surface was the built-in fake verified as a
+  configured-stack attestation on the strength of a real tracing adapter. `probe`
+  now records provenance only for the surfaces its executed steps touched (the
+  KV-timing probe's model surface when it measured anything), and an erasure run
+  only for the surfaces it scanned (`--scope vector_db` records one entry). The
+  gate itself now counts only an exact `LIVE` as live, and `RunResult` refuses any
+  provenance value that is not a member: `"synthetic"`, `"Live"`, or `"bogus"`
+  read as not-synthetic in `score` and as live in `verify`.
+- **`probe` recorded, and `report` signed, a run that asked the stack nothing.**
+  A single `--probe` the stack could not satisfy emptied the suite; `probe` printed
+  `ran 0 probes`, exited 0, and wrote a run with no probe and no finding that
+  `report` packed into a signed evidence pack, audit PDF, in-toto statement, and
+  DSSE envelope, which `verify` passed. Only `score` refused. `probe` now exits 3
+  without writing the run, and `report` refuses such a run (exit 3). `report` also
+  refuses a run whose scenario or manifest hash no longer matches the workdir's
+  substrate (a re-seeded workdir produced a signed pack `verify` then failed on
+  manifest consistency).
+- **A `NaN` metric read as "no regression".** `json.loads` accepts a bare `NaN`
+  and `NaN > baseline` is false, so `diff` and `baseline --compare` on a
+  hand-edited run exited 0. Every spec model now refuses non-finite floats on
+  construction (`allow_inf_nan=False`), so the run fails to load (exit 3).
+- **`diff` tagged a coverage-lost metric `[ok]`.** `_render_diff_text` called the
+  verdict helper without the coverage-lost list the `baseline` path passes, and
+  the un-bracketed headline metrics (`poisoning_bleed_delta`,
+  `inversion_reconstruction_rate`, `extraction_efficiency`, `retrieval_pivot_rate`)
+  never matched the `[probe-id]` rule — so a probe that did not run read as
+  `[ok] poisoning_bleed_delta: 0.5 -> 0`, a fixed leak. Both now read
+  `[not measured]`.
+- **An erasure run that verified nothing signed GDPR Art. 17 / CCPA §1798.105 as
+  "verified".** The erasure control requirement was "the coverage block is
+  non-empty", and the block names every erasure surface — so eight `NOT_COVERED`
+  verdicts (no baseline, no adapter, out of scope) carried both deletion mappings
+  and the OSCAL projection rendered them `satisfied`. The requirement is now a
+  surface scanned to `ERASED` or `RESIDUAL`.
+- **A phoenix / langfuse / langsmith observability kind without its extra was a
+  raw traceback**, not the typed exit-3 error every other family gives — the
+  sibling of the v0.11.0 `mcp` defect.
+- **The in-toto verifier accepted a statement with a foreign subject beside the
+  genuine one**; a statement now attests exactly one subject.
+- **`verify` reported the Rekor integration time as a verified fact.** The
+  inclusion proof binds the digest; the integration time is a field nothing the
+  verifier checks signs (the same proof verifies with any time), so the check now
+  reports it as the log's claim.
+- **A judge answering `{"leak": "false"}` read as a leak** (`bool("false")` is
+  `True`); the field must be a JSON boolean.
+- **SARIF and OSCAL labelled every finding a "cross-tenant leak"** — an erasure
+  residual (same tenant on both sides), a cross-user leak inside one tenant, and
+  the informational 200-empty candidate all rendered as a confirmed cross-tenant
+  breach. Each is now labelled by what it is. Both projections carry the run's
+  surface provenance, and an OSCAL document for a run whose every surface was the
+  built-in fake states no control finding at all (its result says why).
+- **The audit PDF never named the probes that ran** — a one-probe pack and a
+  twelve-probe pack rendered identically apart from the digest, while the scope
+  paragraph said scope was "limited to the probes exercised". Both engines now
+  list them in the summary.
+- The DSSE sidecar check said "sidecar binds this pack's run digest" for an
+  envelope `report` writes with `signatures: []`; the detail now says the envelope
+  is unsigned (or, when signed, that no signature was verified here), and the
+  docstring no longer points at a `sigstore` module that does not exist.
 
 
 ## [0.11.0] - 2026-09-01

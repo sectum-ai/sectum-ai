@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sectum_ai.evidence.labels import leak_label
 from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
@@ -133,7 +134,7 @@ def _result(finding: Finding) -> dict[str, Any]:
         "level": _result_level(finding),
         "message": {
             "text": (
-                f"{finding.severity.value.upper()} cross-tenant leak on "
+                f"{finding.severity.value.upper()} {leak_label(finding)} on "
                 f"{finding.surface.value}: {detail}"
             )
         },
@@ -188,6 +189,9 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     "runId": run.run_id,
                     "scenarioHash": run.scenario_hash,
                     "manifestHash": run.manifest_hash,
+                    # Which stack the results describe. Absent from the projection,
+                    # an all-synthetic demo read exactly like a production scan.
+                    "surfaceProvenance": dict(run.surface_provenance),
                 },
             }
         ],

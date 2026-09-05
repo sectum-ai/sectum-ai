@@ -35,8 +35,12 @@ about every synthetic surface, and the run records a `surface_provenance` block
 (`LIVE` / `SYNTHETIC` per surface) inside the signed evidence, so a third party
 reading the pack can tell what the verdicts actually describe. The block is read
 off the constructed adapters, so an *omitted* family is recorded as the fake it
-resolved to. (A misspelled family key — `vector:` for `vector_store:` — no longer
-reaches this point: it is rejected at config load, since v0.10.0.)
+resolved to — and it names only the surfaces the run's probes actually drove (an
+erasure run: the surfaces it scanned), so a live backend nothing interrogated
+cannot make the run look live. Its values are validated on load; a record carrying
+anything but `LIVE` / `SYNTHETIC` is refused rather than read as live. (A
+misspelled family key — `vector:` for `vector_store:` — no longer reaches this
+point: it is rejected at config load, since v0.10.0.)
 
 ## Probe → the surface it needs
 

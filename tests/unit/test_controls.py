@@ -54,7 +54,7 @@ def _run(*, probes: bool = True, erasure: bool = False, erasure_only: bool = Fal
         started_at=moment,
         finished_at=moment,
         metrics=RunMetrics(
-            erasure_coverage={"vector_db": "erased"} if (erasure or erasure_only) else {}
+            erasure_coverage={"vector_db": "ERASED"} if (erasure or erasure_only) else {}
         ),
         probe_versions=ran,
     )
@@ -132,3 +132,26 @@ def test_a_run_that_exercised_nothing_asserts_no_control() -> None:
     # No probes, no findings, no erasure coverage: the record establishes nothing,
     # so it must assert nothing rather than defaulting the table to satisfied.
     assert control_mappings(_run(probes=False)) == ()
+
+
+def test_an_erasure_run_that_verified_nothing_asserts_no_deletion_control() -> None:
+    # The coverage block names every erasure surface, so it is non-empty for a run
+    # that scanned nothing: all NOT_COVERED (no baseline / no adapter / out of
+    # scope) still signed GDPR Article 17 and CCPA 1798.105 as "verified", and the
+    # OSCAL projection rendered them satisfied.
+    from sectum_ai.spec import CoverageVerdict
+
+    nothing = dict.fromkeys(("vector_db", "tracing"), CoverageVerdict.NOT_COVERED.value)
+    caveat_only = {"vector_db": CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value}
+    for coverage in (nothing, caveat_only):
+        run = _run(erasure_only=True).model_copy(
+            update={"metrics": RunMetrics(erasure_coverage=coverage)}
+        )
+        assert control_mappings(run) == (), coverage
+    residual = _run(erasure_only=True).model_copy(
+        update={"metrics": RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"})}
+    )
+    assert {i for m in control_mappings(residual) for i in m.control_ids} == {
+        "Article 17",
+        "1798.105",
+    }

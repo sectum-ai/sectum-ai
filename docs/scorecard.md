@@ -49,7 +49,10 @@ which reads to an auditor exactly like one we invented. Counts that cannot be tr
 recompute by corrupting them.
 
 `probe` refuses a substrate in which **no marker is foreign to any principal** (exit `3`),
-so no such run reaches the scorecard. That is the precondition of the whole exercise:
+so no such run reaches the scorecard. It likewise records no run at all when every
+selected probe was skipped or planned nothing (exit `3`), and `report` refuses a run
+that names no probe and no finding: a record that asked the stack nothing is not
+something to sign. That is the precondition of the whole exercise:
 isolation is a claim about a boundary *between* principals, so where nothing is foreign to
 anybody no probe can surface a leak however broken the stack is, and every class would read
 clean as a property of the substrate rather than of the stack — the same deliberately-leaky

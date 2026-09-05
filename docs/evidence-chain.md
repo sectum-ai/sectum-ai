@@ -54,7 +54,10 @@ commits to that root was signed by Rekor. As with the TSA, the checkpoint key is
 pinned independently — never read from the pack. The verifier ships the
 public-good instance's log keys built in (selected by log id), and `sectum-ai verify
 --rekor-key <pem>` pins a private instance's key. No network and no current tree
-head are needed to verify; a captured proof verifies indefinitely.
+head are needed to verify; a captured proof verifies indefinitely. What the proof
+binds is the digest's *inclusion*; the entry's integration time is a field of the
+entry that nothing the verifier checks signs, so `verify` reports it as the log's
+claim, not as a verified fact.
 
 Recording uses an ephemeral signing key: a transparency-log entry's value is the
 public, timestamped *inclusion* of the digest, not the signer's identity. Rekor
@@ -89,7 +92,10 @@ system" were unrelated facts, and only the first was checked. The `run-scope`
 check closes that: it reports the run's signed
 [surface provenance](coverage.md), and `sectum-ai verify` **refuses** (exit 4) a
 pack in which no surface was live — or which carries no provenance block at all,
-since its subject cannot be established either way. A third party receiving a vendor's pack is the
+since its subject cannot be established either way. The block covers only the
+surfaces the run's probes drove: a live backend in a slot no probe touched (a
+tracing adapter, on a probe run) is not recorded, so it cannot stand in for the
+probed surfaces at this gate. A third party receiving a vendor's pack is the
 party least able to notice what is missing from it, so this fails closed like the
 anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
@@ -116,14 +122,20 @@ test condition cryptographically.
   not new trust — and can be DSSE-signed and logged to Rekor for distribution.
 - `evidence.dsse.json` — the in-toto statement wrapped in a
   [DSSE](https://github.com/secure-systems-lab/dsse) envelope (PAE-encoded),
-  the signable form for distribution.
+  the signable form for distribution. `report` writes it **unsigned**
+  (`signatures: []`); `verify` re-binds the envelope's statement to the pack and
+  says so — it verifies no signature, whether or not one is present.
 
 `sectum-ai report` flags that shape these outputs:
 
 - `--pdf-engine {reportlab,weasyprint}` — selects the audit-pack PDF renderer
   (`reportlab` is the default; `weasyprint` needs the optional `weasyprint` extra).
 - `--bundle` — writes a single `evidence-bundle.zip` gathering all of the above,
-  the artifact `sectum-ai verify <bundle.zip>` checks end to end.
+  the artifact `sectum-ai verify <bundle.zip>` checks end to end. The bundle's
+  digest manifest is unsigned, so the verifier does not let it choose which member
+  is the pack: `evidence.json` is the pack, always, and a manifest naming another
+  member is refused. Member names are the archive's own input and are escaped in
+  the verifier's output.
 - `--include-manifest` — adds the ground-truth manifest to the bundle, sealed
   AES-256-GCM under the configured `security.manifest_key_env`. Off by default:
   the manifest holds canary plaintexts (the pack otherwise carries only its
