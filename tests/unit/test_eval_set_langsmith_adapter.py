@@ -126,5 +126,18 @@ def test_langsmith_eval_set_refuses_a_listing_that_hit_its_cap() -> None:
     adapter = LangSmithEvalSet(client)
     for index in range(1000):
         adapter.add(_TENANT_A, f"fixture number {index}")
+    # A MISS on a full page is what cannot be told from an erased fixture; a hit
+    # on the same page is a definite residual and is reported (see below).
     with pytest.raises(AdapterError, match="listing cap"):
-        adapter.search(_TENANT_A, "fixture number 999")
+        adapter.search(_TENANT_A, "SECTUM-CANARY-ABSENT")
+
+
+def test_langsmith_eval_set_reports_a_fixture_found_on_a_full_page() -> None:
+    # A fixture FOUND on a capped page already answers the question; refusing it
+    # would lose a real residual rather than prevent a false clean.
+    client = _FakeLangSmith()
+    adapter = LangSmithEvalSet(client)
+    adapter.add(_TENANT_A, "fixture SECTUM-CANARY-AAA")
+    for index in range(999):
+        adapter.add(_TENANT_A, f"fixture number {index}")
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-AAA")

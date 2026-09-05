@@ -148,7 +148,12 @@ of at most 1000 traces, and Langfuse pages to its 1000-trace budget; a miss on a
 full page (or past the budget) is refused (an `AdapterError`) rather than read as
 "erased", since a trace beyond it is indistinguishable from a deleted one. The
 Class 11 marker scan (`search_traces`) reads the same page and refuses it on the
-same rule. A search response that is
+same rule. In every case only a *miss* on a full page is refused: a marker found
+there is a definite residual and is reported, since one hit already answers the
+question the scan asks. The mem0 memory store and the LangSmith eval set follow
+the same rule, and mem0 additionally refuses a response whose envelope is not the
+one it reads (a renamed or re-nested `results` key used to come back as an empty
+tenant, which the subject check attested as erased). A search response that is
 an error envelope (a 200 carrying `error`/`errors`, or no `data` list) is likewise an
 error, not an empty tenant; the generic OpenTelemetry reader treats a `DELETE` that
 answers `404` as a purge only when its query then shows no spans — it asks with an

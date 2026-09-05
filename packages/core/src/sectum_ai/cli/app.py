@@ -77,6 +77,7 @@ from sectum_ai.evidence import (
     build_bundle,
     build_dsse_envelope,
     build_evidence_pack,
+    check_raw_schema_stamps,
     control_mappings,
     dsse_binding_detail,
     rekor_keyring,
@@ -1745,9 +1746,18 @@ def verify(
             raise typer.Exit(code=4)
         _echo_verdict(bundle_result.anchored, what="evidence bundle")
         return
+    raw_pack = pack.read_text()
+    # The bytes, not the parsed model: an omitted run_result.schema_version has
+    # already become the current one by the time the pack is an object, and the
+    # attested digest cannot see the difference either.
+    stamped = check_raw_schema_stamps(raw_pack)
+    if stamped is not None:
+        typer.echo(f"[FAIL] {untrusted(stamped.name)}: {untrusted(stamped.detail)}")
+        typer.echo("VERIFICATION FAILED", err=True)
+        raise typer.Exit(code=4)
     try:
         # pydantic's ValidationError is a ValueError; this also catches invalid JSON.
-        evidence = EvidencePack.model_validate_json(pack.read_text())
+        evidence = EvidencePack.model_validate_json(raw_pack)
     except ValueError as error:
         typer.echo(f"not a valid evidence pack at {pack}: {error}", err=True)
         raise typer.Exit(code=3) from error
@@ -2492,10 +2502,14 @@ def _delta_verdict(
     # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`
     # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.
     lost = set(coverage_lost) | set(boundary_lost)
+    # PROBE_SURFACES lists ALTERNATIVES (a probe drives the vector store OR an
+    # application API), so a probe is unmeasured only when every one of its
+    # surfaces is lost - not when any single alternative is.
+    gone = set(scope_lost)
     lost |= {
         probe_id
         for probe_id, surfaces in PROBE_SURFACES.items()
-        if any(surface.value in set(scope_lost) for surface in surfaces)
+        if surfaces and all(surface.value in gone for surface in surfaces)
     }
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
     # ANY feeding probe lost: losing one of the two bleed probes changes the
@@ -2504,7 +2518,7 @@ def _delta_verdict(
         return "not measured"
     # The pooled counts span every probe, so any loss at all makes them
     # incomparable: a run that stopped exercising a boundary "resolved" its leaks.
-    if lost and delta.name in ("confirmed_findings",):
+    if lost and delta.name in ("confirmed_findings",) and not delta.regressed:
         return "not measured"
     if delta.informational:
         return "info"

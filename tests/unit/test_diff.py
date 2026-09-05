@@ -508,3 +508,23 @@ def test_a_metric_is_not_measured_when_its_boundary_was_lost(tmp_path: Path) -> 
     assert "[BOUNDARY LOST] rag-entity-bleed" in cli.output
     assert "[ok] confirmed_findings" not in cli.output, cli.output
     assert "[not measured] confirmed_findings" in cli.output
+
+
+def test_a_count_that_rose_under_a_loss_is_still_a_regression(tmp_path: Path) -> None:
+    # Blanking the pooled count in both directions said "we didn't check" about a
+    # number the run measured and tripled.
+    earlier = _run(_finding("f-1"))
+    later = _run(_finding("f-1"), _finding("f-2"), _finding("f-3")).model_copy(
+        update={"metrics": RunMetrics(confirmed_findings=3, user_steps_dropped={"p": 4})}
+    )
+    earlier = earlier.model_copy(update={"metrics": RunMetrics(confirmed_findings=1)})
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[REGRESSED] confirmed_findings: 1 -> 3" in cli.output, cli.output
+    assert cli.exit_code == 2

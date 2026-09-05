@@ -589,3 +589,70 @@ def test_a_probe_left_with_only_plants_runs_nothing() -> None:
     carrying = Runner(substrate, cache=FakeCache())
     assert carrying.run_per_step(SemanticCacheProbe())
     assert carrying.dropped_user_steps == {}
+
+
+def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
+    # The guard suppressed only plants that were themselves droppable, so a plant
+    # on an adapter that DOES carry the user still ran - and that alone put the
+    # probe in probe_versions with zero judged observations.
+    from sectum_ai.adapters import FakeCache, FakeVectorStore
+    from sectum_ai.spec import CorpusDocument, ProbeStep, SyntheticUserSpec
+
+    class _TenantOnlyCache(FakeCache):
+        carries_user = False
+
+    class _MixedProbe:
+        id = "mixed-adapter-probe"
+        name = "plants in the vector store, reads from the cache"
+        owasp_llm = "LLM08:2025"
+        atlas_techniques: tuple[str, ...] = ()
+        nist_rmf: tuple[str, ...] = ()
+        surfaces = (Surface.SEMANTIC_CACHE,)
+        requires_adapters: tuple[str, ...] = ("vector", "cache")
+
+        def plan(self, substrate: Substrate) -> list[ProbeStep]:
+            user = substrate.principals()[-1].user_id
+            return [
+                ProbeStep(
+                    step_id="plant",
+                    probe_id=self.id,
+                    actor_tenant_id=substrate.tenants[0].tenant_id,
+                    actor_user_id=user,
+                    action="vector.upsert",
+                    payload={},
+                ),
+                ProbeStep(
+                    step_id="read",
+                    probe_id=self.id,
+                    actor_tenant_id=substrate.tenants[0].tenant_id,
+                    actor_user_id=user,
+                    action="cache.get",
+                    payload={"key": "k"},
+                ),
+            ]
+
+        def detect(
+            self, step: ProbeStep, observation: object, substrate: Substrate
+        ) -> list[object]:
+            return []
+
+    substrate = build_substrate(
+        default_scenario(seed=3, corpus_size=24).model_copy(
+            update={
+                "tenants": (
+                    default_scenario(seed=3)
+                    .tenants[0]
+                    .model_copy(
+                        update={
+                            "users": (SyntheticUserSpec(user_id=UUID(int=0x21), display_name="u1"),)
+                        }
+                    ),
+                )
+            }
+        )
+    )
+    store = FakeVectorStore()
+    runner = Runner(substrate, vector=store, cache=_TenantOnlyCache())
+    assert runner.run_per_step(_MixedProbe()) == []  # type: ignore[arg-type]
+    assert runner.dropped_user_steps["mixed-adapter-probe"] == 2
+    assert not isinstance(CorpusDocument, str)  # keep the import meaningful

@@ -239,18 +239,15 @@ def test_baseline_compare_refuses_a_saved_record_from_another_schema_line(tmp_pa
     # for surfaces that baseline never exercised - while the CHANGELOG said both
     # commands refused it.
     import json
-    from pathlib import Path as _Path
 
     from typer.testing import CliRunner
-
-    assert isinstance(tmp_path, _Path)
 
     from sectum_ai.cli.app import app
 
     runner = CliRunner()
-    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
-    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"]).exit_code == 0
     saved = tmp_path / "baseline.json"
     record = json.loads(saved.read_text())
     record["schema_version"] = "0.6.0"

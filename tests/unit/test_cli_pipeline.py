@@ -1673,6 +1673,9 @@ def test_every_headline_rate_describes_the_live_surfaces_on_a_mixed_run(
         assert summary[rate] in (0.0, None), (rate, summary[rate])
     assert summary["inversion_reconstruction_rate"] in (0.0, None)
     assert summary["extraction_efficiency"] in (0.0, None)
+    # The live RAG pipeline WAS measured: the filter kept its steps rather than
+    # dropping every one of them, which would read the same in the rate alone.
+    assert summary["retrieval_pivot_n"] > 0, summary
 
 
 def test_an_unexercised_live_adapter_does_not_make_a_run_mixed(
@@ -1724,4 +1727,4 @@ def test_the_text_summary_says_how_many_findings_describe_the_stack(
     monkeypatch.setattr(config_module, "build_rag", _live_rag)
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert "0 on live surfaces" in result.output, result.output
+    assert "; 0 on live surfaces" in result.output, result.output

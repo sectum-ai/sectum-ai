@@ -205,3 +205,52 @@ def test_report_refuses_a_run_from_another_schema_line(tmp_path: Path) -> None:
     assert result.exit_code == 3, result.output
     assert "schema '0.6.0'" in result.output
     assert not (tmp_path / "evidence.json").exists()
+
+
+def test_a_pack_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    # Deleting `run_result.schema_version` leaves the PARSED model - and therefore
+    # the attested digest - byte-identical, so every check passed: the stamp has
+    # to be read off the bytes. This is the ordinary upgrade path's failure mode.
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    evidence = tmp_path / "evidence.json"
+    pack = json.loads(evidence.read_text())
+    del pack["run_result"]["schema_version"]
+    evidence.write_text(json.dumps(pack))
+    result = _runner.invoke(
+        app, ["verify", str(evidence), "--allow-unanchored", "--allow-synthetic"]
+    )
+    assert result.exit_code == 4, result.output
+    assert "run record's schema_version is None" in result.output
+
+
+def test_a_bundle_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    import io
+    import json
+    import zipfile
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
+    bundle = tmp_path / "evidence-bundle.zip"
+    with zipfile.ZipFile(bundle) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    pack = json.loads(members["evidence.json"])
+    del pack["run_result"]["schema_version"]
+    members["evidence.json"] = json.dumps(pack).encode("utf-8")
+    manifest = json.loads(members["bundle-manifest.json"])
+    import hashlib
+
+    manifest["members"]["evidence.json"] = hashlib.sha256(members["evidence.json"]).hexdigest()
+    members["bundle-manifest.json"] = json.dumps(manifest).encode("utf-8")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    bundle.write_bytes(out.getvalue())
+    result = _runner.invoke(app, ["verify", str(bundle), "--allow-unanchored", "--allow-synthetic"])
+    assert result.exit_code == 4, result.output
+    assert "schema_version" in result.output

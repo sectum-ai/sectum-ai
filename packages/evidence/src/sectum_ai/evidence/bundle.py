@@ -24,7 +24,13 @@ from typing import Any
 
 from sectum_ai.evidence.dsse import dsse_binding_detail, verify_dsse_envelope
 from sectum_ai.evidence.intoto import verify_in_toto_statement
-from sectum_ai.evidence.verify import Check, VerificationResult, _check_pdf, verify_pack
+from sectum_ai.evidence.verify import (
+    Check,
+    VerificationResult,
+    _check_pdf,
+    check_raw_schema_stamps,
+    verify_pack,
+)
 from sectum_ai.spec import EvidenceError, EvidencePack
 
 EVIDENCE_MEMBER = "evidence.json"
@@ -242,6 +248,10 @@ def verify_bundle(
     evidence_raw = member_bytes.get(evidence_member)
     if evidence_raw is None:
         checks.append(Check("evidence-pack", False, f"missing evidence member {evidence_member!r}"))
+        return VerificationResult(passed=False, checks=tuple(checks))
+    stamped = check_raw_schema_stamps(evidence_raw)
+    if stamped is not None:
+        checks.append(stamped)
         return VerificationResult(passed=False, checks=tuple(checks))
     try:
         pack = EvidencePack.model_validate_json(evidence_raw)

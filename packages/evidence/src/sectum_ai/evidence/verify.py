@@ -291,6 +291,42 @@ def _schema_major_minor(version: str) -> tuple[str, str]:
     return (parts[0], parts[1] if len(parts) > 1 else "0")
 
 
+def check_raw_schema_stamps(raw: str | bytes) -> Check | None:
+    """Refuse a pack whose JSON omits a schema stamp, or names another line.
+
+    ``_check_schema_version`` reads the *parsed* pack, where a missing
+    ``schema_version`` has already become the current version by default - and
+    deleting the key leaves the parsed model, and therefore the attested digest,
+    byte-identical, so no other check sees it either. Only the bytes can tell
+    "stamped 0.7.0" from "unstamped", so this reads them; it returns ``None``
+    when both stamps are present and on this line.
+    """
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None  # the parser below reports an unreadable pack
+    if not isinstance(data, dict):
+        return None
+    run = data.get("run_result")
+    for label, stamp in (
+        ("pack", data.get("schema_version")),
+        ("run record", run.get("schema_version") if isinstance(run, dict) else None),
+    ):
+        if not isinstance(stamp, str) or _schema_major_minor(stamp) != _schema_major_minor(
+            SCHEMA_VERSION
+        ):
+            return Check(
+                "schema-version",
+                ok=False,
+                detail=(
+                    f"the {label}'s schema_version is {stamp!r}; this verifier reads "
+                    f"{SCHEMA_VERSION!r} records, and an unstamped record is not a "
+                    "current one"
+                ),
+            )
+    return None
+
+
 def _check_schema_version(pack: EvidencePack) -> Check:
     """Refuse a pack whose schema version this verifier cannot interpret.
 

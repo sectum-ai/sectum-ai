@@ -101,11 +101,13 @@ class LangSmithEvalSet(EvalSetAdapter):
             text = self._text(example)
             if query_tokens & _tokens(text):
                 hits.append(text)
-        if seen >= _EXAMPLE_LIMIT:
-            # A truncated page is not a scan: a fixture past it read as absent.
+        if not hits and seen >= _EXAMPLE_LIMIT:
+            # A truncated page is not a scan: a fixture past it read as absent. A
+            # fixture FOUND on a full page already answers the question, so only a
+            # miss is refused.
             raise AdapterError(
                 f"LangSmith dataset {dataset} holds at least {_EXAMPLE_LIMIT} examples, the "
-                "listing cap, so the eval-set scan would be incomplete"
+                "listing cap, so an eval-set scan that found nothing would be incomplete"
             )
         return hits
 

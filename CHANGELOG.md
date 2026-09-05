@@ -16,6 +16,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`verify` could not see an unstamped run record.** Deleting
+  `run_result.schema_version` leaves the parsed pack — and therefore the attested
+  digest — byte-identical, so the cycle-5 check (which reads the parsed model,
+  where the field has already defaulted to the current version) passed it, and so
+  did every other check. `verify` and the bundle path now read both stamps off the
+  bytes; the ordinary upgrade path was the way in.
+- **A plant on a user-carrying adapter still ran when no judged step survived.**
+  The cycle-5 guard was applied inside the droppable branch, so a probe planting
+  on one adapter and reading on another executed its plant, landed in
+  `probe_versions`, and graded its class off zero observations. The whole probe is
+  now dropped when nothing it would have judged can run.
+- **mem0's shape guard fired in the wrong places.** It caught a renamed *row* key
+  but not a renamed or re-nested `results` envelope (which came back as an empty
+  tenant — an attested erasure); it aborted on a legitimately empty memory value;
+  and its truncation refusal counted texts rather than rows, so a full page
+  holding any blank row read as a complete listing. The envelope is validated, the
+  guard keys on the `memory` key rather than its truthiness, and the cap counts
+  rows.
+- **A listing refusal must not discard a hit it already found.** mem0's recall and
+  the LangSmith eval-set search raised on a full page that *contained* the canary,
+  turning a confirmed residual into an aborted run (the trace backends were fixed
+  the same way). Only a miss is refused.
+- `diff` and `baseline --compare` no longer print `[not measured]` over a pooled
+  count that *rose*: a run that measured more, not less, is still a regression.
+  A probe is marked unmeasured on a scope loss only when every surface it can run
+  against was lost, not when one alternative was.
 - **A probe left with only plants graded its class PASS off zero observations.**
   On one tenant whose users are the only foreign principals, with an adapter that
   carries no user, every judged read was dropped and the plants alone ran — which

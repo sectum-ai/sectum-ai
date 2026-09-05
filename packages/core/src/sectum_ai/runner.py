@@ -125,22 +125,29 @@ class Runner:
         """
         self.preflight(probe)
         planned_steps = list(probe.plan(self._substrate))
-        droppable = [
-            step
-            for step in planned_steps
-            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
-        ]
-        judged_survives = any(
-            step not in droppable or step.action in _PLANT_ACTIONS
-            for step in planned_steps
-            if step.action not in _PLANT_ACTIONS
-        )
+
+        def _droppable(step: ProbeStep) -> bool:
+            return (
+                step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
+            )
+
+        judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
+        if judged and all(_droppable(step) for step in judged):
+            # Nothing this probe would have JUDGED can run, so it asks the stack
+            # nothing: its plants go too, wherever they sit. Suppressing only the
+            # droppable plants left a plant on a user-carrying adapter running, and
+            # that alone put the probe in `probe_versions` and graded its class.
+            self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + len(
+                planned_steps
+            )
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=len(planned_steps))
+            return []
         results: list[StepResult] = []
         dropped = 0
         for planned in planned_steps:
             step = planned
-            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
-                if step.action not in _PLANT_ACTIONS or not judged_survives:
+            if _droppable(step):
+                if step.action not in _PLANT_ACTIONS:
                     dropped += 1
                     continue
                 # A plant is not judged: run it as the tenant the user belongs to,

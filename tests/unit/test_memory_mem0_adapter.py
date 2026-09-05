@@ -179,3 +179,64 @@ def test_mem0_does_not_carry_the_user() -> None:
     # Class 8 plan user-level steps and confirm cross-user leaks of sessions that
     # never existed - the sibling of the live-MCP defect.
     assert Mem0Memory(_FakeMem0()).carries_user is False
+
+
+def test_mem0_refuses_a_response_whose_envelope_it_does_not_recognise() -> None:
+    # The guard fired only when a ROW key was renamed. A release that renames the
+    # top-level key (or nests the rows deeper) yielded an empty list, which read
+    # as an empty tenant and let the A3 check attest the subject erased.
+    from sectum_ai.spec import AdapterError
+
+    class _RenamedEnvelope(_FakeMem0):
+        def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+            return {"memories": [{"memory": text} for text in self._by_user.get(user_id, [])]}
+
+    class _NestedEnvelope(_FakeMem0):
+        def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+            return {"data": {"results": [{"memory": t} for t in self._by_user.get(user_id, [])]}}
+
+    for client_cls in (_RenamedEnvelope, _NestedEnvelope):
+        client = client_cls()
+        adapter = Mem0Memory(client)
+        adapter.remember(_TENANT_A, "note about canary OMEGA-9")
+        with pytest.raises(AdapterError, match="response shape"):
+            adapter.recall(_TENANT_A, "canary OMEGA-9")
+
+
+def test_mem0_accepts_a_row_whose_memory_is_empty() -> None:
+    # A redacted or soft-deleted entry is a legitimate backend state, not a shape
+    # mismatch: keying the guard on truthiness aborted the run over it.
+    class _EmptyValue(_FakeMem0):
+        def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+            return {"results": [{"memory": ""}, {"memory": "canary OMEGA-9"}]}
+
+    assert Mem0Memory(_EmptyValue()).recall(_TENANT_A, "canary OMEGA-9") == ["canary OMEGA-9"]
+
+
+def test_mem0_counts_rows_not_texts_against_its_listing_limit() -> None:
+    # A full page in which any row lacks text slipped under a text-count
+    # threshold, so a truncated listing read as a complete one.
+    from sectum_ai.adapters.memory.mem0 import _GET_ALL_LIMIT
+    from sectum_ai.spec import AdapterError
+
+    class _FullPageWithBlanks(_FakeMem0):
+        def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+            rows: list[dict[str, str]] = [{"memory": ""}]
+            rows += [{"memory": f"filler {i}"} for i in range(_GET_ALL_LIMIT - 1)]
+            return {"results": rows}
+
+    with pytest.raises(AdapterError, match="listing limit"):
+        Mem0Memory(_FullPageWithBlanks()).recall(_TENANT_A, "canary OMEGA")
+
+
+def test_mem0_reports_a_hit_found_on_a_full_page() -> None:
+    # A hit already answers the question; refusing it would lose a real residual.
+    from sectum_ai.adapters.memory.mem0 import _GET_ALL_LIMIT
+
+    class _FullPageWithHit(_FakeMem0):
+        def get_all(self, *, user_id: str, limit: int = 100, **_: Any) -> Any:
+            rows = [{"memory": "note about canary OMEGA-9"}]
+            rows += [{"memory": f"filler {i}"} for i in range(_GET_ALL_LIMIT - 1)]
+            return {"results": rows}
+
+    assert Mem0Memory(_FullPageWithHit()).recall(_TENANT_A, "canary OMEGA-9")
