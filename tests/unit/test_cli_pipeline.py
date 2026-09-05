@@ -1728,3 +1728,26 @@ def test_the_text_summary_says_how_many_findings_describe_the_stack(
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert "; 0 on live surfaces" in result.output, result.output
+
+
+def test_verify_on_a_non_utf8_file_exits_cleanly(tmp_path: Path) -> None:
+    # Reading the pack's bytes for the schema stamps moved the read out of the
+    # try that mapped a decode error to exit 3, so a binary file tracebacked.
+    bad = tmp_path / "evidence.json"
+    bad.write_bytes(b"\xff\xfe\x00binary")
+    result = _runner.invoke(app, ["verify", str(bad)])
+    assert result.exit_code in (3, 4), result.output
+    assert "Traceback" not in result.output
+
+
+def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> None:
+    # The markers, tenants and manifest ARE the schema: a 0.6.x substrate seeded a
+    # run whose own stamp then read as current, so nothing downstream could see it.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    path = tmp_path / "substrate.json"
+    record = json.loads(path.read_text())
+    record["schema_version"] = "0.6.0"
+    path.write_text(json.dumps(record))
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output

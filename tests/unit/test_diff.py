@@ -528,3 +528,35 @@ def test_a_count_that_rose_under_a_loss_is_still_a_regression(tmp_path: Path) ->
     )
     assert "[REGRESSED] confirmed_findings: 1 -> 3" in cli.output, cli.output
     assert cli.exit_code == 2
+
+
+def test_a_two_surface_probes_metric_is_not_measured_when_its_live_surface_falls_back(
+    tmp_path: Path,
+) -> None:
+    # PROBE_SURFACES lists ALTERNATIVES and a run drives one of them, so requiring
+    # every surface to be lost could never fire for the six two-surface probes -
+    # the ones feeding three of the four headline rates - and a vector store that
+    # fell back to the fake still printed `[ok] poisoning_bleed_delta: 1 -> 0`.
+    earlier = _run(metrics=RunMetrics(poisoning_bleed_delta=1.0)).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"rag-poisoning": "1"},
+        }
+    )
+    later = _run(metrics=RunMetrics(poisoning_bleed_delta=0.0)).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "SYNTHETIC"},
+            "probe_versions": {"rag-poisoning": "1"},
+        }
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[SCOPE LOST] vector_db" in cli.output
+    assert "[not measured] poisoning_bleed_delta" in cli.output, cli.output
+    assert "[ok] poisoning_bleed_delta" not in cli.output

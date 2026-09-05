@@ -484,13 +484,25 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
             )
             raise typer.Exit(code=3)
         try:
-            return Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+            substrate = Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
         except ValueError as error:
             typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
+        _refuse_other_schema_line(substrate.schema_version, str(sealed))
+        return substrate
     if plain.exists():
         try:
-            return Substrate.model_validate_json(plain.read_text())
+            raw = json.loads(plain.read_text())
+        except json.JSONDecodeError as error:
+            typer.echo(f"the substrate at {plain} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
+        # The markers, tenants and manifest ARE the schema: a substrate from
+        # another line seeded a run whose own stamp then read as current.
+        _refuse_other_schema_line(
+            raw.get("schema_version") if isinstance(raw, dict) else None, str(plain)
+        )
+        try:
+            return Substrate.model_validate(raw)
         except ValueError as error:
             typer.echo(f"the substrate at {plain} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
@@ -1747,7 +1759,7 @@ def verify(
             raise typer.Exit(code=4)
         _echo_verdict(bundle_result.anchored, what="evidence bundle")
         return
-    raw_pack = pack.read_text()
+    raw_pack = pack.read_bytes().decode("utf-8", errors="replace")
     # The bytes, not the parsed model: an omitted run_result.schema_version has
     # already become the current one by the time the pack is an object, and the
     # attested digest cannot see the difference either.
@@ -2365,23 +2377,23 @@ def _render_calibration_text(result: CalibrationResult) -> None:
         )
     typer.echo("")
     if result.recommended_score is None:
-        admitted = result.fallback_score.false_positives if result.fallback_score else 0
+        fallback = result.fallback_score
+        admitted = fallback.false_positives if fallback else 0
+        caught = fallback.true_positives if fallback else 0
         typer.echo(
             "no threshold separated the classes with zero false positives, so this "
             f"run recommends nothing. The shipped default {result.recommended_threshold:g} "
-            f"admits {admitted} of {result.negatives} negatives on this set"
-            + (
-                " - applying it would confirm those as leaks. Calibrate against the "
-                "embedding model you will run with, on a substrate whose foreign "
-                "entities it can separate."
-                if admitted
-                else "."
-            ),
-            err=admitted > 0,
+            f"admits {admitted} of {result.negatives} negatives and catches {caught} of "
+            f"{result.positives} positives on this set - applying it would "
+            + ("confirm those negatives as leaks. " if admitted else "")
+            + ("miss every known leak. " if not caught else "")
+            + "Calibrate against the embedding model you will run with, on a substrate "
+            "whose foreign entities it can separate.",
+            err=True,
         )
-        if admitted:
-            # No "apply it" block: the number this run measured is the reason not to.
-            raise typer.Exit(code=3)
+        # No "apply it" block: a threshold that admits a negative is unusable, and so
+        # is one that catches nothing - the numbers this run measured are the reason.
+        raise typer.Exit(code=3)
     else:
         typer.echo(
             f"recommended semantic_threshold: {result.recommended_threshold:g} "
@@ -2397,8 +2409,22 @@ def _render_calibration_json(result: CalibrationResult) -> None:
     """Print the calibration result as one machine-parseable JSON object on stdout."""
     payload = {
         "model_name": result.model_name,
-        "recommended_threshold": result.recommended_threshold,
+        # ``null`` when nothing was recommended: publishing the shipped default
+        # here handed a CI pipeline (`jq -r .recommended_threshold`) the very
+        # value the text renderer refuses, and the command exited 0.
+        "recommended_threshold": (
+            result.recommended_threshold if result.recommended_score is not None else None
+        ),
         "zero_false_positive": result.recommended_score is not None,
+        "fallback": (
+            {
+                "threshold": result.fallback_score.threshold,
+                "false_positives": result.fallback_score.false_positives,
+                "true_positives": result.fallback_score.true_positives,
+            }
+            if result.fallback_score is not None
+            else None
+        ),
         "positives": result.positives,
         "negatives": result.negatives,
         "scores": [
@@ -2416,6 +2442,9 @@ def _render_calibration_json(result: CalibrationResult) -> None:
         ],
     }
     typer.echo(json.dumps(payload, indent=2))
+    if result.recommended_score is None:
+        # The same refusal the text renderer gives: this run recommends nothing.
+        raise typer.Exit(code=3)
 
 
 @app.command()
@@ -2515,13 +2544,16 @@ def _delta_verdict(
     # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.
     lost = set(coverage_lost) | set(boundary_lost)
     # PROBE_SURFACES lists ALTERNATIVES (a probe drives the vector store OR an
-    # application API), so a probe is unmeasured only when every one of its
-    # surfaces is lost - not when any single alternative is.
+    # application API) and a run drives exactly one of them, while `scope_lost`
+    # names only surfaces the EARLIER run exercised live. So requiring all of a
+    # probe's surfaces to be lost could never fire for the six two-surface
+    # probes - the ones feeding three of the four headline rates - and a vector
+    # store that fell back to the fake still printed `[ok] ... 24 -> 0`.
     gone = set(scope_lost)
     lost |= {
         probe_id
         for probe_id, surfaces in PROBE_SURFACES.items()
-        if surfaces and all(surface.value in gone for surface in surfaces)
+        if any(surface.value in gone for surface in surfaces)
     }
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
     # ANY feeding probe lost: losing one of the two bleed probes changes the

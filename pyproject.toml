@@ -310,5 +310,11 @@ show_missing = true
 fail_under = 85
 
 [tool.codespell]
-ignore-words-list = "sectum"
-skip = ".git,.venv,uv.lock"
+# "intoto" is the in-toto attestation standard's own spelling, in payload types
+# (application/vnd.in-toto+json) and member names throughout the evidence layer.
+# "momery" is deliberate test input: the near-miss suggester must map it back
+# to "memory".
+ignore-words-list = "sectum,intoto,retuned,unparseable,momery"
+# Binary and recorded artifacts are not prose: compressed PDF streams and an
+# asciinema cast yield only garbage hits.
+skip = ".git,.venv,uv.lock,*.pdf,*.cast,site"

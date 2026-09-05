@@ -30,6 +30,9 @@ repos:
     rev: v2.4.2
     hooks:
       - id: codespell
+        # The [toml] extra is what lets the hook read [tool.codespell] in
+        # pyproject.toml; without it the run is red on in-toto's own spelling.
+        additional_dependencies: ["tomli"]
 
   - repo: local
     hooks:

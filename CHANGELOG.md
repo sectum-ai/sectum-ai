@@ -16,6 +16,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A lost live surface still printed `[ok]` for the metrics that matter most.**
+  The cycle-6 rule marked a probe unmeasured only when *every* surface it lists
+  was lost, but `PROBE_SURFACES` lists alternatives and a run drives one of them,
+  so the rule could never fire for the six two-surface probes — the ones feeding
+  three of the four headline rates. A vector store that fell back to the fake
+  still reported `[ok] poisoning_bleed_delta: 1 -> 0`.
+- **`calibrate` still offered a threshold that catches nothing.** The new guard
+  keyed on false positives alone, so a default admitting no negative *because it
+  admits nothing at all* (zero recall) printed the "apply it" block and exited 0.
+  And the fix had landed only on the text renderer: `--output json` still
+  published the unusable default as `recommended_threshold` with exit 0, which a
+  CI pipeline pipes straight into its config. Both renderers now refuse, the JSON
+  nulls the recommendation and carries what the fallback scored.
+- **`_load_substrate` was the one loader without the schema-line gate**, so a
+  0.6.x `substrate.json` seeded a run whose own stamp then read as current and
+  nothing downstream could see where the markers and manifest came from.
+- Reading the pack's bytes for the schema stamps moved that read out of the `try`
+  that mapped a decode error to exit 3, so `verify` on a non-UTF-8 file
+  tracebacked. The runner's dropped-step count counts user-level steps, as the
+  field documents (it counted plants too).
+- **Repository gates**: `codespell` — the pre-commit hook CONTRIBUTING tells a
+  contributor to run — failed on a clean checkout (59 hits, 46 of them in-toto's
+  own spelling) and ran nowhere in CI; it now runs in CI with the `toml` extra
+  that lets it read the repo's own ignore list. The Action self-test installed
+  the *latest published* CLI in both jobs, so the composite wiring was never
+  exercised against the checkout; a third job builds the workspace and runs the
+  Action against it (`version: skip`). The integration job passed while every
+  test skipped for an unreachable backend; it now asserts that tests ran. The
+  release recipe stages `docs/index.md`, which step 1 tells you to bump. Core's
+  modules ship a `py.typed` marker, so `sectum_ai.config` and its neighbours are
+  typed for downstream users as CONTRIBUTING promises.
 - **`calibrate` published a threshold its own run measured as admitting 25 of 32
   negatives, and called it "conservative".** When no threshold separated the
   classes, the shipped default was printed as the recommendation with an

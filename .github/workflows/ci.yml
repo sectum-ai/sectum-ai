@@ -37,6 +37,14 @@ jobs:
       - name: Type-check (mypy strict)
         run: uv run mypy
 
+      # The pre-commit hook CONTRIBUTING tells a contributor to run; without it
+      # here, their first gate run was red on code they had not touched.
+      - name: Spell check
+        run: >-
+          uvx --from "codespell[toml]==2.4.2" codespell
+          packages/ tests/ docs/ scripts/ .github/
+          README.md CONTRIBUTING.md CHANGELOG.md SECURITY.md PHASES.md
+
       - name: Tests
         run: uv run pytest -n auto --cov=sectum_ai --cov-report=term-missing
 
@@ -150,7 +158,16 @@ jobs:
           wait_for opensearch http://localhost:9201/_cluster/health
 
       - name: Integration tests
-        run: uv run pytest -m integration -q
+        run: |
+          set -euo pipefail
+          # `pytest -m integration` exits 0 when every test SKIPS for an
+          # unreachable backend, so the job passed while testing nothing. Assert
+          # that tests actually ran.
+          uv run pytest -m integration -q | tee /tmp/integration.log
+          grep -qE "[1-9][0-9]* passed" /tmp/integration.log || {
+            echo "::error::no integration test ran - every one skipped (backends unreachable?)"
+            exit 1
+          }
 
       - name: Dump backend logs on failure
         if: failure()

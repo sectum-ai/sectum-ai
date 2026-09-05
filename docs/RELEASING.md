@@ -142,7 +142,7 @@ the release notes must exist somewhere.
 
 ```sh
 git checkout -b release/v0.1.0
-git add packages/*/pyproject.toml action.yml docs/github-action.md README.md CHANGELOG.md uv.lock
+git add packages/*/pyproject.toml action.yml docs/github-action.md docs/index.md README.md CHANGELOG.md uv.lock
 git commit -m "chore(release): v0.1.0"
 git push -u origin release/v0.1.0
 gh pr create --title "chore(release): v0.1.0" --body "ATLAS sweep: ..."

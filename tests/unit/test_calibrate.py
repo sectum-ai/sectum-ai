@@ -366,7 +366,7 @@ def test_the_fallback_threshold_is_scored_and_never_offered_for_application() ->
     result = CliRunner().invoke(app, ["calibrate", "--embedder", "hash-64", "--seed", "1337"])
     assert result.exit_code == 3, result.output
     assert "recommends nothing" in result.output
-    assert "admits" in result.output and "negatives on this set" in result.output
+    assert "admits 25 of 32 negatives" in result.output
     assert "apply it in sectum-ai.yaml" not in result.output
 
 
@@ -382,6 +382,48 @@ def test_a_scored_fallback_reports_what_it_admits() -> None:
     provider, model_name = _resolve_calibration_embedder("hash-64", EmbedderConfig())
     outcome = calibrate_threshold(substrate, model_name=model_name, embedder=provider)
     assert (outcome.fallback_score is None) is (outcome.recommended_score is not None)
-    if outcome.fallback_score is not None:
-        assert outcome.fallback_score.threshold == DEFAULT_SEMANTIC_THRESHOLD
-        assert outcome.fallback_score.false_positives >= 0
+    assert outcome.recommended_score is None, "hash-64 does not separate this substrate"
+    assert outcome.fallback_score is not None
+    assert outcome.fallback_score.threshold == DEFAULT_SEMANTIC_THRESHOLD
+    # The number the CLI refuses on: measured, not assumed.
+    assert outcome.fallback_score.false_positives == 25
+
+
+def test_a_fallback_that_catches_nothing_is_refused_too() -> None:
+    # The guard keyed on false positives alone, so a default that admits no
+    # negative BECAUSE it admits nothing at all (zero recall) still printed the
+    # "apply it" block and exited 0 - recommending a threshold the run measured
+    # as catching none of the known leaks.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import _render_calibration_text
+    from sectum_ai.probes.calibrate import CalibrationExample, CalibrationResult, ThresholdScore
+
+    def _score(threshold: float, tp: int, fp: int, fn: int) -> ThresholdScore:
+        return ThresholdScore(
+            threshold=threshold,
+            precision=0.0,
+            recall=0.0,
+            f1=0.0,
+            true_positives=tp,
+            false_positives=fp,
+            false_negatives=fn,
+        )
+
+    examples = tuple(
+        CalibrationExample(is_positive=positive, similarity=0.30 if positive else 0.31, label="m")
+        for positive in (True, True, False, False)
+    )
+    result = CalibrationResult(
+        model_name="stub",
+        recommended_threshold=0.62,
+        examples=examples,
+        scores=(_score(0.62, 0, 0, 2),),
+        recommended_score=None,
+        fallback_score=_score(0.62, 0, 0, 2),
+    )
+    import typer
+
+    with CliRunner().isolation(), pytest.raises(typer.Exit) as refusal:
+        _render_calibration_text(result)
+    assert refusal.value.exit_code == 3

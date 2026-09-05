@@ -596,7 +596,7 @@ def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
     # on an adapter that DOES carry the user still ran - and that alone put the
     # probe in probe_versions with zero judged observations.
     from sectum_ai.adapters import FakeCache, FakeVectorStore
-    from sectum_ai.spec import CorpusDocument, ProbeStep, SyntheticUserSpec
+    from sectum_ai.spec import ProbeStep, SyntheticUserSpec
 
     class _TenantOnlyCache(FakeCache):
         carries_user = False
@@ -655,4 +655,3 @@ def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
     runner = Runner(substrate, vector=store, cache=_TenantOnlyCache())
     assert runner.run_per_step(_MixedProbe()) == []  # type: ignore[arg-type]
     assert runner.dropped_user_steps["mixed-adapter-probe"] == 2
-    assert not isinstance(CorpusDocument, str)  # keep the import meaningful

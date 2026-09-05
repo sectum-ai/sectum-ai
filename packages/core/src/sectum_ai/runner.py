@@ -137,10 +137,11 @@ class Runner:
             # nothing: its plants go too, wherever they sit. Suppressing only the
             # droppable plants left a plant on a user-carrying adapter running, and
             # that alone put the probe in `probe_versions` and graded its class.
-            self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + len(
-                planned_steps
+            user_level = sum(1 for step in planned_steps if step.actor_user_id is not None)
+            self.dropped_user_steps[probe.id] = (
+                self.dropped_user_steps.get(probe.id, 0) + user_level
             )
-            _log.info("probe.user_steps_dropped", probe=probe.id, steps=len(planned_steps))
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=user_level)
             return []
         results: list[StepResult] = []
         dropped = 0
