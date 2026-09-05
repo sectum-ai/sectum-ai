@@ -9,13 +9,13 @@ test coverage, not legal certification** — the reports say so explicitly.
 |---|---|---|
 | SOC 2 (TSC) | CC6.1, CC6.6, CC6.7 | Tenant logical separation tested by benign and adversarial probing across the AI surfaces. |
 | ISO/IEC 27001:2022 | A.5.15, A.8.3, A.8.12 | Cross-tenant information leakage tested; residual leakage itemized. |
-| ISO/IEC 42001:2023 | A.6.2.6, A.7.2, A.7.5 | Per-tenant data management and provenance in the AI system tested; isolation verified under operation and monitoring. |
+| ISO/IEC 42001:2023 | A.6.2.6, A.7.2, A.7.5 | Per-tenant data management and provenance in the AI system tested; isolation verified under AI system operation and monitoring. |
 | GDPR | Article 25, Article 32 | Tenant isolation tested across the AI surfaces. |
 | GDPR | Article 17 | Erasure across the AI surfaces verified. |
 | CCPA/CPRA | 1798.100, 1798.150 | Segregation of consumer data tested across the AI surfaces. |
 | CCPA/CPRA | 1798.105 | Deletion of a consumer's personal information across the AI surfaces verified. |
 | EU AI Act | Article 15 | Robustness of tenant isolation **tested** under benign and adversarial conditions. |
-| HIPAA | §164.312(a)(1), (c)(1), (e)(1) | PHI tenant segregation verified. |
+| HIPAA | 164.312(a)(1), 164.312(c)(1), 164.312(e)(1) | Segregation of regulated tenant data verified across the AI surfaces. |
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
 

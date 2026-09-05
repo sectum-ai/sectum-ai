@@ -9,8 +9,10 @@ anything.
 Two erasure flavours ship side-by-side so prospects can see both:
 
 - **Happy path** (`erasure-attestation-*`) — the controller followed up on a
-  GDPR Article 17 request and all eight surfaces are ERASED. The DPO-shaped
-  attestation that closes the regulator ticket.
+  GDPR Article 17 request and all eight surfaces are ERASED. The *shape* of the
+  DPO-facing pack that closes a regulator ticket; this run is synthetic, and the
+  PDF says so ("a demonstration, not an attestation") — see "Verifying these
+  packs" below.
 - **Residual data** (`erasure-attestation-residual-data-*`) — the controller
   ran soft-delete (the common bug: a tombstone, not a purge). Every surface
   comes back RESIDUAL DATA. This is the failure mode the pack is designed

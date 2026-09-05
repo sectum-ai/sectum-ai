@@ -54,7 +54,7 @@ point: it is rejected at config load, since v0.10.0.)
 | KV-cache timing side channel (5) | model | a self-hosted model (vLLM/TGI/HF) — real signal needs a GPU |
 | Embedding inversion (6) | vector store | any live vector backend |
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
-| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
+| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / a generic `http` agent endpoint |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
 | LoRA cross-tenant influence (9) | model | a self-hosted model that trains on tenant data — per-tenant adapters (HF + PEFT), or shared weights, which is the posture the probe exists to catch |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
@@ -85,12 +85,19 @@ scanning adapter yet, so it is out of scope, not fake; see the
   that skip without credentials, so their contract is verified offline against a mock and
   live against a real backend on demand (S3 against a local MinIO, GCS against a local
   fake-gcs-server). The search index
-  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
-  against docker-compose backends in CI every push. The agent-memory surface also has a
+  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores
+  except **Milvus** (pgvector, Chroma, Weaviate, Qdrant) run against docker-compose
+  backends in CI every push; Milvus is gated behind the compose `milvus` profile —
+  too heavy for the CI job — so its integration test skips there and is run on
+  demand. The agent-memory surface also has a
   live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow
   the same seam.
-- **The model probes need a self-hosted model.** Class 9 (LoRA) requires per-tenant
-  adapters — vLLM, TGI, or HuggingFace + PEFT. Class 5 (KV timing) requires a prefix
+- **The model probes need a self-hosted model.** Class 9 (LoRA) requires a model
+  that *trains* on tenant data: HuggingFace + PEFT (per-tenant adapters), or any
+  backend reporting shared weights. vLLM and TGI are serving-only — they declare a
+  shared prefix cache and neither per-tenant adapters nor shared weights — so
+  Class 9 is **skipped** against them and scores `NOT_COVERED`, never `PASS`.
+  Class 5 (KV timing) requires a prefix
   cache *shared across principals*, which only the serving backends (vLLM, TGI)
   declare: HuggingFace + PEFT loads per tenant, so the probe runs there but can find
   nothing by construction, and its PASS is a property of the deployment, not a

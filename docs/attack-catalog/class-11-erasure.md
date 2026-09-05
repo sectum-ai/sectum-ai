@@ -78,7 +78,15 @@ the evidence pack (`RunMetrics.erasure_coverage`, surface → `CoverageVerdict`)
 | `ERASED` | Covered and clean — a baseline existed and no marker is retrievable through the erased tenant's own read path after erasure. A backend that retains the data while revoking that path is indistinguishable, from outside, from one that purged it. |
 | `RESIDUAL` | Covered and failed — the backend was asked to erase and a marker survived. |
 | `ATTESTABLE_WITH_CAVEAT` | Covered, but the backend exposes no per-tenant erasure API — data presumed retained. |
-| `NOT_COVERED` | Out of scope, not scanned, or no pre-erasure baseline — **never** evidence of erasure. |
+| `NOT_COVERED` | Out of scope, not scanned, no pre-erasure baseline, or scanned but **absence could not be established** — **never** evidence of erasure. |
+
+Both probes read the vector store with a top-50 similarity query. A page that
+comes back **full** without a marker is not absence — a marker still stored but
+ranked past the page looks identical — so those markers are counted as
+unverifiable, the surface's human-readable verdict is `NOT VERIFIED` rather than
+`ERASED`, its coverage verdict is `NOT_COVERED`, and `sectum-ai erasure` exits 3
+with `ERASURE INCONCLUSIVE` naming the surfaces whose absence was never
+established.
 
 The guarantee is anti-over-claim: a surface that was not scanned can only ever be
 `NOT_COVERED` — it can never read as `ERASED`. The overall run is "fully erased"

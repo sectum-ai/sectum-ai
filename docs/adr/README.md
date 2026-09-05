@@ -20,12 +20,13 @@ to the decision are the one permitted edit, and several ADRs carry them.
 | [0008](0008-adapter-user-dimension.md) | The adapter SDK carries an optional user dimension | Accepted |
 | [0009](0009-atlas-technique-review-process.md) | ATLAS technique IDs are validated against the live MITRE catalog before each release | Accepted |
 | [0016](0016-anchor-the-whole-pack.md) | Anchor the whole evidence pack, not just the run | Accepted |
-
-(0010–0015 are unused: the numbers were reserved for a proprietary-scope split that
-was never written down as ADRs. The gap is deliberate, not a set of missing files.)
 | [0017](0017-pdf-engine.md) | weasyprint is an optional audit-pack engine; reportlab stays the default | Accepted |
 | [0018](0018-embedding-provider-sweep.md) | Real embedding providers are opt-in extras; a deterministic hashing model is the default | Accepted |
 | [0019](0019-job-runner-abstraction.md) | A `JobRunner` interface with local runners; a distributed backend stays swappable | Accepted |
 | [0020](0020-structured-logging.md) | Structured logging with redaction, to stderr, DEBUG off by default | Accepted |
 | [0021](0021-canonical-float-determinism.md) | Canonical hashing relies on deterministic float repr, not rounding | Accepted |
 | [0022](0022-marker-substrate-depth.md) | Substrate depth: model-scoped embedding refs, multi-field planting, realistic secret shapes + format detector | Accepted |
+
+(0010–0015 are unused: the numbers were reserved for a proprietary-scope split
+that was never written down as ADRs. The gap is deliberate, not a set of missing
+files.)

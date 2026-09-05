@@ -58,7 +58,7 @@ common backends.
 (the flagship), semantic-cache contamination, KV-cache timing side channel,
 embedding inversion, MCP confused-deputy + token passthrough, persistent memory
 contamination, LoRA cross-tenant influence, IKEA benign extraction, RAG
-poisoning, GDPR Article 17 erasure verification.
+poisoning, GDPR Article 17 erasure verification, multi-modal RAG entity-bleed.
 
 **Tamper-evident evidence.** Every run is canonicalized, hashed, wrapped in an
 in-toto attestation envelope, and rendered to an auditor PDF; with

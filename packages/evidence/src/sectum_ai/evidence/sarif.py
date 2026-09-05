@@ -79,7 +79,8 @@ def _describes_a_fake(finding: Finding, live: frozenset[str]) -> bool:
 
     GitHub renders one alert per result, so a run-level provenance property is
     invisible where it matters: an all-synthetic demo raised 229 `error` alerts
-    at `security-severity: 9.5`, indistinguishable from a production scan's.
+    (177 of them at `security-severity: 9.5`), indistinguishable from a
+    production scan's.
     Every other renderer says so inline - the text summary warns, the JSON
     carries `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF says
     "a demonstration, not an attestation".

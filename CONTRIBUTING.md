@@ -29,7 +29,7 @@ uv run pre-commit install   # enable git hooks
 | Type-check | `uv run mypy` |
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
 | Run the example walkthroughs | `SECTUM_RUN_E2E=1 uv run pytest -m e2e` |
-| Build the docs site | `uv run mkdocs build --strict` |
+| Build the docs site | `uv run --group docs mkdocs build --strict` |
 | Check the coverage floors | `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` (core, probes, evidence) |
 | Run the CLI | `uv run sectum-ai --help` |
 
@@ -50,8 +50,10 @@ heavier — it needs etcd and minio — so it lives behind a compose profile: ru
   [conventionalcommits.org](https://www.conventionalcommits.org/): `feat:`,
   `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, and so on.
 - **One logical change per pull request.** Keep PRs small and reviewable.
-- **Typed public APIs.** Every public function has type hints and a docstring
-  (Google style). `mypy` runs in strict mode.
+- **Typed public APIs.** Every public function has type hints — `mypy` runs in
+  strict mode and enforces that. A docstring on anything non-obvious is the house
+  convention (Sphinx cross-references, not Google style); no linter checks it, so
+  it is a review expectation rather than a gate.
 - **Determinism.** Anything seeded must be reproducible; thread RNG explicitly,
   with no hidden global state.
 - **Never commit secrets** or customer data. Secret scanning (gitleaks) runs in

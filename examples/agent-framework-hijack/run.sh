@@ -55,7 +55,7 @@ sectum-ai verify "$out/evidence.json" --allow-unanchored --allow-synthetic
 echo
 echo "Artifacts written to: $out"
 echo
-echo "The page-3 findings table itemises each confirmed Class 7 leak via the"
+echo "The PDF's Findings section itemises each confirmed Class 7 leak via the"
 echo "agent-framework surface. To swap the agent caller to a live backend, see"
 echo "examples/agent-tool-hijack/factories.py - the probe stays the same; only"
 echo "the agent.kind in sectum-ai.yaml changes."

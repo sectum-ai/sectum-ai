@@ -25,8 +25,12 @@ and the search-index / eval-set / backup erasure surfaces), and
 ```sh
 sectum-ai seed      # provision synthetic tenants + plant canary markers
 sectum-ai probe     # run the attack catalog from each tenant's session
-sectum-ai report    # assemble a signed, control-mapped evidence pack (JSON + PDF)
-sectum-ai verify .sectum-ai/evidence.json   # independently re-verify the pack
+sectum-ai report    # assemble the tamper-evident evidence pack (JSON + PDF). A run
+                    # against configured adapters with --tsa/--rekor is also anchored,
+                    # and is what earns control mappings
+sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
+                    # the demo pack: a local-dev timestamp and no live surface, so
+                    # verify names both. A configured, anchored run needs neither flag.
 ```
 
 ## Links

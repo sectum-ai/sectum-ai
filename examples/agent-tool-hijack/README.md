@@ -59,7 +59,7 @@ their customers actually run.
 
 You'll see three confirmed leaks per canary — one per foreign
 principal — for 24 confirmed cross-tenant findings in total. The PDF
-page-3 findings table itemises each.
+PDF's `Findings` section itemises each.
 
 ## Swap the agent caller
 

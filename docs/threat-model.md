@@ -137,8 +137,9 @@ timestamped; it is signed by a TSA only when one is configured.)
 - **Hosted.** Sectum AI runs the synthetic tenants against the customer's
   reachable endpoints.
 - **BYOC (bring-your-own-cloud).** The customer runs the CLI inside their own
-  environment. Only the substrate's markers and the signed evidence pack cross
-  the boundary. Set `detection.mode: local` to **enforce** this posture:
+  environment. Only the substrate's markers, the findings' evidence spans (which
+  can include a judge rationale restating observed content — see *Customer data*
+  above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
   detection is the only stage that embeds or judges tenant content, and in
   `local` mode the config fails fast on any embedder or judge that would call a
   default hosted AI API (`openai`/`anthropic` without a `base_url`) — so Sectum

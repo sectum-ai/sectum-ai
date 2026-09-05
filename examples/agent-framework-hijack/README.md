@@ -44,7 +44,7 @@ in-memory `FakeAgent` configured with both leak knobs on:
 4. **`sectum-ai verify`** independently re-checks the pack.
 
 You'll see confirmed leaks per canary across the configured principals.
-The PDF page-3 findings table itemises each, with `surface =
+The PDF's `Findings` section itemises each, with `surface =
 agent_framework`.
 
 ## Run it

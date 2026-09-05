@@ -132,8 +132,10 @@ model surface the check is prefix-continuation against two controls — a
 same-shaped prefix naming nobody, and (on a per-tenant model) the same prefix as
 a tenant that trained nothing — so a completion any model would produce
 (`@example.com`, a common surname, a public figure's full name) is not counted as
-recall; give it a specific phrase, since one the check cannot verify (a trailing
-part under six characters, a bare two-word name) makes the model surface read
+recall; give it a specific phrase, since one the check cannot verify — a trailing
+part under six characters (which is what makes most bare two-word names
+unverifiable: "Doe" is three), or a prefix with no scrambled form — makes the
+model surface read
 `NOT_COVERED` for the subject, and the run says how many it could not check. Exit
 codes match the canary flow: `0` clean, `2` residual remains, `3` nothing could be
 verified.
@@ -173,7 +175,10 @@ For GitHub code scanning (or any SAST dashboard), pass `--output sarif` instead 
 emit a SARIF 2.1.0 log of the findings — one rule per probe, one result per
 finding. Upload it with `github/codeql-action/upload-sarif` and the cross-tenant
 findings surface in the repository's **Security** tab. An unverified candidate is
-capped at SARIF `note`, and the signed `evidence.json` stays the canonical record.
+capped at SARIF `note`, and so is a confirmed finding whose backing surface ran
+against a built-in fake — its message is prefixed `[synthetic surface — …]` and it
+carries `backingSurface` and `surfaceProvenance`, so a no-`config` demo run is
+entirely `note`-level. The signed `evidence.json` stays the canonical record.
 
 For a GRC platform or auditor, pass `--output oscal` to emit a **NIST OSCAL 1.1.x
 assessment-results** document so the run can be ingested as a machine-readable,

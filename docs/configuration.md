@@ -46,7 +46,7 @@ Settings that drive substrate generation.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `seed` | int | `2026` | Drives every deterministic generator. |
-| `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
+| `corpus_profile` | str | `demo` | Accepted but not yet applied - any string parses — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 | `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
 | `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries that resolve to *real* providers trigger the Class 2 embedding-model gradient sweep — a **modelled** comparison over the sweep's own shared index, not a measurement of the configured vector store (see the Class 2 page). Legacy `fake-*` names carry a modelled recall rather than real vectors, so a mixed config drops them with a warning, and fewer than two real models records no gradient. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `bedrock:<model>` (Amazon Bedrock — Titan, or Cohere-on-Bedrock `cohere.embed-*`, opt-in `sectum-ai[bedrock]`, AWS creds + `AWS_REGION`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
@@ -147,10 +147,10 @@ the default. This is the field-level sibling of the unknown-family check.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `shared_index: bool = false`, `soft_delete: bool = false` | In-memory store. `shared_index: true` makes one index serve every tenant — the Class 2 retrieval-pivot leak. |
-| `pgvector` | `dsn_env: str` *(or `dsn: str`)* | PostgreSQL with the pgvector extension. Prefer the env-var form. |
-| `chroma` | `host: str = "localhost"`, `port: int = 8000` | ChromaDB server. Each tenant maps to its own collection. |
-| `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051` | Weaviate server. Each tenant maps to its own collection. |
-| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)* | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
+| `pgvector` | `dsn_env: str` *(or `dsn: str`)*, `user_scoped: bool = false` | PostgreSQL with the pgvector extension. Prefer the env-var form. |
+| `chroma` | `host: str = "localhost"`, `port: int = 8000`, `user_scoped: bool = false` | ChromaDB server. Each tenant maps to its own collection. |
+| `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051`, `user_scoped: bool = false` | Weaviate server. Each tenant maps to its own collection. |
+| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)*, `user_scoped: bool = false` | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
 | `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
 | `milvus` | `uri: str = "http://localhost:19530"`, `token_env: str` *(or `token: str`, optional)*, `user_scoped: bool = false` | Milvus server. Each tenant maps to its own collection (strong consistency); `user_scoped: true` adds a per-user filter expression. A local/self-hosted Milvus usually needs no `token`. Requires the `milvus` extra. |
 | `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = true`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
@@ -329,7 +329,7 @@ non-negotiable; a threshold that admits any negative is never recommended). It
 prints a precision/recall/F1 table and the value to paste into
 `detection.semantic_threshold`. Flags: `--embedder <kind:model>` (default: the
 configured `detection.embedder`; `st:…`, `openai:…`, `cohere:…`, `voyage:…`, `bedrock:…`, `hash-…`, or `fake`),
-`--seed`, `--workdir`, `--config`, and `--output {text,json}`. The run is
+`--seed`, `--workdir`, `--config`, and `--output {text,json,sarif,oscal}`. The run is
 deterministic from the seed.
 
 `semantic_threshold: auto` skips the per-run calibration and uses a built-in
@@ -379,7 +379,7 @@ adapters:
   cache:
     kind: redis
     host: localhost
-    port: 6379
+    port: 6380              # compose.yaml publishes 6379 as 6380
   # model, mcp, memory default to plain fakes
 ```
 

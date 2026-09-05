@@ -20,8 +20,10 @@
 scenario:
   # Substrate RNG seed. Fixed for reproducibility — same seed => same manifest.
   seed: 2026
-  # Built-in profiles: "demo" (small, fast). The corpus_profile string is
-  # included in the manifest hash, so any change invalidates a baseline.
+  # Reserved for profile-driven corpora: the value is accepted but not yet
+  # applied. `sectum-ai seed` generates the demo corpus regardless and the
+  # substrate always records `corpus_profile: demo`, so changing this string
+  # changes neither the scenario hash nor a baseline.
   corpus_profile: demo
 
 # Where seed/probe/report write their artifacts (substrate.json, run.json,

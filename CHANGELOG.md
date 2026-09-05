@@ -32,10 +32,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`docs/coverage.md` promised Class 9 coverage against vLLM and TGI, which the
+  CLI skips.** Both declare a shared prefix cache and neither per-tenant adapters
+  nor shared weights, so the LoRA probe never runs there — the same page said the
+  opposite twice, and the sentence that did not was added by the previous cycle.
+- **Six ADRs shipped as literal pipe text.** The previous cycle's note about the
+  0010-0015 numbering gap sat between two table rows, which ends a Markdown table,
+  so ADRs 0017-0022 rendered unformatted on the docs site and on GitHub.
+  `mkdocs build --strict` does not catch it. The note now follows the table.
+- `sectum-ai.yaml.example` said `corpus_profile` is in the manifest hash, so
+  changing it invalidates a baseline. Nothing reads the value: `seed` never
+  forwards it and the substrate always records `demo`, so two runs differing only
+  in that string produce the same hash.
+- **The PyPI landing page's quickstart ended in `VERIFICATION FAILED`.** Its
+  `verify` line omitted the two flags the demo pack needs, and called the pack
+  "signed, control-mapped" when the default path signs nothing and an
+  all-synthetic run earns no mapping.
+- `exit-code` was documented as "2 = a confirmed finding". Exit 2 is also the
+  CLI's usage-error code — the Action's own gate distinguishes them, and the docs
+  did not, so a dashboard would record a confirmed leak from a run that never ran.
+- The BYOC bullet in the threat model and the SKU page still promised the narrow
+  egress the previous cycle corrected two sections above. The SARIF cap is
+  documented as covering fake-backed confirmed findings, not only unverified
+  candidates. The Class 11 coverage table and the quickstart's phrase rule now
+  match the code. The HIPAA row claimed "PHI tenant segregation verified", a
+  health-specific claim no pack makes, and ISO 42001 dropped "AI system"; a test
+  now pins that table to the shipped assertions.
+- Smaller: `CONTRIBUTING.md` gave a docs-build command that cannot work after the
+  setup it documents (mkdocs is in a non-default group); the recording page
+  described the seeding bug the previous cycle fixed, and its committed cast
+  predates the current substrate; the Redis example used a port compose does not
+  publish; Milvus was listed as running in CI when it is profile-gated; the
+  README's 12-class list had 11 entries; four vector kinds omitted `user_scoped`
+  from their field lists while the page says an unread field is rejected; the
+  evidence package's README presented two opt-in anchors as unconditional steps.
 - **Every SARIF alert from a demo run looked like a production one.** GitHub
   renders one alert per *result*, so the run-level provenance property was
-  invisible where it counts: an all-synthetic run raised 256 `error` alerts at
-  `security-severity: 9.5`, indistinguishable from a real scan's. Every other
+  invisible where it counts: an all-synthetic run raised 229 `error` alerts (177
+  of them at `security-severity: 9.5`), indistinguishable from a real scan's. Every other
   renderer says so inline — the text summary warns, the JSON carries
   `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
   demonstration. A fake-backed finding is now floored to `note` at the

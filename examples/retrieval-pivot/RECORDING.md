@@ -17,6 +17,10 @@ shot script that wraps `asciinema rec` around the demo workflow and
 emits a `demo.cast` file. The cast is small (a few KB), deterministic,
 and embeddable as a JS player on any page.
 
+> The committed `demo.cast` also predates the current substrate: it prints
+> `retrieval_pivot_rate: 1.0` over 10 probes and 264 findings, not today's 81.2%
+> over 12 probes and 325. Re-record before using it as evidence of the headline.
+
 ## Why a recording at all
 
 Engineers who land on a security product's page click "watch demo"
@@ -40,8 +44,10 @@ cd examples/retrieval-pivot
 The script:
 
 1. Wipes `.sectum-ai/` to start from a clean substrate.
-2. Runs against the CLI's built-in demo stack (no config file — the
-   script deliberately passes none, so the substrate is the default one).
+2. Seeds **with** `sectum-ai.yaml` — it pins `corpus_size: 24`, which is what
+   puts the headline rate at 81.2%; seeding without it gives 12.5% — then runs
+   `probe` **without** the config, so the CLI's built-in leaky demo stack is what
+   leaks. Passing the config to `probe` too builds non-leaky fakes and reports ~0%.
 3. Drives the four-command workflow inside `asciinema rec`:
    `seed` → `probe --output json` → `report` → `verify --allow-unanchored
    --allow-synthetic` (a demo pack is refused without both flags).
@@ -67,8 +73,9 @@ The website renders the cast via the asciinema-player JS embed:
 ```
 
 For the GitHub README the GIF (`./record-demo.sh --gif`) renders
-inline without a JS embed — embed it with a standard
-`![demo](./examples/retrieval-pivot/demo.gif)`.
+inline without a JS embed. Embed it from the **repository root** README with
+`![demo](./examples/retrieval-pivot/demo.gif)` — that path is relative to the
+root, not to this page.
 
 ## Re-recording cadence
 

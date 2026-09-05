@@ -11,7 +11,7 @@ branding:
 inputs:
   version:
     description: >-
-      sectum-ai version to install from PyPI (for example 0.11.0). Pin it for
+      sectum-ai version to install from PyPI (for example 1.2.3). Pin it for
       reproducible runs. Leave empty to install the latest release, or set
       "skip" to use a sectum-ai already on PATH (how this repo's self-test
       exercises the CLI built from the checkout).
@@ -47,7 +47,7 @@ inputs:
 
 outputs:
   exit-code:
-    description: "The sectum-ai probe exit code (0 = no confirmed leaks; 2 = confirmed leak; 3 = config/adapter error)."
+    description: "The sectum-ai probe exit code (0 = no confirmed findings; 2 = a confirmed finding, or a CLI usage error, which shares exit 2 - the gate step tells them apart by whether a report was written; 3 = config/adapter error)."
     value: ${{ steps.probe.outputs.exit-code }}
   results-file:
     description: "Path to the written probe report (the output-file input)."

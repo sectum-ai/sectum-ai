@@ -7,8 +7,11 @@ pack and verifies it independently:
 
 - canonicalize the run and hash it (SHA-256) into a `run_digest`, then hash the
   whole pack into the `attested_digest` that the anchors bind;
-- timestamp the `attested_digest` with an RFC 3161 Time-Stamp Authority;
-- record it in a Sigstore Rekor transparency log;
+- optionally timestamp the `attested_digest` with an RFC 3161 Time-Stamp
+  Authority (`report --tsa <url>`, needs the `rfc3161` extra) — the default is a
+  reproducible local-dev token, which is integrity-only, not tamper evidence;
+- optionally record it in a Sigstore Rekor transparency log (`report --rekor`,
+  needs the `rekor` extra);
 - bundle the canonical run, the hashed ground-truth manifest, the TSA token,
   the Rekor proof, and control mappings into an `in-toto` attestation + a
   human-readable PDF audit pack;

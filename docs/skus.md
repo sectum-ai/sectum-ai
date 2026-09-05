@@ -54,5 +54,7 @@ and their probe sets are validated against the live catalog in CI.
 - **Hosted** — Sectum runs the synthetic tenants against your reachable
   endpoints.
 - **BYOC (bring-your-own-cloud)** — the CLI runs inside your environment; only
-  the markers, the configuration, and the signed evidence leave the box (see the
+  the markers, the configuration, the findings' evidence spans (which can include
+  a judge rationale restating observed content) and the timestamped evidence pack
+  leave the box (see the
   [threat model](threat-model.md)).
