@@ -10,6 +10,7 @@ sectum-ai score  --workdir .sectum-ai           # or: --output json
 ```
 
 ```
+# illustrative: the structure is exact, the figures are from one demo run
 Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   run run-sectum-ai-demo-2026 (.sectum-ai/run.json)
   record 3b4338ec5a375e02 (sha256, the run identifier)

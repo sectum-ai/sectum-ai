@@ -34,7 +34,10 @@ The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the
 local backends up with `docker compose up -d --wait` (pgvector, Chroma, Weaviate,
 Qdrant, OpenSearch, Redis, Phoenix — see [`compose.yaml`](compose.yaml)) and they run against
-the live adapters. CI runs them too, in the dedicated **Integration** job. (Milvus is
+the live adapters. Note that only pgvector and Redis define a healthcheck, so
+`--wait` returns before the HTTP backends are ready; a fixture that cannot reach its
+backend **skips** rather than fails, so give them a few seconds (CI polls each one's
+readiness endpoint for up to 180 s before running the job). CI runs them too, in the dedicated **Integration** job. (Milvus is
 heavier — it needs etcd and minio — so it lives behind a compose profile: run
 `docker compose --profile milvus up -d` to exercise its test locally.)
 
@@ -50,7 +53,9 @@ heavier — it needs etcd and minio — so it lives behind a compose profile: ru
   with no hidden global state.
 - **Never commit secrets** or customer data. Secret scanning (gitleaks) runs in
   pre-commit and CI and will block the change.
-- New runtime dependencies must be justified against the engineering spec, section 13.
+- New runtime dependencies need a stated reason in the PR — what they enable that the
+  standard library and existing dependencies cannot — and go behind an optional extra
+  unless every install needs them.
 
 ## Commit signing
 
@@ -70,8 +75,8 @@ section is the source of truth for that configuration:
 - Require **1 approving review**; dismiss stale approvals on new commits.
 - Require **CODEOWNERS** review.
 - Require status checks to pass before merging: the `CI` workflow
-  (lint, type-check, test; the docker-compose `Integration` job), the
-  `secret-scan` job, and `CodeQL`.
+  (lint, type-check, test; the docker-compose `Integration` job; the
+  `Extras API contract` job), the `secret-scan` job, and `CodeQL`.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).

@@ -26,8 +26,10 @@ The two engines trade off cleanly:
 Forcing weasyprint into the base install would bloat the dependency tree and add
 system-library friction for the many users who never need the fancier layout —
 the same reasoning that makes RFC 3161 timestamping and Rekor anchoring
-optional extras (`sectum-ai-evidence[rfc3161]`, `[rekor]`). The renderer was already
-designed to be theme-pluggable ([ADR-0002](0002-evidence-layer-oss-boundary.md)).
+optional extras (`sectum-ai-evidence[rfc3161]`, `[rekor]`).
+[ADR-0002](0002-evidence-layer-oss-boundary.md) had *called for* a theme-pluggable
+renderer; that input was never built, and the engine selector this ADR adds is the
+renderer's only extension point.
 
 ## Decision
 

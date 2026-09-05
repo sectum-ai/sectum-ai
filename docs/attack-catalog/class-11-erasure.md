@@ -13,7 +13,11 @@ post-deletion check: after the customer's own deletion has run, it confirms the
 subject's records are gone by id and by content fingerprint, without a
 plant/erase flow of its own. The method and coverage model below are the tenant
 probe's; the subject probe applies the same anti-over-claim verdicts at
-data-subject granularity.
+data-subject granularity — over a **narrower surface set**. It verifies by id on
+the vector DB, semantic cache, and tracing, and by content fingerprint on the
+vector DB, model adapter, agent memory, and search index. The eval set and backup
+surfaces are not scanned by the subject probe and read `NOT_COVERED` in its
+attestation; only the tenant probe covers all eight.
 
 ## Goal
 

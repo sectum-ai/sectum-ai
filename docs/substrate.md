@@ -93,7 +93,10 @@ a marker owned by one principal observed in another principal's session.
 3. **Semantic similarity** against foreign `ENTITY_CANARY` vectors yields
    candidates above a calibrated threshold.
 4. **Calibrated judge** adjudicates each candidate with a narrow structured
-   question; it never sees the ground-truth manifest verbatim. The offline
+   question. It is primed with that one candidate marker's plaintext — never
+   the manifest as a whole — and a "yes" only confirms if the span it cites is
+   traceable to the marker (`_span_traceable`), so the judge cannot conjure a
+   confirmation the observation does not contain. The offline
    default judge confirms only when the entity's tokens appear in order within a
    short span, keeping precision high.
 

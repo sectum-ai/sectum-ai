@@ -53,15 +53,17 @@ condition Class 9 is built to catch):
 ./run.sh
 ```
 
-Expect to see cross-tenant findings: one per (owner tenant, observing
-tenant) pair where the owner's canary surfaced under the observer's
-inference. On the 4-tenant demo with `adapter_bleed: true`, every
-inference pulls every adapter, so the count is the full cross-pair set.
+Expect to see cross-tenant findings: two per (owner tenant, observing
+tenant) pair — one per hard canary — where the owner's canary surfaced
+under the observer's inference, plus a `routing-` finding wherever the
+adapter reports that a foreign tenant's weights served the request. On the
+4-tenant demo with `adapter_bleed: true` that is 24 canary findings and 4
+routing findings (`28 confirmed`).
 
 ## Swap the in-memory model for the live HuggingFace stack
 
 The probe is adapter-agnostic; only the `ModelAdapter` it routes through
-changes. The v0.1.0 release added the live `HuggingFaceLoraModel` (PEFT
+changes. The v0.1.1 release added the live `HuggingFaceLoraModel` (PEFT
 + HuggingFace transformers) — point it at a real base model + an
 `adapters_dir` and the probe runs against actual LoRA training +
 inference.
@@ -106,10 +108,10 @@ Each Class 9 finding carries:
 - **Real GPU training.** The demo runs against the in-memory fake; the
   live `huggingface` kind exists for that and is the configured on-ramp
   to real-stack probing (see the swap above).
-- **Routing-error probes.** Class 9 today detects weight-bleed; the
-  routing-failure variant (a tenant id parsed from an unauthenticated
-  header) is a future variant the probe interface accepts at the same
-  contract surface.
+- **Routing-error injection.** The probe already *detects* mis-routing
+  (the `routing-` findings above, from the adapter's `served_by_tenant`);
+  it does not yet *induce* it by forging a tenant header, which would need
+  a routing-aware live adapter.
 - **Adapter deletion + re-train state.** The `delete` + `soft_delete`
   surface on `ModelAdapter` is exercised by Class 11 (erasure
   verification), not Class 9. See `examples/erasure-attestation/` for

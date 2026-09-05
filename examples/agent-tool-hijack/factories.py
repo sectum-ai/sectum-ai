@@ -17,7 +17,7 @@ Reference each from ``sectum-ai.yaml`` as ``module.path:callable``::
     adapters:
       agent:
         kind: langgraph    # or: autogen / crewai / openai-assistants / anthropic-tooluse
-        factory: examples.agent_tool_hijack.factories:make_langgraph_agent
+        factory: factories:make_langgraph_agent
 
 The factories below are intentionally minimal: a single tenant-aware tool
 that echoes whatever the agent forwards. In a real engagement the operator

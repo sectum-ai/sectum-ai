@@ -6,9 +6,8 @@ walkthrough tells the story from the MCP-server end (the leaky lookup
 service), this one tells it from the *agent* end (the framework that
 makes the call) — and shows how to swap the agent caller between the
 seven shipped agent adapters (`fake`, `http`, `langgraph`, `autogen`,
-`crewai`, `openai-assistants`, `anthropic-tooluse`) so the same probe
-verifies isolation regardless of which agent framework a customer's
-stack happens to use.
+`crewai`, `openai-assistants`, `anthropic-tooluse`) for the companion
+`agent-framework-hijack` probe, which drives the agent adapter directly.
 
 ## The attack
 
@@ -46,7 +45,7 @@ in-memory leaky MCP server:
 4. **`sectum-ai verify`** independently re-checks the pack.
 
 The probe today exercises the MCP surface (Class 7 v1 per the
-[engineering spec, §7](https://github.com/sectum-ai/sectum-ai/blob/main/CLAUDE.md));
+engineering spec, §7 (internal engineering spec));
 this example's value is the *next step*: showing how to wire the
 agent that calls the MCP server in production — LangGraph, AutoGen,
 or CrewAI — so the operator can verify Class 7 with the same caller
@@ -64,12 +63,22 @@ page-3 findings table itemises each.
 
 ## Swap the agent caller
 
-The probe consumes whatever `agent.kind` resolves to in
-`sectum-ai.yaml`. The default (no config) is the in-memory `FakeAgent`,
-which is what `run.sh` uses. To drive the same probe through a real
-agent framework, point `agent.kind` at one of the five factory-driven
-adapters below and supply a factory callable that constructs the
-runtime object (`http` needs only a URL; `fake` needs nothing).
+`agent.kind` selects the agent adapter that the **`agent-framework-hijack`**
+probe drives (`--probe agent-framework-hijack`). The `agent-tool-hijack` probe
+in `run.sh` drives the MCP adapter (`mcp.invoke` steps) and is unaffected by
+`agent.kind` — see "Which probe drives which adapter" below. The default (no
+config) is the in-memory `FakeAgent`. To drive the framework probe through a real
+agent runtime, point `agent.kind` at one of the five factory-driven adapters
+below and name a `factory` callable that constructs the runtime object (`http`
+needs only a URL; `fake` needs nothing).
+
+The factories in this directory live in `factories.py`, which is **not** on the
+import path by default — the directory is hyphenated and has no package marker.
+Put it on the path and use the bare module name:
+
+```sh
+export PYTHONPATH=examples/agent-tool-hijack
+```
 
 [`factories.py`](factories.py) in this directory holds copy-pasteable
 factory functions for each agent kind. Pick the one your stack uses
@@ -81,14 +90,14 @@ and reference it from `sectum-ai.yaml`:
 adapters:
   agent:
     kind: langgraph
-    factory: examples.agent_tool_hijack.factories:make_langgraph_agent
+    factory: factories:make_langgraph_agent
     recursion_limit: 25
 ```
 
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The LangGraph adapter scopes by `thread_id`: each probe step passes
@@ -103,14 +112,14 @@ during a run — what the Class 7 probe needs to see.
 adapters:
   agent:
     kind: autogen
-    factory: examples.agent_tool_hijack.factories:make_autogen_pair
+    factory: factories:make_autogen_pair
     max_turns: 4
 ```
 
 ```sh
 pip install sectum-ai-adapters[autogen]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The AutoGen adapter scopes by prefixing every user-proxy message with
@@ -125,7 +134,7 @@ fail closed on a missing or mismatched token.
 adapters:
   agent:
     kind: crewai
-    factory: examples.agent_tool_hijack.factories:make_crewai_crew
+    factory: factories:make_crewai_crew
     input_key: task
     tenant_key: tenant_id
 ```
@@ -133,7 +142,7 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[crewai]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The CrewAI adapter scopes by passing `tenant_id` as a named input to
@@ -148,13 +157,13 @@ arguments.
 adapters:
   agent:
     kind: openai-assistants
-    factory: examples.agent_tool_hijack.factories:make_openai_assistants
+    factory: factories:make_openai_assistants
 ```
 
 ```sh
 pip install sectum-ai-adapters[openai-assistants]
 export OPENAI_API_KEY=sk-...
-sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The OpenAI Assistants adapter scopes by caching one `Thread` per
@@ -170,13 +179,13 @@ argument the tenant-aware tool reads.
 adapters:
   agent:
     kind: anthropic-tooluse
-    factory: examples.agent_tool_hijack.factories:make_anthropic_tooluse
+    factory: factories:make_anthropic_tooluse
 ```
 
 ```sh
 pip install sectum-ai-adapters[anthropic-tooluse]
 export ANTHROPIC_API_KEY=sk-ant-...
-sectum-ai probe --probe agent-tool-hijack --config sectum-ai.yaml --workdir out
+sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
 The Anthropic tool-use adapter scopes by caching one conversation
@@ -221,12 +230,11 @@ steps reach the leaky tool. That's the design point: the attestation
 pack speaks the same language to a DPO regardless of which framework
 the customer ran their probe against.
 
-## What's *not* in this example
+## Which probe drives which adapter
 
-The current probe verifies the MCP surface — that's Class 7 v1. Full
-agent-framework instrumentation (where the probe inspects the
-adapter's `AgentResult.tool_calls` directly, not via MCP) is the
-Class 7 expansion the engineering spec defers to a later phase. The
-agent adapters this example wires (`langgraph` / `autogen` /
-`crewai` / `openai-assistants` / `anthropic-tooluse`) — the full v1
-set spec §11 names — are the SDK piece that expansion will build on.
+Two Class 7 probes ship. `agent-tool-hijack` (this example's `run.sh`) drives the
+**MCP adapter** — every step is an `mcp.invoke` — and models confused-deputy and
+token-passthrough at the tool boundary. `agent-framework-hijack` drives the
+**agent adapter** with `agent.run` steps and inspects the framework's own tool
+calls; that is the probe the `agent.kind` swap above feeds. Both surface as
+Class 7 in the scorecard.

@@ -20,6 +20,6 @@ Tracked in the post-release next-scope roadmap (the strategic review):
 
 - **P5** — ✅ shipped: the provider-agnostic embedding interface, the real-provider sweep, and the `scenario.embedding_models` config wiring (`sectum-ai seed --embedding-model`), which closed the Phase-5 *full-CLI* model-swap criterion above.
 - **P6** — ✅ shipped: the docker-compose integration-CI job (the **Integration** workflow job), which closed the Phase-2 live-backend criterion above.
-- **P7** — ✅ shipped: a `BackupAdapter` (the seventh erasure hiding place); live search-index / eval-set connectors remain a follow-on.
+- **P7** — ✅ shipped: a `BackupAdapter` (the seventh erasure hiding place); live search-index (OpenSearch) and eval-set (LangSmith Datasets) connectors shipped; a Zep memory connectors remain a follow-on.
 
 This record is updated whenever a phase criterion changes status.

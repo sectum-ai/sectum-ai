@@ -72,7 +72,7 @@ For example, to drive a LangGraph caller against the same probe:
 adapters:
   agent:
     kind: langgraph
-    factory: examples.agent_tool_hijack.factories:make_langgraph_agent
+    factory: factories:make_langgraph_agent
     recursion_limit: 25
 ```
 

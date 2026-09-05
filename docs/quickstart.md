@@ -18,13 +18,19 @@ sectum-ai init                 # scaffold a sectum-ai.yaml (optional)
 sectum-ai seed   --workdir .sectum-ai
 sectum-ai probe  --workdir .sectum-ai
 sectum-ai report --workdir .sectum-ai
-sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
+sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
 ```
+
+Without `--config`, `probe` runs against the built-in demo stack with every leak
+knob on, which is why the run reports findings and exits `2`.
 
 The quickstart pack is timestamped by the offline local-dev token, which anyone
 can regenerate — so `verify` requires `--allow-unanchored` to accept it as an
-integrity-only check. A production pack built with `report --tsa --rekor`
-verifies without the flag, as independently anchored tamper evidence.
+integrity-only check. It also ran against no live backend, so `verify` refuses
+it as an attestation unless you pass `--allow-synthetic` (the `run-scope` check
+says which surfaces were real). A pack built against configured adapters with
+`report --tsa <url> --rekor` verifies without either flag, as independently
+anchored tamper evidence.
 
 ## Run the flagship demo (from a clone)
 
@@ -54,7 +60,7 @@ pack, and verifies it.
 | `sectum-ai calibrate` | Calibrate the semantic-detection threshold for your embedder. |
 | `sectum-ai baseline` | Save a regression baseline, or compare a run against it. |
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
-| `sectum-ai adapters` | List installed adapters and their capabilities. |
+| `sectum-ai adapters` | List the adapter families and the capabilities each built-in fake reports (it does not inspect installed live backends). |
 
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
@@ -123,7 +129,7 @@ what was tested:
 ```sh
 sectum-ai report --workdir .sectum-ai          # produce the evidence pack first
 sectum-ai pack   --workdir .sectum-ai --config sectum-ai.yaml
-sectum-ai verify .sectum-ai/run-pack.zip --allow-unanchored
+sectum-ai verify .sectum-ai/run-pack.zip --allow-unanchored --allow-synthetic
 ```
 
 > **A run pack is sensitive.** Unlike the evidence pack — which is redacted — a run

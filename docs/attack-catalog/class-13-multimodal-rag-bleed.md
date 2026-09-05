@@ -80,5 +80,7 @@ Implemented in the multi-modal wave. The Class 13 image Retrieval-Pivot Rate is 
 by its per-model sweep (as Class 2's embedding-strength gradient is a core sweep over the
 flagship probe), driving the probe's plan/detect over the deterministic image substrate
 or real CLIP. Live multi-modal vector-store adapters and generic-suite / CLI wiring are a
-follow-on. Walkthrough:
+follow-on. Like Class 6, the probe requires a vector-slot adapter reporting
+`semantic_retrieval` — the pivot it describes happens in a shared embedding space — so a
+programmatic run against the `app` family skips it and scores `NOT_COVERED`. Walkthrough:
 [`examples/multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed).

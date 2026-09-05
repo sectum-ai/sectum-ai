@@ -7,9 +7,11 @@ verifies independently.
 ## Construction
 
 1. The run is canonicalized: run id, timestamps, scenario and manifest hashes,
-   adapter and probe versions, and findings, as deterministic JSON.
+   adapter and probe versions, surface provenance, findings, and metrics, as
+   deterministic JSON.
 2. The whole attested pack — the canonical run, the manifest hash, the control
-   mappings, the PDF reference, and whether it claims a transparency-log anchor —
+   mappings, the PDF reference, and whether it claims a transparency-log anchor
+   and a real timestamp anchor (`anchored_in_log`, `anchored_with_timestamp`) —
    is hashed (SHA-256) into the `attested_digest`. (The run alone also keeps a
    `run_digest`, used as the in-toto attestation subject and shown in the PDF.)
 3. The attested digest is timestamped. The development default is a local
@@ -86,7 +88,8 @@ family it cannot reach — so "the signature is valid" and "this describes a rea
 system" were unrelated facts, and only the first was checked. The `run-scope`
 check closes that: it reports the run's signed
 [surface provenance](coverage.md), and `sectum-ai verify` **refuses** (exit 4) a
-pack in which no surface was live. A third party receiving a vendor's pack is the
+pack in which no surface was live — or which carries no provenance block at all,
+since its subject cannot be established either way. A third party receiving a vendor's pack is the
 party least able to notice what is missing from it, so this fails closed like the
 anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI

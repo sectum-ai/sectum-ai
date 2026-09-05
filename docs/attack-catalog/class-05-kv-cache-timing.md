@@ -21,7 +21,9 @@ Welch–Satterthwaite degrees of freedom, the **p-value**, a **95% confidence
 interval** on the mean timing gap, and the standardised effect size (**Cohen's
 d**). A pair is a confirmed side-channel finding only when the gap is
 
-- **statistically significant** — p < 0.01 (a strict two-sided level),
+- **statistically significant** — p below a Bonferroni-corrected level: 0.01 divided by
+  the number of ordered tenant pairs, so 0.01/12 ≈ 0.0008 for the default four-tenant
+  scenario (the pack's evidence span states the exact alpha used),
 - **practically large** — Cohen's d ≥ 0.8 (above the per-prompt jitter noise
   floor), and
 - **directional** — the primed prompt is the faster one (a positive gap),

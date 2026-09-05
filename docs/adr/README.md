@@ -4,7 +4,9 @@ This directory records significant architectural decisions for Sectum AI.
 
 Each ADR is a numbered Markdown file (`NNNN-short-title.md`) with the sections
 **Status**, **Context**, **Decision**, and **Consequences**. Once accepted, an
-ADR is immutable — supersede it with a new ADR rather than editing it.
+ADR's decision is immutable — supersede it with a new ADR rather than rewriting
+it. Dated **Update** appendices recording how the code has since moved relative
+to the decision are the one permitted edit, and several ADRs carry them.
 
 | ADR | Title | Status |
 |---|---|---|

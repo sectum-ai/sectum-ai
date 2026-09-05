@@ -90,3 +90,14 @@ for conformance without yet enforcing it (the per-backend follow-on above).
 > drops the user at that boundary. The RAG family's user dimension is therefore
 > *unverified* rather than *unneeded*; threading `user` through `ask` (with a
 > user-scoped fake) remains the open follow-on.
+
+> **Update (2026-09-01).** Two more corrections to the state described above.
+> First, the same gap now exists for the **agent** family: `agent-framework-hijack`
+> plans per-principal `agent.run` steps with `actor_user_id` set, but
+> `AgentAdapter.run(tenant, task)` takes no `user` and the runner drops it at that
+> boundary — unverified rather than unneeded, exactly as for RAG. Second, "the live
+> adapters still accept `user` for conformance without yet enforcing it" is no
+> longer true: the live vector stores (pgvector, Pinecone, Qdrant, Milvus,
+> OpenSearch, Chroma, Weaviate, Azure AI Search), the Redis cache and memory
+> adapters, the MCP clients, and the HuggingFace model adapter all enforce and
+> report `USER_SCOPED` behind an opt-in `user_scoped=True`.

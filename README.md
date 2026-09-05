@@ -13,8 +13,10 @@ independently, without trusting us.
 > acceptance criteria: the marker substrate, the leak-detection pipeline, the
 > Class 1–11 and 13 attack catalog, the tamper-evident evidence chain (Class 12), the
 > adapter SDK (live adapters for vector stores, caches, memory, observability,
-> RAG, agents, MCP, and the search-index / eval-set / backup erasure surfaces,
-> exercised by a docker-compose integration-CI job), the probe
+> RAG, agents, MCP, and the search-index / eval-set / backup erasure surfaces —
+> pgvector, Chroma, Weaviate, Qdrant, OpenSearch, Redis, and Phoenix exercised by
+> a docker-compose integration-CI job, the credential-gated rest by opt-in live
+> tests), the probe
 > interface, the regression-baseline engine, the twelve-command `sectum-ai` CLI, a
 > mkdocs documentation site, and the threat model. [`PHASES.md`](PHASES.md) is the
 > authoritative, per-phase gate record, with the test or example that enforces each
@@ -47,7 +49,7 @@ bounds what can be reported as a leak.
 
 **13 surfaces.** Vector DB, RAG pipeline, semantic cache, KV cache, agent
 memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
-indexes, tracing pipelines, prompt/completion logs, API. Live adapters for the
+indexes, tracing pipelines, agent frameworks, API. Live adapters for the
 common backends.
 
 **11 attack classes.** Direct tenant-boundary fetch, organic entity-bleed RAG
@@ -56,10 +58,13 @@ embedding inversion, MCP confused-deputy + token passthrough, persistent memory
 contamination, LoRA cross-tenant influence, IKEA benign extraction, RAG
 poisoning, GDPR Article 17 erasure verification.
 
-**Tamper-evident evidence.** Every run is canonicalized, hashed, RFC 3161
-timestamped, Sigstore Rekor logged, wrapped in an in-toto attestation envelope,
-and rendered to an auditor PDF. `sectum-ai verify` validates the chain
-end-to-end, with no Sectum AI installation required.
+**Tamper-evident evidence.** Every run is canonicalized, hashed, wrapped in an
+in-toto attestation envelope, and rendered to an auditor PDF; with
+`report --tsa <url> --rekor` it is also RFC 3161 timestamped and Sigstore Rekor
+logged. The default local-dev timestamp is integrity-only, and `verify` says so.
+`sectum-ai verify` validates the chain end-to-end and is part of the Apache-2.0
+package, so a pack is checked without trusting Sectum AI — no hosted service or
+account is involved.
 
 ## Use it for
 
@@ -102,7 +107,7 @@ makes the attestation worth anything. See
 | `sectum-ai` CLI (`init` / `seed` / `probe` / `report` / `pack` / `verify` / `erasure` / `score` / `baseline` / `calibrate` / `diff` / `adapters`) | ✓ | ✓ |
 | Continuous scheduled runs against a customer stack | — | ✓ |
 | Attestation hosting and managed audit-pack delivery | — | ✓ |
-| Dashboard, alerting, and regression baselines across runs | — | ✓ |
+| Hosted run history, dashboard, and alerting | — | ✓ |
 | Auditor / DPO channel: pre-curated evidence packages | — | ✓ |
 
 Both share the same evidence format. An evidence pack produced by Sectum Cloud
@@ -136,8 +141,15 @@ sectum-ai init                 # scaffold a sectum-ai.yaml (optional)
 sectum-ai seed   --workdir .sectum-ai
 sectum-ai probe  --workdir .sectum-ai
 sectum-ai report --workdir .sectum-ai
-sectum-ai verify .sectum-ai/evidence.json --allow-unanchored
+sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
 ```
+
+Without `--config`, `probe` runs against the built-in demo stack with every leak
+knob on — that is what produces the findings above (and a non-zero exit, since
+confirmed leaks exit `2`). `verify` needs both flags for a demo pack: its timestamp
+is the reproducible local-dev token (`--allow-unanchored`), and no surface was a
+live backend (`--allow-synthetic`). A pack from a configured, anchored run needs
+neither.
 
 Optional backends (live vector stores, model/agent frameworks) are extras, e.g.
 `pip install "sectum-ai-adapters[qdrant]"` — see [docs/adapters.md](docs/adapters.md).
@@ -160,9 +172,11 @@ verifies it. See [`examples/`](examples/) for this and the GDPR Article 17
 erasure-attestation walkthrough.
 
 For richer configuration (live vector store, real embedder/judge, Rekor
-signing, manifest-at-rest), copy
-[`sectum-ai.yaml.example`](sectum-ai.yaml.example) to `sectum-ai.yaml` and pass
-`--config sectum-ai.yaml` to each command.
+anchoring, manifest-at-rest), run `sectum-ai init` to scaffold a `sectum-ai.yaml`,
+fill in the blocks per the [configuration reference](docs/configuration.md), and
+pass `--config sectum-ai.yaml` to each command.
+[`sectum-ai.yaml.example`](sectum-ai.yaml.example) shows every family with its
+live kinds commented out.
 
 ### Run it in CI
 

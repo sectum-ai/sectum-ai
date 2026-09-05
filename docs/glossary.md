@@ -24,9 +24,9 @@ principal's session proves a leak. Three types
 
 - **HARD_CANARY** — high-entropy unique token (`SECTUM-CANARY-{base32(16 bytes)}`).
   Exact substring match (case-, width-, and zero-width-insensitive); zero false positives.
-- **ENTITY_CANARY** — a unique synthetic entity (fabricated person,
-  codename, account number) owned by exactly one principal. Tested by
-  semantic similarity plus exact match.
+- **ENTITY_CANARY** — a unique synthetic project codename
+  (`Project <codename><base32>-<serial>`) owned by exactly one principal.
+  Tested by semantic similarity plus exact match.
 - **SECRET_CANARY** — a fake but plausibly shaped secret: an OpenAI-style `sk-`
   key, an AWS `AKIA` access-key id, or a non-issuable `9xx` US SSN. Matched by
   exact substring **plus** a credential-format detector (the shape is recovered
@@ -36,7 +36,7 @@ principal's session proves a leak. Three types
 
 ## Ground-truth manifest
 The authoritative record of which marker belongs to which principal:
-`{marker_id, marker_type, owner_principal, plaintext, planted_locations[]}`.
+`{marker_id, marker_type, owner_tenant_id, owner_user_id?, plaintext, embedding_ref?, planted_locations[]}`.
 Hashed into the evidence chain so the test conditions are provable after the
 fact. Optionally encrypted at rest (see the security note below).
 
@@ -49,9 +49,10 @@ queries leaked across tenants on a shared vector index).
 
 ## Surface
 A place tenant data can live or leak. The catalog covers: API, vector DB,
-RAG pipeline, prompt/completion logs, semantic cache, KV cache, agent
-memory, MCP tool calls, agent frameworks, fine-tunes / adapters, eval sets,
-backups, search indexes, tracing pipelines.
+RAG pipeline, semantic cache, KV cache, agent memory, MCP tool calls, agent
+frameworks, fine-tunes / adapters, eval sets, backups, search indexes, tracing
+pipelines. (`prompt_logs` exists in the `Surface` enum but no probe emits it;
+logs are reached through the tracing surface.)
 
 ## Probe
 A pluggable attack class implementing the `Probe` protocol (a deterministic
@@ -61,8 +62,9 @@ See the [attack catalog overview](attack-catalog/index.md).
 
 ## Finding
 A single recorded leak: `{finding_id, probe_id, severity, confidence,
-status, owner_principal, observed_in_principal, marker_id, evidence_span,
-surface, owasp_llm, atlas[], nist[], remediation_pointer}`. **Confirmed**
+status, owner_tenant_id, owner_user_id?, observed_in_tenant_id,
+observed_in_user_id?, marker_id, evidence_span, surface, owasp_llm,
+owasp_secondary[], atlas[], nist[], remediation_pointer}`. **Confirmed**
 findings trace back to a specific manifest marker; **unverified** findings
 are candidates the detector could not tie to one, recorded as evidence
 rather than asserted as leaks. The distinction is traceability, not which
@@ -72,7 +74,8 @@ and an exact match is decided by the observation alone.
 ## Evidence pack
 The deliverable of a Sectum AI run: a tamper-evident bundle that an auditor
 or DPO accepts. Contains the canonicalized run, the hashed ground-truth
-manifest, an RFC 3161 timestamp token, a Sigstore Rekor inclusion proof
+manifest, a timestamp token (the reproducible local-dev token by default; an
+RFC 3161 token when a TSA is configured), a Sigstore Rekor inclusion proof
 (when enabled), control mappings (SOC 2 / ISO 27001 / ISO/IEC 42001 / GDPR /
 CCPA/CPRA / EU AI Act / HIPAA / NIST AI RMF / OWASP), a machine-readable
 `evidence.json`, and a
@@ -81,8 +84,8 @@ independently verifiable by `sectum-ai verify`.
 
 ## BYOC (bring-your-own-cloud)
 A deployment mode where the `sectum-ai` CLI runs inside the customer's
-environment and only the markers, the configuration, and the signed
-evidence leave the box. The alternative is *hosted* mode, where Sectum
+environment and only the markers, the configuration, the judge-cited
+evidence spans, and the timestamped evidence pack leave the box. The alternative is *hosted* mode, where Sectum
 runs the synthetic tenants against the customer's reachable endpoints.
 
 ## Wedge

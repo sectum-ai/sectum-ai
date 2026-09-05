@@ -1,14 +1,20 @@
+> **Status:** the committed `demo.cast` predates the `sectum_ai` rename and the
+> current verifier — it shows a `.sectum/` workdir, a `VERIFIED: the evidence pack
+> is intact` verdict the CLI no longer prints, and two verify checks where today
+> there are seven. Re-record it with the steps below before linking it anywhere.
+> A `demo.gif` is not committed.
+
 # Recording the demo
 
 The flagship demo is a 90-second walkthrough of the Class 2 organic-
 entity-bleed RAG probe — the one that reproduces the Retrieval Pivot
 research finding (81.2% benign-query cross-tenant leakage on the demo
-substrate; the 2026 research reported 95.4%). It is the single
-most-linked artifact on the website, the README, and the docs.
+substrate; the 2026 research reported 95.4%). It is meant to be the
+first thing a visitor sees; nothing links it yet.
 
 This directory ships [`record-demo.sh`](./record-demo.sh) — a one-
 shot script that wraps `asciinema rec` around the demo workflow and
-emits a `demo.cast` file. The cast is small (~10 KB), deterministic,
+emits a `demo.cast` file. The cast is small (a few KB), deterministic,
 and embeddable as a JS player on any page.
 
 ## Why a recording at all
@@ -34,10 +40,11 @@ cd examples/retrieval-pivot
 The script:
 
 1. Wipes `.sectum-ai/` to start from a clean substrate.
-2. Generates a fixed-seed `sectum-ai.yaml` so the substrate is
-   byte-identical across recordings.
+2. Runs against the CLI's built-in demo stack (no config file — the
+   script deliberately passes none, so the substrate is the default one).
 3. Drives the four-command workflow inside `asciinema rec`:
-   `seed` → `probe --output json` → `report` → `verify`.
+   `seed` → `probe --output json` → `report` → `verify --allow-unanchored
+   --allow-synthetic` (a demo pack is refused without both flags).
 4. Writes `demo.cast` to the current directory.
 
 ## Embedding on the website

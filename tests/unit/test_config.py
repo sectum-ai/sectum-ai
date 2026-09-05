@@ -18,6 +18,7 @@ from sectum_ai.adapters import (
     FakeVectorStore,
 )
 from sectum_ai.config import (
+    ADAPTER_FAMILIES,
     AdapterConfig,
     EmbedderConfig,
     JudgeConfig,
@@ -281,28 +282,20 @@ def test_build_adapters_respects_per_family_knobs() -> None:
 # The eight adapter-family keys `build_adapters` reads (config.py). A key in a
 # config file that is NOT one of these is silently ignored - the resolver falls
 # back to the fake - so the shipped example must use exactly these names.
-_RESOLVER_FAMILIES = {
-    "vector_store",
-    "cache",
-    "model",
-    "mcp",
-    "memory",
-    "rag",
-    "observability",
-    "agent",
-}
 
 
 def test_example_config_uses_only_adapter_keys_the_resolver_reads() -> None:
-    # sectum-ai.yaml.example must use the exact family keys build_adapters consumes:
-    # a copied-and-edited example with a stray key (e.g. `vector:` instead of
-    # `vector_store:`) silently runs against the in-memory fake with no error,
-    # which defeats real-stack probing. Guards that footgun against regressing.
+    # sectum-ai.yaml.example must use only family keys some resolver consumes -
+    # the eight `build_adapters` reads for `probe` plus the three erasure surfaces
+    # `sectum-ai erasure` reads. A stray key (`vector:` for `vector_store:`) is
+    # rejected at load since v0.10.0, so `load_config` succeeding already proves
+    # every key is known; this pins that the example never drifts to a family
+    # the validator would accept but nothing reads, should the two sets diverge.
     example = Path(__file__).resolve().parents[2] / "sectum-ai.yaml.example"
     config = load_config(example)
-    unknown = set(config.adapters) - _RESOLVER_FAMILIES
+    unknown = set(config.adapters) - ADAPTER_FAMILIES
     assert not unknown, (
-        f"sectum-ai.yaml.example has adapter keys the resolver ignores: {sorted(unknown)}"
+        f"sectum-ai.yaml.example has adapter keys no resolver reads: {sorted(unknown)}"
     )
 
 

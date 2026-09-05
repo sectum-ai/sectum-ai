@@ -106,15 +106,22 @@ attested content was altered.
 The development-default timestamper (`LocalTimestamper`) records a digest and a
 wall-clock time; it is **not** an external anchor and is not cryptographically
 binding on its own. Production runs configure an RFC 3161 Time-Stamp Authority
-and a Sigstore Rekor transparency log; a pack anchored that way cannot be
-re-timestamped by an adversary.
+and a Sigstore Rekor transparency log. What an anchor proves is that *this* digest
+existed at the TSA's attested time (and, for Rekor, was logged). It does not stop
+an adversary from editing a pack, recomputing the digest, and obtaining a fresh
+anchor — that pack will also verify. The tamper evidence is comparative: a reader
+holding the original digest or timestamp, or the Rekor log's history, sees that
+the re-anchored pack is a *different, later* record. `verify` alone does not
+detect that; it checks the pack it is handed.
 
 ### Customer data
 
 Sectum AI is synthetic by default — the substrate is fabricated. When pointed at
 a real stack, the probes read whatever that stack returns. In **BYOC** mode the
-CLI runs inside the customer environment and only markers and the signed
-evidence pack leave it; raw retrieved content stays on-box.
+CLI runs inside the customer environment and only markers, the judge-cited
+evidence spans of confirmed findings, and the timestamped evidence pack leave
+it; the bulk of retrieved content stays on-box. (The pack is hash-bound and
+timestamped; it is signed by a TSA only when one is configured.)
 
 ## Deployment modes
 

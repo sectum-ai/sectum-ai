@@ -54,3 +54,10 @@ auditor trust rather than giving away defensible value.
 - The private `platform` repository retains attestation hosting and the public
   registry, the branded theme, scheduling, the dashboard, regression-baseline
   history, and enterprise pinned or private TSA and Rekor.
+
+> **Update (2026-09-01).** The "must take a theme or template as input" requirement
+> above was never implemented. `render_audit_pack` and `render_audit_pack_and_hash`
+> take an `engine` selector ([ADR-0017](0017-pdf-engine.md)) and nothing else; the
+> only extension point is choosing ReportLab or WeasyPrint. A branded pack today
+> would be a code change, not an asset swap. The boundary decision stands; the
+> mechanism it assumed does not exist yet.

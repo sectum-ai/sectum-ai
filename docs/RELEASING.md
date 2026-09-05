@@ -92,22 +92,30 @@ Edit `[project] version` in each of:
 - `packages/evidence/pyproject.toml`
 
 All five must be the same string. The first release is `0.1.0`. Subsequent
-releases follow [Semantic Versioning](https://semver.org/).
+releases follow [Semantic Versioning](https://semver.org/). For a pre-release the
+two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
+`## [0.11.0-rc.1]`, but `pyproject.toml` must carry the PEP 440 form `0.11.0rc1` —
+`scripts/check_release_version.py` normalises the tag and compares against that.
 
-Then bump the **same version** in the GitHub Action, which is a separate surface
-this list used to omit:
+Then bump the **same version** in four more places — surfaces this list used to
+omit, each of which shipped stale at least once:
 
-- `action.yml` — the `version` input's `default`
+- `action.yml` — the `version` input's `default`, **and** the "(for example X.Y.Z)"
+  prose in its description
 - `docs/github-action.md` — the `version` row of the inputs table, and the
   `sectum-ai/sectum-ai@vX.Y.Z` pin example
+- `README.md` — the `> **Status: vX.Y.Z.**` line (it read v0.8.1 while the repo
+  shipped 0.10.0)
 
 That default is passed straight to `pip install "sectum-ai==<version>"`, so a
 caller who does not override it gets exactly this string. Leaving it behind means
 every default run of the Action installs the *previous* release: v0.7.0 through
 v0.8.3 all shipped while the Action kept installing 0.6.0, handing users a CLI
 that predated the correctness fixes those releases existed to deliver.
-`tests/unit/test_action_version.py` now fails the build if any of the three drift
-apart, so this step cannot be silently skipped again.
+`tests/unit/test_action_version.py` now fails the build if the Action default, the
+docs table, the docs pin, or the README status line drifts from the package
+version, so this step cannot be silently skipped again. (The `action.yml` prose
+is unguarded — check it by hand.)
 
 ### 2. Re-validate the ATLAS technique catalog
 
@@ -125,13 +133,14 @@ the bracketed label only.
 
 A final tag (`v0.1.0`) **requires** a matching section in CHANGELOG.md. A
 pre-release tag (`v0.1.0-rc.1`) is allowed to fall back to `## [Unreleased]`
-if its named section is absent.
+if its named section is absent — but an *empty* `[Unreleased]` is refused, so
+the release notes must exist somewhere.
 
 ### 4. Commit and open the release PR
 
 ```sh
 git checkout -b release/v0.1.0
-git add packages/*/pyproject.toml CHANGELOG.md
+git add packages/*/pyproject.toml action.yml docs/github-action.md README.md CHANGELOG.md uv.lock
 git commit -m "chore(release): v0.1.0"
 git push -u origin release/v0.1.0
 gh pr create --title "chore(release): v0.1.0" --body "ATLAS sweep: ..."
@@ -149,8 +158,8 @@ git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
 
-The tag must be **annotated** (the `-a` flag) so it carries a tagger and a
-message; the workflow keys off the tag name. Every shipped tag from `v0.5.0`
+Use an **annotated** tag (the `-a` flag) so it carries a tagger and a message —
+by convention; the workflow triggers on any `v*` tag and does not check. Every shipped tag from `v0.5.0`
 onward is annotated and unsigned, and the pipeline accepts them — the release's
 authenticity comes from Sigstore signing the *artifacts* in the workflow (OIDC,
 no long-lived key), not from a signature on the tag. Add `-s` as well if you
@@ -179,8 +188,9 @@ is created automatically with the CHANGELOG section as its body.
 | `v0.1.0-alpha.2` | Pre-release (`alpha`) | Falls back to `## [Unreleased]`. |
 | `v0.1.0-beta.3` | Pre-release (`beta`) | Falls back to `## [Unreleased]`. |
 
-Other forms (`v0.1`, `release-0.1.0`, anything without a leading `v`) are
-rejected by `scripts/check_release_version.py`.
+Other forms never reach the workflow: it triggers only on `v*` tags, and
+`scripts/check_release_version.py` additionally rejects a `v*` tag that is not
+`vX.Y.Z[-pre]` (such as `v0.1`).
 
 ## Verifying a released artifact
 

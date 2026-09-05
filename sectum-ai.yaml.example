@@ -47,10 +47,10 @@ adapters:
     #   port: 8000
     # kind: weaviate           # Weaviate (REST + gRPC)
     #   host: localhost
-    #   http_port: 8080
+    #   port: 8080
     #   grpc_port: 50051
     # kind: pinecone           # Pinecone (cloud, opt-in)
-    #   index_env: SECTUM_PINECONE_INDEX
+    #   index: sectum-canaries      # the index name; it must exist with dimension 64
     #   api_key_env: SECTUM_PINECONE_API_KEY
     # kind: qdrant             # Qdrant (self-hosted)
     #   host: localhost
@@ -73,15 +73,15 @@ adapters:
 
   observability:
     # kind: phoenix            # Arize Phoenix (per-tenant project)
-    #   base_url_env: SECTUM_PHOENIX_URL
+    #   base_url: http://localhost:6006
     # kind: langfuse           # Langfuse cloud or self-hosted
-    #   host_env: LANGFUSE_HOST
+    #   host: https://cloud.langfuse.com
     #   public_key_env: LANGFUSE_PUBLIC_KEY
     #   secret_key_env: LANGFUSE_SECRET_KEY
     # kind: langsmith
     #   api_key_env: LANGSMITH_API_KEY
     # kind: otel               # generic OpenTelemetry (OTLP-JSON trace-query endpoint)
-    #   base_url_env: SECTUM_OTEL_URL  # any Jaeger/Tempo/collector shim that speaks
+    #   base_url: http://localhost:4318   # any Jaeger/Tempo/collector shim that speaks
     #   query_path: /v1/traces/query   # the Sectum OTLP-JSON trace-query contract
     #   tenant_attribute: tenant.id    # resource attribute carrying the tenant.hex
     # kind: helicone           # Helicone request logs (scoped by a custom property)
@@ -100,37 +100,31 @@ adapters:
 
   rag:
     # kind: http               # generic JSON HTTP RAG pipeline
-    #   url_env: SECTUM_RAG_URL
+    #   url: http://localhost:8000/rag
     # kind: langchain          # any LangChain `Runnable` (a composed LCEL chain)
-    #                          # construct via `LangChainRAGPipeline.connect(retriever, llm)`
-    #                          # or wrap a hand-built chain. Requires the optional
-    #                          # `rag-langchain` extra:
+    #   factory: mypkg.rag:build_chain   # REQUIRED: module.path:callable, called with no
+    #                          # arguments, returning an object with `invoke(input)`.
+    #                          # Requires the optional `rag-langchain` extra:
     #                          # `pip install sectum-ai-adapters[rag-langchain]`.
     kind: fake
 
   agent:
     # kind: http               # generic JSON HTTP agent endpoint
-    #   url_env: SECTUM_AGENT_URL
+    #   url: http://localhost:8000/agent
     # kind: langgraph          # a compiled LangGraph StateGraph (per-thread checkpoint)
-    #                          # construct via `LangGraphAgent.connect(model, tools)`
-    #                          # in Python — sectum-ai.yaml only flips the kind so the
-    #                          # config validator accepts a langgraph adapter built
-    #                          # by the caller. Requires the optional `langgraph`
+    #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
+    #                          # runtime object this adapter wraps (see docs/configuration.md). Requires the optional `langgraph`
     #                          # extra: `pip install sectum-ai-adapters[langgraph]`.
     # kind: autogen            # an AutoGen AssistantAgent + UserProxyAgent pair
     #                          # (each per-tenant message prefixed with [tenant:<hex>])
-    #                          # construct via `AutoGenAgent.connect(model, tools)`
-    #                          # in Python — sectum-ai.yaml only flips the kind so the
-    #                          # config validator accepts an autogen adapter built
-    #                          # by the caller. Requires the optional `autogen`
+    #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
+    #                          # runtime object this adapter wraps (see docs/configuration.md). Requires the optional `autogen`
     #                          # extra: `pip install sectum-ai-adapters[autogen]`.
     # kind: crewai             # a CrewAI Crew (agents + tasks) kicked off per tenant
     #                          # (tenant.hex passed in as the `tenant_id` input
     #                          # variable; templated task descriptions interpolate it)
-    #                          # construct via `CrewAIAgent.connect(agents, tasks)`
-    #                          # in Python — sectum-ai.yaml only flips the kind so the
-    #                          # config validator accepts a crewai adapter built
-    #                          # by the caller. Requires the optional `crewai`
+    #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
+    #                          # runtime object this adapter wraps (see docs/configuration.md). Requires the optional `crewai`
     #                          # extra: `pip install sectum-ai-adapters[crewai]`.
     # kind: openai-assistants  # an OpenAI Assistant + per-tenant Thread (the API
     #                          # caches Threads server-side; one per tenant.hex)
@@ -154,7 +148,7 @@ adapters:
 
   mcp:
     # kind: stdio              # stdio Model Context Protocol server
-    #   command: ["uvx", "your-mcp-server"]
+    #   command: "uvx your-mcp-server"   # one string: the executable and its arguments
     # kind: http               # streamable-HTTP MCP server
     #   url: https://mcp.example.com/mcp
     #   tenant_argument: tenant
@@ -189,7 +183,29 @@ adapters:
     kind: fake
 
   memory:
-    # No live kinds yet — see the model note above.
+    # kind: redis              # Redis-backed long-term memory (key-prefixed per tenant)
+    #   host: localhost
+    #   port: 6379
+    # kind: mem0               # mem0 (opt-in; needs the `mem0` extra and an embedder)
+    kind: fake
+
+  # The three Class 11 erasure surfaces `sectum-ai erasure` additionally scans.
+  # Omit a family to leave it on its in-memory fake (recorded as SYNTHETIC).
+  search_index:
+    # kind: opensearch         # per-tenant index
+    #   host: localhost
+    #   port: 9200
+    kind: fake
+  eval_set:
+    # kind: langsmith          # LangSmith Datasets (opt-in; `langsmith` extra)
+    #   api_key_env: LANGSMITH_API_KEY
+    kind: fake
+  backup:
+    # kind: s3                 # `boto3` extra; per-tenant prefix
+    #   bucket: my-bucket
+    #   region_name: us-east-1
+    # kind: gcs                # `gcs` extra
+    #   bucket: my-bucket
     kind: fake
 
 # -----------------------------------------------------------------------------
