@@ -41,7 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   demonstration. A fake-backed finding is now floored to `note` at the
   informational bucket, its message says which stack it describes, and each
   result carries its `backingSurface` and `surfaceProvenance` — the same cap the
-  projection already applied to unverified candidates.
+  projection already applied to unverified candidates. The cap keys on an
+  explicit `LIVE`, like `confirmed_on_live_surfaces` and the control mappings do:
+  a run that records no provenance for a surface is not evidence that it was
+  live.
 - **The pre-commit ruff hooks were green on a tree CI's own `ruff format --check`
   rejects.** They pinned `v0.15.13`, older than the `ruff>=0.16.3` this repo
   installs, and filtered to Python files, so they never saw the code inside the

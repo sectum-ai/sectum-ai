@@ -83,8 +83,22 @@ def test_one_result_per_finding_and_one_rule_per_probe() -> None:
 
 
 def test_level_is_severity_driven_for_confirmed_findings() -> None:
-    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    sarif = run_to_sarif(
+        _run(_finding("f-1", severity=Severity.CRITICAL)).model_copy(
+            update={"surface_provenance": {"vector_db": "LIVE"}}
+        )
+    )
+    (run,) = sarif["runs"]
     assert run["results"][0]["level"] == "error"
+
+
+def test_a_run_that_records_no_provenance_is_not_evidence_of_a_live_backend() -> None:
+    # `confirmed_on_live_surfaces` and the control mappings both key on an
+    # explicit LIVE. Keying on an explicit SYNTHETIC instead would have let an
+    # unstated surface render as a critical production alert.
+    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    assert run["results"][0]["level"] == "note"
+    assert run["results"][0]["properties"]["surfaceProvenance"] == "SYNTHETIC"
 
 
 def test_unverified_candidate_never_exceeds_note() -> None:
@@ -106,7 +120,10 @@ def test_rule_security_severity_tracks_the_worst_confirmed_finding() -> None:
         _finding("f-1", probe_id="p", severity=Severity.LOW),
         _finding("f-2", probe_id="p", severity=Severity.CRITICAL),
     )
-    (run,) = run_to_sarif(_run(*findings))["runs"]
+    sarif = run_to_sarif(
+        _run(*findings).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    (run,) = sarif["runs"]
     (rule,) = run["tool"]["driver"]["rules"]
     assert rule["properties"]["security-severity"] == "9.5"  # critical, not low
 
