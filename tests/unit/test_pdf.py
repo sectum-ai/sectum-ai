@@ -417,3 +417,25 @@ def test_both_pdf_engines_state_the_same_summary_facts() -> None:
         assert label in html, f"the weasyprint engine omits the {label!r} summary row"
     rpr = _retrieval_pivot_summary(run)
     assert rpr is not None and rpr in html
+
+
+def test_both_pdf_engines_mark_a_finding_that_describes_a_fake() -> None:
+    # SARIF floors such a finding's severity and OSCAL prefixes its observation;
+    # both PDF engines rendered a fake-backed CRITICAL identically to a live one -
+    # in the document an auditor actually reads. Keyed on an explicit LIVE, like
+    # every sibling: a surface the record does not describe is not evidence of a
+    # live backend.
+    from sectum_ai.evidence.pdf import _finding_lines
+    from sectum_ai.evidence.pdf_weasyprint import build_audit_html
+
+    base = _run_result(_manifest_only(), with_finding=True)
+    fake = base.model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    live = base.model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+
+    assert any("[synthetic surface" in line for line in _finding_lines(fake.findings, fake))
+    assert not any("[synthetic surface" in line for line in _finding_lines(live.findings, live))
+
+    fake_html = build_audit_html(EvidencePack(run_result=fake, manifest_hash=fake.manifest_hash))
+    live_html = build_audit_html(EvidencePack(run_result=live, manifest_hash=live.manifest_hash))
+    assert "[synthetic surface" in fake_html
+    assert "[synthetic surface" not in live_html

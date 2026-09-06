@@ -143,8 +143,10 @@ def confirmed_by_kind(run: RunResult) -> str:
         for f in confirmed
         if run.surface_provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
     )
-    if any(p == SurfaceProvenance.LIVE.value for p in run.surface_provenance.values()):
-        parts += f"; on live surfaces {live}"
+    # Always, including - especially - when the answer is zero. Gating this on
+    # the run having a live surface dropped it from the one pack where it is the
+    # whole point: an all-synthetic run read "229 (cross-tenant 229)".
+    parts += f"; on live surfaces {live}"
     return f"{len(confirmed)} ({parts})"
 
 
@@ -288,7 +290,20 @@ def _remediation_line(finding: Finding) -> str | None:
     return f"<i>Remediation: {escape(finding.remediation_pointer)}</i>"
 
 
-def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
+def synthetic_prefix(run: RunResult, finding: Finding) -> str:
+    """``"[synthetic surface] "`` when this finding describes a built-in fake.
+
+    Keyed on an explicit LIVE, like every sibling that answers this question.
+    SARIF floors such a finding's severity and OSCAL prefixes its observation;
+    both PDF engines rendered one identically to a live CRITICAL - in the one
+    document an auditor actually reads.
+    """
+    if run.surface_provenance.get(backing_surface(finding)) == SurfaceProvenance.LIVE.value:
+        return ""
+    return "[synthetic surface - Sectum's built-in fake, not your stack] "
+
+
+def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:
     """Return escaped finding lines, or a single 'none' line for an empty run.
 
     Each finding contributes a summary line - ending with its mapped control IDs
@@ -301,8 +316,9 @@ def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
         return ["No findings were recorded for this run."]
     lines: list[str] = []
     for finding in findings:
+        marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
         line = (
-            f"<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
+            f"{marker}<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
             f"on {escape(finding.surface.value)}: marker "
             f"{escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
         )
@@ -405,7 +421,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
-    flow += [Paragraph(line, body) for line in _finding_lines(run.findings)]
+    flow += [Paragraph(line, body) for line in _finding_lines(run.findings, run)]
 
     coverage_rows = _coverage_rows(run)
     if coverage_rows:

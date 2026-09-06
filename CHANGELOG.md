@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The auditor's PDF rendered a finding from the built-in fake identically to a
+  live one.** SARIF floors such a finding's severity and OSCAL prefixes its
+  observation; the PDF — the document an auditor actually reads — said nothing,
+  in both engines. And the "on live surfaces N" qualifier was withheld exactly
+  when N is zero: an all-synthetic pack read `Confirmed findings: 229
+  (cross-tenant 229)`, the sentence that line exists to prevent. Every sample is
+  regenerated.
 - **`erasure --soft-delete` stopped reaching the vector store** — a regression
   from the previous cycle's own fix. The shared vector-slot builder made its own
   flagless default, so the surface the whole demo is about attested ERASED on a

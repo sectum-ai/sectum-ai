@@ -215,6 +215,8 @@ def test_the_summary_counts_confirmed_findings_by_what_they_are() -> None:
     )
     assert residual is not None
     run = pack.run_result.model_copy(update={"findings": (residual, pack.run_result.findings[0])})
-    assert confirmed_by_kind(run) == "2 (cross-tenant 1, residual-data 1)"
+    # The "on live surfaces" qualifier is unconditional now: withholding it when
+    # the answer is zero dropped it from the one pack where it is the whole point.
+    assert confirmed_by_kind(run) == "2 (cross-tenant 1, residual-data 1; on live surfaces 0)"
     html = build_audit_html(pack.model_copy(update={"run_result": run}))
     assert "Confirmed findings" in html and "Confirmed cross-tenant findings" not in html

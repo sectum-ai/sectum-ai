@@ -31,8 +31,9 @@ from sectum_ai.evidence.pdf import (
     confirmed_by_kind,
     probes_exercised,
     provenance_statement,
+    synthetic_prefix,
 )
-from sectum_ai.spec import EvidenceError, EvidencePack, Finding
+from sectum_ai.spec import EvidenceError, EvidencePack, Finding, RunResult
 
 # Severity -> CSS accent colour for the finding badge. A muted, print-safe
 # palette (no neon); unknown severities fall back to the neutral grey.
@@ -106,11 +107,13 @@ def _kv_table(rows: tuple[tuple[str, str], ...], *, mono_values: bool = False) -
     return f'<table class="kv">{cells}</table>'
 
 
-def _finding_html(finding: Finding) -> str:
+def _finding_html(finding: Finding, run: RunResult | None = None) -> str:
     """Render one finding as an escaped, severity-accented HTML block."""
     severity = finding.severity.value
     colour = _SEVERITY_COLOURS.get(severity, _NEUTRAL)
+    marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
     head = (
+        f"{marker}"
         f'<span class="badge" style="background:{colour}">{escape(severity)}</span>'
         f"{escape(finding.probe_id)} on {escape(finding.surface.value)}: "
         f"marker {escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
@@ -190,7 +193,7 @@ def build_audit_html(pack: EvidencePack) -> str:
     )
 
     if run.findings:
-        findings_html = "".join(_finding_html(f) for f in run.findings)
+        findings_html = "".join(_finding_html(f, run) for f in run.findings)
     else:
         findings_html = '<p class="none">No findings were recorded for this run.</p>'
 

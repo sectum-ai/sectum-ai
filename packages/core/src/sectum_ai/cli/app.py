@@ -1162,11 +1162,10 @@ def _confirmed_summary(confirmed: Sequence[Finding], provenance: dict[str, str])
     live = sum(
         1 for f in confirmed if provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
     )
-    suffix = (
-        f"; {live} on live surfaces"
-        if confirmed and any(p == SurfaceProvenance.LIVE.value for p in provenance.values())
-        else ""
-    )
+    # Always, including - especially - when the answer is zero: gating it on the
+    # run having a live surface dropped it from the one run where it is the whole
+    # point.
+    suffix = f"; {live} on live surfaces" if confirmed else ""
     if set(kinds) <= {"cross-tenant leak"}:
         return f"{len(confirmed)} confirmed cross-tenant findings{suffix}"
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
