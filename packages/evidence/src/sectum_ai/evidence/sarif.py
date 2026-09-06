@@ -26,7 +26,7 @@ from typing import Any
 
 from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, live_surfaces
 from sectum_ai.evidence.labels import backing_surface, leak_label
-from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
+from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity, SurfaceProvenance
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
@@ -67,6 +67,20 @@ _SEVERITY_ORDER: dict[Severity, int] = {
 # as a high-severity alert. An unverified candidate is informational until
 # confirmed, so it takes the lowest (INFO) bucket — the anti-over-claim cap.
 _UNVERIFIED_SECURITY_SEVERITY = _SECURITY_SEVERITY[Severity.INFO]
+
+
+def _scope_prefix(recorded: str | None) -> str:
+    """The message prefix stating which stack a result describes.
+
+    Three-valued, like the property beside it: the prose stayed two-valued when
+    the label went three-valued, so an UNRECORDED surface was told it "describes
+    Sectum's built-in fake" - stating something the record does not.
+    """
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - describes Sectum's built-in fake, not your stack] "
 
 
 def _describes_a_fake(finding: Finding, live: frozenset[str]) -> bool:
@@ -167,7 +181,6 @@ def _result(
     run_provenance: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the SARIF result for a single finding."""
-    on_a_fake = _describes_a_fake(finding, live)
     run_provenance = run_provenance or {}
     detail = finding.evidence_span or (
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
@@ -178,11 +191,7 @@ def _result(
         "level": _result_level(finding, live),
         "message": {
             "text": (
-                (
-                    "[synthetic surface - describes Sectum's built-in fake, not your stack] "
-                    if on_a_fake
-                    else ""
-                )
+                _scope_prefix(run_provenance.get(backing_surface(finding)))
                 + f"{finding.severity.value.upper()} {leak_label(finding)} on "
                 f"{finding.surface.value}: {detail}"
             )

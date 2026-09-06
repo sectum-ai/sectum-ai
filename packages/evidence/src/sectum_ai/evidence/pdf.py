@@ -298,8 +298,11 @@ def synthetic_prefix(run: RunResult, finding: Finding) -> str:
     both PDF engines rendered one identically to a live CRITICAL - in the one
     document an auditor actually reads.
     """
-    if run.surface_provenance.get(backing_surface(finding)) == SurfaceProvenance.LIVE.value:
+    recorded = run.surface_provenance.get(backing_surface(finding))
+    if recorded == SurfaceProvenance.LIVE.value:
         return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
     return "[synthetic surface - Sectum's built-in fake, not your stack] "
 
 

@@ -583,3 +583,28 @@ def test_an_erasure_surface_that_was_not_rescanned_is_not_a_fixed_leak(tmp_path:
     assert "[ok] erasure_residue[vector_db]" not in cli.output
     assert "RESULT: REGRESSION" in cli.output
     assert cli.exit_code == 2
+
+
+def test_the_json_diff_carries_the_qualifier_the_text_diff_refuses_to_omit(
+    tmp_path: Path,
+) -> None:
+    # The JSON carried `regressed` and `informational` but not the verdict, so a
+    # machine reading it saw as fact the delta the human output declines to call
+    # `[ok]`. And both CI-facing commands were silent about a run describing the
+    # built-in fakes, where every other command discloses it.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2}))
+    later = _run(metrics=RunMetrics(erasure_residue={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    payload = json.loads(cli.output[cli.output.index("{") :])
+    residue = next(m for m in payload["metrics"] if m["name"] == "erasure_residue[vector_db]")
+    assert residue["verdict"] == "not measured", payload["metrics"]
+    assert payload["erasure_lost"] == ["vector_db"]

@@ -32,6 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An unmeasured Class 5 pair entered the signed metrics as an effect size of
+  `0.0` — a number the run never established, which `diff` then read as an
+  improvement, printing `[ok]` directly above its own coverage-loss line. The map
+  is gated on `resolved` now, like the probe-version and exercised-surface sets.
+- An `erasure` run configured with an `app` adapter recorded an **empty**
+  provenance block: the app fills the vector slot but declares the API surface,
+  so the "only what this run scanned" filter dropped it, and `verify` reported a
+  0.7.0 pack as one that predates the block.
+- **`diff --output json` stated as fact what the text renderer refuses to call
+  `[ok]`** — it carried `regressed` and `informational` but not the verdict. And
+  `diff` and `baseline --compare`, the two CI-facing commands, were the only ones
+  that said nothing about a run describing the built-in fakes.
+- The SARIF, OSCAL and PDF banners stayed two-valued after the labels beside them
+  went three-valued, so a surface the record does not describe was told it
+  "describes Sectum's built-in fake".
 - **The auditor's PDF rendered a finding from the built-in fake identically to a
   live one.** SARIF floors such a finding's severity and OSCAL prefixes its
   observation; the PDF — the document an auditor actually reads — said nothing,

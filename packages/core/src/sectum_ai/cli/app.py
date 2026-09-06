@@ -1952,6 +1952,19 @@ def _load_subject_manifest(path: Path) -> SubjectManifest:
     )
 
 
+def _subject_provenance(vector: VectorStoreAdapter, others: tuple[Adapter, ...]) -> dict[str, str]:
+    """Erasure provenance, with the vector slot keyed by the reported surface.
+
+    An `app` adapter fills the vector slot and declares ``Surface.API``, so keying
+    by the adapter's own surface put it under `api` - which the "only the surfaces
+    this run scanned" filter then dropped, leaving the block empty and `verify`
+    reporting a 0.7.0 pack as one that predates surface provenance.
+    """
+    provenance = surface_provenance_of(others)
+    provenance[Surface.VECTOR_DB.value] = surface_provenance_of((vector,))[vector.surface.value]
+    return provenance
+
+
 def _emit_erasure_attestation(
     report: ErasureReport,
     *,
@@ -2314,15 +2327,15 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
-            surface_provenance=surface_provenance_of(
+            surface_provenance=_subject_provenance(
+                subject_store,
                 (
-                    subject_store,
                     subject_cache,
                     subject_obs,
                     subject_model,
                     subject_memory,
                     subject_search,
-                )
+                ),
             ),
         )
         return
@@ -2349,7 +2362,11 @@ def erasure(
         evalset = build_eval_set(cfg)
     with adapter_config(loaded, "backup", fake_default) as cfg:
         backup = build_backup(cfg)
-    provenance = surface_provenance_of((store, obs, memory, cache, model, search, evalset, backup))
+    provenance = surface_provenance_of((obs, memory, cache, model, search, evalset, backup))
+    # The vector slot is keyed by the surface the erasure report speaks of, not by
+    # the adapter's own: an `app` adapter fills this slot and declares
+    # Surface.API, so keying by its own surface left the block empty.
+    provenance[Surface.VECTOR_DB.value] = surface_provenance_of((store,))[store.surface.value]
     _warn_on_synthetic_surfaces(provenance)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
@@ -2799,6 +2816,9 @@ def baseline(
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "baseline found may simply have nowhere to appear; re-baseline deliberately"
         )
+    # The other CI-facing command. Both were silent about a run describing the
+    # built-in fakes, where every other command discloses it.
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     if result.regressed:
         typer.echo(
             "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
@@ -2982,6 +3002,9 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
                 "current": delta.current,
                 "regressed": delta.regressed,
                 "informational": delta.informational,
+                # The load-bearing qualifier: the text renderer refuses to print
+                # `[ok]` for these, and the JSON stated the same delta as fact.
+                "verdict": _lost_verdict(delta, result),
             }
             for delta in result.metrics.deltas
         ],
@@ -3143,6 +3166,10 @@ def diff(
         _render_diff_json(earlier, later, result)
     else:
         _render_diff_text(earlier, later, result)
+    # `diff` and `baseline --compare` are the two CI-facing commands, and were the
+    # only ones that said nothing about a run describing the built-in fakes -
+    # `probe`, `report`, `pack`, `score` and `verify` all disclose it.
+    _warn_on_synthetic_surfaces(later_run.surface_provenance)
     if result.regressed:
         raise typer.Exit(code=2)
 

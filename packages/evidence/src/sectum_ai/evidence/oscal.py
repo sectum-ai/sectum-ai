@@ -117,6 +117,20 @@ def _prop(name: str, value: str) -> dict[str, str]:
     return {"name": name, "value": value, "ns": _PROP_NS}
 
 
+def _scope_prefix(recorded: str | None) -> str:
+    """The description prefix stating which stack an observation describes.
+
+    Three-valued, like the property beside it: the prose stayed two-valued when
+    the label went three-valued, so an UNRECORDED surface was told it describes
+    the built-in fake - stating something the record does not.
+    """
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - describes Sectum's built-in fake, not the operator's stack] "
+
+
 def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
     """Build one OSCAL ``observation`` from a Sectum finding.
 
@@ -145,13 +159,8 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
     # reason; this is its sibling.
     backing = backing_surface(finding)
     provenance = run.surface_provenance.get(backing, "UNRECORDED")
-    on_a_fake = provenance != SurfaceProvenance.LIVE.value
     description = (
-        (
-            "[synthetic surface - describes Sectum's built-in fake, not the operator's stack] "
-            if on_a_fake
-            else ""
-        )
+        _scope_prefix(run.surface_provenance.get(backing))
         + f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
         f"{finding.surface.value} surface. {finding.status.value.upper()} "
         f"{finding.severity.value} {leak_label(finding)}: {evidence}"

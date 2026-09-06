@@ -128,11 +128,19 @@ class KvCacheTimingReport:
 
     @property
     def effect_sizes(self) -> dict[str, float]:
-        """Per-pair effect sizes, for ``RunMetrics.side_channel_effect_sizes``."""
+        """Per-pair effect sizes, for ``RunMetrics.side_channel_effect_sizes``.
+
+        Resolved pairs only. An unresolved one has an effect size of 0.0 by
+        arithmetic, not by measurement, and writing it into the signed record put
+        a number there the run never established - `diff` then read the drop to
+        zero as an improvement, printing `[ok]` above its own coverage-loss line.
+        `probe_versions` and the exercised-surface set are gated the same way.
+        """
         # Full hex so two tenant pairs cannot collide onto one map key.
         return {
             f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}": signal.effect_size
             for signal in self.signals
+            if signal.resolved
         }
 
 

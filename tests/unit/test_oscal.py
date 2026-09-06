@@ -369,3 +369,12 @@ def test_every_observation_says_which_stack_it_describes() -> None:
         p["name"]: p["value"] for p in unstated["results"][0]["observations"][0]["props"]
     }
     assert unstated_props["sectum-surface-provenance"] == "UNRECORDED"
+
+
+def test_an_unrecorded_surface_observation_is_not_told_it_describes_a_fake() -> None:
+    # Same two-valued prose beside a three-valued property, in the projection a
+    # GRC platform tabulates.
+    doc = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    description = doc["results"][0]["observations"][0]["description"]
+    assert description.startswith("[surface provenance not recorded"), description
+    assert "built-in fake" not in description

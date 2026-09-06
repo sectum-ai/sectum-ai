@@ -485,3 +485,20 @@ def test_a_surface_with_no_baseline_records_no_residue_count(tmp_path: Path) -> 
     run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
     assert run["metrics"]["erasure_residue"] == {}, run["metrics"]["erasure_residue"]
     assert run["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED"
+
+
+def test_erasure_records_provenance_for_a_configured_app_adapter(tmp_path: Path) -> None:
+    # An `app` adapter fills the vector SLOT but declares Surface.API, so its
+    # provenance was keyed `api` while the erasure report speaks of `vector_db` -
+    # and the "only the surfaces this run scanned" filter then dropped it,
+    # leaving the block EMPTY. `verify` read that as "the run records no surface
+    # provenance (it predates the block)" on a pack stamped 0.7.0.
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("workdir: " + str(tmp_path) + "\nadapters:\n  app:\n    kind: fake\n")
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+    _runner.invoke(
+        app,
+        ["erasure", "--workdir", str(tmp_path), "--config", str(config), "--scope", "vector_db"],
+    )
+    run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
+    assert run["surface_provenance"] == {"vector_db": "SYNTHETIC"}, run["surface_provenance"]

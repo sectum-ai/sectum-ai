@@ -226,3 +226,13 @@ def test_the_same_finding_on_a_live_surface_is_a_critical_alert() -> None:
     assert not result["message"]["text"].startswith("[synthetic surface")
     rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
     assert rule["defaultConfiguration"]["level"] == "error"
+
+
+def test_an_unrecorded_surface_is_not_told_it_describes_a_fake() -> None:
+    # The property went three-valued and the PROSE stayed two-valued, so a result
+    # on a surface the record does not describe was told it "describes Sectum's
+    # built-in fake" - stating something the record does not.
+    sarif = run_to_sarif(_run(_finding("f-1")))
+    message = sarif["runs"][0]["results"][0]["message"]["text"]
+    assert message.startswith("[surface provenance not recorded"), message
+    assert "built-in fake" not in message
