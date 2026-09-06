@@ -148,7 +148,11 @@ of at most 1000 traces, and Langfuse pages to its 1000-trace budget; a miss on a
 full page (or past the budget) is refused (an `AdapterError`) rather than read as
 "erased", since a trace beyond it is indistinguishable from a deleted one. The
 Class 11 marker scan (`search_traces`) reads the same page and refuses it on the
-same rule. In every case only a *miss* on a full page is refused: a marker found
+same rule. The generic `otel` reader has no page cap to count, because it reads a
+caller-supplied store: its contract asks the shim to FLAG a partial page instead
+(a truthy `truncated` / `nextPageToken` / `next_page_token` / `nextLink` in the
+response body), and a miss on a flagged page is refused the same way. A shim that
+never sets one cannot be caught here, which is why the contract asks for it. In every case only a *miss* on a full page is refused: a marker found
 there is a definite residual and is reported, since one hit already answers the
 question the scan asks. The mem0 memory store and the LangSmith eval set follow
 the same rule, and mem0 additionally refuses a response whose envelope is not the

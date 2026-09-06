@@ -51,7 +51,7 @@ retrieval-pivot rate: 62.5% (95% CI 42.7%-78.8%, n=24)
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the pack is internally
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the pack is internally
 consistent, but its only timestamp is a reproducible local-dev token, so this
 is not independent tamper evidence. As with the vector-store
 demo, the rate is a property of the *stack under test*: point the RAG adapter at

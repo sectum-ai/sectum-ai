@@ -129,6 +129,32 @@ _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str, tuple[str, ...]], ..
 )
 
 
+# Which surface each ISOLATION probe speaks for. Mirrors `score.PROBE_SURFACES`
+# minus the erasure probes, and is duplicated rather than imported because
+# `evidence` sits below `core` (ADR-0004); a parity test pins the two in sync.
+#
+# Subtracting the erasure surfaces was only half the rule the comment below
+# states. A live surface NO probe drove also satisfied a bare `live` test, so a
+# record whose isolation probe ran against a fake beside an untouched live
+# `semantic_cache` asserted nine frameworks and 19 OSCAL `satisfied` - while
+# `score` refused to grade the very same record.
+_ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
+    "tenant-boundary-fetch": ("vector_db", "api"),
+    "rag-entity-bleed": ("vector_db", "api"),
+    "rag-pipeline-bleed": ("rag_pipeline",),
+    "rag-poisoning": ("vector_db", "api"),
+    "semantic-cache-contamination": ("semantic_cache",),
+    "kv-cache-timing": ("model_adapter",),
+    "embedding-inversion": ("vector_db", "api"),
+    "agent-tool-hijack": ("mcp",),
+    "agent-framework-hijack": ("agent_framework",),
+    "memory-contamination": ("agent_memory",),
+    "lora-cross-tenant": ("model_adapter",),
+    "ikea-extraction": ("vector_db", "api"),
+    "multimodal-rag-bleed": ("vector_db", "api"),
+}
+
+
 def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = ()) -> bool:
     """Whether ``run`` produced the evidence ``requirement`` names, on ``surfaces``.
 
@@ -162,7 +188,16 @@ def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = 
     # all ran against fakes beside one live erasure surface asserted SOC 2 CC6.1,
     # EU AI Act 15 and HIPAA - eight frameworks' worth of isolation testing - off
     # a deletion check.
-    isolation_live = live - erasure_scanned_surfaces(run)
+    # ...and "drove" means THIS run's isolation probes name it, not merely that
+    # something was live. `PROBE_SURFACES` lists alternatives (a probe drives the
+    # vector store OR an application API), so the union over the exercised probes
+    # is the set this run can speak for.
+    drove = {
+        surface
+        for probe_id in exercised - _ERASURE_PROBE_IDS
+        for surface in _ISOLATION_PROBE_SURFACES.get(probe_id, ())
+    }
+    isolation_live = (live - erasure_scanned_surfaces(run)) & drove
     return bool(exercised - _ERASURE_PROBE_IDS) and bool(isolation_live)
 
 
@@ -240,7 +275,14 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
     inconclusive = sorted(
         surface
         for surface in live_surfaces(run)
-        if run.metrics.erasure_coverage.get(surface) == CoverageVerdict.NOT_COVERED.value
+        # `.get(surface)` returned None for a live surface absent from the block
+        # entirely, so it was neither "verified" nor "could not be established" -
+        # it simply vanished, while the assertion still said verified.
+        # `ErasureReport.coverage()` defaults exactly this case to NOT_COVERED.
+        if (
+            run.metrics.erasure_coverage.get(surface, CoverageVerdict.NOT_COVERED.value)
+            == CoverageVerdict.NOT_COVERED.value
+        )
     )
     # COMPOSED, not first-match. Returning on the first failure dropped the
     # others: a run with residue on one surface and no erasure API on another

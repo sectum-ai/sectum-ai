@@ -118,21 +118,28 @@ evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-wh
 the pack or its siblings call for them. On a **run-pack bundle** (a `.zip`), one
 `member:<name>` line per listed member comes first and the pack's own checks
 follow, with the in-toto line naming the member it re-checked
-(`in-toto-attestation:attestation.intoto.json`). An unreadable archive, a missing
-run and a missing evidence member add `bundle`, `bundled-run` and `evidence-pack`
-respectively — failure paths, so a clean bundle never prints them.
+(`in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)
+also carries `run.json`, so it prints `bundled-run`; an `evidence-bundle.zip`
+carries none and prints nothing for it. An unreadable archive, a duplicate member
+name, a bad digest manifest and a missing evidence member add `bundle`,
+`bundle-members`, `bundle-manifest` and `evidence-pack` — failure paths a clean
+bundle never prints.
 
 `manifest-hash` is the one check a flag turns on. The pack's own digests bind
 *that the manifest hash matches*, not *which marker belonged to which tenant*;
-supplying the ground-truth manifest binds the second. No command writes it as a
-standalone file - it is nested in the workdir's `substrate.json` (and sealed as
-`ground-truth-manifest.json.aes` when `security.manifest_key_env` is set), so
-extract it first:
+supplying the ground-truth manifest binds the second. The manifest lives inside
+the workdir's `substrate.json`, so extract it first:
 
 ```sh
 python -c "import json,sys; json.dump(json.load(open('.sectum-ai/substrate.json'))['manifest'], sys.stdout)" > manifest.json
 uv run sectum-ai verify .sectum-ai/evidence.json --manifest manifest.json
 ```
+
+With `security.manifest_key_env` set, `seed` seals the whole substrate as
+`substrate.json.enc` and deletes the plaintext, so that command has nothing to
+read - decrypt it first, or take the manifest from a run pack built with
+`sectum-ai pack --include-manifest`, which ships it sealed as
+`ground-truth-manifest.json.aes`.
 
 The `control-mappings` check asks the same question of the pack's **compliance
 claims**. The digest binds them, so they cannot be edited after signing — but

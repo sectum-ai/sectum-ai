@@ -63,7 +63,7 @@ ERASURE VERIFIED: no residual marker on vector_db, tracing, agent_memory,
 semantic_cache, model_adapter, search_index, eval_set, backup.
 ```
 
-`sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the attestation pack is internally
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the attestation pack is internally
 consistent, but its only timestamp is a reproducible local-dev token, so this
 is not independent tamper evidence.
 

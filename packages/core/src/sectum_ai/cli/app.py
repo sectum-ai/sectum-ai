@@ -1622,6 +1622,18 @@ def pack(
                 "--include-manifest needs security.manifest_key_env set to seal the manifest"
             )
         substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
+        # The same guard `report` applies, and for a sharper reason: the sealed
+        # marker-to-tenant table is the ONLY ground truth an auditor has for
+        # re-deriving who owned which canary. Sealing a re-seeded workdir's
+        # manifest beside this run's pack shipped another substrate's ground
+        # truth at exit 0, and nothing in the pack revealed it -
+        # `manifest-consistency` compares the run to the pack, both stale.
+        if run.manifest_hash != canonical_hash(substrate.manifest):
+            raise ConfigError(
+                "the run was recorded against a different substrate than the one in "
+                f"{workdir}, so --include-manifest would seal another substrate's "
+                "ground truth beside it; re-run 'sectum-ai probe' after re-seeding"
+            )
         sealed = seal_bytes(
             substrate.manifest.model_dump_json().encode("utf-8"), load_key_from_env(key_env)
         )
@@ -2839,6 +2851,10 @@ def baseline(
     baseline_path = workdir / "baseline.json"
     if save:
         baseline_path.write_text(run.model_dump_json(indent=2))
+        # `--compare` discloses a synthetic run; `--save` returned before the call
+        # that does it. An all-fake run enshrined as the reference every future
+        # comparison measures against is the one place it matters most.
+        _warn_on_synthetic_surfaces(run.surface_provenance)
         typer.echo(f"baseline saved -> {baseline_path}")
         return
     if not compare:

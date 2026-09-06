@@ -1,7 +1,7 @@
 > **Status:** the committed `demo.cast` predates the `sectum_ai` rename and the
 > current verifier — it shows a `.sectum/` workdir, a `VERIFIED: the evidence pack
 > is intact` verdict the CLI no longer prints, and two verify checks where today
-> there are eight. Re-record it with the steps below before linking it anywhere.
+> there are nine. Re-record it with the steps below before linking it anywhere.
 > A `demo.gif` is not committed.
 
 # Recording the demo

@@ -161,6 +161,23 @@ def verify_pack(
                 ),
             )
         )
+    elif pdf_bytes is not None:
+        # The complement, which the branch above did not cover: a PDF WAS handed
+        # to us and the pack binds none. `verify` fed it from the pack's own
+        # directory, so this is an auditor document delivered beside the pack and
+        # bound by nothing - and the verdict was silent about it, exit 0, no
+        # `audit-pdf` line at all. `verify_bundle` fails the identical bytes.
+        checks.append(
+            Check(
+                "audit-pdf",
+                ok=False,
+                detail=(
+                    "an audit PDF sits beside this pack, but the pack binds no "
+                    "pdf_ref - so nothing ties that document to this run and it is "
+                    "not covered by the attested digest"
+                ),
+            )
+        )
     anchored = token_anchored or rekor_anchored
     if require_anchored and not anchored:
         checks.append(

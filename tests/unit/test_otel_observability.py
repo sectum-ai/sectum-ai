@@ -322,3 +322,46 @@ def test_an_error_envelope_beside_empty_spans_is_not_an_empty_tenant() -> None:
     adapter = OtelObservability(_PartialStore())
     with pytest.raises(AdapterError, match="returned an error"):
         adapter.search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+
+
+class _FlaggedStore:
+    """A store that answers with a page it flags as partial."""
+
+    def __init__(self, body: dict[str, Any]) -> None:
+        self._body = body
+
+    def query(self, tenant_hex: str, marker: str) -> dict[str, Any]:
+        return self._body
+
+    def tenant_values(self) -> set[str]:
+        return set()
+
+    def purge(self, tenant_hex: str) -> None:
+        return None
+
+
+def test_a_miss_on_a_page_the_store_flagged_partial_is_refused() -> None:
+    # The five sibling trace backends refuse a miss on a page that hit their known
+    # cap. This one reads a caller-supplied store with no cap to count, so its
+    # contract asks the shim to flag a partial page - and a miss on a flagged page
+    # is a marker that cannot be told apart from an erased one.
+    import pytest
+
+    from sectum_ai.spec import AdapterError
+
+    marker = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    hex_a = _TENANT_A.hex
+
+    for flag in ("truncated", "nextPageToken", "next_page_token", "nextLink"):
+        empty = dict(_resource_spans(hex_a, []), **{flag: True})
+        with pytest.raises(AdapterError, match="partial page"):
+            OtelObservability(_FlaggedStore(empty)).search_traces(_TENANT_A, marker)
+
+        # A HIT on a flagged page already answers the question; refusing it would
+        # lose a real residual.
+        found = dict(_resource_spans(hex_a, [_span(f"lookup {marker}")]), **{flag: True})
+        assert OtelObservability(_FlaggedStore(found)).search_traces(_TENANT_A, marker)
+
+    # A falsy flag is not a partial page.
+    quiet = dict(_resource_spans(hex_a, []), truncated=False)
+    assert OtelObservability(_FlaggedStore(quiet)).search_traces(_TENANT_A, marker) == []

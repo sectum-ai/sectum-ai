@@ -1,4 +1,4 @@
-# examples/agent-framework-hijack/sectum.yaml
+# examples/agent-framework-hijack/sectum-ai.yaml
 #
 # Drives the AgentFrameworkHijackProbe against the in-memory FakeAgent with
 # both leak knobs on (confused-deputy + tool-call passthrough), so the demo

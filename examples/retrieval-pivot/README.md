@@ -53,7 +53,7 @@ retrieval-pivot rate: 81.2% (95% CI 68.1%-89.8%, n=48)
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the pack is internally
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the pack is internally
 consistent, but its only timestamp is a reproducible local-dev token, so this
 is not independent tamper evidence.
 

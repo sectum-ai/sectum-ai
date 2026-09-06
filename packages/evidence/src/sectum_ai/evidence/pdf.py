@@ -164,9 +164,15 @@ def probes_exercised(run: RunResult) -> str:
     when the run names them: a one-probe pack and a twelve-probe pack rendered
     identically apart from the digest.
     """
-    if not run.probe_versions:
+    # A finding is itself proof its probe executed - the reasoning
+    # `score._confirmed_probe_ids`, `baseline._exercised_probes` and
+    # `controls._run_supports` all apply. This renderer did not, so the auditor
+    # PDF read "Probes exercised: none recorded" in the same signed pack that
+    # grades that probe's class FAIL.
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    if not exercised:
         return "none recorded"
-    ids = sorted(run.probe_versions)
+    ids = sorted(exercised)
     text = f"{len(ids)}: {', '.join(ids)}"
     dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
     if dropped:

@@ -61,15 +61,18 @@ class LiveAnthropicClient:
         self._max_tokens = max_tokens
         self._system = system
         # The Anthropic tool spec is a dict carrying name / description /
-        # input_schema. Strip the python-callable sidecar before passing
-        # it to the SDK (the SDK rejects unknown keys on tool specs).
+        # input_schema, resolved off the tool object's ``__sectum_tool_spec__``
+        # attribute. Nothing is stripped and nothing needs to be: the callable is
+        # the tool, not a key inside the spec, so the dict handed to the SDK
+        # carries only the keys it declares.
         self._tools: list[dict[str, Any]] = []
         self._tool_targets: dict[str, Any] = {}
         for tool in tools:
             spec = getattr(tool, "__sectum_tool_spec__", None) or tool
             if not isinstance(spec, dict) or "name" not in spec:
                 raise AdapterError(
-                    "each tool must be (or carry) an Anthropic tool-spec dict "
+                    "each tool must carry an Anthropic tool-spec dict on its "
+                    "`__sectum_tool_spec__` attribute "
                     "with at least a `name` field; got "
                     f"{type(spec).__name__}"
                 )

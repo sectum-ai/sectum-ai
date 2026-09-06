@@ -19,9 +19,8 @@ Implements the ``_AssistantsClient`` protocol the adapter consumes:
 Tool execution: the live backend resolves each ``requires_action``
 event by reading the tool name + arguments off the run, calling the
 caller-supplied Python callable mapped under the same name, and
-posting the result back via ``submit_tool_outputs``.
-
-Tool execution: pass the python callable ITSELF as the tool, with its
+posting the result back via ``submit_tool_outputs``. Pass the python
+callable ITSELF as the tool, with its
 schema attached as a ``__sectum_tool_spec__`` attribute. Both sidecars
 are read off the tool object with ``getattr``, so a callable stored as a
 KEY inside the spec dict is invisible to them (and makes the spec
@@ -76,7 +75,7 @@ class LiveAssistantsClient:
             if not isinstance(spec, dict) or "function" not in spec:
                 raise AdapterError(
                     "each tool must carry a `__sectum_tool_spec__` dict with the "
-                    "OpenAI function-tool schema, or be a tool-spec dict itself"
+                    "OpenAI function-tool schema"
                 )
             tool_specs.append(spec)
             function_name = spec.get("function", {}).get("name")

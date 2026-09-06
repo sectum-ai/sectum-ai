@@ -34,9 +34,9 @@ from sectum_ai.adapters import ModelAdapter
 from sectum_ai.spec import Finding, FindingStatus, Severity, Substrate, Surface
 
 # Trials per condition. Enough samples that the jitter noise floor is stable and
-# the t-test has ample degrees of freedom. Must stay EVEN: `_measure` alternates
-# which arm it times first, and only an even count leaves the two arms with equal
-# mean measurement positions, which is what makes a linear drift cancel exactly.
+# the t-test has ample degrees of freedom. Must stay EVEN: `_measure` shuffles a
+# BALANCED order of which arm it times first, and only an even count can be split
+# evenly - equal mean measurement positions are what make a linear drift cancel.
 _TRIALS = 24
 # No latency is measured finer than the clock: variances are floored at the
 # square of a 1 us resolution (perf_counter's is tens of ns), in ms. A jitter-free
@@ -347,7 +347,7 @@ class KvCacheTimingProbe:
         # Manufacturing a cross-tenant finding out of ambient machine noise is the
         # worst direction for a signed evidence pack to be wrong in.
         #
-        # Alternating makes the two arms' mean measurement positions equal, so a
+        # Balance makes the two arms' mean measurement positions equal, so a
         # linear drift cancels exactly rather than merely shrinking - which is why
         # _TRIALS must stay even. Higher-order drift (a GC pause mid-run) is damped,
         # not eliminated; the Bonferroni-corrected alpha and the effect-size floor

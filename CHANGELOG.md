@@ -46,6 +46,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Nine compliance frameworks asserted off a live surface no probe drove.**
+  `_run_supports` tested `live` as a run-wide existential: subtracting the erasure
+  surfaces left a live surface *nothing* touched still satisfying it. A record
+  whose isolation probe ran against a fake `vector_db`, beside an untouched live
+  `semantic_cache`, shipped nine control mappings and 19 OSCAL `satisfied` — while
+  `score` refused to grade the identical record. The module's own comment already
+  stated the rule ("the live surface has to be one an ISOLATION probe drove") and
+  only half of it was implemented; the test named for that rule exercised only the
+  half that was.
+- **`verify` was silent about an auditor PDF the pack does not bind.** It had a
+  branch for "binds a PDF, got one" and "binds a PDF, got none", and none for the
+  complement — so a PDF sitting beside a pack that binds no `pdf_ref` produced no
+  `audit-pdf` line at all, every check `[ok]`, exit 0. `verify_bundle` FAILS the
+  identical bytes.
+- **`pack --include-manifest` sealed another substrate's ground truth at exit 0.**
+  `report` refuses a run recorded against a re-seeded workdir; `pack` loaded the
+  substrate for the same purpose with no such check, and the sealed
+  marker-to-tenant table is the only ground truth an auditor has for re-deriving
+  who owned which canary. Nothing in the pack revealed it: `manifest-consistency`
+  compares the run to the pack, both stale.
+- **A live surface absent from `erasure_coverage` entirely was neither verified nor
+  unestablished — it vanished**, while the assertion still said verified. The
+  producer defaults exactly that case to `NOT_COVERED`; the consumer read `.get()`
+  as `None`.
+- **The audit PDF said "Probes exercised: none recorded"** in the same signed pack
+  that graded a probe's class `FAIL`. A finding is proof its probe ran — the rule
+  `score`, `baseline` and `controls` all apply, and this renderer did not.
+- **`baseline --save` was the one command that never disclosed a synthetic run**,
+  returning before the call its `--compare` sibling makes. An all-fake run is
+  enshrined as the reference every later comparison measures against.
 - **One of the six trace backends could not refuse a truncated answer.** The
   other five count rows against a known page cap; the generic OTel adapter reads
   a caller-supplied store through a contract with no cap to count, so a partial
@@ -3105,8 +3135,8 @@ semantic detector. A config carrying such a value will fail to load until correc
   contract states completion-only explicitly.
 - **The Anthropic judge is deterministic and fence-tolerant.** It now pins
   `temperature: 0` (matching the OpenAI judge) so identical runs judge
-  identically, and the verdict parser tolerates a fenced ```json response
-  instead of aborting the run.
+  identically, and the verdict parser tolerates a fenced `json` code block instead
+  of aborting the run.
 - **`hash-<dim>` embedding specs with a non-positive dimension are rejected at
   config time** instead of failing later when the sweep instantiates the
   embedder.

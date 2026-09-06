@@ -41,7 +41,8 @@ _TRUNCATION_KEYS = ("truncated", "nextPageToken", "next_page_token", "nextLink")
 def _refuse_truncated(payload: Any, backend: str) -> None:
     """Refuse a miss on a page the backend itself flagged as partial.
 
-    The counting guard `_refuse_capped` gives the five other trace backends does
+    The counting guard `_refuse_capped` gives four of the other trace backends
+    (langfuse has its own budget refusal) does
     not transfer: this one reads a caller-supplied store through a contract with
     no cap to count against. So the contract asks the store to say so instead,
     and a store that does not answer the question cannot be caught here - which

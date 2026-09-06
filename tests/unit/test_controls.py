@@ -182,9 +182,15 @@ def test_a_mapping_needs_evidence_from_a_live_surface() -> None:
 
 
 def test_a_row_about_specific_surfaces_needs_one_of_them_live() -> None:
+    # The run drives the probe that SPEAKS for `mcp`: this test used to leave
+    # `tenant-boundary-fetch` (vector_db / api) as the only probe and still
+    # expected SOC 2 asserted on a live `mcp` - pinning the defect that a live
+    # surface no probe drove was enough. See the test below.
     from sectum_ai.evidence.controls import asserted_surfaces
 
-    mcp_only = _run(provenance={"vector_db": "SYNTHETIC", "mcp": "LIVE"})
+    mcp_only = _run(provenance={"vector_db": "SYNTHETIC", "mcp": "LIVE"}).model_copy(
+        update={"probe_versions": {"agent-tool-hijack": "0.11.0"}}
+    )
     mappings = control_mappings(mcp_only)
     frameworks = {m.framework for m in mappings}
     assert "OWASP LLM Top 10" not in frameworks
@@ -378,3 +384,36 @@ def test_every_way_the_erasure_failed_is_stated_not_just_the_first() -> None:
         assert "presumed retained" in assertion, assertion
         assert "absence could not be established on agent_memory" in assertion, assertion
         assert "This run is not an attestation." in assertion, assertion
+
+
+def test_isolation_controls_need_a_surface_this_run_s_probes_drove() -> None:
+    # `live` was a run-wide existential: subtracting the erasure surfaces left a
+    # live surface NO probe drove still satisfying it. A record whose isolation
+    # probe ran against a fake `vector_db`, beside an untouched live
+    # `semantic_cache`, asserted nine frameworks and 19 OSCAL `satisfied` - while
+    # `score` refused to grade the identical record ("every class that ran was
+    # backed only by Sectum's built-in fakes"). The module's own comment already
+    # stated this rule; only half of it was implemented.
+    untouched = _run(provenance={"vector_db": "SYNTHETIC", "semantic_cache": "LIVE"})
+    assert untouched.probe_versions == {"tenant-boundary-fetch": "0.7.1"}
+    assert control_mappings(untouched) == (), control_mappings(untouched)
+
+    # The same provenance, with the probe that speaks for that surface: asserted.
+    driven = untouched.model_copy(
+        update={"probe_versions": {"semantic-cache-contamination": "0.11.0"}}
+    )
+    frameworks = {m.framework for m in control_mappings(driven)}
+    assert "SOC 2 (TSC)" in frameworks, frameworks
+
+
+def test_the_isolation_surface_map_matches_the_scorecard_s() -> None:
+    # `evidence` sits below `core`, so this map is a duplicate rather than an
+    # import. Duplicated constants drift; this is the test that stops it.
+    from sectum_ai.evidence.controls import _ISOLATION_PROBE_SURFACES
+    from sectum_ai.score import PROBE_SURFACES
+
+    mirrored = {
+        probe_id: tuple(surface.value for surface in surfaces)
+        for probe_id, surfaces in PROBE_SURFACES.items()
+    }
+    assert mirrored == _ISOLATION_PROBE_SURFACES

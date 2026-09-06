@@ -47,8 +47,11 @@ Artifacts are written to `out/`.
 
 On the demo stack the CLI's built-in MCP fake has only the confused-deputy and
 token-passthrough flaws switched on, so the direct and token-carrying lookups
-resolve a foreign canary; the cross-server and tool-description-injection
-sub-probes run and resolve nothing (the CLI does not wire those flags). Findings
+and the cross-server (`via`) lookups all resolve a foreign canary: with no
+downstream server wired, the `via` call falls THROUGH to the same confused-deputy
+resolution rather than being skipped. Only the tool-description-injection
+`search` resolves nothing, because a bare search with no explicit key resolves
+nothing on a scoped server. Findings
 collapse to one per (marker, observing tenant):
 
 ```
@@ -56,7 +59,7 @@ ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the pack is internally
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the pack is internally
 consistent, but its only timestamp is a reproducible local-dev token, so this
 is not independent tamper evidence.
 

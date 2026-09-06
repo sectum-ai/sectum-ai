@@ -106,6 +106,9 @@ adapters:
     # kind: otel               # generic OpenTelemetry (OTLP-JSON trace-query endpoint)
     #   base_url: http://localhost:4318   # any Jaeger/Tempo/collector shim that speaks
     #   query_path: /v1/traces/query   # the Sectum OTLP-JSON trace-query contract
+    #   # The shim must flag a partial page (`truncated` / `nextPageToken` /
+    #   # `next_page_token` / `nextLink`); without it a marker past the page
+    #   # reads as erased. See docs/adapters.md.
     #   tenant_attribute: tenant.id    # resource attribute carrying the tenant.hex
     # kind: helicone           # Helicone request logs (scoped by a custom property)
     #   api_key_env: HELICONE_API_KEY

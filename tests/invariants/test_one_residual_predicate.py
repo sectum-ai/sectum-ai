@@ -85,7 +85,8 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
     import ast
     from pathlib import Path
 
-    # Names that mean "the thing we are looking for" on either side of an `in`.
+    # Names that mean "the thing we are looking for", matched on the LEFT of an
+    # `in`. The right operand is only checked against `normalized` below.
     # `value` and `text` are deliberately NOT here: they matched set-membership
     # tests over surface names and coverage verdicts, which are a different
     # question, and a sweep that cries wolf gets suppressed rather than fixed.
@@ -111,7 +112,11 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
     normalized = {"haystack", "shaped"}
 
     def _needle_name(node: ast.expr) -> str:
-        """The identifier a marker-ish operand is spelled with, in any shape.
+        """The identifier a marker-ish operand is spelled with.
+
+        Covers a bare name, an attribute, a constant subscript and a see-through
+        method call. NOT covered: a binop, an f-string, or a computed subscript -
+        a residue test written that way is still invisible here.
 
         The first version required a bare `ast.Name`, so `marker.plaintext` - the
         shape EVERY Class 11 scan uses - was invisible and it caught only the one

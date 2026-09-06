@@ -148,7 +148,7 @@ over-claim. Six rules prevent it:
 
 ### What a `PASS` line can still tell you
 
-A `PASS` is never silent about what it could not establish. Three notes attach to
+A `PASS` is never silent about what it could not establish. Four notes attach to
 one:
 
 - **findings withheld** — confirmed findings on a surface backed by the built-in
@@ -159,9 +159,15 @@ one:
   code path, so a Class 1 pass means "no canary came back", never "the boundary
   held". An unverified finding never flips a class — that is the false-positive
   control the detector rests on — so it says so on the line instead.
-- **no measured headline rate** — the class has a headline metric and this run
-  produced none, so the pass rests on the absence of confirmed findings alone. Without
-  the note it is indistinguishable from a class that measured `0.0%`.
+- **no recorded headline measurement** — the class has one and this run produced
+  none, so the pass rests on the absence of confirmed findings alone. Without the
+  note it is indistinguishable from a class that measured zero. Classes 2, 3, 6 and
+  10 have a rate; Class 5's is the per-pair timing effect size, a map rather than a
+  rate, and its absence is the same silence.
+- **graded on a subset of its probes** — the class's catalog entry names more than
+  one probe and this run exercised some of them. Classes 2 and 7 are the multi-probe
+  classes; for Class 2 the omission also moves the number, because counting the
+  vector probe without the pipeline probe understates the Retrieval-Pivot Rate.
 
 ## The catalog and its weights
 

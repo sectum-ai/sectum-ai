@@ -176,10 +176,15 @@ class VectorStoreAdapter(Adapter):
     substrings instead, and a keyword hit gets recorded as embedding inversion -
     a real finding attributed to a mechanism the backend does not have.
 
-    Defaults to ``True`` because every store Sectum ships is embedding-backed, so
-    the capability cannot be forgotten when adding one. A backend that retrieves
+    Defaults to ``True`` because every LIVE store Sectum ships is embedding-backed,
+    so the capability cannot be forgotten when adding one. A backend that retrieves
     some other way sets it ``False`` and those classes report NOT_COVERED, which
     is the honest verdict for a check that could not be performed.
+
+    The built-in ``FakeVectorStore`` is the exception the default does NOT cover:
+    it ranks by lexical token overlap and still declares ``True``, so the offline
+    demo's Class 6 and 13 numbers are the probe exercising itself, not an
+    inversion. Every example that reports them says so.
     """
 
     def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:

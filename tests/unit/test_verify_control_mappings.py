@@ -139,3 +139,25 @@ def test_a_pack_carrying_no_mappings_at_all_is_read_as_a_pack_of_no_mappings() -
     pack: EvidencePack = build_evidence_pack(bare, _MANIFEST)
     assert pack.control_mappings == ()
     assert _check(verify_pack(pack)).ok
+
+
+def test_an_audit_pdf_the_pack_does_not_bind_is_refused(tmp_path: Path) -> None:
+    # `verify_pack` had a branch for "binds a PDF, got one" and "binds a PDF, got
+    # none" - and none for its complement. A PDF handed to it over a pack that
+    # binds no `pdf_ref` produced NO audit-pdf line at all: every check [ok], exit
+    # 0, and an auditor document delivered beside the pack bound by nothing.
+    # `verify_bundle` FAILS the identical bytes, which is the divergence.
+    run = _run()
+    pack = build_evidence_pack(run, _MANIFEST)
+    assert pack.pdf_ref is None
+    result = verify_pack(pack, pdf_bytes=b"%PDF-1.7 a document nothing binds")
+    assert not result.passed
+    unbound = next(c for c in result.checks if c.name == "audit-pdf")
+    assert not unbound.ok
+    assert "binds no pdf_ref" in unbound.detail, unbound.detail
+
+    # Without a PDF beside it, the same pack verifies clean and says nothing
+    # about one - the honest answer when there is nothing to check.
+    quiet = verify_pack(pack)
+    assert quiet.passed
+    assert not [c for c in quiet.checks if c.name == "audit-pdf"]
