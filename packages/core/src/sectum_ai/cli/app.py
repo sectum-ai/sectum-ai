@@ -1409,10 +1409,12 @@ def report(
 # ``tokenizer`` and ``public_key`` do NOT (the trailing-boundary stops ``token``
 # from matching inside ``tokens``). ``*_env`` keys name an environment variable,
 # not the secret, and are kept (handled by the caller).
-_CONFIG_SECRET_KEY_RE = re.compile(
-    r"(?:api_?key|dsn|password|passphrase|token|secret|credential|application_key)"
-    r"(?![A-Za-z0-9])"
-)
+# One pattern, shared with the log redactor. Two of them answering the same
+# question about the same shapes had already drifted: `secret_key`, `tsa_token`
+# and `db_dsn` were redacted here and logged in the clear there.
+from sectum_ai.spec._logging import SECRET_KEY_RE  # noqa: E402
+
+_CONFIG_SECRET_KEY_RE = SECRET_KEY_RE
 
 # Value-shape backstop: an inline secret can hide under a benign key name - in a
 # header value (`Authorization: Bearer ...`), embedded in a URL

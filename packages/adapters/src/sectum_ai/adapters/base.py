@@ -470,6 +470,13 @@ class SearchIndexAdapter(Adapter):
     family = AdapterFamily.SEARCH_INDEX
     surface = Surface.SEARCH_INDEX
 
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
+
     @abstractmethod
     def index(self, tenant: UUID, text: str) -> None:
         """Index ``text`` as a document in ``tenant``'s scope.
@@ -505,6 +512,13 @@ class EvalSetAdapter(Adapter):
 
     family = AdapterFamily.EVAL_SET
     surface = Surface.EVAL_SET
+
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:
@@ -543,6 +557,13 @@ class BackupAdapter(Adapter):
 
     family = AdapterFamily.BACKUP
     surface = Surface.BACKUP
+
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:

@@ -47,7 +47,28 @@ _TENANT_CONTENT_KEYS = frozenset(
     {"content", "raw_response", "answer", "query", "prompt", "text", "evidence_span"}
 )
 _SENSITIVE_KEYS = _SECRET_KEYS | _TENANT_CONTENT_KEYS
+# Exact membership missed every key that CONTAINS a secret word - `secret_key`,
+# `tsa_token`, `db_dsn`, `application_key` - while the config redactor, which
+# answers the same question about the same shapes, matched them by a word
+# boundary. Two redactors disagreeing about what a secret is means one of them is
+# wrong; this is the config redactor's rule, so the answer no longer depends on
+# which path the value took. (Tenant-content keys stay exact: they are specific
+# field names, not a family of spellings.)
+SECRET_KEY_RE = re.compile(
+    r"(?:api_?key|dsn|password|passphrase|token|secret|credential|credentials"
+    r"|application_key|authorization)"
+    r"(?![A-Za-z0-9])"
+)
 _REDACTED = "<redacted>"
+
+
+def _is_sensitive_key(name: str) -> bool:
+    lowered = name.lower()
+    if lowered in _SENSITIVE_KEYS:
+        return True
+    # `*_env` names an environment VARIABLE, not the secret itself.
+    return not lowered.endswith("_env") and SECRET_KEY_RE.search(lowered) is not None
+
 
 # Canary/secret value shapes, scrubbed wherever they appear (nested under a benign
 # key, inside the event message, or in an exception's text) so a future careless
@@ -84,9 +105,7 @@ def _redact_value(value: object) -> object:
     if isinstance(value, dict):
         return {
             key: (
-                _REDACTED
-                if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS
-                else _redact_value(val)
+                _REDACTED if isinstance(key, str) and _is_sensitive_key(key) else _redact_value(val)
             )
             for key, val in value.items()
         }

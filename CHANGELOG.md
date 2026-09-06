@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Three adapter families whose methods take no `user` inherited
+  `carries_user = True`, the flag the runner reads to decide whether a user-level
+  step can be judged — the default that once produced twelve false CRITICAL
+  cross-user leaks on a store never asked about a user. A test now pins the whole
+  set, so a new family cannot inherit the wrong answer silently.
+- The log redactor and the config redactor answered the same question about the
+  same shapes and disagreed: `secret_key`, `tsa_token`, `db_dsn` and
+  `application_key` were redacted by one and logged in the clear by the other.
+  They share one pattern now.
 - **`erasure` ignored a configured `app` adapter.** `probe` resolves the vector
   slot from `app` or `vector_store`; the erasure command read `vector_store`
   directly, so a config carrying only `app` built a clean *default fake* — the
