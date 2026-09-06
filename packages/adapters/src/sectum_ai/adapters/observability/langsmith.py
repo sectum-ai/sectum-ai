@@ -15,6 +15,7 @@ from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _refuse_capped
+from sectum_ai.spec import residual_present
 
 _RUN_LIMIT = 1000
 """How many of a project's most recent runs to scan when searching for a marker."""
@@ -73,7 +74,7 @@ class LangSmithObservability(ObservabilityAdapter):
         for run in self._client.list_runs(project_name=project, limit=_RUN_LIMIT):
             seen += 1
             snippet = self._snippet(run)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(TraceHit(trace_id=str(run.id), project=project, snippet=snippet))
         # Only a MISS on a full page is refused: a marker found there is a
         # definite residual, and refusing it would lose a real erasure failure.

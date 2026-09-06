@@ -247,3 +247,65 @@ def test_the_asserted_surfaces_suffix_names_only_isolation_evidence() -> None:
     # And the erasure control still names the surface it DID scan.
     erasure = next(m for m in control_mappings(run) if m.control_ids == ("Article 17",))
     assert "tracing" in erasure.assertion, erasure.assertion
+
+
+def _erasure_run(coverage: dict[str, str], **metrics: object) -> RunResult:
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    return RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance=dict.fromkeys(coverage, "LIVE"),
+        metrics=RunMetrics(erasure_coverage=coverage, **metrics),
+    )
+
+
+def _deletion_assertions(run: RunResult) -> list[str]:
+    return [m.assertion for m in control_mappings(run) if m.framework in ("GDPR", "CCPA/CPRA")]
+
+
+def test_a_failed_purge_does_not_assert_erasure_was_verified() -> None:
+    # `_ERASURE_VERDICTS` admits ERASED *and* RESIDUAL, which is the right gate
+    # for whether the control has evidence at all and the wrong one for the word
+    # "verified": a run whose purge left three canaries behind produced a signed
+    # pack asserting "Erasure across the AI surfaces verified", byte-identical to
+    # a clean one - while the same run's OSCAL marked the control not-satisfied
+    # and its own audit PDF printed RESIDUAL two lines above. This is the wedge
+    # SKU's headline claim, in the artifact a DPO hands a regulator.
+    failed = _erasure_run({"vector_db": "RESIDUAL"}, erasure_residue={"vector_db": 3})
+    stated = _deletion_assertions(failed)
+    assert len(stated) == 2, stated
+    for assertion in stated:
+        assert "verified" not in assertion, assertion
+        assert "residual data remains" in assertion, assertion
+
+    # The row still appears: evidence of a FAILED erasure is still evidence about
+    # Article 17, and dropping it would hide the failure rather than state it.
+    assert {"Article 17", "1798.105"} <= {
+        i for m in control_mappings(failed) for i in m.control_ids
+    }
+
+
+def test_a_caveat_surface_is_not_folded_into_a_verified_claim() -> None:
+    # ATTESTABLE_WITH_CAVEAT means the backend exposes no per-tenant erasure API,
+    # so its data is presumed RETAINED - and it was named in the "Live surfaces"
+    # list of an assertion that said erasure was verified.
+    mixed = _erasure_run(
+        {"vector_db": "ERASED", "prompt_logs": "ATTESTABLE_WITH_CAVEAT"},
+        erasure_residue={"vector_db": 0},
+        erasure_caveats={"prompt_logs": 4},
+    )
+    for assertion in _deletion_assertions(mixed):
+        assert "verified" not in assertion, assertion
+        assert "presumed retained" in assertion, assertion
+
+
+def test_a_clean_purge_still_asserts_verified() -> None:
+    clean = _erasure_run({"vector_db": "ERASED"}, erasure_residue={"vector_db": 0})
+    stated = _deletion_assertions(clean)
+    assert len(stated) == 2, stated
+    for assertion in stated:
+        assert "verified" in assertion, assertion

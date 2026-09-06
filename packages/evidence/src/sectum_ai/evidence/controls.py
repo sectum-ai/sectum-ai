@@ -218,6 +218,32 @@ def mapping_requirement(mapping: ControlMapping) -> str:
     return _ISOLATION
 
 
+def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) -> str:
+    """The deletion assertion the run's own verdicts support - not always "verified".
+
+    ``_ERASURE_VERDICTS`` admits ERASED *and* RESIDUAL, because both mean the
+    surface was scanned and answered - which is the right gate for whether the
+    control has evidence at all. It is the wrong gate for the WORD "verified": a
+    run whose purge left three canaries behind produced a signed pack asserting
+    "Erasure across the AI surfaces verified", byte-identical to a clean one,
+    while the same run's OSCAL marked the control not-satisfied and its own audit
+    PDF printed RESIDUAL two lines above. Evidence of a FAILED erasure is still
+    evidence about Article 17, so the row stays; the verb is what has to move.
+    """
+    verdicts = {run.metrics.erasure_coverage.get(surface) for surface in named}
+    if CoverageVerdict.RESIDUAL.value in verdicts:
+        return verified.replace(
+            " verified.", " tested; residual data remains and is itemized in this pack."
+        )
+    if CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value in verdicts:
+        return verified.replace(
+            " verified.",
+            " tested; one or more surfaces expose no per-tenant erasure API, so their "
+            "data is presumed retained.",
+        )
+    return verified
+
+
 def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:
     """Return the framework control mappings a Sectum AI run speaks to.
 
@@ -238,8 +264,10 @@ def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]
         mapping = ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
         # The assertion names the live surfaces it rests on, inside the signed
         # pack: "across the AI surfaces" read as all of them.
-        covered = ", ".join(asserted_surfaces(run, mapping))
+        named = asserted_surfaces(run, mapping)
+        covered = ", ".join(named)
+        stated = assertion if requirement != _ERASURE else _erasure_assertion(run, named, assertion)
         mappings.append(
-            mapping.model_copy(update={"assertion": f"{assertion} Live surfaces: {covered}."})
+            mapping.model_copy(update={"assertion": f"{stated} Live surfaces: {covered}."})
         )
     return tuple(mappings)

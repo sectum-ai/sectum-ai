@@ -15,7 +15,7 @@ from phoenix.client import Client
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _refuse_capped
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import ErasureUnsupported, residual_present
 
 _SPAN_LIMIT = 1000
 """How many spans to scan per project when searching for a marker."""
@@ -44,7 +44,7 @@ class PhoenixObservability(ObservabilityAdapter):
         for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
             seen += 1
             snippet = self._snippet(span)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(
                     TraceHit(
                         trace_id=str(span["context"]["trace_id"]),

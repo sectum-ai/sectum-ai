@@ -51,7 +51,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _DEFAULT_QUERY_PATH = "/v1/traces/query"
 
@@ -151,7 +151,7 @@ class OtelObservability(ObservabilityAdapter):
             for scope_span in _as_list(resource_span.get("scopeSpans")):
                 for span in _as_list(scope_span.get("spans")):
                     snippet = _span_snippet(span)
-                    if marker in snippet:
+                    if residual_present(marker, snippet):
                         hits.append(
                             TraceHit(
                                 trace_id=str(span.get("traceId", "")),

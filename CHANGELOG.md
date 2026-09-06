@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A run whose purge FAILED signed "Erasure across the AI surfaces verified".**
+  The deletion controls are gated on a surface having been scanned and
+  *answered* — which is the right test for whether the control has evidence at
+  all, and the wrong one for the word "verified". A Class 11 run that left three
+  canaries behind produced a signed pack, an audit PDF and a DSSE predicate
+  asserting GDPR Article 17 and CCPA 1798.105 verified, byte-identical to a clean
+  run — while the same run's OSCAL marked the control not-satisfied and its own
+  PDF printed `RESIDUAL` two lines above. A surface with no per-tenant erasure
+  API, whose data is *presumed retained*, was folded into the same claim. The
+  rows now state what the run found; only an all-`ERASED` run says verified, and
+  the row is never dropped, because evidence of a failed erasure is still
+  evidence about Article 17. This is the wedge SKU's headline claim, in the
+  artifact a DPO hands a regulator.
+- **The TRACING surface asked the residue question with a raw case-sensitive
+  `in`.** The shared-predicate commit unified three adapter families and skipped
+  the fourth — and `_scan_observability` applies no predicate of its own, so the
+  adapter's `in` *was* the residue test. Six live trace adapters and the built-in
+  fake all matched literally, so the same bytes and the same partial purge gave
+  `search_index: RESIDUAL` and `tracing: ERASED` on one run. All seven now share
+  `residual_present`, and the invariant test gained an AST sweep that fails on any
+  raw `<marker> in <text>` in the adapters or probes — the previous check listed
+  modules, so it structurally could not see a sibling that never imported the
+  predicate, which is exactly how this family stayed behind for twelve cycles.
 - **`diff` stated a filled zero as a measurement on the OTHER side of the arrow.**
   The previous release taught it that an absent CURRENT value is not a
   measurement; `baseline` fills an absent value the same way, so

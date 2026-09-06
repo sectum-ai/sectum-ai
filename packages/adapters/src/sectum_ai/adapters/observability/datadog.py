@@ -40,7 +40,7 @@ from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _data_list, _refuse_capped
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _SPAN_LIMIT = 1000
 """How many of a tenant's most recent spans to scan when searching for a marker."""
@@ -121,7 +121,7 @@ class DatadogObservability(ObservabilityAdapter):
         events = self._client.search_spans(tenant.hex)
         for event in events:
             snippet = _event_snippet(event)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(
                     TraceHit(
                         trace_id=str(event.get("id") or ""),

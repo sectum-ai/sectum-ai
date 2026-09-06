@@ -19,6 +19,22 @@ test coverage, not legal certification** — the reports say so explicitly.
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
 
+**The two deletion rows are what an all-`ERASED` run asserts.** They state what
+the run *found*, not merely that it looked, so the wording moves with the
+verdict. A
+run whose purge left residue behind asserts "…tested; residual data remains and
+is itemized in this pack"; one resting partly on a surface with no per-tenant
+erasure API asserts "…tested; one or more surfaces expose no per-tenant erasure
+API, so their data is presumed retained". Only a run whose every scanned surface
+came back `ERASED` says *verified*. The row is never dropped: evidence of a
+failed erasure is still evidence about Article 17, and stating it is the point.
+
+`sectum-ai verify` re-derives this whole table from the run it is given and
+refuses any mapping the run's evidence does not support, so the filter is not
+only a build-time courtesy - a pack asserting a control it did not earn fails
+verification. Asserting *fewer* controls than the evidence earns is honest
+under-claiming and passes.
+
 A pack carries only the mappings its run supports, and only evidence from a
 **live** surface counts: a verdict from the built-in fake describes nothing the
 operator runs, so a run whose every surface was synthetic (or whose provenance

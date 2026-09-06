@@ -840,3 +840,53 @@ def test_erasure_counts_a_marker_the_index_re_cased_as_residual() -> None:
     assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.RESIDUAL
     assert not report.erased
     assert any(finding.surface is Surface.SEARCH_INDEX for finding in report.findings)
+
+
+class _CaseSensitivePurgeObservability(FakeObservability):
+    """A trace backend whose purge matches the canary's literal spelling only."""
+
+    def __init__(self, canaries: tuple[str, ...]) -> None:
+        super().__init__(soft_delete=False)
+        self._canaries = canaries
+
+    def delete(self, tenant: UUID) -> None:
+        self._traces[tenant] = [
+            row
+            for row in self._traces.get(tenant, [])
+            if not any(canary in row[2] for canary in self._canaries)
+        ]
+
+
+def test_erasure_counts_a_marker_the_trace_backend_re_cased_as_residual() -> None:
+    # The tracing family was the one the shared-predicate commit skipped, and
+    # `_scan_observability` applies no predicate of its own - it takes the
+    # truthiness of the adapter's already-filtered list, so the adapter's raw `in`
+    # WAS the residue test. Same bytes and same partial purge as the search-index
+    # case above, opposite verdicts: the wedge SKU signed ERASURE VERIFIED for a
+    # surface the backend still returns the canary from.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canaries = tuple(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.HARD_CANARY
+    )
+    obs = _CaseSensitivePurgeObservability(canaries)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            obs.record(
+                marker.owner_tenant_id, "sectum-ai-erasure", f"trace recording {marker.plaintext}"
+            )
+            obs.record(
+                marker.owner_tenant_id,
+                "sectum-ai-erasure",
+                f"normalized trace copy {marker.plaintext.lower()}",
+            )
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), observability=obs
+    ).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.TRACING].markers_before > 0
+    assert surfaces[Surface.TRACING].residual_after > 0
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.RESIDUAL
+    assert not report.erased

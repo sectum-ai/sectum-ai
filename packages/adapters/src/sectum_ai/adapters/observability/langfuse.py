@@ -19,7 +19,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 _TRACE_LIMIT = 1000
 """How many of a tenant's most recent traces to scan or purge per call."""
@@ -115,7 +115,7 @@ class LangfuseObservability(ObservabilityAdapter):
         hits: list[TraceHit] = []
         for trace in traces:
             snippet = self._snippet(trace)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(TraceHit(trace_id=str(trace.id), project=project, snippet=snippet))
         # A marker found on a partial listing is a definite residual; only a MISS
         # on one is unknowable.

@@ -33,7 +33,7 @@ from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _data_list, _refuse_capped
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _REQUEST_LIMIT = 1000
 """How many of a tenant's most recent requests to scan when searching for a marker."""
@@ -93,7 +93,7 @@ class HeliconeObservability(ObservabilityAdapter):
         rows = self._client.query_requests(tenant.hex)
         for row in rows:
             snippet = _row_snippet(row)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(
                     TraceHit(
                         trace_id=str(row.get("request_id") or row.get("id") or ""),
