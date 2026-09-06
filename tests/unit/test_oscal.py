@@ -378,3 +378,45 @@ def test_an_unrecorded_surface_observation_is_not_told_it_describes_a_fake() -> 
     description = doc["results"][0]["observations"][0]["description"]
     assert description.startswith("[surface provenance not recorded"), description
     assert "built-in fake" not in description
+
+
+def _erasure_states(coverage: dict[str, str], **metrics: Any) -> dict[str, str]:
+    """The OSCAL state of each deletion control for an erasure run."""
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance=dict.fromkeys(coverage, "LIVE"),
+        metrics=RunMetrics(erasure_coverage=coverage, **metrics),
+    )
+    return {
+        finding["title"]: finding["target"]["status"]["state"]
+        for result in run_to_oscal(run)["assessment-results"]["results"]
+        for finding in result.get("findings", [])
+        if "erasure verification" in finding["title"]
+    }
+
+
+def test_oscal_marks_an_inconclusive_erasure_not_satisfied() -> None:
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so a surface the run SCANNED
+    # and could not clear was invisible here - the same hole the pack's prose
+    # assertion had, fixed there and not here. The signed pack then contradicted
+    # itself inside one string: a description reading "absence could not be
+    # established on search_index. This run is not an attestation." carrying a
+    # target state of `satisfied` and "verified the erasure on every live surface
+    # it scanned". The CLI exits 3 on that same run.
+    inconclusive = _erasure_states(
+        {"vector_db": "ERASED", "search_index": "NOT_COVERED"},
+        erasure_residue={"vector_db": 0},
+    )
+    assert inconclusive, "the deletion controls must still appear"
+    assert set(inconclusive.values()) == {"not-satisfied"}, inconclusive
+
+    # An all-ERASED run still attests, and a surface nobody scanned (no
+    # provenance) must not drag it down.
+    clean = _erasure_states({"vector_db": "ERASED"}, erasure_residue={"vector_db": 0})
+    assert set(clean.values()) == {"satisfied"}, clean

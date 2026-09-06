@@ -13,9 +13,14 @@ Implements the ``_AnthropicClient`` protocol the adapter consumes:
   and repeats until ``stop_reason: end_turn``. Returns the final
   assistant text + the list of tool names that fired across the loop.
 
-Tool execution: the caller attaches a python callable to each tool
-spec via the ``__sectum_callable__`` attribute. The backend looks the
-callable up by the tool's ``name`` field.
+Tool execution: pass the python callable ITSELF as the tool, with its
+schema attached as a ``__sectum_tool_spec__`` attribute. Both sidecars
+are read off the tool object with ``getattr``, so a callable stored as a
+KEY inside the spec dict is invisible to them (and makes the spec
+unserializable for the API call). A tool whose target is not callable is
+refused rather than skipped: a dropped tool answers every invocation with
+an empty string, which grades the agent surface clean over a tool that
+was never wired. The backend looks the callable up by the tool's ``name`` field.
 """
 
 from __future__ import annotations
@@ -71,7 +76,15 @@ class LiveAnthropicClient:
             self._tools.append(spec)
             name = spec.get("name")
             callable_target = getattr(tool, "__sectum_callable__", tool)
-            if isinstance(name, str) and name and callable(callable_target):
+            if not callable(callable_target):
+                raise AdapterError(
+                    f"tool {name!r} has no python callable to execute: pass the callable "
+                    "itself as the tool (carrying its schema as a `__sectum_tool_spec__` "
+                    "attribute), not a spec dict with the callable under a key - `getattr` "
+                    "cannot see a dict key, and a tool that is silently dropped answers "
+                    "every invocation with an empty string"
+                )
+            if isinstance(name, str) and name:
                 self._tool_targets[name] = callable_target
 
     def run_turn(self, messages: list[dict[str, Any]]) -> tuple[str, tuple[str, ...]]:

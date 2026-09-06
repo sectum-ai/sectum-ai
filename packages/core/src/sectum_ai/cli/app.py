@@ -1826,11 +1826,22 @@ def verify(
         if cert_path is not None and not cert_path.exists():
             typer.echo(f"no certificate at {cert_path} for {label}", err=True)
             raise typer.Exit(code=3)
+    # Parsed before the bundle branch: it used to be read after, so `--manifest`
+    # on a `.zip` was accepted and silently dropped - the operator got exit 0 and
+    # no `manifest-hash` line, on the artifact ADR-0016 calls the deliverable.
+    ground_truth: GroundTruthManifest | None = None
+    if manifest is not None:
+        try:
+            ground_truth = GroundTruthManifest.model_validate_json(manifest.read_text())
+        except (OSError, ValidationError) as error:
+            typer.echo(f"not a valid ground-truth manifest at {manifest}: {error}", err=True)
+            raise typer.Exit(code=3) from error
     if pack.suffix == ".zip":
         # A bundle (report --bundle) carries the pack and its sidecars in one
         # archive; verify each member's digest and the contained pack together.
         bundle_result = verify_bundle(
             pack.read_bytes(),
+            ground_truth=ground_truth,
             tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
             tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
             rekor_keyring=_rekor_keyring_override(rekor_key),
@@ -1849,6 +1860,13 @@ def verify(
             typer.echo("VERIFICATION FAILED", err=True)
             raise typer.Exit(code=4)
         _echo_verdict(bundle_result.anchored, what="evidence bundle")
+        if ground_truth is None:
+            typer.echo(
+                "note: this confirms integrity and internal consistency; to also bind "
+                "which marker belonged to which tenant, re-run with "
+                "`--manifest <manifest.json>`.",
+                err=True,
+            )
         return
     raw_pack = pack.read_bytes().decode("utf-8", errors="replace")
     # The bytes, not the parsed model: an omitted run_result.schema_version has
@@ -1870,15 +1888,6 @@ def verify(
     # bound into the attested digest, so a swapped PDF fails verification.
     pdf_bytes = _sibling_audit_pdf(pack)
     unclaimed = sorted({name for slot in (0, 1, 2) for name in _unclaimed_siblings(pack, slot)})
-    # The `manifest-hash` check existed and no CLI path reached it, while both
-    # this command and ADR-0016 told the reader to "re-run with the manifest".
-    ground_truth: GroundTruthManifest | None = None
-    if manifest is not None:
-        try:
-            ground_truth = GroundTruthManifest.model_validate_json(manifest.read_text())
-        except (OSError, ValidationError) as error:
-            typer.echo(f"not a valid ground-truth manifest at {manifest}: {error}", err=True)
-            raise typer.Exit(code=3) from error
     result = verify_pack(
         evidence,
         manifest=ground_truth,

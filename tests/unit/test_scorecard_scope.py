@@ -333,3 +333,29 @@ def test_a_pass_with_no_measured_headline_rate_says_so() -> None:
     scored = next(c for c in measured.classes if c.class_id == 2)
     assert scored.headline is not None and "n=24" in scored.headline
     assert scored.note is None
+
+
+def test_a_class_graded_on_a_subset_of_its_probes_says_so() -> None:
+    # Class 2's catalog entry names two probes. Running one graded the class at
+    # full critical-band weight with an empty detail column - while every class
+    # that ran NO probe says "probe did not run". For this class the omission also
+    # moves the number: `BLEED_PROBE_IDS`' own comment says counting the vector
+    # probe alone "understates the rate when a leak manifests solely at the
+    # pipeline surface (it would read 0%)", and that understated rate is the
+    # headline the line prints.
+    entry = next(c for c in CATALOG if c.class_id == 2)
+    assert len(entry.probe_ids) == 2, entry.probe_ids
+    run = _run(_all(SurfaceProvenance.LIVE)).model_copy(
+        update={"probe_versions": {"rag-entity-bleed": "1.0"}}
+    )
+    scored = next(c for c in score_run(run).classes if c.class_id == 2)
+    assert scored.verdict is ClassVerdict.PASS
+    assert scored.note is not None
+    assert "graded on 1 of 2 probes" in scored.note, scored.note
+    assert "rag-pipeline-bleed did not run" in scored.note, scored.note
+
+    # A class whose every probe ran says nothing extra.
+    whole = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 2
+    )
+    assert whole.note is None or "graded on" not in whole.note

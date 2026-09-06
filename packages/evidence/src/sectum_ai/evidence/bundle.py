@@ -31,7 +31,7 @@ from sectum_ai.evidence.verify import (
     check_raw_schema_stamps,
     verify_pack,
 )
-from sectum_ai.spec import EvidenceError, EvidencePack
+from sectum_ai.spec import EvidenceError, EvidencePack, GroundTruthManifest
 
 EVIDENCE_MEMBER = "evidence.json"
 """The bundled evidence-pack JSON; every bundle must contain it."""
@@ -132,6 +132,7 @@ def build_bundle(members: Mapping[str, bytes]) -> bytes:
 def verify_bundle(
     bundle: bytes,
     *,
+    ground_truth: GroundTruthManifest | None = None,
     tsa_certificate: bytes | None = None,
     tsa_root: bytes | None = None,
     rekor_keyring: Mapping[str, bytes] | None = None,
@@ -143,10 +144,13 @@ def verify_bundle(
     Every member's SHA-256 must match the recorded manifest digest, the archive's
     member set must equal the manifest's (no unlisted member may ride along, no
     duplicate names), and the contained evidence pack must pass
-    :func:`verify_pack` - with ``tsa_certificate``/``tsa_root``/``rekor_keyring``
-    threaded through so a customer-pinned TSA or a private Rekor instance
-    verifies, and ``require_anchored``/``require_live`` enforced the same way as
-    on a bare pack.
+    :func:`verify_pack` - with ``ground_truth``/``tsa_certificate``/``tsa_root``/
+    ``rekor_keyring`` threaded through so a supplied ground-truth manifest, a
+    customer-pinned TSA or a private Rekor instance verifies, and
+    ``require_anchored``/``require_live`` enforced the same way as on a bare pack.
+    Every one of those has to reach the contained pack: a flag the bundle path
+    accepts and drops is worse than one it rejects, because the operator reads a
+    pass as an answer to the question they asked.
     A missing, extra, or mismatched member, or a failed pack verification, fails
     the result - so editing a bundled artifact, smuggling an unlisted one in, or
     altering the pack is caught. The result's ``anchored`` reflects the contained
@@ -297,6 +301,7 @@ def verify_bundle(
     pdf_bytes = member_bytes[present_pdfs[0]] if present_pdfs else None
     pack_result = verify_pack(
         pack,
+        manifest=ground_truth,
         tsa_certificate=tsa_certificate,
         tsa_root=tsa_root,
         rekor_keyring=rekor_keyring,

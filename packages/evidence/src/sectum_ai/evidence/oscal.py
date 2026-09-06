@@ -339,11 +339,23 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # a caveat surface (no per-tenant erasure API, data presumed retained) emits
     # UNVERIFIED findings, and "verified the erasure on every live surface" was
     # rendered over three markers presumed retained.
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so a surface the run SCANNED
+    # but could not clear was invisible here - the same hole `_erasure_assertion`
+    # had, fixed there and not here. It made this export state `satisfied` and
+    # "verified the erasure on every live surface it scanned" INSIDE a description
+    # whose own prose said absence could not be established. A live surface that
+    # is NOT_COVERED is scanned-and-unestablished (`erasure` records provenance
+    # only for the surfaces in its report), and it is a failure like any other.
+    scanned = erasure_scanned_surfaces(run)
     residual_surfaces = tuple(
         sorted(
             s
             for s, v in run.metrics.erasure_coverage.items()
-            if s in erasure_scanned_surfaces(run) and v != CoverageVerdict.ERASED.value
+            if s in live
+            and (
+                (s in scanned and v != CoverageVerdict.ERASED.value)
+                or v == CoverageVerdict.NOT_COVERED.value
+            )
         )
     )
     has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)

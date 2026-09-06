@@ -46,6 +46,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The OSCAL export signed `satisfied` over a run the CLI exits 3 on.** An
+  earlier entry gave the pack's prose a third failure mode — a surface the run
+  scanned and could not clear — and left the OSCAL projection reading the same
+  coverage block through `erasure_scanned_surfaces`, which drops `NOT_COVERED`.
+  One signed artifact then contradicted itself inside a single string: a
+  description reading "absence could not be established on search_index. This run
+  is not an attestation." carrying a target state of `satisfied` and "Sectum AI
+  verified the erasure on every live surface it scanned".
+- **`verify --manifest` was accepted and silently dropped on a `.zip` bundle.**
+  The flag was parsed after the bundle branch returned, so the marker-to-tenant
+  binding went unchecked with no `manifest-hash` line and no note saying so — on
+  the artifact ADR-0016 calls the deliverable. A flag a path accepts and drops is
+  worse than one it rejects.
+- **A class graded on half its probes rendered as a full-weight `PASS` with an
+  empty detail column**, while every class that ran *no* probe says "probe did
+  not run". For Class 2 the omission also moves the number: counting the vector
+  probe alone understates the Retrieval-Pivot Rate when a leak manifests only at
+  the pipeline surface, and that understated rate is what the line printed.
+- **A tool the agent adapters could not execute was dropped silently.** An
+  unregistered tool answers every invocation with an empty string, so Class 7
+  graded the agent surface clean over a tool that was never wired. Both live
+  adapters now refuse it, and the six prose sites that still taught the
+  callable-as-a-dict-key shape (which `getattr` cannot see) describe the one that
+  works.
 - **The shared residue predicate was weaker than the detector it was shared to
   agree with.** `residual_present` tested a normalized substring where every
   detection tier tests a substring **or** the marker's tokens contiguous and in

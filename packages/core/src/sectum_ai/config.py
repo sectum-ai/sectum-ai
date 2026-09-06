@@ -1245,9 +1245,10 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
             )
         return OpenAIAssistantsAgent(client, assistant_id)
     if config.kind == "anthropic-tooluse":
-        # A live Anthropic native tool-use agent is wired in code (the tool
-        # specs are Python objects carrying a ``__sectum_callable__`` sidecar
-        # so the backend can execute them in the tool-use loop). The resolver
+        # A live Anthropic native tool-use agent is wired in code (each tool is
+        # the python callable itself, carrying its spec as a
+        # ``__sectum_tool_spec__`` attribute, so the backend can execute it in
+        # the tool-use loop). The resolver
         # expects a client-factory callable referenced by
         # ``module.path:callable`` that returns an object implementing the
         # ``_AnthropicClient`` protocol the adapter consumes — typically the

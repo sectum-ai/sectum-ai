@@ -307,3 +307,41 @@ def test_verify_binds_the_ground_truth_manifest_when_given_one(tmp_path: Path) -
     assert plain.exit_code == 0, plain.output
     assert "manifest-hash" not in plain.output, plain.output
     assert "--manifest <manifest.json>" in plain.output, plain.output
+
+
+def test_verify_binds_the_manifest_on_a_bundle_too(tmp_path: Path) -> None:
+    # The flag was parsed AFTER the `.zip` branch returned, so `--manifest` on a
+    # bundle was accepted and silently dropped: exit 0, no `manifest-hash` line,
+    # and no note saying the binding went unchecked - on the artifact ADR-0016
+    # calls the deliverable. A flag a path accepts and drops is worse than one it
+    # rejects, because the operator reads the pass as an answer to their question.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    other = dict(substrate["manifest"], manifest_id="some-other-run")
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+
+    bundle = str(tmp_path / "evidence-bundle.zip")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    bad = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # And without it the bundle path says how to get the binding, as the pack
+    # path does - it used to say nothing at all.
+    plain = _runner.invoke(app, ["verify", bundle, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output

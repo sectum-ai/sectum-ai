@@ -467,6 +467,14 @@ def _score_class(
     # None", so the four classes that HAVE one are named here.
     headline = _headline(entry, run.metrics)
     unmeasured_rate = headline is None and entry.class_id in _HEADLINE_RATE_CLASSES
+    # A class whose catalog entry names two probes and whose run exercised one is
+    # graded on half its evidence, at full weight, with nothing on the line to
+    # say so - while every class that ran NO probe says "probe did not run". For
+    # Class 2 the omission also moves the headline: `BLEED_PROBE_IDS`' own
+    # comment says counting the vector probe alone "understates the rate when a
+    # leak manifests solely at the pipeline surface (it would read 0%)", and that
+    # understated rate is what the line prints.
+    missing = tuple(sorted(set(entry.probe_ids) - set(ran)))
     notes = [
         f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
         "that fake, not your stack"
@@ -479,6 +487,10 @@ def _score_class(
         "this class's headline rate was never measured in this run, so the pass rests "
         "on the absence of confirmed findings alone"
         if unmeasured_rate and not confirmed
+        else "",
+        f"graded on {len(ran)} of {len(entry.probe_ids)} probes for this class; "
+        f"{', '.join(missing)} did not run"
+        if missing
         else "",
     ]
     return ClassScore(

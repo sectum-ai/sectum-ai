@@ -204,7 +204,7 @@ The Anthropic tool-use adapter scopes by caching one conversation
 history per tenant; each per-tenant user message is prefixed with
 `[tenant:<hex>]` and the tool-use loop runs to `stop_reason:
 end_turn`. Tools attach a python callable via the
-`__sectum_callable__` sidecar on each tool spec; the live backend
+`__sectum_tool_spec__` attribute on each tool callable; the live backend
 executes it on every `tool_use` block and posts the result back as a
 `tool_result` user message.
 
