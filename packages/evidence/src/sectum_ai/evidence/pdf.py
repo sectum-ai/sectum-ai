@@ -28,6 +28,7 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
+    rate_from_counts,
     sha256_hex,
     wilson_interval,
 )
@@ -378,11 +379,13 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
     # 350 print `2.0% (95% CI 1.9%-2.1%, n=350)` into the auditor's signed PDF,
     # while `score` read the same record as 95.4%. Refusing to invent an interval
     # while faithfully relaying a fabricated one reads identically to the auditor.
-    if metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
-        # The record contradicts its own counts, so there is nothing here to state.
+    rate = rate_from_counts(
+        metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
+    )
+    # The record contradicts its own counts, so there is nothing here to state.
+    if rate is None:
         return None
     if metrics.retrieval_pivot_n > 0:
-        rate = metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
         low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
         return f"{rate:.1%} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
     if metrics.retrieval_pivot_rate is None:

@@ -2685,6 +2685,16 @@ _HEADLINE_METRIC_PROBES: dict[str, frozenset[str]] = {
     "extraction_efficiency": frozenset({IkeaExtractionProbe.id}),
 }
 
+# The same question for an expanded MAP, keyed by the map's label because its
+# KEYS name something that is neither a probe nor a surface. A Class 5 effect
+# size is keyed by tenant PAIR, so a pair that survived while the model surface
+# behind it fell back to the built-in fake read `[ok] 0.8 -> 0` - directly beside
+# that surface's own `[SCOPE LOST]` line, and beside two sibling maps on the same
+# record that both read `[not measured]`.
+_MAP_METRIC_PROBES: dict[str, frozenset[str]] = {
+    "side_channel_effect_sizes": frozenset({KvCacheTimingProbe.id}),
+}
+
 
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
@@ -2739,7 +2749,9 @@ def _delta_verdict(
     # And a key that is still present but whose SURFACE lost its live backing.
     if any(f"[{key}]" in delta.name for key in key_lost):
         return "not measured"
-    fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
+    fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset()) | _MAP_METRIC_PROBES.get(
+        delta.name.split("[", 1)[0], frozenset()
+    )
     # ANY feeding probe lost: losing one of the two bleed probes changes the
     # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
     if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by & lost):

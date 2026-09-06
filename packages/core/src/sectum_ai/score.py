@@ -74,6 +74,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    rate_from_counts,
     untrusted,
     wilson_interval,
 )
@@ -247,9 +248,7 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
             "the record's Retrieval-Pivot counts are incoherent, so its headline rate "
             "cannot be trusted and the run is not graded."
         )
-    if not metrics.retrieval_pivot_n:
-        return None
-    return metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
+    return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
 def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:

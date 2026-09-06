@@ -16,7 +16,7 @@ section 13: dependency discipline).
 
 import math
 
-__all__ = ["normal_quantile", "wilson_interval"]
+__all__ = ["normal_quantile", "rate_from_counts", "wilson_interval"]
 
 
 def normal_quantile(probability: float) -> float:
@@ -104,3 +104,29 @@ def wilson_interval(
     low = max(0.0, center - half_width)
     high = min(1.0, center + half_width)
     return (low, high)
+
+
+def rate_from_counts(successes: int, trials: int, asserted: float | None = None) -> float | None:
+    """The rate ``successes`` of ``trials`` gives, or ``asserted`` when there are no counts.
+
+    THE single answer to "what is this record's rate", so that no consumer can be
+    shown a different number than another. Where a record states both a rate and
+    the counts behind it, the counts win: the counts are the evidence and the rate
+    is bookkeeping, so a record that disagrees with its own counts must not have
+    its claim relayed as fact. `diff` and `baseline --compare` relayed it while
+    `score` and both PDF engines recomputed, and a run whose Retrieval-Pivot Rate
+    went from 0% to 95.4% over identical counts gated CI green at `[ok] 0 -> 0`.
+
+    ``None`` when the counts are incoherent (``successes > trials``) and no rate is
+    recoverable: relaying either number there would let a record opt OUT of the
+    recompute by corrupting its own counts - the incoherent record choosing to be
+    believed. Callers decide what to do with that; `score` refuses to grade at all.
+
+    A record with no counts (``trials == 0``) has only what it asserts about
+    itself, which is returned as-is; ``None`` when it asserts nothing either.
+    """
+    if successes > trials:
+        return None
+    if trials:
+        return successes / trials
+    return asserted

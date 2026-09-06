@@ -17,6 +17,7 @@ from sectum_ai.spec import (
     RunResult,
     Severity,
     SurfaceProvenance,
+    rate_from_counts,
 )
 
 
@@ -72,6 +73,7 @@ def _dict_deltas(
     current: Mapping[str, float],
     *,
     informational: bool = False,
+    absent_when_clean: bool = False,
 ) -> list[MetricDelta]:
     """A MetricDelta per key across both mappings; a key absent on a side is 0.0.
 
@@ -79,6 +81,15 @@ def _dict_deltas(
     fill, not a measurement, and reading it as an improvement is what let a
     dropped side-channel pair, an unscanned erasure surface and a vanished
     embedding model each read `[ok] ... -> 0` in turn.
+
+    ``absent_when_clean`` exempts a map that omits a key precisely BECAUSE it
+    measured zero. ``per_probe_findings`` counts findings, so a probe that ran
+    and found nothing is absent from it - as ``_exercised_probes`` says in as many
+    words - and marking that key lost labelled a genuinely clean probe "not
+    measured". Its real coverage loss is not lost with it: the key names a probe
+    id, so ``coverage_lost`` reaches it through the probe-id lookup, which is the
+    stricter signal of the two. A label that fires on a clean result teaches the
+    reader to ignore it.
     """
     return [
         MetricDelta(
@@ -86,10 +97,33 @@ def _dict_deltas(
             baseline=float(baseline.get(key, 0.0)),
             current=float(current.get(key, 0.0)),
             informational=informational,
-            key_lost=key in baseline and key not in current,
+            key_lost=not absent_when_clean and key in baseline and key not in current,
         )
         for key in sorted(set(baseline) | set(current))
     ]
+
+
+def _rate_delta(name: str, baseline: float | None, current: float | None) -> MetricDelta:
+    """A headline-rate delta whose filled 0.0 is marked as the fill it is."""
+    return MetricDelta(
+        name=name,
+        baseline=baseline or 0.0,
+        current=current or 0.0,
+        key_lost=baseline is not None and current is None,
+    )
+
+
+def _pivot_rate(metrics: RunMetrics) -> float | None:
+    """Class 2's rate as the record's own counts give it.
+
+    `diff` and `baseline --compare` RELAYED this where `score` and both PDF
+    engines RECOMPUTE it, so one record read 0.0% in CI and 95.4% in the audit
+    PDF bound to the same pack. Comparing a pack you did not produce is `diff`'s
+    documented use, which is precisely when relaying matters.
+    """
+    return rate_from_counts(
+        metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
+    )
 
 
 def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineComparison:
@@ -118,27 +152,25 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             baseline=float(baseline.confirmed_findings),
             current=float(current.confirmed_findings),
         ),
-        MetricDelta(
-            name="retrieval_pivot_rate",
-            baseline=baseline.retrieval_pivot_rate or 0.0,
-            current=current.retrieval_pivot_rate or 0.0,
-        ),
+        # The four headline rates fill an absent measurement with 0.0 exactly as
+        # the expanded maps do, so they need the same flag: configuring one live
+        # adapter leaves the other probes no live step, and all four went `None`
+        # while `confirmed_findings` held at 229. Both gates printed `[ok] 0.125
+        # -> 0` four times over and exited 0 on "no regression" - every leak rate
+        # "fixed" by not being measured.
+        _rate_delta("retrieval_pivot_rate", _pivot_rate(baseline), _pivot_rate(current)),
         # Class 3/6/10 headline rates: higher means more cross-tenant leakage, so
         # an increase regresses exactly like the retrieval-pivot rate above.
-        MetricDelta(
-            name="poisoning_bleed_delta",
-            baseline=baseline.poisoning_bleed_delta or 0.0,
-            current=current.poisoning_bleed_delta or 0.0,
+        _rate_delta(
+            "poisoning_bleed_delta", baseline.poisoning_bleed_delta, current.poisoning_bleed_delta
         ),
-        MetricDelta(
-            name="inversion_reconstruction_rate",
-            baseline=baseline.inversion_reconstruction_rate or 0.0,
-            current=current.inversion_reconstruction_rate or 0.0,
+        _rate_delta(
+            "inversion_reconstruction_rate",
+            baseline.inversion_reconstruction_rate,
+            current.inversion_reconstruction_rate,
         ),
-        MetricDelta(
-            name="extraction_efficiency",
-            baseline=baseline.extraction_efficiency or 0.0,
-            current=current.extraction_efficiency or 0.0,
+        _rate_delta(
+            "extraction_efficiency", baseline.extraction_efficiency, current.extraction_efficiency
         ),
     ]
     deltas.extend(
@@ -153,6 +185,7 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             "per_probe_findings",
             {key: float(value) for key, value in baseline.per_probe_findings.items()},
             {key: float(value) for key, value in current.per_probe_findings.items()},
+            absent_when_clean=True,
         )
     )
     deltas.extend(

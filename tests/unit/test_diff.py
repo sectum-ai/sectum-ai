@@ -669,9 +669,12 @@ def test_every_expanded_metric_map_treats_a_lost_key_as_unmeasured(tmp_path: Pat
     # a surface, a tenant pair, an embedding model - and each had to be wired up
     # separately as it was noticed, three times over three cycles. The flag is set
     # where the 0.0 is filled in now, so this sweep covers the next map too.
+    # `per_probe_findings` is deliberately NOT here: it counts findings, so a
+    # probe that RAN and found nothing is absent from it, and the flag labelled
+    # that clean result "not measured". See the two tests below - its genuine
+    # coverage loss is caught by the stricter probe-id signal instead.
     cases = {
         "retrieval_pivot_rate_by_model": RunMetrics(retrieval_pivot_rate_by_model={"st:x": 0.9}),
-        "per_probe_findings": RunMetrics(per_probe_findings={"rag-entity-bleed": 5}),
         "erasure_residue": RunMetrics(erasure_residue={"vector_db": 2}),
         "side_channel_effect_sizes": RunMetrics(side_channel_effect_sizes={"a->b": 9.0}),
         "erasure_caveats": RunMetrics(erasure_caveats={"backup": 3}),
@@ -687,3 +690,137 @@ def test_every_expanded_metric_map_treats_a_lost_key_as_unmeasured(tmp_path: Pat
         )
         line = next(x for x in cli.output.splitlines() if name in x and "[" in x)
         assert line.strip().startswith("[not measured]"), line
+
+
+def test_a_probe_that_ran_and_found_nothing_does_not_read_not_measured(tmp_path: Path) -> None:
+    # `per_probe_findings` counts FINDINGS, so a probe that ran and found nothing
+    # is absent from it - `_exercised_probes` says exactly that. Marking its key
+    # lost printed `[not measured] per_probe_findings[rag-entity-bleed]: 5 -> 0`
+    # directly under `[ok] confirmed_findings: 5 -> 0`, for the same five
+    # findings, with nothing lost at all. A label that fires on a clean result
+    # teaches the reader to ignore it on a real one.
+    earlier = _run(
+        metrics=RunMetrics(confirmed_findings=5, per_probe_findings={"rag-x": 5})
+    ).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "clean-e.json", earlier)),
+            str(_write(tmp_path / "clean-l.json", later)),
+        ],
+    )
+    assert "[ok] per_probe_findings[rag-x]: 5 -> 0" in cli.output, cli.output
+    assert "[not measured] per_probe_findings" not in cli.output, cli.output
+
+
+def test_a_probe_that_did_not_run_still_reads_not_measured(tmp_path: Path) -> None:
+    # The other half: the same vanished key, but the later run never exercised the
+    # probe. `coverage_lost` reaches it through the probe id in the key - the
+    # stricter of the two signals, and the reason exempting this map is safe.
+    earlier = _run(
+        metrics=RunMetrics(confirmed_findings=5, per_probe_findings={"rag-x": 5})
+    ).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {}})
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "lost-e.json", earlier)),
+            str(_write(tmp_path / "lost-l.json", later)),
+        ],
+    )
+    assert "[not measured] per_probe_findings[rag-x]: 5 -> 0" in cli.output, cli.output
+    assert "[COVERAGE LOST] rag-x" in cli.output, cli.output
+
+
+def test_a_headline_rate_the_later_run_never_measured_is_not_a_fixed_leak(tmp_path: Path) -> None:
+    # The four scalar rates fill an absent measurement with 0.0 exactly as the
+    # expanded maps do. `2c21f90` taught the MAPS that a filled 0.0 is not a
+    # measurement and left the SCALARS relaying it - the incomplete-fix shape, one
+    # commit later. Configuring a single live adapter leaves the other probes no
+    # live step, so all four go None at once while `confirmed_findings` holds:
+    # both gates then printed `[ok] 0.125 -> 0` four times and exited 0 on "no
+    # regression", every leak rate "fixed" by not having been measured.
+    measured = RunMetrics(
+        confirmed_findings=229,
+        retrieval_pivot_rate=0.125,
+        poisoning_bleed_delta=1.0,
+        inversion_reconstruction_rate=1.0,
+        extraction_efficiency=0.18,
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "measured.json", _run(metrics=measured))),
+            str(
+                _write(
+                    tmp_path / "unmeasured.json", _run(metrics=RunMetrics(confirmed_findings=229))
+                )
+            ),
+        ],
+    )
+    for name in (
+        "retrieval_pivot_rate",
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    ):
+        line = next(
+            x
+            for x in cli.output.splitlines()
+            if x.strip().endswith(f" {name}: 0.125 -> 0") or (name in x and "[" in x and "->" in x)
+        )
+        assert line.strip().startswith("[not measured]"), line
+
+
+def test_the_diff_recomputes_the_pivot_rate_from_the_records_own_counts(tmp_path: Path) -> None:
+    # `score` and both PDF engines recompute this from k of n; `diff` relayed the
+    # rate the record asserts about itself. A record whose counts say 95.4% while
+    # its rate field says 0.0 therefore gated CI green at `[ok] 0 -> 0` and
+    # printed 95.4% in the audit PDF bound to the same pack. Comparing a pack you
+    # did not produce is this command's documented use.
+    earlier = RunMetrics(retrieval_pivot_k=0, retrieval_pivot_n=350, retrieval_pivot_rate=0.0)
+    later = RunMetrics(retrieval_pivot_k=334, retrieval_pivot_n=350, retrieval_pivot_rate=0.0)
+    result = diff_runs(_run(metrics=earlier), _run(metrics=later))
+    pivot = next(d for d in result.metrics.deltas if d.name == "retrieval_pivot_rate")
+    assert pivot.baseline == 0.0
+    assert abs(pivot.current - 334 / 350) < 1e-12
+    assert pivot.regressed
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "rpr-e.json", _run(metrics=earlier))),
+            str(_write(tmp_path / "rpr-l.json", _run(metrics=later))),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] retrieval_pivot_rate" in cli.output, cli.output
+
+
+def test_a_side_channel_pair_whose_surface_lost_its_backing_is_not_measured(tmp_path: Path) -> None:
+    # `side_channel_effect_sizes` is keyed by tenant PAIR, so it names neither a
+    # probe id nor a surface: a key that SURVIVES while the model surface behind
+    # it falls back to the built-in fake matched no lookup, and read `[ok] 0.8 ->
+    # 0` beside that surface's own `[SCOPE LOST]` line.
+    pair = "00000000-0000-0000-0000-000000000001->00000000-0000-0000-0000-000000000002"
+    live = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 0.8})).model_copy(
+        update={"surface_provenance": {"model_adapter": "LIVE"}}
+    )
+    fake = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 0.0})).model_copy(
+        update={"surface_provenance": {"model_adapter": "SYNTHETIC"}}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "sc-e.json", live)),
+            str(_write(tmp_path / "sc-l.json", fake)),
+        ],
+    )
+    line = next(x for x in cli.output.splitlines() if "side_channel_effect_sizes[" in x)
+    assert line.strip().startswith("[not measured]"), line
+    assert "[SCOPE LOST] model_adapter" in cli.output, cli.output

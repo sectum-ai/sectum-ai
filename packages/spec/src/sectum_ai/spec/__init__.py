@@ -48,7 +48,7 @@ from sectum_ai.spec.models import (
     SyntheticUserSpec,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
-from sectum_ai.spec.stats import normal_quantile, wilson_interval
+from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
 from sectum_ai.spec.text import normalize_for_match, residual_present, untrusted
 
 __all__ = [
@@ -97,6 +97,7 @@ __all__ = [
     "json_schemas",
     "normal_quantile",
     "normalize_for_match",
+    "rate_from_counts",
     "redact_sensitive",
     "residual_present",
     "sha256_hex",

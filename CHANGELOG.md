@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Four headline leak rates read `[ok] ... -> 0` in both CI gates on a run that
+  never measured them.** `diff` and `baseline --compare` fill an absent rate with
+  `0.0`, and the previous release taught only the expanded metric MAPS that such
+  a fill is not a measurement — the scalars kept relaying it. Configuring a
+  single live adapter leaves the other probes no live step, so all four go
+  unmeasured at once while `confirmed_findings` holds steady: the gates printed
+  every leak rate as "fixed" and exited 0. They now read `[not measured]`.
+- **`diff` relayed a Retrieval-Pivot Rate that `score` and both PDF engines
+  recompute.** Where a record states both a rate and the counts behind it, the
+  counts win — the rule `docs/scorecard.md` already stated, which the diff path
+  did not follow. A record whose counts say 95.4% while its rate field says 0.0
+  gated CI green at `[ok] 0 -> 0` and printed 95.4% in the audit PDF bound to the
+  same pack. All three now share one `rate_from_counts` in `sectum_ai.spec`.
+  Comparing a pack you did not produce is `diff`'s documented use, which is
+  exactly when relaying matters.
+- **A Class 5 effect size whose backing surface fell back to the fake read
+  `[ok] 0.8 -> 0`.** `side_channel_effect_sizes` is keyed by tenant PAIR, so it
+  names neither a probe id nor a surface and matched neither lookup — printing
+  `[ok]` directly beside that surface's own `[SCOPE LOST]` line, and beside two
+  sibling maps on the same record that both read `[not measured]`.
+- **A probe that ran and found nothing read `[not measured]`.** The opposite
+  error, from the same release: `per_probe_findings` counts findings, so a clean
+  probe is absent from it by design, and flagging that key as lost labelled a
+  genuinely clean result unmeasured. Its real coverage loss is still caught, by
+  the stricter probe-id signal. A label that fires on a clean result teaches the
+  reader to ignore it on a real one.
 - **A surface still holding a re-cased copy of the tenant's canary was signed
   `ERASURE VERIFIED`.** The Class 11 scans tested residue with a raw
   case-sensitive `in`, so an ordinary partial purge — the backend's delete walks

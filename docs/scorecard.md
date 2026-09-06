@@ -46,7 +46,10 @@ headline is recomputed from `retrieval_pivot_k`/`_n` rather than read from the
 interval faithfully would let a doctored record print a far-too-tight interval as fact,
 which reads to an auditor exactly like one we invented. Counts that cannot be true
 (`k > n`) are refused rather than fallen back on, so a record cannot opt out of the
-recompute by corrupting them.
+recompute by corrupting them. The rule is the product's, not this command's:
+`report`'s audit PDF and `diff` / `baseline --compare` recompute the same rate
+from the same counts, so one record cannot read 0.0% in CI and 95.4% in the
+signed PDF bound to the same pack.
 
 On a run with some live surfaces, a class backed by both a live surface and a
 built-in fake is graded on the live surface's findings only: a confirmed finding
