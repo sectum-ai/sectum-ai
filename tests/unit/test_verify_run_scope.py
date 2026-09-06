@@ -269,3 +269,41 @@ def test_a_pack_binding_a_pdf_that_was_not_supplied_says_so() -> None:
     assert "not supplied" in audit.detail
     # Not a failure in itself: a standalone pack verifies without its companion.
     assert "audit-pdf" not in {check.name for check in result.checks if not check.ok}
+
+
+def test_verify_binds_the_ground_truth_manifest_when_given_one(tmp_path: Path) -> None:
+    # The `manifest-hash` check existed and NO CLI path reached it: `verify`
+    # passed no manifest, so the check never ran - while the command's own
+    # closing note, and ADR-0016, both told the reader to "re-run with the
+    # original ground-truth manifest". The capability is real now.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    pack = str(tmp_path / "evidence.json")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    # A manifest from another run must FAIL, not be quietly ignored.
+    other = json.loads(good.read_text())
+    other["manifest_id"] = "some-other-run"
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+    bad = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # Without the flag the command says how to get the binding, and does not
+    # claim to have checked it.
+    plain = _runner.invoke(app, ["verify", pack, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output

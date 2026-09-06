@@ -59,6 +59,8 @@ adapters:
 ```
 
 ```sh
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe semantic-cache-contamination --config sectum-ai.yaml --workdir out
 ```
 

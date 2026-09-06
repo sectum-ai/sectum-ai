@@ -1,9 +1,11 @@
 # Sectum AI
 
-**AI data-isolation verification.** Sectum AI tests whether one user can read
-another user's data — and one customer another customer's — through your vector
-DB, RAG pipeline, agent framework, semantic cache, fine-tunes, or MCP servers,
-and records exactly which checks it was able to run.
+**AI data-isolation verification.** Sectum AI tests whether one customer can read
+another customer's data — through your vector DB, RAG pipeline, agent framework,
+semantic cache, fine-tunes, or MCP servers — and whether one user can read
+another user's, on the surfaces whose adapters carry a user identity (the RAG
+pipeline and the agent framework do not, so they are tested tenant-to-tenant
+only). It records exactly which checks it was able to run.
 It provisions synthetic tenants on a live stack, seeds them with cryptographic
 canary markers, runs a 12-class attack catalog (Classes 1-11 and 13) across 13
 surfaces, and produces

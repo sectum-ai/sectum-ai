@@ -136,6 +136,7 @@ from sectum_ai.spec import (
     EvidenceError,
     EvidencePack,
     Finding,
+    GroundTruthManifest,
     IsolationScore,
     MarkerType,
     RunMetrics,
@@ -1778,6 +1779,16 @@ def verify(
         Path | None,
         typer.Option("--rekor-key", help="PEM of a Rekor public key (pins a private instance)."),
     ] = None,
+    manifest: Annotated[
+        Path | None,
+        typer.Option(
+            "--manifest",
+            help=(
+                "Path to the run's ground-truth manifest. Binds which marker "
+                "belonged to which tenant, which the pack's own digests cannot."
+            ),
+        ),
+    ] = None,
     allow_unanchored: Annotated[
         bool,
         typer.Option(
@@ -1859,8 +1870,18 @@ def verify(
     # bound into the attested digest, so a swapped PDF fails verification.
     pdf_bytes = _sibling_audit_pdf(pack)
     unclaimed = sorted({name for slot in (0, 1, 2) for name in _unclaimed_siblings(pack, slot)})
+    # The `manifest-hash` check existed and no CLI path reached it, while both
+    # this command and ADR-0016 told the reader to "re-run with the manifest".
+    ground_truth: GroundTruthManifest | None = None
+    if manifest is not None:
+        try:
+            ground_truth = GroundTruthManifest.model_validate_json(manifest.read_text())
+        except (OSError, ValidationError) as error:
+            typer.echo(f"not a valid ground-truth manifest at {manifest}: {error}", err=True)
+            raise typer.Exit(code=3) from error
     result = verify_pack(
         evidence,
+        manifest=ground_truth,
         tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
         tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
         rekor_keyring=_rekor_keyring_override(rekor_key),
@@ -1908,11 +1929,12 @@ def verify(
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
     _echo_verdict(result.anchored, what="evidence pack")
-    typer.echo(
-        "note: this confirms integrity and internal consistency; to also bind which "
-        "marker belonged to which tenant, re-run with the original ground-truth manifest.",
-        err=True,
-    )
+    if ground_truth is None:
+        typer.echo(
+            "note: this confirms integrity and internal consistency; to also bind which "
+            "marker belonged to which tenant, re-run with `--manifest <manifest.json>`.",
+            err=True,
+        )
 
 
 def _parse_subject_surface_map(

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`sectum-ai verify --manifest <manifest.json>`** binds which marker belonged
+  to which tenant. The `manifest-hash` check existed and no CLI path reached it,
+  while the command's own closing note and ADR-0016 both told the reader to
+  "re-run with the original ground-truth manifest".
+
 ### Fixed
 
 - **The shared residue predicate was weaker than the detector it was shared to

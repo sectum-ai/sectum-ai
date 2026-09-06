@@ -77,7 +77,9 @@ import path by default — the directory is hyphenated and has no package marker
 Put it on the path and use the bare module name:
 
 ```sh
-export PYTHONPATH=examples/agent-tool-hijack
+# Run from THIS directory (the commands below use dir-relative paths);
+# `factories.py` lives here and a hyphenated dir is not on the import path.
+export PYTHONPATH=.
 ```
 
 [`factories.py`](factories.py) in this directory holds copy-pasteable
@@ -97,6 +99,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -119,6 +123,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[autogen]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -142,6 +148,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[crewai]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -163,6 +171,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[openai-assistants]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -185,6 +195,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[anthropic-tooluse]
 export ANTHROPIC_API_KEY=sk-ant-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 

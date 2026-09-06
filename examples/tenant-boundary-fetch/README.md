@@ -82,6 +82,8 @@ adapters:
 ```
 
 ```sh
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe tenant-boundary-fetch --config sectum-ai.yaml --workdir out
 ```
 
@@ -96,6 +98,9 @@ points the same probe at the store as it is deployed and reports what it finds.
   tests the existence of the scoping boundary; bypass-via-forged-
   credentials is out of scope (Sectum does not test the
   authentication layer itself).
-- **403-vs-200-with-empty ambiguity.** A real engagement extends
-  the probe to flag stores that return an empty 200 instead of a
-  proper 403 — currently those are treated as "no leak observed".
+- **403-vs-200-with-empty ambiguity.** The probe flags it: a
+  cross-principal fetch that comes back empty rather than explicitly
+  denied yields an INFO/UNVERIFIED finding ("negative authorization is
+  unproven"), never a silent pass, and the scorecard's class line says
+  how many. An empty 200 still is not proof of enforcement — which is
+  why the finding is UNVERIFIED and does not fail the class.

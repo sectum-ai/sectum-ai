@@ -76,8 +76,8 @@ timestamps to UTC) — see the update note in
 - Tamper-evidence now covers the full auditor-facing surface, not just the run record.
 - Transparency-log anchoring cannot be silently downgraded.
 - `sectum-ai verify <pack>` without the original manifest confirms integrity and internal
-  consistency but not marker-ownership; the CLI now says so explicitly (re-run with
-  the manifest to bind ownership).
+  consistency but not marker-ownership; the CLI now says so explicitly, and
+  names the flag that binds it (`--manifest <manifest.json>`).
 - `tests/invariants/test_evidence_roundtrip.py` gained a tamper-each-field suite
   (control mappings, pdf ref, manifest hash, Rekor strip, flag flip, forged local token).
 - `pdf_ref` is bound into the digest and the CLI now populates it: `sectum-ai report`

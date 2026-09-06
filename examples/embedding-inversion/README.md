@@ -32,10 +32,19 @@ memory `FakeVectorStore` with `shared_index: true`:
 1. **`sectum-ai seed`** provisions four synthetic tenants with
    `ENTITY_CANARY` markers planted across the corpora.
 2. **`sectum-ai probe --probe embedding-inversion`** issues, from
-   each tenant, nearest-neighbour queries crafted to surface a
-   foreign tenant's entity canary. A foreign canary in the returned
-   neighbours is a confirmed inversion path; the probe exits `2`
-   on at least one such hit.
+   each tenant, retrieval queries crafted to surface a foreign
+   tenant's entity canary. A foreign canary in the returned hits is a
+   confirmed inversion path; the probe exits `2` on at least one such
+   hit.
+
+   **On the built-in fake, that path is lexical, not embedding-based.**
+   `run.sh` passes no `--config`, so the demo store ranks by token
+   overlap — so what this walkthrough demonstrates is the *probe*, not
+   an embedding inversion. Sectum says why in its own adapter contract:
+   run Class 6 against a store that matches on substrings "and a keyword
+   hit gets recorded as embedding inversion — a real finding attributed
+   to a mechanism the backend does not have". Point it at a real
+   embedding-backed store before reading the rate as inversion.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
 4. **`sectum-ai verify`** independently re-checks the pack.
 
