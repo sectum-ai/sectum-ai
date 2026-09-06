@@ -232,6 +232,20 @@ def _confidence_for(coverage: float) -> Confidence:
     return Confidence.LOW
 
 
+def _confirmed_in_class(run: RunResult, entry: _CatalogClass) -> int:
+    """The class's confirmed findings, however the class was ultimately graded.
+
+    Rules 5 and 6 both decline to GRADE a class while its findings still exist,
+    and both have to say how many: a `NOT_COVERED` verdict beside a count of `0`
+    reads as "nothing was found here", which is a different claim.
+    """
+    return sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+    )
+
+
 def _rate_from_counts(metrics: RunMetrics) -> float | None:
     """Class 2's rate as its own counts give it, or ``None`` if the record has no counts.
 
@@ -346,20 +360,32 @@ def _score_class(
         # this methodology cannot tie to a class. Grading it would assert a verdict
         # about a system the scorecard cannot identify, so it fails closed - the same
         # answer rule 1 gives for a class that never ran at all.
+        # Not grading the class is not the same as asserting it had no findings.
+        # Omitting this count let a record hide a confirmed CRITICAL by deleting
+        # one provenance key: the class line then positively read `0`, where rule
+        # 5 fifteen lines below counts and names the same findings. Rule 4 forbids
+        # dropping a finding silently, and the count is how the reader sees it.
+        unattributed = _confirmed_in_class(run, entry)
+        detail = (
+            f"; the {unattributed} confirmed finding(s) here are not attributed to a surface"
+            if unattributed
+            else ""
+        )
         return ClassScore(
             class_id=entry.class_id,
             name=entry.name,
             verdict=ClassVerdict.NOT_COVERED,
             severity=entry.severity,
             probe_ids=tuple(ran),
+            confirmed_findings=unattributed,
             # Say only what is known. The run records WHICH surfaces it exercised,
             # not which one backed this class, so naming the others would imply an
             # attribution this rule exists to refuse.
             note=(
                 f"expected {'one of ' if len(accepted) > 1 else ''}"
                 f"{', '.join(sorted(accepted))}, none of which this run's provenance "
-                "records; the surface it ran against cannot be attributed to a class "
-                "by this methodology"
+                f"records; the surface it ran against cannot be attributed to a class "
+                f"by this methodology{detail}"
             ),
         )
     if ran and backing and backing <= synthetic:
@@ -367,11 +393,7 @@ def _score_class(
         # cannot speak for the operator's stack in either direction - a pass is not
         # assurance and a leak is not their fault. Its findings are still counted and
         # named, so nothing is dropped silently; they just do not move this grade.
-        confirmed_synthetic = sum(
-            1
-            for finding in run.findings
-            if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
-        )
+        confirmed_synthetic = _confirmed_in_class(run, entry)
         against = ", ".join(sorted(backing))
         detail = (
             f"; the {confirmed_synthetic} finding(s) here describe that fake, not your stack"

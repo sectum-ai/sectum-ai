@@ -132,7 +132,6 @@ from sectum_ai.runner import (
 from sectum_ai.score import PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
-    ClassVerdict,
     ConfigError,
     EvidenceError,
     EvidencePack,
@@ -3091,7 +3090,13 @@ def _render_scorecard(card: IsolationScore, source: Path) -> None:
         typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")
     for entry in card.classes:
-        detail = entry.headline or (entry.note if entry.verdict is ClassVerdict.NOT_COVERED else "")
+        # Both, not either: the "N findings withheld" note is set only on a
+        # PASS/FAIL class, which the old NOT_COVERED condition excluded outright,
+        # and a class with a headline rate swallowed its note as well. The
+        # scorecard page promises the note says how many were withheld; it said so
+        # only in `--output json`, while the text an auditor reads showed `PASS`
+        # under a scope block implying that class was unaffected.
+        detail = " ".join(part for part in (entry.headline, entry.note) if part)
         typer.echo(
             f"  Class {entry.class_id:>2}  {entry.name:<32}"
             f"{entry.verdict.value:<12}{entry.severity.value:<9}{detail}"

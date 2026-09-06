@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A pack could assert a compliance control its own run never earned, and
+  `verify` said `[ok]` on every line.** The attested digest binds
+  `control_mappings`, so nobody can edit them after signing — and that was the
+  whole of the guarantee. Nothing asked whether the run SUPPORTS them, so a clean
+  isolation run over an empty `erasure_coverage`, packed with the unfiltered
+  table, asserted GDPR Article 17 "Erasure across the AI surfaces verified" and
+  CCPA 1798.105 into a signed pack, its audit PDF and its DSSE predicate, at
+  exit 0. That is the exact over-claim `controls.control_mappings`' filter exists
+  to prevent — it just ran only at build time. `verify` now recomputes the table
+  from the run and refuses any mapping the evidence does not support, including
+  one naming live surfaces the run never exercised. A subset, not an equality:
+  asserting fewer controls than the evidence earns is honest under-claiming.
+- **A confirmed CRITICAL could be hidden by deleting one provenance key.** The
+  scorecard's rule 6 declines to grade a class whose backing surface the run does
+  not account for, and omitted the class's finding count entirely — so the class
+  line positively asserted `0`, which reads as "nothing was found here" rather
+  than "found, but not attributable". Rule 5 fifteen lines below counts and names
+  the same findings. Both now share one counter.
+- **The "N findings withheld" note never reached the text scorecard.** It is set
+  only on a PASS/FAIL class, and the renderer showed a note only for
+  `NOT_COVERED` ones, so the count existed in `--output json` and nowhere in the
+  text an auditor reads — under a scope block whose wording implies the class was
+  unaffected. A class with a headline rate swallowed its note as well.
 - **Four headline leak rates read `[ok] ... -> 0` in both CI gates on a run that
   never measured them.** `diff` and `baseline --compare` fill an absent rate with
   `0.0`, and the previous release taught only the expanded metric MAPS that such

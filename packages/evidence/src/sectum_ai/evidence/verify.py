@@ -25,8 +25,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum_ai.evidence.chain import LocalTimestamper, attested_digest
+from sectum_ai.evidence.controls import control_mappings
 from sectum_ai.spec import (
     SCHEMA_VERSION,
+    ControlMapping,
     EvidenceError,
     EvidencePack,
     GroundTruthManifest,
@@ -119,6 +121,7 @@ def verify_pack(
         _check_schema_version(pack),
         token_check,
         _check_consistency(pack),
+        _check_control_mappings(pack),
         _check_run_scope(pack, require_live),
     ]
     rekor_anchored = False
@@ -447,6 +450,53 @@ def _check_consistency(pack: EvidencePack) -> Check:
         else "the run's manifest hash does not match the pack's"
     )
     return Check("manifest-consistency", ok=ok, detail=detail)
+
+
+def _check_control_mappings(pack: EvidencePack) -> Check:
+    """Whether the compliance claims in the pack are ones its own run earned.
+
+    The digest binds the mappings, so they cannot be edited after signing - but
+    nothing asked whether the run supports them in the first place, and a pack
+    built by any other tool carries whatever table its author chose. A clean
+    isolation run over an empty `erasure_coverage`, packed with the unfiltered
+    11-row table, therefore verified `[ok]` on every line while asserting GDPR
+    Article 17 "Erasure across the AI surfaces verified" - the exact over-claim
+    `controls.control_mappings`' filter exists to prevent, applied only at build
+    time. The OSCAL export re-derives from the run and emitted 9 rows for the
+    same pack; that divergence is the tell.
+
+    `control_mappings(run)` is a pure function of the run, so the verifier can
+    simply ask it again. A SUBSET, not an equality: asserting fewer controls than
+    the evidence earns is honest under-claiming, and `report` without the
+    compliance table produces exactly that. Only the other direction is the
+    over-claim this product exists to refuse, and it fails closed.
+
+    The comparison is over the whole mapping, so the live-surface list the
+    assertion names is bound too: "verified" over surfaces the run never
+    exercised live is the same claim one clause further in.
+    """
+    earned = {_canonical_mapping(mapping) for mapping in control_mappings(pack.run_result)}
+    unearned = [
+        mapping for mapping in pack.control_mappings if _canonical_mapping(mapping) not in earned
+    ]
+    named = ", ".join(
+        f"{mapping.framework} {'/'.join(mapping.control_ids)}" for mapping in unearned
+    )
+    detail = (
+        f"every one of the pack's {len(pack.control_mappings)} control mapping(s) is one "
+        "this run's evidence supports"
+        if not unearned
+        else (
+            f"the pack asserts {len(unearned)} control mapping(s) this run's evidence does "
+            f"not support ({named}); a compliance claim the run did not earn is not made "
+            "true by being signed"
+        )
+    )
+    return Check("control-mappings", ok=not unearned, detail=detail)
+
+
+def _canonical_mapping(mapping: ControlMapping) -> str:
+    return json.dumps(mapping.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 def _check_manifest(manifest: GroundTruthManifest, expected_hash: str) -> Check:

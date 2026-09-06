@@ -111,6 +111,15 @@ anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 
+The `control-mappings` check asks the same question of the pack's **compliance
+claims**. The digest binds them, so they cannot be edited after signing — but
+nothing asked whether the run *earned* them, and a pack built by any other tool
+carries whatever table its author chose. `control_mappings()` is a pure function
+of the run, so the verifier recomputes it and refuses any mapping the run's
+evidence does not support: a clean isolation run over no erasure coverage cannot
+assert GDPR Article 17. Asserting *fewer* controls than the evidence earns is
+honest under-claiming and passes — only the other direction fails.
+
 ## What the pack carries — and what it does not
 
 The pack carries the manifest's *hash*, not the manifest itself. The

@@ -12,12 +12,15 @@ covered; there the synthetic-backed classes are withheld from the letter.
 """
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from sectum_ai.cli.app import app
 from sectum_ai.score import CATALOG, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     ClassVerdict,
@@ -233,3 +236,44 @@ def test_an_erasure_coverage_key_or_verdict_that_is_not_a_member_is_refused() ->
     assert RunMetrics(erasure_coverage={"vector_db": "ERASED"}).erasure_coverage == {
         "vector_db": "ERASED"
     }
+
+
+def test_rule_6_counts_the_findings_it_declines_to_grade() -> None:
+    # Deleting ONE provenance key moved Class 4 from rule 5's path to rule 6's,
+    # and with it the class's confirmed CRITICAL from `confirmed_findings=1` to a
+    # positively asserted `0` - a NOT_COVERED line reading "nothing was found
+    # here", which is a different claim from "found, but not attributable". Rule 5
+    # fifteen lines below counts and names the same findings; rule 4 forbids
+    # dropping one silently, and re-grading a record you did not produce is this
+    # command's whole purpose.
+    leak = _finding("semantic-cache-contamination").model_copy(
+        update={"surface": Surface.SEMANTIC_CACHE}
+    )
+    provenance = _all(SurfaceProvenance.LIVE)
+    del provenance[Surface.SEMANTIC_CACHE.value]
+    entry = next(
+        c for c in score_run(_run(provenance, findings=(leak,))).classes if c.class_id == 4
+    )
+    assert entry.verdict is ClassVerdict.NOT_COVERED
+    assert entry.confirmed_findings == 1
+    assert entry.note is not None and "1 confirmed finding(s)" in entry.note
+
+
+def test_the_withheld_note_reaches_the_text_scorecard(tmp_path: Path) -> None:
+    # The note is set only on a PASS/FAIL class, and the renderer showed a note
+    # only for NOT_COVERED ones - so the count of findings withheld from the grade
+    # existed in `--output json` and nowhere in the text an auditor reads. The
+    # scope block above it says classes resting only on a fake are excluded, which
+    # invites exactly the wrong conclusion about a class that passed with findings
+    # withheld. A headline rate swallowed the note as well.
+    leak = _finding("rag-entity-bleed").model_copy(update={"surface": Surface.VECTOR_DB})
+    run = _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(leak,))
+    entry = next(c for c in score_run(run).classes if c.class_id == 2)
+    assert entry.verdict is not ClassVerdict.NOT_COVERED
+    assert entry.note is not None and "withheld" in entry.note
+
+    (tmp_path / "run.json").write_text(run.model_dump_json())
+    result = CliRunner().invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    class_line = next(x for x in result.output.splitlines() if x.strip().startswith("Class  2 "))
+    assert "withheld" in class_line, class_line
