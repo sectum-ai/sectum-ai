@@ -304,7 +304,15 @@ def verify_bundle(
         require_anchored=require_anchored,
         require_live=require_live,
     )
-    checks.extend(pack_result.checks)
+    # A bundle that binds a PDF and does not carry it FAILs below. `verify_pack`
+    # emits its own, non-failing "not supplied" note for the standalone case, which
+    # is the right answer there and the wrong one here - drop it so the bundle's
+    # verdict is the only `audit-pdf` line.
+    checks.extend(
+        check
+        for check in pack_result.checks
+        if not (check.name == "audit-pdf" and pdf_bytes is None)
+    )
     for name in present_pdfs:
         if pack.pdf_ref is None:
             # verify_pack checks a PDF only when the pack binds one; a bundled PDF

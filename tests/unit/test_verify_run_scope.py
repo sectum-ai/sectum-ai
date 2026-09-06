@@ -254,3 +254,18 @@ def test_a_bundle_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -
     result = _runner.invoke(app, ["verify", str(bundle), "--allow-unanchored", "--allow-synthetic"])
     assert result.exit_code == 4, result.output
     assert "schema_version" in result.output
+
+
+def test_a_pack_binding_a_pdf_that_was_not_supplied_says_so() -> None:
+    # `verify_pack` checked the binding only when a PDF was handed to it and was
+    # otherwise SILENT: every line `[ok]`, exit 0, and a reader concluding the
+    # bound PDF had been matched. A standalone pack legitimately verifies without
+    # its companion, so this is not a failure - but the verdict has to say what it
+    # did not check, the way the unanchored-timestamp check states its limitation.
+    pack = _pack({"vector_db": "LIVE"}).model_copy(update={"pdf_ref": "0" * 64})
+    result = verify_pack(pack, require_anchored=False, require_live=False)
+    audit = next(check for check in result.checks if check.name == "audit-pdf")
+    assert audit.ok
+    assert "not supplied" in audit.detail
+    # Not a failure in itself: a standalone pack verifies without its companion.
+    assert "audit-pdf" not in {check.name for check in result.checks if not check.ok}

@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `verify` was silent about a binding it never checked: a pack that names an
+  audit PDF but is verified without one printed every line `[ok]` and exited 0,
+  so a reader concluded the PDF had been matched. A standalone pack legitimately
+  verifies without its companion, so this is not a failure — it now says which
+  part of the pack the verdict does not speak for, the way the unanchored
+  timestamp already states its own limitation. A hostile Rekor checkpoint whose
+  root hash is not valid base64 is refused with exit 3 rather than crashing out
+  with a traceback, which a caller keying on the exit code read as the tool
+  breaking rather than as a rejected proof.
 - **Eight frameworks' worth of isolation controls were asserted off a deletion
   check.** The isolation requirement asked only whether *some* surface was live,
   so a run whose isolation probes every one ran against a built-in fake, beside

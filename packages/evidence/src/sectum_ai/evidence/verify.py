@@ -141,6 +141,23 @@ def verify_pack(
         checks.append(_check_manifest(manifest, pack.manifest_hash))
     if pack.pdf_ref is not None and pdf_bytes is not None:
         checks.append(_check_pdf(pack.pdf_ref, pdf_bytes))
+    elif pack.pdf_ref is not None:
+        # A standalone pack legitimately verifies without its companion PDF, so
+        # this is not a failure - but omitting the check entirely left the verdict
+        # SILENT about a binding it never checked: every line `[ok]`, exit 0, and
+        # a reader concluding the PDF had been matched. Said plainly instead, the
+        # way the unanchored-timestamp check states its own limitation.
+        checks.append(
+            Check(
+                "audit-pdf",
+                ok=True,
+                detail=(
+                    "the pack binds an audit PDF that was not supplied, so this "
+                    "verification says nothing about it; put the PDF beside the pack, "
+                    "or verify the run-pack bundle, to check the binding"
+                ),
+            )
+        )
     anchored = token_anchored or rekor_anchored
     if require_anchored and not anchored:
         checks.append(
