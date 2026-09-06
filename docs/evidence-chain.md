@@ -111,11 +111,16 @@ anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 
-`sectum-ai verify` prints one line per check: `schema-version`,
+`sectum-ai verify` prints one line per check. On a **pack**: `schema-version`,
 `timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
 `audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
 `in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings` when the flags,
-the pack or its siblings call for them.
+the pack or its siblings call for them. On a **run-pack bundle** (a `.zip`), one
+`member:<name>` line per listed member comes first and the pack's own checks
+follow, with the in-toto line naming the member it re-checked
+(`in-toto-attestation:attestation.intoto.json`). An unreadable archive, a missing
+run and a missing evidence member add `bundle`, `bundled-run` and `evidence-pack`
+respectively — failure paths, so a clean bundle never prints them.
 
 `manifest-hash` is the one check a flag turns on. The pack's own digests bind
 *that the manifest hash matches*, not *which marker belonged to which tenant*;

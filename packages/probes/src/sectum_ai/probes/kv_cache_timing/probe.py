@@ -333,8 +333,9 @@ class KvCacheTimingProbe:
         return KvCacheTimingReport(signals=tuple(signals), findings=tuple(findings))
 
     def _measure(self, owner: UUID, observer: UUID, prefixes: list[str]) -> TimingSignal:
-        # Interleave the two arms, alternating which is measured first, instead of
-        # timing all primed trials and then all control trials.
+        # Interleave the two arms in a seeded but exactly balanced order (see the
+        # shuffle below), instead of timing all primed trials and then all control
+        # trials.
         #
         # Block ordering confounded the comparison with anything that drifts during
         # the run - thermal throttling, CPU frequency scaling, a noisy neighbour, GC.
