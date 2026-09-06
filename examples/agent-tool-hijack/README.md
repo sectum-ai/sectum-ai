@@ -217,7 +217,8 @@ in front of it and point Sectum at the URL.
 The evidence pack itemises every confused-deputy and
 token-passthrough leak the probe confirmed: per-finding marker ID,
 owning tenant, observing tenant, the leaked tool result, OWASP /
-ATLAS / NIST control IDs, and a remediation pointer. The headline
+ATLAS / NIST control IDs. Class 7 findings carry no per-finding remediation
+pointer. The headline
 on page 1 is the count of confirmed Class 7 leaks under the
 configured agent.
 

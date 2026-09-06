@@ -99,9 +99,9 @@ Each Class 9 finding carries:
 - the `evidence_span` (the slice of the foreign-tenant inference where
   the canary surfaced)
 - the surface (`MODEL_ADAPTER`) + OWASP / ATLAS / NIST control IDs
-- the remediation pointer: per-tenant adapter routing with auth-scoped
-  resolution + a sanity-check that the merged model never serves
-  cross-tenant traffic
+Class 9 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant adapter routing with auth-scoped resolution, plus a sanity check
+that the merged model never serves cross-tenant traffic.
 
 ## What's *not* in this example
 

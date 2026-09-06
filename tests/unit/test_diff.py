@@ -824,3 +824,65 @@ def test_a_side_channel_pair_whose_surface_lost_its_backing_is_not_measured(tmp_
     line = next(x for x in cli.output.splitlines() if "side_channel_effect_sizes[" in x)
     assert line.strip().startswith("[not measured]"), line
     assert "[SCOPE LOST] model_adapter" in cli.output, cli.output
+
+
+def test_a_baseline_that_never_measured_is_not_rendered_as_a_clean_one(tmp_path: Path) -> None:
+    # The mirror of the lost-key fix, on the other side of the arrow. `baseline`
+    # fills an absent value with 0.0 exactly as `current` does, so
+    # `[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader the earlier
+    # run measured zero - a clean run that has since broken - when it measured
+    # nothing at all. The same fill reaches every expanded map: a surface the
+    # earlier run never scanned read `erasure_residue[backup]: 0 -> 2`.
+    #
+    # The REGRESSION itself stands. Dropping it would let a doctored earlier
+    # record suppress the signal by omitting the metric - the "record chooses to
+    # be believed" shape - so this is a rendering fix, and the exit code is
+    # asserted below precisely so a later change cannot quietly weaken it.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 1}))
+    later = _run(
+        metrics=RunMetrics(poisoning_bleed_delta=0.9, erasure_residue={"vector_db": 1, "backup": 2})
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "absent-e.json", earlier)),
+            str(_write(tmp_path / "absent-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] poisoning_bleed_delta: (not measured) -> 0.9" in cli.output, cli.output
+    assert "[REGRESSED] erasure_residue[backup]: (not measured) -> 2" in cli.output, cli.output
+    # A side that WAS measured still prints its number, on both sides.
+    assert "[ok] erasure_residue[vector_db]: 1 -> 1" in cli.output, cli.output
+
+
+def test_the_json_diff_says_which_side_of_a_metric_was_measured(tmp_path: Path) -> None:
+    # The text renderer refuses to state a fill as a value; the JSON stated a bare
+    # `0` for both sides and a consumer read it as a measurement. Same qualifier,
+    # both renderers - the rule this file has had to re-learn once per cycle.
+    earlier = _run(metrics=RunMetrics(retrieval_pivot_rate=0.4))
+    later = _run(metrics=RunMetrics(poisoning_bleed_delta=0.9))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "js-e.json", earlier)),
+            str(_write(tmp_path / "js-l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    metrics = {m["name"]: m for m in json.loads(cli.output)["metrics"]}
+    # measured earlier, not measured later
+    assert metrics["retrieval_pivot_rate"]["baseline_measured"] is True
+    assert metrics["retrieval_pivot_rate"]["current_measured"] is False
+    # not measured earlier, measured later
+    assert metrics["poisoning_bleed_delta"]["baseline_measured"] is False
+    assert metrics["poisoning_bleed_delta"]["current_measured"] is True
+    # measured on NEITHER side: both are fills, so neither is a claim, and the
+    # line reads `[not measured] ... (not measured) -> (not measured)` rather
+    # than `[ok] ... 0 -> 0`, which asserted two runs had measured zero.
+    assert metrics["extraction_efficiency"]["baseline_measured"] is False
+    assert metrics["extraction_efficiency"]["current_measured"] is False
+    assert metrics["extraction_efficiency"]["verdict"] == "not measured"

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`diff` stated a filled zero as a measurement on the OTHER side of the arrow.**
+  The previous release taught it that an absent CURRENT value is not a
+  measurement; `baseline` fills an absent value the same way, so
+  `[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader the earlier run
+  had measured a clean zero, and `[ok] extraction_efficiency: 0 -> 0` called two
+  runs that both measured nothing "ok". Each side now renders as
+  `(not measured)` when it is a fill, both runs unmeasured reads
+  `[not measured]`, and the JSON carries `baseline_measured` /
+  `current_measured`. The regression itself still stands where the baseline is
+  absent: dropping it would let a doctored earlier record suppress the signal by
+  omitting the metric.
 - **The MODEL surface attested `ERASED` while still returning the canary.**
   `content_recalled` — the sixth place that asks "is this string still there",
   and the one the previous commit's unification missed — tested a casefolded
@@ -37,8 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first run (`jq` emits `null`, and the `// ""` beside it makes that an empty
   output rather than an error). A unit test now pins the jq paths to the report's
   keys, and it runs on every PR.
-- **Ten of sixteen runner payload reads were untyped.** `vector.fetch`,
-  `vector.upsert`, `cache.get`/`set` and six others indexed `step.payload`
+- **Sixteen of eighteen runner payload reads were untyped.** `vector.fetch`,
+  `vector.upsert`, `cache.get`/`set` and eight other step actions indexed `step.payload`
   directly, so a missing key raised a bare `KeyError` that escaped the
   `SectumError` exit-code mapping and exited 1 instead of 3.
 - **The reportlab PDF left a bare "Compliance control coverage" heading** where
@@ -114,9 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was truncated" refusal on a hit the scan would then not count, and the marker
   past the cap read as absent. A suppression predicate looser than the caller's
   count is a fail-open by construction. There is now one `residual_present` in
-  `sectum_ai.spec`, shared by both erasure probes, all three capped adapters and
-  the detector, and an invariant test pins that they resolve to the same function
-  object — matching two predicates by hand is what failed, and behavioural
+  `sectum_ai.spec`, shared by both erasure probes and all three capped adapters
+  (the detector shares its normalizer), and an invariant test pins that every one
+  of them resolves to the same function object — matching two predicates by hand is what failed, and behavioural
   equality today does not survive the next normalization added to one of them.
 - **A re-punctuated foreign credential was a dropped CRITICAL.** `_secret_format`
   was the one detection tier without the ordered-token recovery arm — while
@@ -151,7 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Every metric map `diff` expands now treats a lost key as unmeasured**, and
+- **Every metric map `diff` expands treats a lost key as unmeasured**, except
+  `per_probe_findings`, which omits a key precisely because it measured zero (see
+  the entry above), and
   the flag is set where the filled `0.0` is produced rather than wired up map by
   map. Three of the five maps had to be noticed separately over three cycles —
   the erasure surfaces, the side-channel pairs, and the per-embedding-model

@@ -25,14 +25,20 @@ principal's session proves a leak. Three types
 (see [the marker substrate](substrate.md)):
 
 - **HARD_CANARY** — high-entropy unique token (`SECTUM-CANARY-{base32(16 bytes)}`).
-  Exact substring match (case-, width-, and zero-width-insensitive); zero false positives.
+  Exact substring match (case-, width-, and zero-width-insensitive), or the marker's
+  tokens contiguous and in order — which recovers a canary the surface re-punctuated
+  (a hyphen rendered as a space, U+2011 or an en dash). Zero false positives: both
+  arms require a manifest marker.
 - **ENTITY_CANARY** — a unique synthetic project codename
   (`Project <codename><base32>-<serial>`) owned by exactly one principal.
-  Tested by semantic similarity plus exact match.
+  Tested by semantic similarity plus exact match, with the same ordered-token
+  recovery arm.
 - **SECRET_CANARY** — a fake but plausibly shaped secret: an OpenAI-style `sk-`
   key, an AWS `AKIA` access-key id, or a non-issuable `9xx` US SSN. Matched by
-  exact substring **plus** a credential-format detector (the shape is recovered
-  even from surrounding bytes), and redacted in the finding's evidence span so a
+  exact substring, a credential-format detector (the shape is recovered even from
+  surrounding bytes), **or** the same ordered-token recovery arm the other two tiers
+  carry — a re-punctuated secret defeats the first two together, because the format
+  patterns need the ASCII hyphen too, and redacted in the finding's evidence span so a
   pack never reproduces the credential verbatim. Tests PII/secret surfacing and
   redaction.
 

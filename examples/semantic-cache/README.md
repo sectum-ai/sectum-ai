@@ -75,9 +75,9 @@ Each Class 4 finding carries:
   answer text)
 - the surface (`SEMANTIC_CACHE`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure: per-
-  tenant cache namespacing (`tenant_id` in the key derivation),
-  TTL bounds, or disabling the cache for tenant-sensitive paths
+Class 4 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant cache namespacing (`tenant_id` in the key derivation), TTL bounds,
+or disabling the cache for tenant-sensitive paths.
 
 ## What's *not* in this example
 

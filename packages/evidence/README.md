@@ -15,8 +15,9 @@ pack and verifies it independently:
 - bundle the canonical run, the hashed ground-truth manifest, the TSA token,
   the Rekor proof, and control mappings into an `in-toto` attestation + a
   human-readable PDF audit pack;
-- `sectum-ai verify <pack>` recomputes the digests and validates the TSA token and
-  Rekor inclusion proof, reporting PASS/FAIL with reasons — so a third party can
+- `sectum-ai verify <pack>` recomputes the digests, re-derives the pack's control
+  mappings from its own run and refuses any the evidence does not support, and
+  validates the TSA token and Rekor inclusion proof, reporting PASS/FAIL with reasons — so a third party can
   verify a pack without trusting the producer.
 
 ```sh

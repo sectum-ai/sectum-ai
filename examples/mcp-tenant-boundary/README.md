@@ -45,8 +45,11 @@ Artifacts are written to `out/`.
 
 ## Expected result
 
-Every cross-tenant tool call resolves a foreign canary, so the probe confirms a
-leak on each:
+On the demo stack the CLI's built-in MCP fake has only the confused-deputy and
+token-passthrough flaws switched on, so the direct and token-carrying lookups
+resolve a foreign canary; the cross-server and tool-description-injection
+sub-probes run and resolve nothing (the CLI does not wire those flags). Findings
+collapse to one per (marker, observing tenant):
 
 ```
 ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces

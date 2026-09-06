@@ -62,6 +62,12 @@ pack, and verifies it.
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
 | `sectum-ai adapters` | List the adapter families and the capabilities each built-in fake reports (it does not inspect installed live backends). |
 
+Where a signal above means a metric could not be compared, `diff` labels that
+metric `[not measured]` instead of `[ok]`, and renders the side it has no value
+for as `(not measured)` rather than `0`: a filled zero is not a measurement, and
+reading one as an improvement is what let a dropped side channel, an unscanned
+erasure surface and a vanished embedding model each report a fixed leak.
+
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake

@@ -28,8 +28,9 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
 ```
 
 The grade is **derived, not asserted**. Every input is the
-[`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`, and
-`metrics` — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
+[`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`,
+`metrics`, and `surface_provenance` (which surfaces were live, which fell back to the
+built-in fake) — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
 `score` also accepts and unwraps) recomputes the letter with this page's rules rather
 than trusting it.
 
@@ -177,10 +178,16 @@ folding it in would conflate two different claims. Class 12 is the
 
 ## How the letter is computed
 
-1. **Per class** — a class is *covered* when at least one of its probes appears in the
-   run's `probe_versions`, **or** produced a confirmed finding (a finding is itself proof
-   its probe ran — rule 4). A covered class is `FAIL` if any of its probes produced a
-   **confirmed** finding, else `PASS`. An uncovered class is `NOT_COVERED`.
+1. **Per class** — a class is a *candidate* for grading when at least one of its probes
+   appears in the run's `probe_versions`, **or** produced a confirmed finding (a finding
+   is itself proof its probe ran — rule 4). A candidate is still `NOT_COVERED` if rule 5
+   (every backing surface was the built-in fake) or rule 6 (the backing surface cannot be
+   attributed to a class) applies — both decline to grade a class that *did* run. A class
+   that survives both is `FAIL` when a confirmed finding rests on a **live** backing
+   surface, else `PASS`: on a mixed run the findings on a synthetic surface are withheld
+   from the letter, so a class can pass while its line names the findings withheld
+   (rule 5 and the withheld-note above). A class that is not a candidate at all is
+   `NOT_COVERED`.
 2. **Weighted score** — `sum(weight of PASS) / sum(weight of covered)`, over the
    **covered classes only**.
 3. **Base grade** — from the weighted score:

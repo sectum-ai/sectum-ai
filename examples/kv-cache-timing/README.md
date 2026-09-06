@@ -90,10 +90,10 @@ Each Class 5 finding carries:
 - the surface (`KV_CACHE`) + OWASP / ATLAS / NIST control IDs the
   finding maps to
 
-The remediation pointer in the finding row names the standard
-counter-measure: per-tenant prefix-cache scoping (vLLM 0.5+'s
-`tenant_id` keying), or disabling the prefix cache entirely on
-shared deployments.
+The remediation pointer in the finding row reads `disable cross-tenant KV
+prefix-cache sharing`. In practice that means per-tenant prefix-cache keying if
+the serving engine supports it, or disabling the prefix cache on shared
+deployments.
 
 ## What's *not* in this example
 

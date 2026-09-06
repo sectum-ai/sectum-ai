@@ -111,6 +111,11 @@ anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 
+`sectum-ai verify` prints one line per check: `schema-version`,
+`timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
+`audit-pdf`, plus `rekor-inclusion`, `independent-anchor`, `in-toto-attestation`
+and `dsse-envelope` when the pack or its siblings call for them.
+
 The `control-mappings` check asks the same question of the pack's **compliance
 claims**. The digest binds them, so they cannot be edited after signing — but
 nothing asked whether the run *earned* them, and a pack built by any other tool

@@ -55,9 +55,9 @@ Each Class 3 finding carries:
 - the canary id + its `evidence_span` in the retrieved context
 - the surface (`VECTOR_DB`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure: per-
-  tenant write scoping on the index, schema-level isolation, or
-  signed-provenance metadata on every ingested document
+Class 3 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant write scoping on the index, schema-level isolation, or
+signed-provenance metadata on every ingested document.
 
 ## What's *not* in this example
 

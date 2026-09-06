@@ -2,9 +2,10 @@
 
 **Multi-tenant AI verification.** Sectum AI provisions synthetic tenants on an
 AI stack, seeds them with cryptographic canary markers, runs benign and
-adversarial probes from each tenant's session, and detects cross-tenant data
-leakage across every surface — producing tamper-evident, control-mapped evidence
-that an auditor accepts.
+adversarial probes from each tenant's session, and probes for cross-tenant data
+leakage on every surface it can reach — recording exactly which ones it was able
+to run, and producing tamper-evident, control-mapped evidence that an auditor
+accepts.
 
 ## The question Sectum AI answers
 

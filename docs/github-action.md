@@ -41,7 +41,7 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 | `output` | `json` | Report format written to `output-file`: `text` / `json` / `sarif` / `oscal`. |
 | `output-file` | `sectum-results.json` | Where to write the report. |
 | `python-version` | `3.12` | Python to set up (`sectum-ai` requires ≥ 3.12). |
-| `fail-on-leak` | `true` | Fail the step when the probe confirms a finding — cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). |
+| `fail-on-leak` | `true` | Fail the step when the probe confirms a finding — cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). Must be exactly `true` or `false`: any other value is refused with an error when a finding is found, rather than silently downgrading the gate to a warning. |
 
 ## Outputs
 

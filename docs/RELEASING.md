@@ -92,8 +92,8 @@ Edit `[project] version` in each of:
 - `packages/evidence/pyproject.toml`
 
 All five must be the same string, and `uv lock` must be re-run after editing
-them (the recipe stages `uv.lock`, and nothing in CI runs `uv sync --locked`, so
-a stale lock would ship unnoticed). The first release is `0.1.0`. Subsequent
+them (the recipe stages `uv.lock`; all three CI `uv sync` steps are `--locked`, so
+a stale lock fails the build rather than shipping unnoticed). The first release is `0.1.0`. Subsequent
 releases follow [Semantic Versioning](https://semver.org/). For a pre-release the
 two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
 `## [0.11.0-rc.1]`, but `pyproject.toml` must carry the PEP 440 form `0.11.0rc1` —

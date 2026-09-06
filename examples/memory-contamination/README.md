@@ -55,7 +55,8 @@ Every cross-tenant recall surfaces a foreign canary, so the probe confirms
 a leak on each. The evidence pack itemises every finding the probe
 confirmed: the marker's owning tenant, the observing tenant, the leaked
 memory text (the recalled note carrying the canary), per-finding control
-IDs (OWASP / ATLAS / NIST), and a remediation pointer.
+IDs (OWASP / ATLAS / NIST). Class 8 findings carry no per-finding remediation
+pointer.
 
 ```
 ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces

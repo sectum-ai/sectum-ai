@@ -40,6 +40,18 @@ class MetricDelta:
     # - and each one had to be wired up separately as it was noticed. Recording it
     # HERE, where the 0.0 is filled in, covers every map including the next one.
     key_lost: bool = False
+    # Which SIDE of the arrow is a fill rather than a value. `key_lost` above
+    # drives the verdict and gates CI; these two only decide how the pair is
+    # rendered, and they cover the cases it does not: the EARLIER run having no
+    # value (`[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader it used
+    # to be clean, when it was never measured), and NEITHER run having one
+    # (`[ok] extraction_efficiency: 0 -> 0`, an "ok" about nothing).
+    #
+    # The regression itself stands where the baseline is absent: dropping it would
+    # let a doctored earlier record suppress the signal by omitting the metric.
+    # This is a rendering fix, not a gate change.
+    baseline_absent: bool = False
+    current_absent: bool = False
 
     @property
     def regressed(self) -> bool:
@@ -98,6 +110,11 @@ def _dict_deltas(
             current=float(current.get(key, 0.0)),
             informational=informational,
             key_lost=not absent_when_clean and key in baseline and key not in current,
+            # `absent_when_clean` gates these too: rendering a probe that ran
+            # and found nothing as "(not measured)" is the same false signal the
+            # flag exists to remove, one column to the right.
+            baseline_absent=not absent_when_clean and key not in baseline,
+            current_absent=not absent_when_clean and key not in current,
         )
         for key in sorted(set(baseline) | set(current))
     ]
@@ -110,6 +127,8 @@ def _rate_delta(name: str, baseline: float | None, current: float | None) -> Met
         baseline=baseline or 0.0,
         current=current or 0.0,
         key_lost=baseline is not None and current is None,
+        baseline_absent=baseline is None,
+        current_absent=current is None,
     )
 
 

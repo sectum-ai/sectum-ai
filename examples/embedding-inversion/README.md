@@ -55,9 +55,9 @@ Each Class 6 finding carries:
   `evidence_span` (the text of the returned neighbour)
 - the surface (`VECTOR_DB`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure: per-
-  tenant namespace filtering on every query path, or moving to a
-  per-tenant index entirely
+Class 6 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant namespace filtering on every query path, or moving to a per-tenant
+index entirely.
 
 ## What's *not* in this example
 

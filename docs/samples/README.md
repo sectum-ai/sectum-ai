@@ -20,7 +20,7 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 | File | Source example | What it is |
 |---|---|---|
-| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | The auditor-facing PDF: executive summary, scope / methodology, all 343 findings (each with its OWASP LLM and NIST ids; ATLAS ids and remediation pointers where the probe declares them), the compliance-control section (empty: every surface of this demo run is the built-in fake, and a mapping needs evidence from a live surface), and the integrity / verification block. |
+| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | The auditor-facing PDF: executive summary, scope / methodology, all 343 findings (each with its OWASP LLM and NIST ids; ATLAS ids and remediation pointers where the probe declares them), the compliance-control section (it reads "No control mappings were recorded.": every surface of this demo run is the built-in fake, and a mapping needs evidence from a live surface), and the integrity / verification block. |
 | [`retrieval-pivot-attestation.intoto.json`](retrieval-pivot-attestation.intoto.json) | `examples/retrieval-pivot` | The [in-toto](https://in-toto.io/) attestation statement: the run digest as its subject, and a predicate carrying the scenario and manifest hashes, the metrics, the finding count, the control mappings, and which integrity anchors the pack has. |
 | [`erasure-attestation-audit-pack.pdf`](erasure-attestation-audit-pack.pdf) | `examples/erasure-attestation` | The DPO-facing GDPR Article 17 erasure attestation, **happy path**: per-surface verdicts ERASED across all eight configured surfaces, with the Coverage & caveats matrix. |
 | [`erasure-attestation-evidence.json`](erasure-attestation-evidence.json) | `examples/erasure-attestation` | The machine-readable evidence pack for the happy-path erasure run (the JSON sibling of the PDF, schema-versioned). |
@@ -32,14 +32,20 @@ Two erasure flavours ship side-by-side so prospects can see both:
 ## Verifying these packs
 
 The two erasure `evidence.json` packs verify under the open-source
-`sectum-ai verify`, given two flags that say plainly what they are. (The
-retrieval-pivot sidecar and PDF are companions to an `evidence.json` that is not
-committed — ~293 KB — and verify only beside the one `run.sh` regenerates.) They are produced by the offline
-demo flow, so:
+`sectum-ai verify`, given two flags that say plainly what they are.
+
+`verify` finds a pack's audit PDF and sidecars by their *generated* names beside
+it (`erasure-attestation.pdf` next to `erasure-evidence.json`). Every copy in
+this directory is renamed with a `retrieval-pivot-` or `erasure-attestation-`
+prefix, so the command below checks the JSON pack alone and says so on its
+`audit-pdf` line — run the example's `run.sh` to check the PDF binding against
+the pack it was generated with. (The retrieval-pivot `evidence.json` is not
+committed at all — ~293 KB — so its PDF and sidecar have no pack here to bind
+to.) These are produced by the offline demo flow, so:
 
 - their timestamp is the local-dev token — `--allow-unanchored` accepts
-  integrity-only verification (a production pack built with `report --tsa
-  --rekor` verifies without the flag, as an independently anchored attestation);
+  integrity-only verification (a production pack built with `report --tsa <url> --rekor`
+  verifies without the flag, as an independently anchored attestation);
 - every surface they exercised was Sectum's built-in in-memory fake, not a
   configured backend — `--allow-synthetic` accepts that. Without it `verify`
   refuses, because every other check concerns the integrity of the *bytes* and

@@ -2695,6 +2695,14 @@ _MAP_METRIC_PROBES: dict[str, frozenset[str]] = {
 }
 
 
+def _delta_range(delta: MetricDelta) -> str:
+    """`baseline -> current`, saying so when either side is a fill rather than a value."""
+    not_measured = "(not measured)"
+    before = not_measured if delta.baseline_absent else f"{delta.baseline:g}"
+    after = not_measured if delta.current_absent else f"{delta.current:g}"
+    return f"{before} -> {after}"
+
+
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
     return _delta_verdict(
@@ -2744,6 +2752,12 @@ def _delta_verdict(
     # including the next one added, which is how the side-channel map, the erasure
     # surfaces and the embedding-model gradient each had to be noticed in turn.
     if delta.key_lost:
+        return "not measured"
+    # Neither side has a value, so there is nothing here to call ok: `[ok]
+    # extraction_efficiency: 0 -> 0` was an assertion about two runs that both
+    # measured nothing. It gates nothing either way - `regressed` is what CI
+    # reads - so this is the label telling the truth about its own line.
+    if delta.baseline_absent and delta.current_absent:
         return "not measured"
     # And a key that is still present but whose SURFACE lost its live backing.
     if any(f"[{key}]" in delta.name for key in key_lost):
@@ -2816,8 +2830,7 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_lost_verdict(delta, result)}] "
-            f"{untrusted(delta.name)}: {delta.baseline:g} -> {delta.current:g}"
+            f"[{_lost_verdict(delta, result)}] {untrusted(delta.name)}: {_delta_range(delta)}"
         )
     for change in result.findings.severity_escalations:
         typer.echo(
@@ -2991,8 +3004,7 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_lost_verdict(delta, result)}] "
-            f"{untrusted(delta.name)}: {delta.baseline:g} -> {delta.current:g}"
+            f"  [{_lost_verdict(delta, result)}] {untrusted(delta.name)}: {_delta_range(delta)}"
         )
 
     typer.echo("")
@@ -3052,6 +3064,11 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
                 "name": delta.name,
                 "baseline": delta.baseline,
                 "current": delta.current,
+                # Which side of the pair is a fill rather than a measurement. The
+                # text renderer prints "(not measured)" for these; the JSON stated
+                # a bare 0 and a consumer read it as a clean earlier run.
+                "baseline_measured": not delta.baseline_absent,
+                "current_measured": not delta.current_absent,
                 "regressed": delta.regressed,
                 "informational": delta.informational,
                 # The load-bearing qualifier: the text renderer refuses to print

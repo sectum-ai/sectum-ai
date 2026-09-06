@@ -59,10 +59,10 @@ Each Class 1 finding carries:
 - the leaked marker id + plaintext + `evidence_span`
 - the surface (`VECTOR_DB` — the surface this probe emits)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure:
-  per-tenant namespace scoping (Pinecone namespaces, Weaviate
-  multi-tenancy, pgvector schema-per-tenant) + an auth check on
-  every read path
+A confirmed Class 1 leak carries no per-finding remediation pointer (only the
+UNVERIFIED 200-empty finding does, naming an explicit deny). The counter-measure
+is per-tenant namespace scoping - Pinecone namespaces, Weaviate multi-tenancy,
+pgvector schema-per-tenant - plus an auth check on every read path.
 
 ## Swap the in-memory store for a real backend
 
