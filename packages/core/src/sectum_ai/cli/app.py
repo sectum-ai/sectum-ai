@@ -2868,6 +2868,12 @@ def baseline(
             "metric had no resolution, or the probe did not run); its drop to zero is a "
             "missing measurement, not a closed channel"
         )
+    for name in result.metrics.headline_unmeasured:
+        typer.echo(
+            f"[RATE NOT REMEASURED] {untrusted(name)}: the baseline run measured this "
+            "headline rate and this one did not, so there is nothing to compare it "
+            "against; its drop to zero is a missing measurement, not a closed leak"
+        )
     if result.scenario_changed:
         typer.echo(
             "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
@@ -3036,6 +3042,12 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "timing effect size for this tenant pair and this one did not (the latency "
             "metric had no resolution, or the probe did not run); its drop to zero is a "
             "missing measurement, not a closed channel"
+        )
+    for name in result.metrics.headline_unmeasured:
+        typer.echo(
+            f"[RATE NOT REMEASURED] {untrusted(name)}: the earlier run measured this "
+            "headline rate and this one did not, so there is nothing to compare it "
+            "against; its drop to zero is a missing measurement, not a closed leak"
         )
     if result.scenario_changed:
         typer.echo(

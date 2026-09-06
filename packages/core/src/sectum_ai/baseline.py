@@ -78,6 +78,19 @@ class BaselineComparison:
         """True when any compared metric regressed."""
         return any(delta.regressed for delta in self.deltas)
 
+    @property
+    def headline_unmeasured(self) -> tuple[str, ...]:
+        """The headline rates the earlier run measured and this one did not.
+
+        Only the four scalar rates, deliberately. The expanded MAPS gate through
+        their own loss tuples where a loss is real, and the embedding-model
+        gradient's keys change legitimately whenever the operator edits
+        `embedding_models` - gating that would fail CI on a config change.
+        """
+        return tuple(
+            delta.name for delta in self.deltas if delta.key_lost and "[" not in delta.name
+        )
+
 
 def _dict_deltas(
     label: str,
@@ -362,6 +375,11 @@ class RunDiff:
         known leak growing more severe (low -> critical) is a worse posture the
         counts do not see at all.
 
+        A headline rate the baseline measured and this run did not fails the gate
+        too. Labelling it `[not measured]` without gating meant `diff` printed
+        that four times and still exited 0 - saying plainly it could not compare,
+        then greenlighting the pipeline anyway.
+
         A probe the baseline exercised and this run did not also fails the gate.
         Nothing got worse, but every metric that probe fed reads as an improvement
         to zero - ``per_probe_findings[rag-poisoning]: 24 -> 0`` - so a gate that
@@ -378,6 +396,7 @@ class RunDiff:
             or bool(self.boundary_lost)
             or bool(self.erasure_lost)
             or bool(self.side_channel_lost)
+            or bool(self.metrics.headline_unmeasured)
             or self.scenario_changed
         )
 

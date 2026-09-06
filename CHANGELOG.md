@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`diff` printed `[not measured]` four times and still exited 0.** The previous
+  release fixed the label and left the gate: the command said plainly it could
+  not compare four headline leak rates, then greenlit the pipeline. Configuring
+  one live adapter leaves the other probes no live step, so all four go at once
+  while `probe_versions` still lists every probe and no other loss signal can
+  fire. A seventh signal, `[RATE NOT REMEASURED]`, now names them and gates at
+  exit 2. It keys on the four scalar rates deliberately: the embedding-model
+  gradient's keys change whenever the operator edits `embedding_models`, and
+  gating that would fail CI on an ordinary config change — it is still labelled,
+  just not gated.
+- **A Class 1 `PASS` could not mean what a reader takes it to mean.**
+  `AccessOutcome.DENIED` is produced by no code path — the runner emits only
+  `RETURNED` or `EMPTY` — so on every isolated stack, live or fake, a Class 1
+  pass means "no canary came back", never "the deny was enforced". The class page
+  says the probe does not treat a 200-empty as a clean pass; the scorecard did,
+  with `note: None` and full critical-band weight into the letter. An unverified
+  finding still must not flip a class, so the line now carries the count instead.
 - **A run whose purge FAILED signed "Erasure across the AI surfaces verified".**
   The deletion controls are gated on a surface having been scanned and
   *answered* — which is the right test for whether the control has evidence at

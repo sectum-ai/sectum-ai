@@ -77,7 +77,9 @@ the later run did not run because its adapter cannot carry a user, reported as
 reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
 residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, a tenant
 pair whose Class 5 timing effect size the earlier run measured and this one did not,
-reported as `[SIDE CHANNEL NOT REMEASURED]`, and two runs of different
+reported as `[SIDE CHANNEL NOT REMEASURED]`, a headline rate the earlier run
+measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
+of different
 scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
 `[SCENARIO CHANGED]`; a record from another schema line

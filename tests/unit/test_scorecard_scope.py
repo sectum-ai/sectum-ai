@@ -277,3 +277,36 @@ def test_the_withheld_note_reaches_the_text_scorecard(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     class_line = next(x for x in result.output.splitlines() if x.strip().startswith("Class  2 "))
     assert "withheld" in class_line, class_line
+
+
+def test_a_pass_that_rests_on_unverified_findings_says_so() -> None:
+    # `AccessOutcome.DENIED` is produced by NO code path - the runner emits only
+    # RETURNED or EMPTY - so a Class 1 PASS can only ever mean "no canary came
+    # back", never "the deny was enforced". The class page says the probe does not
+    # treat a 200-empty as a clean pass; the scorecard did, with `note=None` and
+    # full critical-band weight into the letter. An unverified finding must not
+    # FLIP the class (that is the false-positive control the detector rests on),
+    # so the line carries it instead.
+    ambiguous = _finding("tenant-boundary-fetch").model_copy(
+        update={
+            "finding_id": "f-ambiguous",
+            "status": FindingStatus.UNVERIFIED,
+            "severity": Severity.INFO,
+            "surface": Surface.VECTOR_DB,
+        }
+    )
+    entry = next(
+        c
+        for c in score_run(_run(_all(SurfaceProvenance.LIVE), findings=(ambiguous,))).classes
+        if c.class_id == 1
+    )
+    assert entry.verdict is ClassVerdict.PASS
+    assert entry.confirmed_findings == 0
+    assert entry.note is not None and "could not establish the negative" in entry.note
+
+    # A clean run with no unverified findings still passes silently.
+    clean = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 1
+    )
+    assert clean.verdict is ClassVerdict.PASS
+    assert clean.note is None

@@ -442,6 +442,30 @@ def _score_class(
                 "this run's suite, or the substrate left it no step to take"
             ),
         )
+    # A PASS the probe could not actually establish. `AccessOutcome.DENIED` is
+    # produced by NO code path - the runner can only emit RETURNED or EMPTY - so a
+    # Class 1 PASS can only ever mean "no canary came back", never "the deny was
+    # enforced", and the class page says the probe does not treat 200-empty as a
+    # clean pass. The scorecard did, with note=None and full critical-band weight.
+    # An unverified finding must not FLIP the class (that is the false-positive
+    # control the whole detector rests on), so it says so on the line instead.
+    unverified = sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.UNVERIFIED
+        and backing_surface(finding) not in synthetic
+    )
+    notes = [
+        f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
+        "that fake, not your stack"
+        if withheld
+        else "",
+        f"{unverified} unverified finding(s) here: the probe could not establish the "
+        "negative, so this is not proof the boundary was enforced"
+        if unverified and not confirmed
+        else "",
+    ]
     return ClassScore(
         class_id=entry.class_id,
         name=entry.name,
@@ -450,12 +474,7 @@ def _score_class(
         probe_ids=tuple(ran),
         confirmed_findings=confirmed,
         headline=_headline(entry, run.metrics),
-        note=(
-            f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
-            "that fake, not your stack"
-            if withheld
-            else None
-        ),
+        note="; ".join(part for part in notes if part) or None,
     )
 
 

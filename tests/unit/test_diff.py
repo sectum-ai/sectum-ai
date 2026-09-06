@@ -886,3 +886,66 @@ def test_the_json_diff_says_which_side_of_a_metric_was_measured(tmp_path: Path) 
     assert metrics["extraction_efficiency"]["baseline_measured"] is False
     assert metrics["extraction_efficiency"]["current_measured"] is False
     assert metrics["extraction_efficiency"]["verdict"] == "not measured"
+
+
+def test_an_unmeasured_headline_rate_fails_the_gate(tmp_path: Path) -> None:
+    # The label was fixed and the gate was not: `diff` printed `[not measured]`
+    # four times and exited 0 - saying plainly it could not compare, then
+    # greenlighting the pipeline. Configuring one live adapter leaves the other
+    # probes no live step, so all four go at once while `probe_versions` still
+    # lists every probe, and no other loss signal can fire.
+    measured = RunMetrics(
+        retrieval_pivot_rate=0.125,
+        poisoning_bleed_delta=0.125,
+        inversion_reconstruction_rate=0.125,
+        extraction_efficiency=0.125,
+    )
+    probes = {"probe_versions": {"rag-entity-bleed": "1", "rag-poisoning": "1"}}
+    earlier = _run(metrics=measured).model_copy(update=probes)
+    later = _run(metrics=RunMetrics()).model_copy(update=probes)
+    result = diff_runs(earlier, later)
+    assert result.metrics.headline_unmeasured == (
+        "retrieval_pivot_rate",
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    )
+    assert result.regressed
+    # No OTHER signal fires, so this one is load-bearing rather than incidental.
+    assert result.coverage_lost == () and result.scope_lost == ()
+
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "hu-e.json", earlier)),
+            str(_write(tmp_path / "hu-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[RATE NOT REMEASURED] retrieval_pivot_rate" in cli.output, cli.output
+    assert "RESULT: REGRESSION" in cli.output, cli.output
+
+
+def test_a_changed_embedding_model_list_does_not_fail_the_gate(tmp_path: Path) -> None:
+    # The counter-case, and the reason the gate keys on the four SCALARS rather
+    # than on `key_lost` everywhere: `retrieval_pivot_rate_by_model` is a modelled
+    # sweep the record labels as not a measurement of the store, and it degrades
+    # to `{}` whenever the sweep cannot run. Gating that would fail CI on an
+    # ordinary config change. It still LABELS the loss - the line reads
+    # `[not measured]` - it just does not gate.
+    earlier = _run(metrics=RunMetrics(retrieval_pivot_rate_by_model={"st:old": 0.9}))
+    later = _run(metrics=RunMetrics())
+    result = diff_runs(earlier, later)
+    assert result.metrics.headline_unmeasured == ()
+    assert not result.regressed
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "em-e.json", earlier)),
+            str(_write(tmp_path / "em-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 0, cli.output
+    assert "[not measured] retrieval_pivot_rate_by_model[st:old]" in cli.output, cli.output

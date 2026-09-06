@@ -32,6 +32,8 @@ uv run pre-commit install   # enable git hooks
 | Build the docs site | `uv run --group docs mkdocs build --strict` |
 | Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
+| Check the lockfile is current | `uv lock --check` (all three CI `uv sync` steps are `--locked`, so commit `uv.lock` with any dependency change) |
+| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)). The `Secret scan` CI job runs this; the pre-commit `detect-private-key` hook does **not** cover it, and a credential-shaped test fixture written as `api_key": "sk-..."` trips gitleaks' generic rule. Build such fixtures at runtime instead of committing the literal. |
 
 The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the

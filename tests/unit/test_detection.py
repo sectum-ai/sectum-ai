@@ -506,10 +506,13 @@ def test_a_re_punctuated_foreign_secret_is_still_a_confirmed_leak() -> None:
 
     # The zero-false-positive invariant is what the arm must not cost: a
     # credential-shaped string matching no foreign marker still produces nothing.
+    # Built at runtime, not written out: a committed `api_key": "sk-..."` literal
+    # is what a secret scanner is FOR, and this repo's own CI caught it.
+    stranger = "sk-" + "notaforeignmarkeratall0000"
     assert (
         confirmed_findings(
             DetectionPipeline(substrate).detect(
-                observer, '{"api_key": "sk-notaforeignmarkeratall0000"}', Surface.API
+                observer, f'{{"api_key": "{stranger}"}}', Surface.API
             )
         )
         == []
