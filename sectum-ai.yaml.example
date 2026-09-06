@@ -43,6 +43,13 @@ workdir: .sectum-ai
 # Every adapter family defaults to `fake` if you omit it; you only need to
 # declare the families you've pointed at real infrastructure.
 # -----------------------------------------------------------------------------
+#
+# The ports below are each backend's own default. `compose.yaml` REMAPS most of
+# them so several can run side by side - chroma 8000 as 8001, redis 6379 as 6380,
+# weaviate 8080 as 8082, qdrant 6333 as 6335, opensearch 9200 as 9201, pgvector
+# 5432 as 5433, phoenix 6006 as 6007 - so against the repo's own compose stack,
+# use the published port.
+# -----------------------------------------------------------------------------
 adapters:
 
   # app: the application's own resource API, probed through the vector-store

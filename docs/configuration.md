@@ -259,7 +259,7 @@ Omitting `factory` fails when the adapter is built, with
 
 `sectum-ai verify` checks an RFC 3161 token against a root pinned independently of
 the pack: it ships the public FreeTSA leaf and root built in, and
-`--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA.
+`--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA — pass both: a leaf supplied alone must still be issued by the pinned root, and `verify` refuses it otherwise.
 Likewise it checks a Rekor inclusion proof against log keys pinned built in, and
 `--rekor-key <pem>` pins a private instance's key. See the
 [evidence chain](evidence-chain.md#trusted-timestamping-rfc-3161).
@@ -329,7 +329,7 @@ non-negotiable; a threshold that admits any negative is never recommended). It
 prints a precision/recall/F1 table and the value to paste into
 `detection.semantic_threshold`. Flags: `--embedder <kind:model>` (default: the
 configured `detection.embedder`; `st:…`, `openai:…`, `cohere:…`, `voyage:…`, `bedrock:…`, `hash-…`, or `fake`),
-`--seed`, `--workdir`, `--config`, and `--output {text,json,sarif,oscal}`. The run is
+`--seed`, `--workdir`, `--config`, and `--output {text,json}` (`sarif` and `oscal` are refused with exit `3` — a calibration projects no findings). The run is
 deterministic from the seed.
 
 `semantic_threshold: auto` skips the per-run calibration and uses a built-in

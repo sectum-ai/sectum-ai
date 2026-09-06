@@ -2729,10 +2729,14 @@ def _delta_verdict(
         for probe_id, surfaces in PROBE_SURFACES.items()
         if any(surface.value in gone for surface in surfaces)
     }
-    # A metric keyed by something other than a probe id reads "not measured" when
-    # its own key was lost: an erasure surface the later run could not scan to a
-    # count, one that fell back to the fake, or a tenant pair whose side-channel
-    # measurement had no resolution. `[ok] ... 2 -> 0` there asserts a fix.
+    # A metric whose own key the later run does not carry: its `current` is a
+    # filled 0.0, not a measurement, and `[ok] ... 2 -> 0` there asserts a fix.
+    # `key_lost` is set where the fill happens, so it covers every expanded map -
+    # including the next one added, which is how the side-channel map, the erasure
+    # surfaces and the embedding-model gradient each had to be noticed in turn.
+    if delta.key_lost:
+        return "not measured"
+    # And a key that is still present but whose SURFACE lost its live backing.
     if any(f"[{key}]" in delta.name for key in key_lost):
         return "not measured"
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())

@@ -45,7 +45,7 @@ in-memory leaky MCP server:
 4. **`sectum-ai verify`** independently re-checks the pack.
 
 The probe today exercises the MCP surface (Class 7 v1 per the
-engineering spec, §7 (internal engineering spec));
+engineering spec, §7);
 this example's value is the *next step*: showing how to wire the
 agent that calls the MCP server in production — LangGraph, AutoGen,
 or CrewAI — so the operator can verify Class 7 with the same caller
@@ -58,8 +58,8 @@ their customers actually run.
 ```
 
 You'll see three confirmed leaks per canary — one per foreign
-principal — for 24 confirmed cross-tenant findings in total. The PDF
-PDF's `Findings` section itemises each.
+principal — for 24 confirmed cross-tenant findings in total. The PDF's
+`Findings` section itemises each.
 
 ## Swap the agent caller
 

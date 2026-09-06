@@ -45,7 +45,7 @@ The demo pipeline wraps a single shared index, so benign cross-tenant queries
 surface foreign canaries through the answer:
 
 ```
-ran 1 probe: 15 confirmed cross-tenant findings
+ran 1 probe: 15 confirmed cross-tenant findings; 0 on live surfaces
 retrieval-pivot rate: 62.5% (95% CI 42.7%-78.8%, n=24)
 ```
 

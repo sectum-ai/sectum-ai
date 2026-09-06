@@ -88,6 +88,15 @@ cp examples/erasure-attestation/out-residual/erasure-evidence.json docs/samples/
 cp examples/erasure-attestation/out-residual/erasure-attestation.intoto.json docs/samples/erasure-attestation-residual-data-attestation.intoto.json
 ```
 
+**The two erasure PDFs are guarded; the retrieval-pivot one is not.**
+`tests/invariants/test_sample_packs_verify.py` re-renders each committed erasure
+PDF from its committed pack and fails if they differ, so a renderer change cannot
+leave them stating a rule the tool no longer follows. That guard needs a
+committed pack to render *from*, and the retrieval-pivot pack is not committed
+(next paragraph) — so its PDF is the one shipped artifact that can drift
+silently. Regenerate all three together, and re-read the regenerated
+retrieval-pivot PDF when the renderer changes.
+
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
 (~293 KB with 343 findings); run the example locally to inspect the JSON
 structure, or read the

@@ -33,7 +33,10 @@ repos:
         name: ruff (lint, workspace)
         entry: uv run ruff check --fix --force-exclude
         language: system
-        types_or: [python, pyi, jupyter, markdown]
+        # No `markdown`: `ruff check` has no Markdown support, so listing it here
+        # is dead config. Only `ruff format` below reads the code in the repo's
+        # `.md` files, which is what the note above is about.
+        types_or: [python, pyi, jupyter]
         require_serial: true
       - id: ruff-format
         name: ruff format (workspace)

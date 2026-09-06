@@ -30,7 +30,7 @@ uv run pre-commit install   # enable git hooks
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
 | Run the example walkthroughs | `SECTUM_RUN_E2E=1 uv run pytest -m e2e` |
 | Build the docs site | `uv run --group docs mkdocs build --strict` |
-| Check the coverage floors | `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` (core, probes, evidence) |
+| Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
 
 The default `uv run pytest` stays fully offline: the integration tests in
@@ -60,7 +60,11 @@ heavier — it needs etcd and minio — so it lives behind a compose profile: ru
   pre-commit and CI and will block the change.
 - **The pre-commit hooks are a CI gate.** `uv run pre-commit run --all-files`
   runs in the `Lint, type-check, test` job, so a hook that is red on a clean
-  checkout fails the build rather than surprising the next contributor. The
+  checkout fails the build rather than surprising the next contributor. Two of
+  them are commit-time only and check nothing under `--all-files`:
+  `check-added-large-files` looks at newly *staged* files, and
+  `check-merge-conflict` at a tree mid-merge. Secret scanning is covered by the
+  standalone `Secret scan` job, which scans the whole tree. The
   checked-in evidence packs under `docs/samples/` and the captured TSA token are
   excluded from the whitespace hooks: they are artefacts of a run, and a
   formatting hook must not rewrite them.
@@ -85,10 +89,11 @@ section is the source of truth for that configuration:
 - Require a pull request before merging; **no direct pushes to `main`**.
 - Require **1 approving review**; dismiss stale approvals on new commits.
 - Require **CODEOWNERS** review.
-- Require status checks to pass before merging: the `CI` workflow
-  (lint, type-check, test; the docker-compose `Integration` job; the
-  `Extras API contract` job), the `secret-scan` job, `CodeQL`, the `Docs`
-  workflow (`mkdocs build --strict`). The `Action self-test` workflow is **not**
+- Require status checks to pass before merging. These are the context names
+  GitHub reports, which is what branch protection matches on — the job's `name:`,
+  not its key: `Lint, type-check, test`, `Integration (docker-compose backends)`,
+  `Extras API contract`, `Secret scan`, `Analyze (Python)` (CodeQL), and
+  `Build docs site` (`mkdocs build --strict`). The `Action self-test` workflow is **not**
   a required check: it is filtered to changes touching `action.yml`, and a
   workflow that does not run never reports, so requiring it would block every
   unrelated pull request on a check that cannot arrive. `tests/unit/

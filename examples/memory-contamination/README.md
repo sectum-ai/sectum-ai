@@ -58,7 +58,7 @@ memory text (the recalled note carrying the canary), per-finding control
 IDs (OWASP / ATLAS / NIST), and a remediation pointer.
 
 ```
-ran 1 probe: 24 confirmed cross-tenant findings
+ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks,

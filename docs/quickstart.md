@@ -181,7 +181,8 @@ emit a SARIF 2.1.0 log of the findings — one rule per probe, one result per
 finding. Upload it with `github/codeql-action/upload-sarif` and the cross-tenant
 findings surface in the repository's **Security** tab. An unverified candidate is
 capped at SARIF `note`, and so is a confirmed finding whose backing surface ran
-against a built-in fake — its message is prefixed `[synthetic surface — …]` and it
+against a built-in fake — its message is prefixed `[synthetic surface - ...]`, as is
+one on a surface the record does not describe (`[surface provenance not recorded - ...]`), and each
 carries `backingSurface` and `surfaceProvenance`, so a no-`config` demo run is
 entirely `note`-level. The signed `evidence.json` stays the canonical record.
 

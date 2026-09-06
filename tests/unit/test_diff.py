@@ -662,3 +662,28 @@ def test_an_erasure_surface_that_fell_back_to_the_fake_is_not_a_cleared_residual
     )
     assert "[not measured] erasure_residue[vector_db]" in cli.output, cli.output
     assert "[ok] erasure_residue[vector_db]" not in cli.output
+
+
+def test_every_expanded_metric_map_treats_a_lost_key_as_unmeasured(tmp_path: Path) -> None:
+    # Each of these maps is keyed by something the probe-id lookup cannot reach -
+    # a surface, a tenant pair, an embedding model - and each had to be wired up
+    # separately as it was noticed, three times over three cycles. The flag is set
+    # where the 0.0 is filled in now, so this sweep covers the next map too.
+    cases = {
+        "retrieval_pivot_rate_by_model": RunMetrics(retrieval_pivot_rate_by_model={"st:x": 0.9}),
+        "per_probe_findings": RunMetrics(per_probe_findings={"rag-entity-bleed": 5}),
+        "erasure_residue": RunMetrics(erasure_residue={"vector_db": 2}),
+        "side_channel_effect_sizes": RunMetrics(side_channel_effect_sizes={"a->b": 9.0}),
+        "erasure_caveats": RunMetrics(erasure_caveats={"backup": 3}),
+    }
+    for name, metrics in cases.items():
+        cli = CliRunner().invoke(
+            app,
+            [
+                "diff",
+                str(_write(tmp_path / f"{name}-e.json", _run(metrics=metrics))),
+                str(_write(tmp_path / f"{name}-l.json", _run(metrics=RunMetrics()))),
+            ],
+        )
+        line = next(x for x in cli.output.splitlines() if name in x and "[" in x)
+        assert line.strip().startswith("[not measured]"), line

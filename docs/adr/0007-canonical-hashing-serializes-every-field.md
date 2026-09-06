@@ -81,3 +81,25 @@ form is always valid JSON and maps equal values to equal bytes:
 
 The scope of *what* the evidence anchors bind (the whole pack, not just the run)
 is covered in [ADR-0016](0016-anchor-the-whole-pack.md).
+
+## Update (2026-09-06): two more constraints, for the same reason
+
+The 2026-05-29 sweep above named two constraints. Two more now hold, found by
+the same question asked of the two shapes it did not cover:
+
+- **No non-string mapping key.** `json.dumps` coerces one to its string form, so
+  `{1: "a"}` and `{"1": "a"}` canonicalized to the same bytes — two distinct
+  objects with one digest, exactly the injectivity failure this section exists to
+  prevent. A non-`str` key anywhere in the structure is a `TypeError`. No shipped
+  model has such a field; the constraint keeps the public helper honest for a
+  caller passing a raw dict.
+- **No unencodable string.** A lone surrogate reaches a record through the
+  standard-library JSON parser (the validator behind `model_validate_json`
+  rejects one; `json.loads` does not), and the `.encode("utf-8")` sat *outside*
+  the block that exists to turn these into typed failures — so `sectum-ai report`
+  died with a `UnicodeEncodeError` traceback at exit 1 rather than refusing the
+  record. It is a `ValueError` naming the cause.
+
+Both are refusals, not coercions, for the reason the section already gives: a
+canonical form that silently accepts a value it cannot represent injectively is
+worse than one that will not compute a digest at all.

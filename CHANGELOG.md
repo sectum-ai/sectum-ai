@@ -32,6 +32,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every metric map `diff` expands now treats a lost key as unmeasured**, and
+  the flag is set where the filled `0.0` is produced rather than wired up map by
+  map. Three of the five maps had to be noticed separately over three cycles —
+  the erasure surfaces, the side-channel pairs, and the per-embedding-model
+  gradient, which still read `[ok] 0.9 -> 0` at exit 0. The next map added is
+  covered without anyone remembering to.
+- The four flagship example READMEs quoted the leak headline with the
+  live-surface qualifier stripped off — the exact sentence that qualifier exists
+  to prevent, on the pages a first-time reader sees.
+- `calibrate` refuses `--output sarif|oscal` at exit 3, as `diff` does, and only
+  `diff` said so. `CONTRIBUTING.md`'s coverage-floor command could not run after
+  the setup the same table documents, because plain `pytest` writes no coverage
+  data — and its failure is indistinguishable from a real regression. Its
+  required-check list named four of six checks by a string GitHub never reports,
+  and its pre-commit claim implied protection two of the thirteen hooks do not
+  give under `--all-files`.
+- The timestamp-authority override is documented as needing both flags: a leaf
+  supplied alone must still be issued by the pinned root. Three `[Unreleased]`
+  entries described behaviour a later commit in the same section had already
+  changed, and two described defects that never shipped.
 - **The CI gate passed at exit 0 on a Class 5 side channel the later run could
   not measure.** `side_channel_effect_sizes` is keyed by tenant *pair*, so it
   matches no probe id, no surface and no headline-metric name — none of the four
@@ -70,10 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agent-factory return contracts, the subject-erasure example's missing caveat
   about a real vector store, four config keys the template omitted, and two of
   the five `diff` loss signals the quickstart did not name.
-- `CONTRIBUTING.md` listed the Action self-test as a required check; it is
-  filtered to changes touching `action.yml`, and a workflow that does not run
-  never reports, so requiring it would block every unrelated pull request on a
-  check that cannot arrive.
 - An unmeasured Class 5 pair entered the signed metrics as an effect size of
   `0.0` — a number the run never established, which `diff` then read as an
   improvement, printing `[ok]` directly above its own coverage-loss line. The map
@@ -179,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verifies without its companion, so this is not a failure — it now says which
   part of the pack the verdict does not speak for, the way the unanchored
   timestamp already states its own limitation. A hostile Rekor checkpoint whose
-  root hash is not valid base64 is refused with exit 3 rather than crashing out
+  root hash is not valid base64 is refused with exit 4 rather than crashing out
   with a traceback, which a caller keying on the exit code read as the tool
   breaking rather than as a rejected proof.
 - **Eight frameworks' worth of isolation controls were asserted off a deletion
@@ -321,8 +337,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the release workflow's own comment claimed a manual run cannot publish, which
   it can, and `RELEASING.md` said the workflow triggers only on tags; the release
   recipe stages every file it tells you to bump except `SECURITY.md`, and never
-  says to re-run `uv lock`; `CONTRIBUTING.md` omitted three gates CI enforces and
-  two workflows from the required-check list it calls the source of truth; the
+  says to re-run `uv lock`; `CONTRIBUTING.md` omitted three gates CI enforces, and
+  its required-check list — which the file calls the source of truth — omitted the
+  `Docs` workflow and named four of the six checks by a string GitHub never
+  reports (the job key, not the `name:` branch protection matches on); the
   extras list omitted `azure-search`. `docs/data-models.md` states the schema
   version in prose and is now pinned by a test.
 - **A renamed CLI flag would have shipped a broken Action.** `action.yml` shells
@@ -429,7 +447,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "apply it in sectum-ai.yaml" block, unscored — and that threshold gates which
   semantic candidates become CONFIRMED findings. The fallback is now scored on
   the run's own labeled set, the output says how many negatives it admits, and
-  the command exits 3 without an apply block when that number is not zero. (The
+  the command exits 3 without an apply block whenever no threshold separated the
+  classes. (The
   message also blamed "the offline fake embedder" for a run that used a real
   hashing embedder.)
 - **The GitHub Action reported a confirmed leak for a probe that never ran.**
@@ -479,8 +498,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same way). Only a miss is refused.
 - `diff` and `baseline --compare` no longer print `[not measured]` over a pooled
   count that *rose*: a run that measured more, not less, is still a regression.
-  A probe is marked unmeasured on a scope loss only when every surface it can run
-  against was lost, not when one alternative was.
 - **A probe left with only plants graded its class PASS off zero observations.**
   On one tenant whose users are the only foreign principals, with an adapter that
   carries no user, every judged read was dropped and the plants alone ran — which

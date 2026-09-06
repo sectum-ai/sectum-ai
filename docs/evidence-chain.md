@@ -40,7 +40,11 @@ the verifier **never trusts a root carried inside the pack** — that would let 
 forged pack ship its own trust anchor. Instead `sectum-ai verify` pins the root
 independently: it ships the public [FreeTSA](https://freetsa.org) leaf and root
 built in (FreeTSA is the default TSA), and `--tsa-cert`/`--tsa-root` override
-them with a customer-pinned authority's certificates.
+them with a customer-pinned authority's certificates. Pass them **together**: a
+leaf supplied with `--tsa-cert` must be issued by the pinned root, so
+`--tsa-cert` alone leaves a customer's leaf checked against FreeTSA's root and
+`verify` refuses it. The library keeps the leaf and the roots in one flat trust
+store, so without that check a self-signed leaf would anchor its own token.
 
 RFC 3161 support is an optional extra, `sectum-ai-evidence[rfc3161]` (the
 `LocalTimestamper` path needs no third-party dependency).

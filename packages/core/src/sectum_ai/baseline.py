@@ -33,6 +33,12 @@ class MetricDelta:
     # failure. It is kept distinct from erasure *residue*, which is a real
     # failure and does regress.
     informational: bool = False
+    # The later run's map had no entry for this key, so its `current` is a filled
+    # 0.0, not a measurement. Every one of these maps is keyed by something the
+    # probe-id lookup cannot reach - a surface, a tenant pair, an embedding model
+    # - and each one had to be wired up separately as it was noticed. Recording it
+    # HERE, where the 0.0 is filled in, covers every map including the next one.
+    key_lost: bool = False
 
     @property
     def regressed(self) -> bool:
@@ -67,13 +73,20 @@ def _dict_deltas(
     *,
     informational: bool = False,
 ) -> list[MetricDelta]:
-    """A MetricDelta per key across both mappings; a key absent on a side is 0.0."""
+    """A MetricDelta per key across both mappings; a key absent on a side is 0.0.
+
+    A key the CURRENT run does not carry is marked ``key_lost``: its 0.0 is the
+    fill, not a measurement, and reading it as an improvement is what let a
+    dropped side-channel pair, an unscanned erasure surface and a vanished
+    embedding model each read `[ok] ... -> 0` in turn.
+    """
     return [
         MetricDelta(
             name=f"{label}[{key}]",
             baseline=float(baseline.get(key, 0.0)),
             current=float(current.get(key, 0.0)),
             informational=informational,
+            key_lost=key in baseline and key not in current,
         )
         for key in sorted(set(baseline) | set(current))
     ]

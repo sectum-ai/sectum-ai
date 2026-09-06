@@ -49,7 +49,7 @@ Every cross-tenant tool call resolves a foreign canary, so the probe confirms a
 leak on each:
 
 ```
-ran 1 probe: 24 confirmed cross-tenant findings
+ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
