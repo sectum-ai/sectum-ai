@@ -2884,11 +2884,16 @@ def baseline(
     # built-in fakes, where every other command discloses it.
     _warn_on_synthetic_surfaces(run.surface_provenance)
     if result.regressed:
+        # NOT an enumeration of the gate's disjuncts. It was one, and it went
+        # stale three times over: an unrescanned erasure surface, an unremeasured
+        # side channel and an unremeasured headline rate all gated at exit 2 with
+        # no matching reason in the sentence, so a reader hunting the cause found
+        # a closed list that did not contain it. The bracketed lines above are
+        # printed from the same result and cannot drift from it.
         typer.echo(
-            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
-            "a confirmed leak escalated in severity, a probe the baseline "
-            "covered was not run, a live surface fell back to the fake, a probe's "
-            "user-level steps were not run, or the scenario changed.",
+            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed or "
+            "escalated in severity, this run measured less than the baseline did, or "
+            "the scenario changed - the bracketed lines above name which.",
             err=True,
         )
         raise typer.Exit(code=2)

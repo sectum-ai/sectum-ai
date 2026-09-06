@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`baseline --compare`'s failure banner enumerated the gate's causes, and named
+  seven of ten.** An unrescanned erasure surface, an unremeasured side channel
+  and an unremeasured headline rate each gated at exit 2 with no matching reason
+  in the sentence, so a reader hunting the cause found a closed list that did not
+  contain it. The banner now points at the bracketed lines, which are printed
+  from the same result and cannot drift from it.
 - **`diff` printed `[not measured]` four times and still exited 0.** The previous
   release fixed the label and left the gate: the command said plainly it could
   not compare four headline leak rates, then greenlit the pipeline. Configuring
