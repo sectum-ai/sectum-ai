@@ -78,16 +78,17 @@ adapters:
   vector_store:
     kind: pgvector
     dsn_env: SECTUM_PGVECTOR_DSN
-    shared_index: true   # delete to enforce per-tenant scoping
+    # user_scoped: true   # isolate by user within a tenant, too
 ```
 
 ```sh
 sectum-ai probe --probe tenant-boundary-fetch --config sectum-ai.yaml --workdir out
 ```
 
-A real engagement runs the probe with `shared_index: false` to
-*verify* isolation holds; the demo here flips it to `true` so the
-walkthrough has a leak to show.
+`shared_index` is a **`fake`-only** knob — a live store's tenancy is its own,
+and passing it to a live kind is refused with exit `3`. The demo above flips it
+on the built-in fake so the walkthrough has a leak to show; a real engagement
+points the same probe at the store as it is deployed and reports what it finds.
 
 ## What's *not* in this example
 

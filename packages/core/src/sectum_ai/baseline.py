@@ -393,13 +393,9 @@ def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
     and its coverage verdict is NOT_COVERED. Without this the drop read as an
     erasure that had succeeded.
     """
-    return tuple(
-        sorted(
-            surface
-            for surface in earlier.metrics.erasure_residue
-            if surface not in later.metrics.erasure_residue
-        )
-    )
+    earlier_scanned = set(earlier.metrics.erasure_residue) | set(earlier.metrics.erasure_caveats)
+    later_scanned = set(later.metrics.erasure_residue) | set(later.metrics.erasure_caveats)
+    return tuple(sorted(earlier_scanned - later_scanned))
 
 
 def _scope_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:

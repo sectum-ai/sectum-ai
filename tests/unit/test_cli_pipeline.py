@@ -1789,3 +1789,29 @@ def test_a_kv_probe_with_no_resolution_does_not_cover_class_5(tmp_path: Path) ->
     assert KvCacheTimingProbe.id not in run["probe_versions"], run["probe_versions"]
     assert "kv_cache" not in run["surface_provenance"]
     assert app_module is not None
+
+
+def test_verify_names_the_files_beside_the_pack_it_does_not_speak_for(tmp_path: Path) -> None:
+    # `verify` checked only the pack's OWN expected siblings and said nothing
+    # about anything else in the folder, so a forged `erasure-attestation.pdf`
+    # delivered beside a genuine `evidence.json` produced an all-`[ok]` verdict
+    # that read as "everything here checks out".
+    #
+    # It cannot be CHECKED: one workdir routinely holds both the probe's and the
+    # erasure run's artifacts, each pack binding only its own, so hashing the
+    # other against this pack's `pdf_ref` would call a genuine document altered -
+    # the worst false alarm a tamper-evidence product can raise. So it is named.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "erasure-attestation.pdf").write_bytes(b"%PDF-1.4 forged\n")
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert "unclaimed-siblings" in result.output, result.output
+    assert "erasure-attestation.pdf" in result.output
+    assert "says nothing about them" in result.output
+    # Still a pass: the pack itself is intact, and the extra file is not its
+    # business to judge.
+    assert result.exit_code == 0

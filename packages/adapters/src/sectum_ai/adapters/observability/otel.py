@@ -82,6 +82,13 @@ class _OtelTraceStore(Protocol):
         """
 
 
+def _refuse_error_envelope(body: dict[str, Any], what: str) -> None:
+    """An error envelope is not an answer, whatever else the body carries."""
+    for key in ("error", "errors"):
+        if body.get(key):
+            raise AdapterError(f"{what} returned an error: {str(body[key])[:200]}")
+
+
 class OtelObservability(ObservabilityAdapter):
     """A generic OpenTelemetry observability backend read over an OTLP-JSON query API.
 
@@ -129,9 +136,12 @@ class OtelObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         body = self._store.query(tenant.hex, marker)
+        # An error envelope is refused whether or not `resourceSpans` is there
+        # beside it: `{"resourceSpans": [], "error": "partial results"}` read as
+        # "no traces" - in the A3 check, as the subject's trace having been
+        # erased - and the four sibling backends refuse that exact shape.
+        _refuse_error_envelope(body, "OTel query")
         if "resourceSpans" not in body:
-            # A 200 with an error envelope (or the wrong shape) read as "no traces"
-            # - in the A3 check, as the subject's trace having been erased.
             detail = body.get("error") or body.get("errors") or sorted(body)
             raise AdapterError(f"OTel query returned no resourceSpans: {str(detail)[:200]}")
         hits: list[TraceHit] = []
@@ -219,6 +229,7 @@ class _HttpOtelTraceStore:
             # the re-scan's residue as an erasure FAILURE instead of a caveat.
             if error.code == 404:
                 remaining = self.query(tenant_hex, "")
+                _refuse_error_envelope(remaining, "OTel post-delete re-scan")
                 if "resourceSpans" not in remaining:
                     # The same guard `search_traces` applies to this exact call: a
                     # 200 carrying an error envelope is not "the spans are gone",

@@ -7,6 +7,7 @@ types).
 """
 
 import math
+from typing import Any, cast
 
 import pytest
 
@@ -59,3 +60,26 @@ def test_a_non_json_native_value_is_a_typed_error() -> None:
 def test_sha256_hex_is_the_digest_of_the_canonical_bytes() -> None:
     obj = {"b": 2, "a": 1}
     assert canonical_hash(obj) == sha256_hex(to_canonical_json(obj))
+
+
+def test_an_unencodable_string_is_a_typed_refusal_not_a_traceback() -> None:
+    # A lone surrogate reaches a record through the stdlib JSON parser (jiter,
+    # behind model_validate_json, rejects one; json.loads does not), and the
+    # encode sat OUTSIDE the block that exists to type these failures - so
+    # `sectum-ai report` died with a UnicodeEncodeError traceback at exit 1.
+    with pytest.raises(ValueError, match="cannot canonicalize an unencodable string"):
+        to_canonical_json({"corpus_profile": "demo\ud800"})
+
+
+def test_a_non_string_key_cannot_share_a_digest_with_its_string_form() -> None:
+    # `json.dumps` coerces a non-str key to its string form, so {1: "a"} and
+    # {"1": "a"} canonicalized to the same bytes: two distinct objects, one
+    # digest, against this module's own injectivity claim.
+    for key in (1, True, None, 1.0):
+        with pytest.raises(TypeError, match="non-string keys"):
+            to_canonical_json(cast("dict[str, Any]", {key: "a"}))
+    # Nested, too.
+    with pytest.raises(TypeError, match="non-string keys"):
+        to_canonical_json({"outer": [{"inner": {2: "b"}}]})
+    # And the ordinary shape is untouched.
+    assert to_canonical_json({"1": "a"}) == b'{"1":"a"}'

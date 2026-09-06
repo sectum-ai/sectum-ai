@@ -32,6 +32,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`erasure --soft-delete` stopped reaching the vector store** — a regression
+  from the previous cycle's own fix. The shared vector-slot builder made its own
+  flagless default, so the surface the whole demo is about attested ERASED on a
+  run explicitly modelling a store that fails erasure, and the shipped
+  residual-data sample could no longer be regenerated from its documented recipe.
+  Both erasure sample sets are regenerated, and a test now renders each committed
+  sample PDF from its committed pack, so the artifact an auditor reads cannot
+  drift from the renderer again.
+- **A no-baseline erasure surface wrote `erasure_residue: 0`** — the other way to
+  establish nothing, beside the inconclusive scan the previous cycle guarded. The
+  same `diff` misreading followed: a prior run's 2 residuals "resolved" at exit 0.
+  The caveat block needed the same guard, and `diff`'s lost-erasure signal reads
+  both blocks now, not just the residue one.
+- **The isolation control's assertion still named a surface only the erasure scan
+  touched.** The previous cycle narrowed the *gate* and not the suffix that gets
+  written into the pack, printed in the PDF, and repeated in every OSCAL control
+  finding — so the assertion cited evidence it was not granted.
+- **`verify` said nothing about the other files in the folder.** A forged
+  `erasure-attestation.pdf` beside a genuine `evidence.json` produced an
+  all-`[ok]` verdict that read as "everything here checks out". It cannot be
+  *checked* — one workdir routinely holds both packs' artifacts, each binding only
+  its own, so hashing the other would call a genuine document altered — so it is
+  named: the verdict lists what it does not speak for.
+- **The RFC 3161 verifier lost its root pin to half an override.** The library
+  puts the supplied leaf and the roots in one flat trust store, so `--tsa-cert`
+  alone let a self-signed certificate anchor its own token; the leaf must now be
+  issued by the pinned root. A one-byte edit to a token's *unsigned* certificate
+  bag crashed the CLI with a traceback at exit 1 instead of refusing the token at
+  exit 4, nondeterministically. And `.cert_request()` takes a keyword-only flag
+  defaulting to `False`, so the bare call turned it off: every token this tool
+  minted carried no signer certificate, and an archived pack could only ever be
+  verified against Sectum's own shipped PEM.
+- The canonical form raised a bare `UnicodeEncodeError` from outside the block
+  that exists to type these failures, so a lone surrogate — which the stdlib JSON
+  parser accepts — killed `report` with a traceback. And a non-string mapping key
+  canonicalized to its string form, so `{1: "a"}` and `{"1": "a"}` shared a
+  digest, against the module's own injectivity claim.
+- The OTel scan read `{"resourceSpans": [], "error": ...}` as "no traces": the
+  guard checked for the key's absence, not for an error envelope beside it.
+- The e2e CI step reported success with zero tests run — both its sibling steps
+  already assert that tests ran. Docs: `shared_index` is a fake-only knob and a
+  live kind refuses it with exit 3, which one example still recommended; six of
+  eleven adapter families carry no user, not three.
 - **One inconclusive scan aborted the whole erasure run.** The vector scan
   degrades to "absence not established" on its own; every other surface's adapter
   *raises* when it cannot trust its listing, and nothing caught it — so a capped

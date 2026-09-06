@@ -1656,6 +1656,35 @@ def _sibling_names(pack_path: Path, slot: int) -> tuple[str, ...]:
     return (known[slot],) if known is not None else _SIBLING_FALLBACK[slot]
 
 
+def _sibling_paths(pack_path: Path, slot: int) -> list[Path]:
+    """Every one of THIS pack's expected siblings that is present."""
+    return [
+        candidate
+        for name in _sibling_names(pack_path, slot)
+        if (candidate := pack_path.parent / name).exists()
+    ]
+
+
+def _unclaimed_siblings(pack_path: Path, slot: int) -> list[str]:
+    """Candidate-named files beside the pack that are NOT this pack's siblings.
+
+    A directory is not a closed container the way a bundle is: one workdir
+    routinely holds both the probe's `audit-pack.pdf` and the erasure run's
+    `erasure-attestation.pdf`, and each pack binds only its own. Checking the
+    other one against this pack's `pdf_ref` would report a genuine document as
+    "altered or replaced after signing" - the worst false alarm a tamper-evidence
+    product can raise. So they are NAMED rather than judged: the verdict says
+    which files in the folder it does not speak for, instead of staying silent
+    about them and reading as "everything here checks out".
+    """
+    mine = set(_sibling_names(pack_path, slot))
+    return sorted(
+        name
+        for name in _SIBLING_FALLBACK[slot]
+        if name not in mine and (pack_path.parent / name).exists()
+    )
+
+
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
     """Return the bytes of the audit PDF written beside ``pack_path``, if present.
 
@@ -1819,6 +1848,7 @@ def verify(
     # audit-pack.pdf / erasure-attestation.pdf next to the json); its hash is
     # bound into the attested digest, so a swapped PDF fails verification.
     pdf_bytes = _sibling_audit_pdf(pack)
+    unclaimed = sorted({name for slot in (0, 1, 2) for name in _unclaimed_siblings(pack, slot)})
     result = verify_pack(
         evidence,
         tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
@@ -1836,25 +1866,34 @@ def verify(
     # Re-verify the in-toto sidecar if report/erasure wrote one beside the pack:
     # a swapped or corrupt statement that no longer binds this pack's run digest
     # is itemized as a failed check, never silently trusted.
-    intoto_path = _sibling_intoto(pack)
-    if intoto_path is not None:
+    for index, intoto_path in enumerate(_sibling_paths(pack, 1)):
+        label = "in-toto-attestation" if index == 0 else f"in-toto-attestation:{intoto_path.name}"
         try:
             verify_in_toto_statement(json.loads(intoto_path.read_text()), evidence)
-            typer.echo("[ok] in-toto-attestation: sidecar binds this pack's run digest")
+            typer.echo(f"[ok] {untrusted(label)}: sidecar binds this pack's run digest")
         except (ValueError, EvidenceError) as error:
-            typer.echo(f"[FAIL] in-toto-attestation: {error}")
+            typer.echo(f"[FAIL] {untrusted(label)}: {error}")
             passed = False
     # Re-verify the DSSE envelope sidecar if report wrote one: its in-toto
     # statement must still bind this pack's run digest (a swapped envelope fails).
-    dsse_path = _sibling_dsse(pack)
-    if dsse_path is not None:
+    for index, dsse_path in enumerate(_sibling_paths(pack, 2)):
+        label = "dsse-envelope" if index == 0 else f"dsse-envelope:{dsse_path.name}"
         try:
             envelope = json.loads(dsse_path.read_text())
             verify_dsse_envelope(envelope, evidence)
-            typer.echo(f"[ok] dsse-envelope: {dsse_binding_detail(envelope)}")
+            typer.echo(f"[ok] {untrusted(label)}: {dsse_binding_detail(envelope)}")
         except (ValueError, EvidenceError) as error:
-            typer.echo(f"[FAIL] dsse-envelope: {error}")
+            typer.echo(f"[FAIL] {untrusted(label)}: {error}")
             passed = False
+    if unclaimed:
+        # Silence here read as "everything in this folder checks out". A bundle is
+        # a closed container and its verifier fails an unbound member; a directory
+        # is not, so these are named rather than judged.
+        typer.echo(
+            f"[ok] unclaimed-siblings: {', '.join(untrusted(n) for n in unclaimed)} "
+            "sit beside this pack and are not bound by it, so this verification says "
+            "nothing about them; each belongs to its own pack, or to nothing"
+        )
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
@@ -1952,20 +1991,28 @@ def _emit_erasure_attestation(
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
-            # A surface whose absence the scan could not establish has no residue
-            # COUNT - writing 0 there asserts a number the run never measured, and
-            # `diff` read it as a leak that had been fixed. It is absent here and
-            # NOT_COVERED in the coverage block, which is what tells it apart from
-            # a surface that was never scanned at all.
+            # A surface that established nothing has no residue COUNT - writing 0
+            # there asserts a number the run never measured, and `diff` read it as
+            # a leak that had been fixed. Two ways to establish nothing: the scan
+            # could not rule the markers out (`unverifiable_after`), or there was
+            # no pre-erasure baseline to rule out. Both are absent here and
+            # NOT_COVERED in the coverage block, which is what tells them apart
+            # from a surface that was never scanned at all.
             erasure_residue={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
-                if surface.erasure_supported and not surface.unverifiable_after
+                if surface.erasure_supported
+                and not surface.unverifiable_after
+                and surface.markers_before > 0
             },
+            # The caveat count is the same claim about a backend with no erasure
+            # API, and needs the same guard.
             erasure_caveats={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
                 if not surface.erasure_supported
+                and not surface.unverifiable_after
+                and surface.markers_before > 0
             },
             erasure_coverage={
                 surface.value: verdict.value for surface, verdict in report.coverage().items()
@@ -2171,7 +2218,7 @@ def erasure(
         manifest = _load_subject_manifest(subject)
         # The `app`-aware path, as above: the subject scan read `vector_store`
         # directly too.
-        subject_store = build_vector_slot(loaded)
+        subject_store = build_vector_slot(loaded, fake_default)
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -2284,7 +2331,7 @@ def erasure(
     # `vector_store` directly ignored a configured `app` and built a clean default
     # fake, so the run attested ERASURE VERIFIED against a backend the operator
     # never configured - and dropped that adapter's `soft_delete` knob with it.
-    store = build_vector_slot(loaded)
+    store = build_vector_slot(loaded, fake_default)
     with adapter_config(loaded, "observability", fake_default) as cfg:
         obs = build_observability(cfg)
     with adapter_config(loaded, "memory", fake_default) as cfg:

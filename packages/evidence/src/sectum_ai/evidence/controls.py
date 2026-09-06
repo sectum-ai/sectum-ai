@@ -177,6 +177,12 @@ def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...
         live = live & frozenset(row[4])
     if row is not None and row[3] == _ERASURE:
         live = live & erasure_scanned_surfaces(run)
+    if row is not None and row[3] == _ISOLATION:
+        # `_run_supports` already refuses to assert an isolation control off a
+        # surface only the erasure scan touched. The suffix that goes INTO the
+        # pack - and into the PDF, and every OSCAL control finding - has to name
+        # the same set, or the assertion cites evidence it was not granted.
+        live = live - erasure_scanned_surfaces(run)
     return tuple(sorted(live))
 
 

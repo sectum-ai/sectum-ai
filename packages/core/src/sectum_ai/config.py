@@ -1328,7 +1328,9 @@ def adapter_config(
         )
 
 
-def build_vector_slot(config: SectumConfig) -> VectorStoreAdapter:
+def build_vector_slot(
+    config: SectumConfig, default: AdapterConfig | None = None
+) -> VectorStoreAdapter:
     """The adapter filling the vector slot: the `app` resource API, or a store.
 
     `app` and `vector_store` both fill this slot - the app's resource API is
@@ -1340,7 +1342,10 @@ def build_vector_slot(config: SectumConfig) -> VectorStoreAdapter:
     that adapter's `soft_delete` knob with it, and attested ERASURE VERIFIED
     against a backend the operator never configured.
     """
-    fake = AdapterConfig(kind="fake")
+    # The caller's default, not a fresh one: `erasure --soft-delete` passes a
+    # default carrying that flag, and building our own dropped it - so the run
+    # attested ERASED on the one surface the flag exists to make fail.
+    fake = default if default is not None else AdapterConfig(kind="fake")
     app = config.adapters.get("app")
     if app is not None and "vector_store" in config.adapters:
         raise ConfigError(

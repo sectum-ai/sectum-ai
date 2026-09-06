@@ -1,5 +1,6 @@
 """Tests for the ``sectum-ai erasure`` CLI command (Class 11, the wedge)."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -448,3 +449,39 @@ def test_erasure_honours_a_configured_app_adapter(tmp_path: Path) -> None:
     assert "ERASURE VERIFIED" not in result.output, result.output
     assert "RESIDUAL DATA" in result.output, result.output
     assert result.exit_code == 2
+
+
+def test_soft_delete_reaches_the_vector_store(tmp_path: Path) -> None:
+    # The `--soft-delete` flag rides on the default adapter config. A shared
+    # vector-slot builder that made its OWN default dropped it, so the surface the
+    # whole demo is about attested ERASED on a run explicitly modelling a store
+    # that fails erasure - and the shipped residual-data sample could no longer be
+    # regenerated from its own documented recipe.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--soft-delete"])
+    assert "vector_db: 2 markers before, 2 after -> RESIDUAL DATA" in result.output, result.output
+    assert "ERASURE FAILED" in result.output
+    assert result.exit_code == 2
+
+
+def test_a_surface_with_no_baseline_records_no_residue_count(tmp_path: Path) -> None:
+    # The other way to establish nothing. A surface with no pre-erasure baseline
+    # wrote `erasure_residue: 0` - a number the run never measured - and `diff`
+    # read the drop from a prior run's 2 as a leak that had been fixed, which is
+    # exactly what the guard beside it exists to stop.
+    from sectum_ai.adapters import FakeVectorStore
+
+    monkeypatch = pytest.MonkeyPatch()
+    # A store that was never seeded: no baseline on the vector surface.
+    monkeypatch.setattr(FakeVectorStore, "query", lambda self, tenant, text, k=5, **kw: [])
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        result = _runner.invoke(
+            app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"]
+        )
+    finally:
+        monkeypatch.undo()
+    assert result.exit_code == 3, result.output
+    run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
+    assert run["metrics"]["erasure_residue"] == {}, run["metrics"]["erasure_residue"]
+    assert run["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED"

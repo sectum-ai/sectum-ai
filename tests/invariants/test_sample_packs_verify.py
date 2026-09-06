@@ -15,11 +15,14 @@ silence it.
 """
 
 import json
+import re
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from sectum_ai.evidence import PREDICATE_TYPE, STATEMENT_TYPE, verify_pack
+from sectum_ai.evidence.pdf import render_audit_pack
 from sectum_ai.spec import EvidencePack
 
 # tests/invariants/ -> repo root is two parents up.
@@ -65,3 +68,33 @@ def test_shipped_intoto_sidecar_is_a_wellformed_statement(sidecar_path: Path) ->
         assert subject.get("name"), f"{sidecar_path.name} subject missing a name"
         sha256 = subject.get("digest", {}).get("sha256", "")
         assert len(sha256) == 64, f"{sidecar_path.name} subject digest is not a SHA-256"
+
+
+_ERASURE_SAMPLES = sorted(p for p in _SAMPLES_DIR.glob("*evidence*.json") if "erasure" in p.name)
+
+
+def _normalised(pdf: bytes) -> bytes:
+    """The PDF's content, minus what legitimately changes between renders."""
+    pdf = re.sub(rb"D:\d{14}[^)]*", b"D:TIME", pdf)
+    return re.sub(rb"\[<[0-9a-f]{32}><[0-9a-f]{32}>\]", b"[<ID><ID>]", pdf)
+
+
+@pytest.mark.parametrize("pack_path", _ERASURE_SAMPLES, ids=lambda p: p.name)
+def test_shipped_sample_pdf_is_what_todays_renderer_produces(pack_path: Path) -> None:
+    # The samples are sold as "real outputs ... so a prospective auditor, DPO, or
+    # CISO can see what they get", and only the JSON packs were guarded. The
+    # renderer gained a fourth cause for NOT_COVERED and both committed erasure
+    # PDFs kept stating three, for a whole cycle - the artifact an auditor reads
+    # describing a coverage rule the tool no longer follows. Rendering from the
+    # committed pack and comparing (modulo the creation timestamp and reportlab's
+    # document id, the only parts that legitimately vary) catches any such drift.
+    pack = EvidencePack.model_validate_json(pack_path.read_text())
+    committed = pack_path.with_name(pack_path.name.replace("-evidence.json", "-audit-pack.pdf"))
+    assert committed.exists(), f"no committed PDF beside {pack_path.name}"
+    with tempfile.TemporaryDirectory() as directory:
+        fresh = Path(directory) / "audit.pdf"
+        render_audit_pack(pack, fresh)
+        assert _normalised(fresh.read_bytes()) == _normalised(committed.read_bytes()), (
+            f"{committed.name} is not what today's renderer produces; regenerate the "
+            "samples (docs/samples/README.md)"
+        )

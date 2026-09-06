@@ -114,8 +114,9 @@ RAG and agent adapters or any other. Running a step as the tenant while judging
 it as the user confirmed cross-user leaks of sessions that never existed, so the
 runner now drops the **step**: every adapter declares whether a call made as a
 user reaches its backend as that user (`Adapter.carries_user` — a live adapter
-sets it from its `user_scoped` knob, the RAG/agent/observability contracts and
-mem0 and the serving models never carry it, and the live MCP clients carry it
+sets it from its `user_scoped` knob; the RAG, agent, observability,
+search-index, eval-set and backup contracts, mem0 and the serving models never
+carry it; and the live MCP clients carry it
 only with `user_argument`). A user-level *read* on an adapter that does not carry
 the user is not run; a user-owned *plant* runs as its tenant; and a probe left
 with no judged step runs nothing at all rather than grading its class off its

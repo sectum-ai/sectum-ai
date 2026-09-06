@@ -22,9 +22,29 @@ from typing import Any
 from pydantic import BaseModel
 
 
+def _refuse_non_string_keys(data: Any) -> None:
+    """Refuse a non-``str`` mapping key anywhere in ``data``.
+
+    `json.dumps` coerces one to its string form, so ``{1: "a"}`` and
+    ``{"1": "a"}`` canonicalize to the same bytes - two distinct objects with one
+    digest, against this module's injectivity claim. No shipped model has such a
+    field; this keeps the public helper honest for a caller passing a raw dict.
+    """
+    if isinstance(data, dict):
+        bad = sorted(repr(key) for key in data if not isinstance(key, str))
+        if bad:
+            raise TypeError(f"cannot canonicalize a mapping with non-string keys: {', '.join(bad)}")
+        for value in data.values():
+            _refuse_non_string_keys(value)
+    elif isinstance(data, list):
+        for item in data:
+            _refuse_non_string_keys(item)
+
+
 def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
     """Serialize an object to canonical JSON bytes: sorted keys, UTF-8, compact."""
     data: Any = obj.model_dump(mode="json") if isinstance(obj, BaseModel) else obj
+    _refuse_non_string_keys(data)
     try:
         text = json.dumps(
             data,
@@ -32,7 +52,12 @@ def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
             separators=(",", ":"),
             ensure_ascii=False,
             allow_nan=False,
-        )
+        ).encode("utf-8")
+    except UnicodeEncodeError as error:
+        # A lone surrogate reaches here from a `json.loads`-parsed record (jiter,
+        # behind `model_validate_json`, rejects one; the stdlib parser does not).
+        # It sat outside this block, so `report` died with a traceback at exit 1.
+        raise ValueError(f"cannot canonicalize an unencodable string: {error}") from error
     except ValueError as error:
         # A non-finite float (NaN/Infinity) would serialize as a JavaScript
         # literal that is not valid JSON (RFC 8259): a third-party verifier
@@ -47,7 +72,7 @@ def to_canonical_json(obj: BaseModel | dict[str, Any] | list[Any]) -> bytes:
         # surface it as a clear, typed canonicalization failure so a caller sees
         # why the digest could not be computed instead of an opaque traceback.
         raise TypeError(f"cannot canonicalize a non-JSON-native value: {error}") from error
-    return text.encode("utf-8")
+    return text
 
 
 def sha256_hex(data: bytes) -> str:

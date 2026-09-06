@@ -205,8 +205,9 @@ identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
 *user* identity unless `user_argument` names the tool argument to put it in.
 
 **Which boundary a run can claim.** Every adapter declares whether a call made as a
-user reaches the backend *as that user* (`carries_user`). The RAG, agent, and
-observability contracts carry no user at all, the live MCP clients carry one
+user reaches the backend *as that user* (`carries_user`). The RAG, agent,
+observability, search-index, eval-set and backup contracts — the six families
+whose methods take no `user` — carry none at all, the live MCP clients carry one
 only with `user_argument`, every live vector store, both Redis adapters, and the
 HuggingFace model carry one only with `user_scoped: true` (with the knob off,
 nothing user-specific reaches the backend), and the mem0 memory store (a flat
@@ -223,8 +224,8 @@ Run as the tenant and judged as the user, such a step confirmed cross-user leaks
 a session that never existed. The built-in fakes carry the user wherever their
 family contract does (vector, app, cache, model, MCP, memory) — the fake *is* the
 backend, and `user_scoped: false` on a fake models a backend that receives the
-user and ignores it; the RAG, observability, and agent fakes cannot, like their
-contracts.
+user and ignores it. The RAG, observability, agent, search-index, eval-set and
+backup fakes cannot, like their contracts.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:

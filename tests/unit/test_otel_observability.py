@@ -270,7 +270,7 @@ def test_an_error_envelope_is_not_an_empty_tenant() -> None:
         def query(self, tenant_hex: str, marker: str) -> dict[str, Any]:
             return {"error": "backend unavailable"}
 
-    with pytest.raises(AdapterError, match="no resourceSpans"):
+    with pytest.raises(AdapterError, match="returned an error"):
         OtelObservability(_ErrorStore()).search_traces(_TENANT_A, "anything")
 
 
@@ -308,3 +308,17 @@ def test_http_query_wraps_a_transport_error_in_adapter_error(
     monkeypatch.setattr(urllib.request, "urlopen", _raise_http_error(500))
     with pytest.raises(AdapterError, match="OTel trace query"):
         _http_store().query(_TENANT_A.hex, "SECTUM-CANARY-AAA")
+
+
+def test_an_error_envelope_beside_empty_spans_is_not_an_empty_tenant() -> None:
+    # The guard checked for the KEY's absence, so `{"resourceSpans": [], "error":
+    # "partial results"}` - a 200 that answered nothing but carried the shape -
+    # read as "no traces", and post-erasure that is a live tracing surface
+    # attesting ERASED. The four sibling backends refuse this exact body.
+    class _PartialStore(_FakeOtelStore):
+        def query(self, tenant_hex: str, marker: str) -> dict[str, Any]:
+            return {"resourceSpans": [], "error": "trace store unavailable: partial results"}
+
+    adapter = OtelObservability(_PartialStore())
+    with pytest.raises(AdapterError, match="returned an error"):
+        adapter.search_traces(_TENANT_A, "SECTUM-CANARY-AAA")

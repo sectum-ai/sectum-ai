@@ -222,3 +222,28 @@ def test_isolation_controls_need_a_surface_an_isolation_probe_drove() -> None:
 
     # The same run with the vector store live earns the isolation controls.
     assert "SOC 2 (TSC)" in {m.framework for m in control_mappings(_mixed("LIVE"))}
+
+
+def test_the_asserted_surfaces_suffix_names_only_isolation_evidence() -> None:
+    # `_run_supports` refuses to assert an isolation control off a surface only
+    # the erasure scan touched. The suffix that goes INTO the pack - and into the
+    # PDF, and every OSCAL control finding - did not mirror it, so the assertion
+    # cited `tracing` as evidence for SOC 2 CC6.1 when the deletion check was all
+    # that ever touched it.
+    moment = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
+    run = RunResult(
+        run_id="run-1",
+        scenario_hash="s",
+        manifest_hash="m",
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(erasure_coverage={"tracing": "ERASED"}),
+        probe_versions={"tenant-boundary-fetch": "1", "gdpr-erasure-verification": "1"},
+        surface_provenance={"vector_db": "LIVE", "tracing": "LIVE"},
+    )
+    isolation = next(m for m in control_mappings(run) if m.framework == "SOC 2 (TSC)")
+    assert "tracing" not in isolation.assertion, isolation.assertion
+    assert "vector_db" in isolation.assertion
+    # And the erasure control still names the surface it DID scan.
+    erasure = next(m for m in control_mappings(run) if m.control_ids == ("Article 17",))
+    assert "tracing" in erasure.assertion, erasure.assertion
