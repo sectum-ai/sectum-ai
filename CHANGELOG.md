@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A run the tool refused to attest still signed "Erasure ... verified".** The
+  previous entry made the deletion assertion depend on the outcome for `RESIDUAL`
+  and for a caveat surface, and missed the third way to fail: a surface the run
+  SCANNED but could not clear is `NOT_COVERED`, which `erasure_scanned_surfaces`
+  drops — so it vanished from the assertion entirely. A run with one clean
+  surface beside one inconclusive one asserted erasure verified while the command
+  itself exited 3 with `ERASURE INCONCLUSIVE`, and `verify` shares the function so
+  it did not catch it either. A scanned-but-unestablished surface is
+  distinguishable from one nobody scanned — `erasure` records provenance only for
+  the surfaces in its report — and now blocks the claim by name.
 - **Three payload reads outside the runner were untyped.** `payload_required` was
   private while its `payload_int` twin was public, so `sweep.py` and
   `multimodal.py` indexed `step.payload` raw and a missing key escaped the

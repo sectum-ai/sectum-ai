@@ -309,3 +309,47 @@ def test_a_clean_purge_still_asserts_verified() -> None:
     assert len(stated) == 2, stated
     for assertion in stated:
         assert "verified" in assertion, assertion
+
+
+def test_a_scanned_but_inconclusive_surface_blocks_the_verified_claim() -> None:
+    # The third way to fail, and the one that vanished: `erasure_scanned_surfaces`
+    # drops NOT_COVERED, so a surface the run SCANNED but could not clear never
+    # reached the verdict set at all - and a run with one clean surface beside one
+    # inconclusive one signed "Erasure across the AI surfaces verified" while the
+    # command itself exited 3 with ERASURE INCONCLUSIVE. `verify` calls the same
+    # function, so it did not catch it either.
+    #
+    # It IS distinguishable from a surface nobody scanned: `sectum-ai erasure`
+    # records `surface_provenance` only for the surfaces in its report, so LIVE
+    # plus NOT_COVERED means scanned and unestablished.
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        finished_at=datetime(2026, 1, 1, tzinfo=UTC),
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance={"vector_db": "LIVE", "search_index": "LIVE"},
+        metrics=RunMetrics(
+            erasure_coverage={"vector_db": "ERASED", "search_index": "NOT_COVERED"},
+            erasure_residue={"vector_db": 0},
+        ),
+    )
+    stated = _deletion_assertions(run)
+    assert len(stated) == 2, stated
+    for assertion in stated:
+        assert "verified" not in assertion, assertion
+        assert "absence could not be established on search_index" in assertion, assertion
+
+    # A surface nobody scanned must NOT block it: it carries no provenance, so an
+    # all-clean run over a narrower scope still attests.
+    narrowed = run.model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": run.metrics.model_copy(
+                update={"erasure_coverage": {"vector_db": "ERASED", "search_index": "NOT_COVERED"}}
+            ),
+        }
+    )
+    for assertion in _deletion_assertions(narrowed):
+        assert "verified" in assertion, assertion

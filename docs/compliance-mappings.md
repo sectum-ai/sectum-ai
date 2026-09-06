@@ -26,7 +26,8 @@ run whose purge left residue behind asserts "…tested; residual data remains an
 is itemized in this pack"; one resting partly on a surface with no per-tenant
 erasure API asserts "…tested; one or more surfaces expose no per-tenant erasure
 API, so their data is presumed retained". Only a run whose every scanned surface
-came back `ERASED` says *verified*. The row is never dropped: evidence of a
+came back `ERASED` says *verified*; a surface the run scanned and could not clear
+is named in the assertion, not dropped from it. The row is never dropped: evidence of a
 failed erasure is still evidence about Article 17, and stating it is the point.
 
 `sectum-ai verify` re-derives this whole table from the run it is given and

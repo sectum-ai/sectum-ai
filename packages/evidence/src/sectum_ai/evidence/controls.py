@@ -230,6 +230,18 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
     PDF printed RESIDUAL two lines above. Evidence of a FAILED erasure is still
     evidence about Article 17, so the row stays; the verb is what has to move.
     """
+    # A surface the run SCANNED but could not clear never reaches `named`:
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so it vanishes from the
+    # assertion entirely - and a run with one clean surface beside one
+    # inconclusive one signed "verified" while the command itself exited 3 with
+    # ERASURE INCONCLUSIVE. It IS distinguishable from a surface nobody scanned:
+    # `erasure` records provenance only for the surfaces in its report, so LIVE
+    # plus NOT_COVERED means scanned and unestablished.
+    inconclusive = sorted(
+        surface
+        for surface in live_surfaces(run)
+        if run.metrics.erasure_coverage.get(surface) == CoverageVerdict.NOT_COVERED.value
+    )
     verdicts = {run.metrics.erasure_coverage.get(surface) for surface in named}
     if CoverageVerdict.RESIDUAL.value in verdicts:
         return verified.replace(
@@ -240,6 +252,12 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
             " verified.",
             " tested; one or more surfaces expose no per-tenant erasure API, so their "
             "data is presumed retained.",
+        )
+    if inconclusive:
+        return verified.replace(
+            " verified.",
+            " tested; absence could not be established on "
+            f"{', '.join(inconclusive)}, so this run is not an attestation.",
         )
     return verified
 

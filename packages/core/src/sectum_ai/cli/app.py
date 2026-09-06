@@ -2019,8 +2019,11 @@ def _emit_erasure_attestation(
             # a leak that had been fixed. Two ways to establish nothing: the scan
             # could not rule the markers out (`unverifiable_after`), or there was
             # no pre-erasure baseline to rule out. Both are absent here and
-            # NOT_COVERED in the coverage block, which is what tells them apart
-            # from a surface that was never scanned at all.
+            # NOT_COVERED in the coverage block - and what tells them apart from a
+            # surface nobody scanned is `surface_provenance`, which this command
+            # records ONLY for the surfaces in its report. LIVE plus NOT_COVERED
+            # therefore means scanned and unestablished, which is what the
+            # deletion control assertion keys on.
             erasure_residue={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
