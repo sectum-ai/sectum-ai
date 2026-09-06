@@ -2744,8 +2744,6 @@ def _delta_verdict(
     # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
     if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by & lost):
         return "not measured"
-    # The pooled counts span every probe, so any loss at all makes them
-    # incomparable: a run that stopped exercising a boundary "resolved" its leaks.
     # The pooled counts span every probe, so ANY loss makes them incomparable -
     # including the two keyed by surface or pair, which the probe-id set above
     # does not carry.

@@ -95,11 +95,12 @@ class TimingSignal:
         """Whether the gap clears ``alpha`` and is practically large and directional.
 
         All four must hold to report a finding (the spec's "avoid over-claiming"):
-        a p-value below ``alpha``, a large effect size, and the primed prompt
-        being the faster one (a positive gap). ``run`` passes a Bonferroni-
-        corrected ``alpha`` (the per-pair level divided by the number of tenant-
-        pair comparisons) so the *family-wise* false-positive rate across every
-        pair stays at ``_ALPHA``, rather than ``_ALPHA`` leaking once per pair.
+        the pair was resolved at all, a p-value below ``alpha``, a large effect
+        size, and the primed prompt being the faster one (a positive gap).
+        ``run`` passes a Bonferroni-corrected ``alpha`` (the per-pair level
+        divided by the number of tenant-pair comparisons) so the *family-wise*
+        false-positive rate across every pair stays at ``_ALPHA``, rather than
+        ``_ALPHA`` leaking once per pair.
         """
         if not self.resolved:
             return False

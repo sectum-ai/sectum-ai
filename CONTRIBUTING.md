@@ -96,9 +96,9 @@ section is the source of truth for that configuration:
   `Build docs site` (`mkdocs build --strict`). The `Action self-test` workflow is **not**
   a required check: it is filtered to changes touching `action.yml`, and a
   workflow that does not run never reports, so requiring it would block every
-  unrelated pull request on a check that cannot arrive. `tests/unit/
-  test_action_cli_contract.py` and `tests/unit/test_action_version.py` are what
-  run on every PR.
+  unrelated pull request on a check that cannot arrive.
+  `tests/unit/test_action_cli_contract.py` and
+  `tests/unit/test_action_version.py` are what run on every PR.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).

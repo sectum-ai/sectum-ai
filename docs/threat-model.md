@@ -105,8 +105,9 @@ sensitive core: an adversary holding it knows every canary in advance.
 ### Evidence packs
 
 An evidence pack is tamper-evident. The pack's `attested_digest` covers the whole
-attested content — the canonical run (findings included) together with the
-manifest binding and the audit-PDF reference; that digest is what gets
+attested content — the canonical run (findings included), the manifest binding,
+the control mappings, the audit-PDF reference, and the two anchor flags; that
+digest is what gets
 timestamped, and `sectum-ai verify` recomputes it and rejects any pack whose
 attested content was altered.
 

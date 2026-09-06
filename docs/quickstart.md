@@ -69,10 +69,12 @@ between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level s
 the later run did not run because its adapter cannot carry a user, reported as
 `[BOUNDARY LOST]`, a probe the earlier run exercised and this one did not,
 reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
-residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, and two
-runs of different scenarios — a re-seed, other tenants
-or users, where every finding "resolves" because its id embeds the markers and
-principals — reported as `[SCENARIO CHANGED]`; a record from another schema line
+residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, a tenant
+pair whose Class 5 timing effect size the earlier run measured and this one did not,
+reported as `[SIDE CHANNEL NOT REMEASURED]`, and two runs of different
+scenarios — a re-seed, other tenants or users, where every finding "resolves"
+because its id embeds the markers and principals — reported as
+`[SCENARIO CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
 check the run record *inside* a pack), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —

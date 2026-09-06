@@ -21,7 +21,7 @@ without running Sectum.
 | `ProbeStep` | One planned action: `step_id`, `probe_id`, `actor_tenant_id`, `actor_user_id?`, `action`, `payload`. |
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
-| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface erasure **coverage** block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes, `user_steps_dropped`, and the Class 3/6/10 rates. |
+| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface `erasure_coverage` block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes, `user_steps_dropped`, and the Class 3/6/10 rates. |
 | `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped`). |
 | `EvidencePack` | The attested bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, the `anchored_in_log` / `anchored_with_timestamp` downgrade guards, and `schema_version`. |
 | `ControlMapping` | A pack-level framework mapping (framework, control ids, an assertion ending in the live surfaces it rests on) — see the [compliance mappings](compliance-mappings.md). |
@@ -48,7 +48,7 @@ Retrieval-Pivot Rate's binomial counts (`retrieval_pivot_n`,
 to `RunMetrics`, so the headline rate's uncertainty is reproducible from the
 signed evidence (see the
 [Class 2 attack catalog page](attack-catalog/class-02-rag-entity-bleed.md)), and
-**0.4.0** added the per-surface erasure `coverage` block to `RunMetrics`
+**0.4.0** added the per-surface `erasure_coverage` block to `RunMetrics`
 (see the [erasure attack catalog page](attack-catalog/class-11-erasure.md)).
 
 ## Published JSON Schema
@@ -65,9 +65,10 @@ The committed schemas are: `Scenario`, `Marker`, `CorpusDocument`,
 `GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`, `Finding`,
 `RunMetrics`, `RunResult`, `EvidencePack`, `ControlMapping`, `ClassScore`, and
 `IsolationScore`. The nested models a parent embeds inline —
-`SyntheticTenantSpec`, `SyntheticUserSpec`, `SharedEntity`, `Principal`, and
+`SyntheticTenantSpec`, `SyntheticUserSpec`, `SharedEntity`, and
 `PlantedLocation` — have no standalone schema file; they appear in their
-parent's `$defs`.
+parent's `$defs`. `Principal` has neither: no model carries it as a field
+(`Substrate.principals()` returns it), so it appears in no schema at all.
 
 ## Canonical hashing
 

@@ -50,7 +50,7 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 | `exit-code` | The raw probe exit code: `0` no confirmed findings; `2` a confirmed finding (cross-tenant or cross-user, on any surface — check `confirmed-on-live-surfaces` for the ones that describe your stack) **or a CLI usage error, which shares exit 2**; `3` config/adapter error. The gate step tells the two apart: exit 2 with an empty `results-file` means the probe never ran, and always fails the step. |
 | `results-file` | Path to the written report (the `output-file`). |
 | `run-path` | Path to the `run.json` the probe wrote in the workdir. |
-| `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant, cross-user, or residual-data — on every surface, the built-in fakes included (populated when `output: json`). |
+| `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant or cross-user — on every surface, the built-in fakes included (populated when `output: json`). The Action runs `seed` and `probe` only, so residual-data findings, which come from `sectum-ai erasure`, never appear in this count. |
 | `confirmed-on-live-surfaces` | Of those, the confirmed findings on surfaces that ran against a live backend — the ones that describe your stack (populated when `output: json`). |
 | `retrieval-pivot-rate` | Headline Retrieval-Pivot Rate (populated when `output: json` and Class 2 ran). |
 

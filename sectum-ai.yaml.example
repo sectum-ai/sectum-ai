@@ -8,7 +8,7 @@
 #     uv run sectum-ai report --config sectum-ai.yaml
 #
 # Anything omitted uses the built-in default; explicit CLI flags
-# (--seed, --workdir, --probe) override the values here.
+# (--seed, --workdir) override the values here.
 #
 # Credentials never appear inline. Adapter blocks reference environment
 # variables (for example `dsn_env: SECTUM_PGVECTOR_DSN`) so the adapter

@@ -8,7 +8,10 @@
 # samples were regenerated WITHOUT it, so they are unanchored
 # (`rekor_proof: null`, `anchored_in_log: false`).
 #
-# Used by docs/samples/ regeneration; not by the default run.sh.
+# A production-shape reference only. The docs/samples/ regeneration recipe
+# (docs/samples/README.md) uses sectum-ai.yaml, and so does run.sh: the two
+# configs build different substrates, so this one does not reproduce the
+# committed samples.
 
 scenario:
   seed: 2026

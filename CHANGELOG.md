@@ -88,8 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mappings as unconditional output. Plus the search-index refusal being
   miss-only, four adapter families missing from the adapters package README, two
   agent-factory return contracts, the subject-erasure example's missing caveat
-  about a real vector store, four config keys the template omitted, and two of
-  the five `diff` loss signals the quickstart did not name.
+  about a real vector store, three config keys the template omitted, and two
+  `diff` loss signals the quickstart did not name.
 - An unmeasured Class 5 pair entered the signed metrics as an effect size of
   `0.0` — a number the run never established, which `diff` then read as an
   improvement, printing `[ok]` directly above its own coverage-loss line. The map
@@ -429,7 +429,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reading the pack's bytes for the schema stamps moved that read out of the `try`
   that mapped a decode error to exit 3, so `verify` on a non-UTF-8 file
   tracebacked. The runner's dropped-step count counts user-level steps, as the
-  field documents (it counted plants too).
+  field documents — an earlier commit in this section counted every planned step.
 - **Repository gates**: `codespell` — the pre-commit hook CONTRIBUTING tells a
   contributor to run — failed on a clean checkout (59 hits, 46 of them in-toto's
   own spelling) and ran nowhere in CI; it now runs in CI with the `toml` extra
