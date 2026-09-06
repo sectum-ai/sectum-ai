@@ -113,8 +113,21 @@ evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-wh
 
 `sectum-ai verify` prints one line per check: `schema-version`,
 `timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
-`audit-pdf`, plus `rekor-inclusion`, `independent-anchor`, `in-toto-attestation`
-and `dsse-envelope` when the pack or its siblings call for them.
+`audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
+`in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings` when the flags,
+the pack or its siblings call for them.
+
+`manifest-hash` is the one check a flag turns on. The pack's own digests bind
+*that the manifest hash matches*, not *which marker belonged to which tenant*;
+supplying the ground-truth manifest binds the second. No command writes it as a
+standalone file - it is nested in the workdir's `substrate.json` (and sealed as
+`ground-truth-manifest.json.aes` when `security.manifest_key_env` is set), so
+extract it first:
+
+```sh
+python -c "import json,sys; json.dump(json.load(open('.sectum-ai/substrate.json'))['manifest'], sys.stdout)" > manifest.json
+uv run sectum-ai verify .sectum-ai/evidence.json --manifest manifest.json
+```
 
 The `control-mappings` check asks the same question of the pack's **compliance
 claims**. The digest binds them, so they cannot be edited after signing — but

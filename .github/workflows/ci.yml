@@ -94,17 +94,21 @@ jobs:
       - name: Sync workspace
         run: uv sync --locked --all-packages
 
-      # The lint-type-test job installs no extras, so every live adapter behind
-      # one is unreachable there and a bump to its package goes green having run
-      # none of the code it could break. Install the packages whose API surface
+      # The lint-type-test job installs no extras, so the adapters behind an
+      # EXTRA are unreachable there and a bump to one of those packages goes
+      # green having run none of the code it could break. (The dev group already
+      # carries psycopg, chromadb, weaviate, qdrant-client, opensearch-py, redis,
+      # phoenix and mcp, so those ARE importable in that job.) Install the packages whose API surface
       # tests/contract/test_extra_api_surface.py pins so that file executes.
       #
       # Versions come from `uv export`, i.e. what the LOCKFILE resolves, not the
       # newest on PyPI, so the contract reflects what a user of the extra gets.
-      # Installed directly rather than via `uv sync --extra huggingface`, which
-      # would also pull torch and the NVIDIA CUDA wheels (~GBs) that signature
-      # and attribute inspection does not need.
-      - name: Install the pinned extras (locked versions, no torch)
+      # Installed directly rather than via `uv sync --extra huggingface` so the
+      # set is exactly the packages the contract tests import, at the LOCKED
+      # versions. `peft` still brings torch and the NVIDIA CUDA wheels with it -
+      # `--no-deps` is not an option, because the contract tests import `peft`
+      # and it has to actually work.
+      - name: Install the pinned extras (locked versions)
         run: |
           # GitHub's default `run:` shell has -e but NOT -o pipefail, so a grep
           # that matched nothing exited 0 through the pipe, installed nothing,

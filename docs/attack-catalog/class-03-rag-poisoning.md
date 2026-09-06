@@ -20,6 +20,9 @@ and its canary surfaces — a confirmed cross-tenant leak that exists only becau
 of the planted document. An isolated per-tenant store keeps each poison document
 within its own namespace.
 
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
+
 ## Status
 
 Implemented in Phase 5.

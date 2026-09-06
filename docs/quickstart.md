@@ -85,9 +85,11 @@ because its id embeds the markers and principals — reported as
 `[SCENARIO CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
 check the run record *inside* a pack), or residual / attestable-with-caveat data on an erased surface
-(`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
-including a `probe` run in which nothing interrogated the stack, and a `report` on
-a run that names no probe (or was recorded against a since re-seeded substrate);
+(`sectum-ai erasure`, where data is presumed retained); `3` the run could not be
+completed or graded — a config or adapter error, a `probe` run in which nothing
+interrogated the stack, a `report` on a run that names no probe (or one recorded
+against a since re-seeded substrate), an erasure run whose absence could not be
+established (`ERASURE INCONCLUSIVE`), or a record `score` refuses to grade;
 `4` evidence verification failure.
 
 `0` means "nothing this command gates on", not "no leaks": the reporting commands do

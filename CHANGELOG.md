@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The user boundary is stated once**, in the attack catalog's index, and the
+  class pages point at it: a probe plans cross-user steps only where its adapter
+  carries the caller's user, a tenant-scoped backend fails there, and where the
+  adapter cannot carry a user those steps are DROPPED rather than failed — a pass
+  that says the boundary was not tested, never that it held. Eight class pages
+  either asserted a clean per-tenant verdict with no user caveat at all, or (in
+  the two corrected an entry ago) over-stated it as a guaranteed failure.
 - **`sectum-ai verify --manifest <manifest.json>`** binds which marker belonged
   to which tenant. The `manifest-hash` check existed and no CLI path reached it,
   while the command's own closing note and ADR-0016 both told the reader to
@@ -86,8 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the sentence, so a reader hunting the cause found a closed list that did not
   contain it. The banner now points at the bracketed lines, which are printed
   from the same result and cannot drift from it.
-- **`diff` printed `[not measured]` four times and still exited 0.** The previous
-  release fixed the label and left the gate: the command said plainly it could
+- **`diff` printed `[not measured]` four times and still exited 0.** An earlier
+  entry in this section fixed the label and left the gate: the command said plainly it could
   not compare four headline leak rates, then greenlit the pipeline. Configuring
   one live adapter leaves the other probes no live step, so all four go at once
   while `probe_versions` still lists every probe and no other loss signal can

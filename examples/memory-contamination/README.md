@@ -63,7 +63,9 @@ ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks,
-and `sectum-ai verify` confirms the evidence pack is intact. The headline
+and `sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the pack is internally
+consistent, but its only timestamp is a reproducible local-dev token, so this
+is not independent tamper evidence. The headline
 metric is the count of confirmed Class 8 leaks; on a memory store that
 binds every read and write to the authenticated principal, the same probe
 yields zero findings.

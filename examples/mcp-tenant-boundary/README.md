@@ -56,7 +56,9 @@ ran 1 probe: 24 confirmed cross-tenant findings; 0 on live surfaces
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum-ai verify` confirms the evidence pack is intact.
+`sectum-ai verify` reports `INTEGRITY OK — UNANCHORED`: the pack is internally
+consistent, but its only timestamp is a reproducible local-dev token, so this
+is not independent tamper evidence.
 
 A tenant-scoped MCP server — one that binds every tool call to the
 authenticated caller and ignores caller-supplied tokens — yields zero findings.

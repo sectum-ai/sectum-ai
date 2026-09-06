@@ -16,7 +16,7 @@ jobs:
   sectum-ai:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: sectum-ai/sectum-ai@main   # pin to a release tag or SHA for production
         with:
           config: sectum-ai.yaml         # your adapters; omit to run the demo fixture
@@ -70,7 +70,7 @@ jobs:
       contents: read
       security-events: write   # required to upload SARIF
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: sectum-ai/sectum-ai@main
         with:
           config: sectum-ai.yaml
@@ -92,7 +92,7 @@ custom `workdir`, match it in both the `report --workdir` and the upload `path`:
 
 ```yaml
       - run: sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sectum-ai-evidence
           path: .sectum-ai/evidence.json

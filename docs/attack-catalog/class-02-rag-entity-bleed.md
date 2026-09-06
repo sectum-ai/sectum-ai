@@ -8,10 +8,13 @@ queries surface another tenant's content through shared organic entities.
 Two probes measure the same Retrieval Pivot at two points in the stack.
 `rag-entity-bleed` reads the retrieval directly at the **vector index** — the
 purest measurement, isolating the store's tenant scoping. `rag-pipeline-bleed`
-measures it at the **end of a real RAG pipeline** (retriever + generator), where
+measures it at the **end of the RAG pipeline** (retriever + generator) - a live
+one when configured, the built-in fake otherwise - where
 a foreign canary reaching the generated answer confirms the leak survives the
 full pipeline, not just the raw retrieval. The method and detection below apply to
-both; they differ only in where the retrieval is observed.
+both; they differ in where the retrieval is observed, and in what they can verify: the
+pipeline probe plans tenant-level principals only, because the RAG contract carries
+no user.
 
 ## Goal
 
@@ -99,6 +102,9 @@ actual cosine retrieval over the embedded corpus, so it is recorded for any
 configured stack — the "stronger embeddings leak more" gradient no longer
 vanishes off the in-memory fake. The legacy `fake-*` recall illustration is
 recorded only for an in-memory-store run.
+
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
 
 ## Status
 

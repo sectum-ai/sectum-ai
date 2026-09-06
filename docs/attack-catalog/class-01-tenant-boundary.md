@@ -29,6 +29,9 @@ for it and is produced by no adapter today. These findings are excluded from the
 confirmed-leak headline and carry a remediation pointer to return an explicit
 authorization error.
 
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
+
 ## Status
 
 Implemented in Phase 3. This is the table-stakes probe — its value is
