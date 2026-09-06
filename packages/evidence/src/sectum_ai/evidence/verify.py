@@ -168,9 +168,10 @@ def verify_pack(
                 "independent-anchor",
                 ok=False,
                 detail=(
-                    "no verified independent anchor binds the pack digest: the only "
+                    "no verified independent anchor binds the pack digest: its "
                     "timestamp is a local-dev token, which anyone can regenerate over "
-                    "an edited pack, so this verification is not tamper evidence. "
+                    "an edited pack, or an external token this verifier could not "
+                    "check - so this verification is not tamper evidence. "
                     "Re-create the pack with `report --tsa`/`--rekor`, or accept "
                     "integrity-only verification explicitly"
                 ),

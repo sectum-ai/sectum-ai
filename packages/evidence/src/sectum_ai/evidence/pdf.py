@@ -472,7 +472,10 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         flow.append(Paragraph(f"<i>{escape(_COVERAGE_CAVEAT)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Compliance control coverage", heading)]
-    flow += [Paragraph(line, body) for line in _control_lines(pack.control_mappings)]
+    # Say it, rather than leaving a bare heading: the weasyprint engine does, and
+    # an empty section reads as "not rendered" where the other reads "none".
+    control_lines = _control_lines(pack.control_mappings) or ["No control mappings were recorded."]
+    flow += [Paragraph(line, body) for line in control_lines]
     flow.append(Paragraph(f"<i>{escape(COVERAGE_DISCLAIMER)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Integrity and independent verification", heading)]

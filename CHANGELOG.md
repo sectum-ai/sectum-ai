@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CI installed whatever resolved, not what the lockfile pins.** All three
+  `uv sync --all-packages` steps are now `--locked`, and nothing else asserted
+  the committed `uv.lock` matches the pyprojects — while the extras job depends
+  on it being authoritative ("what the LOCKFILE resolves, not the newest on
+  PyPI"). A PR that edited a dependency without re-locking went green.
+- **`fail-on-leak` accepted any string and only `true` meant true.** The Action
+  validates `output` up front for exactly this reason; `fail-on-leak` did not, so
+  `yes`, `1` or `TRUE` silently downgraded the security gate to a `::warning::`
+  at exit 0. It now refuses anything but `true` or `false` rather than guessing.
+- **The gitleaks archive was version-pinned but not byte-pinned.** It is unpacked
+  and RUN over the whole worktree, so a swapped release asset executes in CI. Its
+  SHA-256 is now checked against the vendor's published checksum.
+- **The Action's three JSON outputs were only asserted against the PUBLISHED
+  release.** The one self-test job that runs this checkout's CLI asserts the exit
+  code and a non-empty report, and nothing else — so renaming a report field
+  shipped an Action whose outputs are all empty strings, silently, on the user's
+  first run (`jq` emits `null`, and the `// ""` beside it makes that an empty
+  output rather than an error). A unit test now pins the jq paths to the report's
+  keys, and it runs on every PR.
+- **Ten of sixteen runner payload reads were untyped.** `vector.fetch`,
+  `vector.upsert`, `cache.get`/`set` and six others indexed `step.payload`
+  directly, so a missing key raised a bare `KeyError` that escaped the
+  `SectumError` exit-code mapping and exited 1 instead of 3.
+- **The reportlab PDF left a bare "Compliance control coverage" heading** where
+  the weasyprint engine says "No control mappings were recorded." An empty
+  section reads as "not rendered"; the other reads as "none". The two shipped
+  erasure samples are regenerated accordingly.
+- **The in-toto sidecar's anchor flags are shape-only, and said otherwise.** The
+  docstring claimed they "must match `verify_pack`"; the test has no trust roots
+  and verifies no signature, so a binary token `verify_pack` REJECTS still
+  reports `anchors.timestamp: true`. It now says the flag means an anchor was
+  claimed, not that one held. Also, `verify`'s unanchored message asserted "the
+  only timestamp is a local-dev token" for a pack whose token is a real one this
+  verifier could not check.
 - **A pack could assert a compliance control its own run never earned, and
   `verify` said `[ok]` on every line.** The attested digest binds
   `control_mappings`, so nobody can edit them after signing — and that was the

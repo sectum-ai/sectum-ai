@@ -66,3 +66,22 @@ def test_the_commands_the_action_runs_exist() -> None:
     known = set(get_command(app).commands)  # type: ignore[attr-defined]
     assert invoked, "no `sectum-ai <command>` invocation found in action.yml"
     assert invoked <= known, f"action.yml runs unknown commands: {sorted(invoked - known)}"
+
+
+def test_every_json_path_the_action_reads_is_a_key_of_the_probe_report() -> None:
+    # `action.yml` derives three of its outputs with `jq -r '.<field>'` over the
+    # probe's JSON report. The only job that asserts those outputs installs from
+    # PyPI (`action-selftest.yml`: "install the latest published sectum-ai"), and
+    # the one job that runs THIS checkout's CLI asserts only the exit code and
+    # that the report is non-empty - so renaming a report field in a PR shipped an
+    # action whose outputs are all empty strings, silently, on the user's first
+    # run. `jq` on a missing key emits `null`, and the `// ""` fallback beside it
+    # turns that into an empty output rather than an error.
+    from sectum_ai.spec import RunMetrics
+
+    paths = set(re.findall(r"jq -r '\.([a-z_]+)", _action_shell()))
+    assert paths, "the action no longer reads any JSON path - update this test"
+    # The probe report is the metrics block plus the two live-surface counts the
+    # CLI adds; both are optional in the JSON, so membership is what matters.
+    report_keys = set(RunMetrics.model_fields) | {"confirmed_on_live_surfaces"}
+    assert paths <= report_keys, f"not keys of the probe report: {sorted(paths - report_keys)}"

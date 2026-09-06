@@ -168,6 +168,10 @@ runs:
           exit 1
         fi
         if [ "${EXIT_CODE}" = "2" ]; then
+          if [ "${FAIL_ON_LEAK}" != "true" ] && [ "${FAIL_ON_LEAK}" != "false" ]; then
+            echo "::error::fail-on-leak must be 'true' or 'false', got '${FAIL_ON_LEAK}'. Refusing to guess: any other value silently downgraded this gate to a warning."
+            exit 1
+          fi
           if [ "${FAIL_ON_LEAK}" = "true" ]; then
             echo "::error::sectum-ai confirmed a finding (see ${RESULTS}; a fake-surface finding describes the built-in fake). Set fail-on-leak: false to report without failing."
             exit 1

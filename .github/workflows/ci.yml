@@ -26,7 +26,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
       - name: Ruff lint
         run: uv run ruff check .
@@ -92,7 +92,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
       # The lint-type-test job installs no extras, so every live adapter behind
       # one is unreachable there and a bump to its package goes green having run
@@ -137,8 +137,13 @@ jobs:
         # gitleaks-action@v2 requires a paid/registration-gated license for
         # organization repos; the gitleaks binary itself is MIT-licensed.
         run: |
+          set -euo pipefail
           url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz"
+          # Pin the bytes, not just the URL: this archive is unpacked and RUN over
+          # the whole worktree, so a swapped release asset executes here.
+          sha="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
           curl -sSfL "$url" -o /tmp/gitleaks.tar.gz
+          echo "${sha}  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           chmod +x /tmp/gitleaks
           /tmp/gitleaks dir . --no-banner --redact
@@ -155,7 +160,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
       # pgvector and redis ship in-container healthchecks, so --wait blocks until
       # they are ready. chroma, weaviate, phoenix, qdrant, and opensearch do not,
