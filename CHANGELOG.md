@@ -32,6 +32,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The CI gate passed at exit 0 on a Class 5 side channel the later run could
+  not measure.** `side_channel_effect_sizes` is keyed by tenant *pair*, so it
+  matches no probe id, no surface and no headline-metric name — none of the four
+  lost-coverage signals could reach it, and a dropped key became `0.0` in the
+  diff. Keeping an unmeasured pair out of the signed record was only half the
+  fix: `diff` and `baseline --compare` still read the absence as a drop to zero
+  and reported no regression, one line below their own coverage-loss notice. A
+  fifth signal, `[SIDE CHANNEL NOT REMEASURED]`, now covers it.
+- Two more metrics keyed by something other than a probe id read `[ok]` where
+  every headline metric on the same run read `[not measured]`: the pooled
+  `confirmed_findings` did not see an erasure loss, and `erasure_residue` did not
+  see a surface that had fallen back to the built-in fake — so a residual count
+  from a scan against the fake read as data that had been cleared.
+- **The live-surface count was two-valued where every label beside it is
+  three-valued.** A record that states no provenance rendered identically to an
+  all-synthetic one, so the PDF's summary row asserted that none of its confirmed
+  leaks touched a live surface while the scope paragraph below it said that
+  cannot be established. The count now says so, and the JSON's
+  `confirmed_on_live_surfaces` is `null` rather than `0`.
+- An inconclusive erasure surface reported the vector store's reason — "a full
+  similarity page" — whatever the backend actually said, and threw away the
+  adapter's own message naming the real cap. A caveat surface whose post-scan
+  also failed now keeps its itemized caveat findings, which its own coverage
+  verdict promises. And the cap-refusal suppression is case-insensitive: it has
+  two callers and the subject-erasure one casefolds, so a full page carrying the
+  phrase in another case was refused instead of returned, turning a genuine
+  residual into an error.
 - Docs caught up with this branch's behaviour changes: the scorecard page said
   `score` refuses an all-fake run when rule 5 on the same page says it is still
   graded; the Class 5 page listed three conditions for a confirmed finding where

@@ -425,7 +425,9 @@ def test_erasure_that_could_not_establish_absence_is_inconclusive(
     assert "ERASURE INCONCLUSIVE" in result.output
     # The summary must name the reason, not fall through to the "no baseline"
     # wording - there WAS a baseline; what failed is establishing absence.
-    assert "their absence was never established" in result.output, result.output
+    assert "could not establish that the tenant's markers are absent" in result.output, (
+        result.output
+    )
     assert "no baseline on" not in result.output
     # And the per-surface line says why "0 after" is not a purge.
     assert "-> NOT VERIFIED" in result.output
@@ -502,3 +504,26 @@ def test_erasure_records_provenance_for_a_configured_app_adapter(tmp_path: Path)
     )
     run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
     assert run["surface_provenance"] == {"vector_db": "SYNTHETIC"}, run["surface_provenance"]
+
+
+def test_an_inconclusive_surface_reports_the_backend_s_own_reason(tmp_path: Path) -> None:
+    # The verdict was right and the REASON was fiction: both messages hard-coded
+    # the vector store's "full similarity page", while a capped search-index,
+    # eval-set, memory or trace listing never ran a similarity query - and the
+    # adapter's own message, which names the actual cap and count, was discarded.
+    from sectum_ai.adapters import FakeObservability
+    from sectum_ai.spec import AdapterError
+
+    def _refuse(self: object, tenant: object, marker: object) -> list[object]:
+        raise AdapterError("Datadog listed 1000 traces, its page cap, so a miss is not absence")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(FakeObservability, "search_traces", _refuse)
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "tracing"])
+    finally:
+        monkeypatch.undo()
+    assert "its page cap" in result.output, result.output
+    assert "full similarity page" not in result.output
+    assert result.exit_code == 3

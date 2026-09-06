@@ -143,10 +143,16 @@ def confirmed_by_kind(run: RunResult) -> str:
         for f in confirmed
         if run.surface_provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
     )
-    # Always, including - especially - when the answer is zero. Gating this on
-    # the run having a live surface dropped it from the one pack where it is the
-    # whole point: an all-synthetic run read "229 (cross-tenant 229)".
-    parts += f"; on live surfaces {live}"
+    # Always, including - especially - when the answer is zero: gating it on the
+    # run having a live surface dropped it from the one pack where it is the whole
+    # point. Three-valued, like every label beside it: a run that records no
+    # provenance at all cannot be said to have zero live-surface findings, and
+    # saying so contradicted the scope paragraph below it in the same document.
+    parts += (
+        f"; on live surfaces {live}"
+        if run.surface_provenance
+        else "; live-surface attribution not recorded"
+    )
     return f"{len(confirmed)} ({parts})"
 
 

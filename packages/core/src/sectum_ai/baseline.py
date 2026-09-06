@@ -271,6 +271,14 @@ class RunDiff:
     # `erasure_residue[<surface>]: 2 -> 0` and the two residual findings that go
     # with it read as an erasure that succeeded. The wedge SKU's own diff.
     erasure_lost: tuple[str, ...] = ()
+    # Tenant pairs the earlier run measured a side-channel effect size for that
+    # the later run did not. The map is keyed by PAIR, so it matches no probe id,
+    # no surface and no headline-metric name: none of the three signals above can
+    # reach it, and a dropped key becomes `0.0` in the diff. Keeping an unmeasured
+    # pair OUT of the signed record was only half the fix - the diff still read
+    # the absence as a drop to zero, and both CI gates passed at exit 0 on a
+    # side channel the later run could not measure.
+    side_channel_lost: tuple[str, ...] = ()
     # The two runs used different scenarios (a re-seed, other tenants or users).
     # Finding ids embed markers and principals, so every finding "resolves"; a
     # later run with no users read every cross-user leak as fixed.
@@ -304,6 +312,7 @@ class RunDiff:
             or bool(self.scope_lost)
             or bool(self.boundary_lost)
             or bool(self.erasure_lost)
+            or bool(self.side_channel_lost)
             or self.scenario_changed
         )
 
@@ -381,6 +390,12 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             )
         ),
         erasure_lost=_erasure_lost(earlier, later),
+        side_channel_lost=tuple(
+            sorted(
+                set(earlier.metrics.side_channel_effect_sizes)
+                - set(later.metrics.side_channel_effect_sizes)
+            )
+        ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
     )
 

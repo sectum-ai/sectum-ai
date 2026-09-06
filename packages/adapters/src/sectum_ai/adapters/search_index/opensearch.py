@@ -98,9 +98,13 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         # holds it answers that - refusing would lose a definite residual. So only
         # a MISS on a truncated page is refused, as on the eval-set and trace
         # backends.
-        # Case-sensitive, matching the caller's own `marker.plaintext in hit`:
-        # suppress the refusal only on a hit the caller would count.
-        if total_count > len(rows) and not any(query in text for text in contents):
+        # Case-insensitive: two callers ask this, and the A3 subject check
+        # casefolds where Class 11 does not. Suppress the refusal whenever EITHER
+        # would count a hit - keyed on the stricter one, a full page carrying the
+        # phrase in another case was refused instead of returned, and the subject
+        # probe turns that into an exit-3 error over a genuine residual.
+        needle = query.casefold()
+        if total_count > len(rows) and not any(needle in text.casefold() for text in contents):
             raise AdapterError(
                 f"OpenSearch matched {total_count} documents for the tenant but returned "
                 f"{len(rows)}; a search-index scan that found nothing would be incomplete"

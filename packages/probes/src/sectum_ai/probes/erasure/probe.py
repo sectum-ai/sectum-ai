@@ -90,6 +90,10 @@ class SurfaceErasure:
     # ranked past the page reads exactly like purged. Such a surface is NOT
     # attested ERASED.
     unverifiable_after: int = 0
+    # Why absence could not be established, in the backend's own words when it
+    # said so. The vector scan's cause is a full similarity page; every other
+    # surface's adapter raises with its own, which the operator needs to act on.
+    unverifiable_reason: str | None = None
 
     @property
     def erased(self) -> bool:
@@ -359,10 +363,14 @@ class ErasureProbe:
         """
         try:
             before = scan(target, markers)
-        except AdapterError:
+        except AdapterError as error:
             return (
                 SurfaceErasure(
-                    surface=surface, markers_before=0, residual_after=0, unverifiable_after=1
+                    surface=surface,
+                    markers_before=0,
+                    residual_after=0,
+                    unverifiable_after=1,
+                    unverifiable_reason=str(error),
                 ),
                 [],
             )
@@ -374,9 +382,12 @@ class ErasureProbe:
         self._inconclusive.pop(surface, None)
         try:
             residual = scan(target, markers)
-        except AdapterError:
+        except AdapterError as error:
             # Present before, and the post-scan could not establish absence: the
             # markers it did see are the baseline, and none of them is ruled out.
+            # A backend with no erasure API still gets its caveat findings - the
+            # coverage verdict says ATTESTABLE_WITH_CAVEAT, so the pack has to
+            # itemize what that caveat is about.
             return (
                 SurfaceErasure(
                     surface=surface,
@@ -384,8 +395,12 @@ class ErasureProbe:
                     residual_after=0,
                     erasure_supported=supported,
                     unverifiable_after=max(len(before), 1),
+                    unverifiable_reason=str(error),
                 ),
-                [],
+                [
+                    self._caveat_finding(target, marker, surface)
+                    for marker in (before if not supported else [])
+                ],
             )
         surface_result = SurfaceErasure(
             surface=surface,

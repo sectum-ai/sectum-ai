@@ -148,11 +148,15 @@ class Mem0Memory(MemoryAdapter):
         result = self._client.get_all(user_id=self._scope(tenant), limit=_GET_ALL_LIMIT)
         memories = self._memories(result)
         query_tokens = _tokens(query)
+        # Case-insensitive: two callers ask this, and the A3 subject check
+        # casefolds. Suppress the refusal whenever EITHER would count a hit.
+        needle = query.casefold()
         recalled = [text for text in memories if query_tokens & _tokens(text)]
         # `recalled` is token-overlap; the caller counts an exact substring, and
         # every canary shares the tokens "sectum" and "canary" - so suppress the
         # refusal only on a hit the caller would also count.
-        if not any(query in text for text in recalled) and len(_rows(result)) >= _GET_ALL_LIMIT:
+        found = any(needle in text.casefold() for text in recalled)
+        if not found and len(_rows(result)) >= _GET_ALL_LIMIT:
             # mem0's get_all defaults to limit=100 and pages no further; a
             # subject's memory past the window read as not recalled - ERASED. The
             # count is of ROWS (a row with an empty memory still fills the page),

@@ -608,3 +608,57 @@ def test_the_json_diff_carries_the_qualifier_the_text_diff_refuses_to_omit(
     residue = next(m for m in payload["metrics"] if m["name"] == "erasure_residue[vector_db]")
     assert residue["verdict"] == "not measured", payload["metrics"]
     assert payload["erasure_lost"] == ["vector_db"]
+
+
+def test_a_side_channel_the_later_run_could_not_measure_is_not_a_closed_channel(
+    tmp_path: Path,
+) -> None:
+    # `side_channel_effect_sizes` is keyed by tenant PAIR, so it matches no probe
+    # id, no surface and no headline-metric name: none of the three lost-coverage
+    # signals could reach it, and a dropped key became 0.0 in the diff. Keeping an
+    # unmeasured pair out of the signed record was only half the fix - the diff
+    # still read the absence as a drop to zero, and BOTH CI gates passed at exit 0
+    # on a side channel the later run could not measure.
+    pair = "a" * 32 + "->" + "b" * 32
+    earlier = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 9.0}))
+    later = _run(metrics=RunMetrics(side_channel_effect_sizes={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert f"[SIDE CHANNEL NOT REMEASURED] {pair}" in cli.output, cli.output
+    assert f"[not measured] side_channel_effect_sizes[{pair}]" in cli.output
+    assert "[ok] side_channel_effect_sizes" not in cli.output
+    assert "RESULT: REGRESSION" in cli.output
+    assert cli.exit_code == 2
+
+
+def test_an_erasure_surface_that_fell_back_to_the_fake_is_not_a_cleared_residual(
+    tmp_path: Path,
+) -> None:
+    # `scope_lost` is surface-keyed, but the verdict converted it into probe ids
+    # via PROBE_SURFACES and matched those against the metric name - discarding
+    # the surface key that `erasure_residue[<surface>]` needs. Every headline
+    # metric on the same run read `[not measured]`; the erasure line was the lone
+    # outlier, asserting the residual data was gone on the strength of a scan
+    # against the built-in fake.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2})).model_copy(
+        update={"surface_provenance": {"vector_db": "LIVE"}}
+    )
+    later = _run(metrics=RunMetrics(erasure_residue={"vector_db": 0})).model_copy(
+        update={"surface_provenance": {"vector_db": "SYNTHETIC"}}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[not measured] erasure_residue[vector_db]" in cli.output, cli.output
+    assert "[ok] erasure_residue[vector_db]" not in cli.output

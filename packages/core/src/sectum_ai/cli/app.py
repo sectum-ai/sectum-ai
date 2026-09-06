@@ -1074,11 +1074,17 @@ def probe(
             # ran against the built-in fake describes that fake, and a probe whose
             # user-level steps were not run exercised the tenant boundary only.
             "surface_provenance": dict(run.surface_provenance),
-            "confirmed_on_live_surfaces": sum(
-                1
-                for finding in confirmed
-                if run.surface_provenance.get(backing_surface(finding))
-                == SurfaceProvenance.LIVE.value
+            # `null`, not 0, when the record states no provenance: zero is a
+            # measurement, and there is none.
+            "confirmed_on_live_surfaces": (
+                sum(
+                    1
+                    for finding in confirmed
+                    if run.surface_provenance.get(backing_surface(finding))
+                    == SurfaceProvenance.LIVE.value
+                )
+                if run.surface_provenance
+                else None
             ),
             "user_steps_dropped": run.metrics.user_steps_dropped,
             "run_path": str(path),
@@ -1164,8 +1170,14 @@ def _confirmed_summary(confirmed: Sequence[Finding], provenance: dict[str, str])
     )
     # Always, including - especially - when the answer is zero: gating it on the
     # run having a live surface dropped it from the one run where it is the whole
-    # point.
-    suffix = f"; {live} on live surfaces" if confirmed else ""
+    # point. Three-valued: a run recording no provenance has no live-surface
+    # count, and stating 0 would assert something it does not say.
+    if not confirmed:
+        suffix = ""
+    elif provenance:
+        suffix = f"; {live} on live surfaces"
+    else:
+        suffix = "; live-surface attribution not recorded"
     if set(kinds) <= {"cross-tenant leak"}:
         return f"{len(confirmed)} confirmed cross-tenant findings{suffix}"
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
@@ -2056,11 +2068,16 @@ def _emit_erasure_attestation(
         )
         # "0 after" reads as a purge; say when it only means "not in the page".
         if surface.unverifiable_after:
+            # The backend's own words when it gave them: a capped search index,
+            # eval set, memory or trace listing never ran a similarity query, and
+            # telling the operator it did is a fiction about the cause.
+            reason = surface.unverifiable_reason or (
+                "the backend returned a full similarity page without them, which a "
+                "still-stored marker ranked below the page produces too"
+            )
             typer.echo(
                 f"  {surface.unverifiable_after} marker(s) were neither found nor ruled "
-                "out: the backend returned a full similarity page without them, which a "
-                "still-stored marker ranked below the page produces too. The surface "
-                "reads NOT_COVERED, not ERASED.",
+                f"out: {untrusted(reason)}. The surface reads NOT_COVERED, not ERASED.",
                 err=True,
             )
     if report.not_covered:
@@ -2121,11 +2138,12 @@ def _emit_erasure_attestation(
         surface.surface.value for surface in report.surfaces if surface.unverifiable_after
     ]
     if unverified:
+        # The per-surface lines above carry each backend's own reason; this
+        # summary states the consequence, which is the same for all of them.
         typer.echo(
-            f"ERASURE INCONCLUSIVE: {', '.join(unverified)} returned a full similarity "
-            "page without the tenant's markers, so their absence was never established "
-            "- a marker ranked below the page looks the same. Erasure is not attested "
-            "on those surfaces.",
+            f"ERASURE INCONCLUSIVE: {', '.join(unverified)} could not establish that the "
+            "tenant's markers are absent (see the reason printed for each above), so "
+            "erasure is not attested on those surfaces.",
             err=True,
         )
         raise typer.Exit(code=3)
@@ -2675,7 +2693,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
         result.coverage_lost,
         result.boundary_lost,
         result.scope_lost,
-        result.erasure_lost,
+        (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
     )
 
 
@@ -2684,7 +2702,10 @@ def _delta_verdict(
     coverage_lost: Sequence[str] = (),
     boundary_lost: Sequence[str] = (),
     scope_lost: Sequence[str] = (),
-    erasure_lost: Sequence[str] = (),
+    # Keyed by SURFACE or by tenant PAIR, not by probe id: `erasure_residue[...]`,
+    # `side_channel_effect_sizes[...]`. The probe-id lookup below cannot reach
+    # them, so they need their own.
+    key_lost: Sequence[str] = (),
 ) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
@@ -2708,10 +2729,11 @@ def _delta_verdict(
         for probe_id, surfaces in PROBE_SURFACES.items()
         if any(surface.value in gone for surface in surfaces)
     }
-    # `erasure_residue[vector_db]` is keyed by SURFACE, not probe id, so it needs
-    # its own lookup: a surface the later run could not scan to a count reads "not
-    # measured", never "[ok] ... 2 -> 0", which asserts the erasure worked.
-    if any(f"[{surface}]" in delta.name for surface in erasure_lost):
+    # A metric keyed by something other than a probe id reads "not measured" when
+    # its own key was lost: an erasure surface the later run could not scan to a
+    # count, one that fell back to the fake, or a tenant pair whose side-channel
+    # measurement had no resolution. `[ok] ... 2 -> 0` there asserts a fix.
+    if any(f"[{key}]" in delta.name for key in key_lost):
         return "not measured"
     fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
     # ANY feeding probe lost: losing one of the two bleed probes changes the
@@ -2720,7 +2742,10 @@ def _delta_verdict(
         return "not measured"
     # The pooled counts span every probe, so any loss at all makes them
     # incomparable: a run that stopped exercising a boundary "resolved" its leaks.
-    if lost and delta.name in ("confirmed_findings",) and not delta.regressed:
+    # The pooled counts span every probe, so ANY loss makes them incomparable -
+    # including the two keyed by surface or pair, which the probe-id set above
+    # does not carry.
+    if (lost or key_lost) and delta.name in ("confirmed_findings",) and not delta.regressed:
         return "not measured"
     if delta.informational:
         return "info"
@@ -2809,6 +2834,13 @@ def baseline(
             f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the baseline scanned it to a "
             "residue count and this run did not (out of scope, or its absence could not be "
             "established); any resolved residual finding there was not re-tested"
+        )
+    for pair in result.side_channel_lost:
+        typer.echo(
+            f"[SIDE CHANNEL NOT REMEASURED] {untrusted(pair)}: the baseline measured a "
+            "timing effect size for this tenant pair and this run did not (the latency "
+            "metric had no resolution, or the probe did not run); its drop to zero is a "
+            "missing measurement, not a closed channel"
         )
     if result.scenario_changed:
         typer.echo(
@@ -2973,6 +3005,13 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "residue count and this one did not (out of scope, or its absence could not be "
             "established); any resolved residual finding there was not re-tested"
         )
+    for pair in result.side_channel_lost:
+        typer.echo(
+            f"[SIDE CHANNEL NOT REMEASURED] {untrusted(pair)}: the earlier run measured a "
+            "timing effect size for this tenant pair and this one did not (the latency "
+            "metric had no resolution, or the probe did not run); its drop to zero is a "
+            "missing measurement, not a closed channel"
+        )
     if result.scenario_changed:
         typer.echo(
             "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
@@ -3012,6 +3051,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "scope_lost": list(result.scope_lost),
         "boundary_lost": list(result.boundary_lost),
         "erasure_lost": list(result.erasure_lost),
+        "side_channel_lost": list(result.side_channel_lost),
         "scenario_changed": result.scenario_changed,
         "regressed": result.regressed,
     }
