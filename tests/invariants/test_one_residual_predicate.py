@@ -85,15 +85,60 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
     import ast
     from pathlib import Path
 
-    # Names that mean "the thing we are looking for" on the left of an `in`.
-    needles = {"marker", "needle", "query", "plaintext", "phrase", "canary", "secret"}
+    # Names that mean "the thing we are looking for" on either side of an `in`.
+    # `value` and `text` are deliberately NOT here: they matched set-membership
+    # tests over surface names and coverage verdicts, which are a different
+    # question, and a sweep that cries wolf gets suppressed rather than fixed.
+    needles = {
+        "marker",
+        "needle",
+        "query",
+        "plaintext",
+        "phrase",
+        "canary",
+        "secret",
+        "entity",
+        "fingerprint",
+        "subject",
+    }
+    # String methods that do not change WHAT is being looked for, only its form -
+    # `marker.plaintext.lower() in body` is the residue question wearing a hat.
+    transparent = {"lower", "upper", "casefold", "strip", "lstrip", "rstrip"}
     # Membership tests that are NOT the residue question: the right-hand side is
-    # already normalized by the shared normalizer, so the comparison is the shared
-    # predicate spelled out. Named by VARIABLE, not by file: excluding a whole
-    # file would be the same hole this test exists to close, one level up.
+    # already normalized by the shared normalizer, so the comparison IS the shared
+    # predicate spelled out. Named by VARIABLE, not by file: excluding a whole file
+    # would be the same hole this test exists to close, one level up.
     normalized = {"haystack", "shaped"}
 
-    roots = [Path("packages/adapters/src"), Path("packages/probes/src")]
+    def _needle_name(node: ast.expr) -> str:
+        """The identifier a marker-ish operand is spelled with, in any shape.
+
+        The first version required a bare `ast.Name`, so `marker.plaintext` - the
+        shape EVERY Class 11 scan uses - was invisible and it caught only the one
+        family it had been calibrated against. Subscripts and method calls are the
+        same question again (`row["plaintext"] in body`,
+        `marker.plaintext.lower() in body`).
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            # `.lower()` and friends are see-through: recurse to the receiver.
+            return _needle_name(node.value) if node.attr in transparent else node.attr
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
+            return str(node.slice.value)
+        if isinstance(node, ast.Call):
+            return _needle_name(node.func)
+        return ""
+
+    # All five packages. The first version walked two, so a residue test added to
+    # core, evidence or spec would have been unswept - the same blindness by a
+    # different axis.
+    roots = [
+        Path(f"packages/{pkg}/src") for pkg in ("core", "spec", "probes", "adapters", "evidence")
+    ]
+    assert all(root.is_dir() for root in roots), (
+        f"run from the repo root; missing: {[str(r) for r in roots if not r.is_dir()]}"
+    )
     offenders: list[str] = []
     for root in roots:
         for path in sorted(root.rglob("*.py")):
@@ -103,26 +148,14 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
                     continue
                 if not isinstance(node.ops[0], ast.In | ast.NotIn):
                     continue
-                # `<marker-ish> in <text>`. The left side is a Name (`needle`)
-                # OR an Attribute (`marker.plaintext`) - the shape every Class 11
-                # scan uses, and the one the first version of this sweep could not
-                # see, so it caught the adapter family it was calibrated on and
-                # missed all six probe-side residue tests.
-                left = node.left
-                name = (
-                    left.id
-                    if isinstance(left, ast.Name)
-                    else left.attr
-                    if isinstance(left, ast.Attribute)
-                    else ""
-                )
-                if name.lower() in needles:
-                    right = node.comparators[0]
-                    if isinstance(right, ast.Set | ast.Dict | ast.Tuple | ast.List):
-                        continue
-                    if isinstance(right, ast.Name) and right.id in normalized:
-                        continue
-                    offenders.append(f"{path}:{node.lineno}")
+                if _needle_name(node.left).lower() not in needles:
+                    continue
+                right = node.comparators[0]
+                if isinstance(right, ast.Set | ast.Dict | ast.Tuple | ast.List):
+                    continue
+                if _needle_name(right) in normalized:
+                    continue
+                offenders.append(f"{path}:{node.lineno}")
 
     assert not offenders, (
         "these ask 'is this canary still there' with a raw substring test instead of "

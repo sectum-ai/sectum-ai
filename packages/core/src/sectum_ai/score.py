@@ -233,8 +233,12 @@ def _confidence_for(coverage: float) -> Confidence:
 
 
 # The four classes `_headline` can render a rate for. A class outside this set has
-# no headline metric at all, so an empty detail column says nothing was omitted.
+# no *renderable* headline, which is not the same as having no measurement:
+# Class 5's is `side_channel_effect_sizes`, a map rather than a scalar, so it
+# never reaches `_headline` and a Class 5 PASS rendered identically with and
+# without one. `diff` prints [SIDE CHANNEL NOT REMEASURED] for that same absence.
 _HEADLINE_RATE_CLASSES = frozenset({2, 3, 6, 10})
+_KV_TIMING_CLASS = 5
 
 
 def _confirmed_in_class(run: RunResult, entry: _CatalogClass) -> int:
@@ -466,7 +470,9 @@ def _score_class(
     # `_headline` returns None for both "this class has no rate" and "the rate is
     # None", so the four classes that HAVE one are named here.
     headline = _headline(entry, run.metrics)
-    unmeasured_rate = headline is None and entry.class_id in _HEADLINE_RATE_CLASSES
+    unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
+        entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
+    )
     # A class whose catalog entry names two probes and whose run exercised one is
     # graded on half its evidence, at full weight, with nothing on the line to
     # say so - while every class that ran NO probe says "probe did not run". For
@@ -484,8 +490,8 @@ def _score_class(
         "negative, so this is not proof the boundary was enforced"
         if unverified and not confirmed
         else "",
-        "this class's headline rate was never measured in this run, so the pass rests "
-        "on the absence of confirmed findings alone"
+        "this class's headline measurement was never recorded in this run, so the pass "
+        "rests on the absence of confirmed findings alone"
         if unmeasured_rate and not confirmed
         else "",
         f"graded on {len(ran)} of {len(entry.probe_ids)} probes for this class; "

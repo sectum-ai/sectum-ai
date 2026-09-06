@@ -46,6 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **One of the six trace backends could not refuse a truncated answer.** The
+  other five count rows against a known page cap; the generic OTel adapter reads
+  a caller-supplied store through a contract with no cap to count, so a partial
+  page that no longer held the marker read as "erased" — verbatim the failure
+  the sibling adapters' own comments describe. The contract now names a
+  truncation signal (`truncated` / `nextPageToken` / `next_page_token` /
+  `nextLink`), a miss on a flagged page is refused, and the docstring states that
+  a store which does not answer the question cannot be caught here.
+- **A Class 5 `PASS` read identically with and without a timing measurement.**
+  Its measurement is a map rather than a scalar, so it never reached the
+  headline renderer and the note added for exactly this shape skipped it, while
+  `diff` prints `[SIDE CHANNEL NOT REMEASURED]` for the same absence.
+- **The residue sweep saw one of thirteen shapes and two of five package roots.**
+  It required a bare name or attribute on the left of the `in`, so
+  `row["plaintext"] in body` and `marker.plaintext.lower() in body` were
+  invisible, and a residue test added to core, spec or evidence was never walked
+  at all. It now sees through subscripts and string methods, walks all five
+  roots, and refuses to pass vacuously when run from the wrong directory.
 - **The OSCAL export signed `satisfied` over a run the CLI exits 3 on.** An
   earlier entry gave the pack's prose a third failure mode — a surface the run
   scanned and could not clear — and left the OSCAL projection reading the same

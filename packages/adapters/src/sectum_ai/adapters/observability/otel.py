@@ -22,6 +22,15 @@ trace-export shape)::
               {"traceId": "<hex>", "name": "<span name>",
                "attributes": [{"key": "...", "value": {"stringValue": "..."}}]}]}]}]}
 
+A truncated answer must say so. OTLP-JSON carries no standard paging signal,
+so the contract adds one: a truthy ``"truncated"`` (or any of
+``"nextPageToken"`` / ``"next_page_token"`` / ``"nextLink"``) means the store
+returned a partial page. The adapter refuses a MISS on such a page, because a
+marker beyond it cannot be told apart from an erased one - the guard the five
+sibling trace backends get from counting rows against a known cap, which this
+contract has no equivalent of. A marker FOUND on a partial page is a definite
+residual and is returned; only the miss is refused.
+
 The backend is expected to scope by the ``tenant`` field, but the adapter
 re-checks the per-resource tenant attribute (default ``tenant.id``) and
 re-scans every span's name + attribute values for the marker, so a backend
@@ -51,6 +60,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
+from sectum_ai.adapters.observability._listing import _refuse_truncated
 from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _DEFAULT_QUERY_PATH = "/v1/traces/query"
@@ -159,6 +169,10 @@ class OtelObservability(ObservabilityAdapter):
                                 snippet=snippet,
                             )
                         )
+        # Only a MISS on a partial page is refused: a marker found there already
+        # answers the question, and refusing the hit would lose a real residual.
+        if not hits:
+            _refuse_truncated(body, "OTel query")
         return hits
 
     def list_projects(self) -> list[str]:

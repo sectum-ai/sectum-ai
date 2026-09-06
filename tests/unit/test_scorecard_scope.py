@@ -322,7 +322,7 @@ def test_a_pass_with_no_measured_headline_rate_says_so() -> None:
     entry = next(c for c in unmeasured.classes if c.class_id == 2)
     assert entry.verdict is ClassVerdict.PASS
     assert entry.headline is None
-    assert entry.note is not None and "never measured" in entry.note
+    assert entry.note is not None and "never recorded" in entry.note
 
     # A class with a measured rate keeps its headline and says nothing extra.
     measured = score_run(
@@ -359,3 +359,23 @@ def test_a_class_graded_on_a_subset_of_its_probes_says_so() -> None:
         c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 2
     )
     assert whole.note is None or "graded on" not in whole.note
+
+
+def test_class_5_says_so_when_no_effect_size_was_recorded() -> None:
+    # Class 5's measurement is `side_channel_effect_sizes`, a MAP - so it never
+    # reaches `_headline`, and a Class 5 PASS rendered identically whether the run
+    # measured a timing effect size or none at all. `diff` prints
+    # [SIDE CHANNEL NOT REMEASURED] for exactly that absence.
+    silent = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 5
+    )
+    assert silent.verdict is ClassVerdict.PASS
+    assert silent.note is not None and "never recorded" in silent.note, silent.note
+
+    measured = score_run(
+        _run(_all(SurfaceProvenance.LIVE)).model_copy(
+            update={"metrics": RunMetrics(side_channel_effect_sizes={"a->b": 0.2})}
+        )
+    )
+    scored = next(c for c in measured.classes if c.class_id == 5)
+    assert scored.note is None or "never recorded" not in scored.note
