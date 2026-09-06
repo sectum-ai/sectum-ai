@@ -88,7 +88,12 @@ section is the source of truth for that configuration:
 - Require status checks to pass before merging: the `CI` workflow
   (lint, type-check, test; the docker-compose `Integration` job; the
   `Extras API contract` job), the `secret-scan` job, `CodeQL`, the `Docs`
-  workflow (`mkdocs build --strict`), and the `Action self-test` workflow.
+  workflow (`mkdocs build --strict`). The `Action self-test` workflow is **not**
+  a required check: it is filtered to changes touching `action.yml`, and a
+  workflow that does not run never reports, so requiring it would block every
+  unrelated pull request on a check that cannot arrive. `tests/unit/
+  test_action_cli_contract.py` and `tests/unit/test_action_version.py` are what
+  run on every PR.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).

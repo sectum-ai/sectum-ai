@@ -37,7 +37,13 @@ Point `vector_store` in [`sectum-ai.yaml`](sectum-ai.yaml) at your real backend
 **and** no supplied content still surfaces; every other surface reads `NOT_COVERED`,
 so the attestation never implies coverage it did not verify. Fingerprint probing is
 best-effort — a clean result is evidence the content no longer surfaces, not proof of
-absence. `tests/integration/test_subject_erasure_qdrant.py` shows a live,
+absence. Against a real approximate-nearest-neighbour store the vector surface
+usually reads `NOT_COVERED` rather than `ERASED`: the check treats a **full**
+top-50 page without the phrase as inconclusive, and such a store returns a full
+page whenever the tenant still holds that many vectors — which an A3 subject
+erasure, removing one subject's data rather than the tenant's, leaves it doing
+(see the coverage gaps in `docs/coverage.md`).
+`tests/integration/test_subject_erasure_qdrant.py` shows a live,
 residual-catching run against Qdrant.
 
 ## Exit codes

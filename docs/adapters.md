@@ -85,7 +85,7 @@ extra) indexes each tenant's derived full-text documents into its own OpenSearch
 (`{prefix}-{tenant.hex}`) and searches with a `match` query — the tenth "hiding place",
 distinct from the vector store. Class 11 erasure seeds it, then confirms a `delete`
 purges the index; `soft_delete=True` leaves it in place — the erasure residue. A
-search whose matches exceed the page it returns is refused rather than truncated.
+search whose matches exceed the page it returns is refused rather than truncated — unless the page it *did* return already carries the phrase, which answers the question (the same miss-only rule the trace backends, mem0 and the LangSmith eval set follow).
 
 **Eval set.** The LangSmith eval set (`kind: langsmith`, the `[langsmith]` extra) maps
 each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant.hex}`) — a dataset *is* a

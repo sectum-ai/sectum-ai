@@ -25,6 +25,12 @@ scenario:
   # substrate always records `corpus_profile: demo`, so changing this string
   # changes neither the scenario hash nor a baseline.
   corpus_profile: demo
+  # Documents per tenant. The package default (500) seeds realistically; lower it
+  # for a faster run.
+  # corpus_size: 500
+  # Embedding models the Class 2 rate sweep runs. Prefixes: st:, openai:, cohere:,
+  # voyage:, bedrock:, hash-<dim>, and the legacy fake-* names.
+  # embedding_models: ["fake-deterministic"]
 
 # Where seed/probe/report write their artifacts (substrate.json, run.json,
 # evidence.json, audit-pack.pdf, attestation.intoto.json).
@@ -147,7 +153,7 @@ adapters:
     #                          # per-tenant user message is prefixed with [tenant:<hex>]
     #                          # and the loop runs to `stop_reason: end_turn` per turn.
     #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
-    #                          # (client, model, tools) the adapter wraps - see
+    #                          # Anthropic client the adapter wraps - see
     #                          # docs/configuration.md. Requires the optional
     #                          # `anthropic-tooluse` extra:
     #                          # `pip install sectum-ai-adapters[anthropic-tooluse]`.
@@ -259,3 +265,7 @@ detection:
   # Cosine-similarity gate for semantic candidates. The conservative default
   # suits the fake embedder; raise it once a real embedding model is configured.
   semantic_threshold: 0.62
+  # `local` ENFORCES the BYOC posture: detection is the only stage that embeds or
+  # judges tenant content, and in `local` mode the config fails fast on any
+  # embedder or judge that would call a hosted API.
+  mode: hosted   # hosted | local

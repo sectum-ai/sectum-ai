@@ -17,6 +17,12 @@ inference (the HuggingFace adapter), the observer's own first trial would
 otherwise warm a single shared prefix — and the control prefix — for every later
 trial, leaving both arms as cache hits and the side channel visible in one trial
 of twenty-four. The control prefix is fresh per trial and never warmed by anyone.
+Which arm is measured first is **shuffled**, from a seed derived from the tenant
+pair, and stays balanced twelve-and-twelve so the two arms' mean measurement
+positions are equal. A fixed alternation put each arm on a fixed pair of
+positions modulo four, and behind a four-way round-robin dispatcher — where the
+replica *is* the call index modulo four — the arms sat on disjoint replicas, so
+any spread across the pool read as a side channel on a backend with no cache.
 Each prefix opens with a 20-character key (a hash of the tenant id, so two
 low-valued ids do not share it) and continues with filler spanning several full
 16-token blocks: a block-granular cache such as vLLM's automatic prefix caching
@@ -36,7 +42,12 @@ d**). A pair is a confirmed side-channel finding only when the gap is
   scenario (the pack's evidence span states the exact alpha used),
 - **practically large** — Cohen's d ≥ 0.8 (above the per-prompt jitter noise
   floor), and
-- **directional** — the primed prompt is the faster one (a positive gap),
+- **directional** — the primed prompt is the faster one (a positive gap), and
+- **resolved** — the pair was actually measured. A backend whose latency metric
+  returns one constant makes all 48 readings identical, which is arithmetically
+  indistinguishable from a careful null result; such a pair is marked unresolved,
+  kept out of the signed metrics, and the class reads `NOT_COVERED` rather than
+  passing a check that could not have found anything.
 
 so a coincidental or wrong-direction gap is not over-claimed (the spec,
 section 7). Within-arm variances are floored at the timer's resolution (about a

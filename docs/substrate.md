@@ -23,7 +23,8 @@ entity pulls a *foreign* tenant's document into the answer), which the flagship
 [Class 2 probe](attack-catalog/class-02-rag-entity-bleed.md) measures.
 
 A scenario with no `shared_entities` plants nothing in the corpus (a pivot
-document exists per shared entity), so the probes that query the corpus plan no
+document names a shared entity, so with none there is nothing to build one
+around), so the probes that query the corpus plan no
 step and their classes read `NOT_COVERED` — never a pass. The probes provisioned
 from the manifest (MCP, agent, memory, cache, model) still have markers to find.
 
@@ -112,8 +113,8 @@ marker. A finding is `CONFIRMED` on an exact/format hit, on a foreign entity who
 plaintext is literally present in the observation (a leak by observation, which no
 judge verdict can unmake), or on a judge verdict whose cited evidence is traceable
 to the marker. A semantic candidate that cannot be tied to a manifest marker is
-downgraded to `UNVERIFIED`, excluded from the headline count but kept in the
-appendix. That bounds confirmations to the manifest's own markers; it is not a
+downgraded to `UNVERIFIED`, excluded from the headline count but still itemized
+in the pack's Findings section, labelled with its status. That bounds confirmations to the manifest's own markers; it is not a
 claim that every confirmation is correct, since a semantic confirmation still
 rests on the configured judge. **Zero false negatives:** a foreign marker of any
 type, planted in any field, that appears verbatim in an observation is always

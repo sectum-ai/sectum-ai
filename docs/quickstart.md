@@ -67,7 +67,10 @@ result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake
 between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level steps
 the later run did not run because its adapter cannot carry a user, reported as
-`[BOUNDARY LOST]`, and two runs of different scenarios — a re-seed, other tenants
+`[BOUNDARY LOST]`, a probe the earlier run exercised and this one did not,
+reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
+residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, and two
+runs of different scenarios — a re-seed, other tenants
 or users, where every finding "resolves" because its id embeds the markers and
 principals — reported as `[SCENARIO CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
@@ -137,8 +140,10 @@ part under six characters (which is what makes most bare two-word names
 unverifiable: "Doe" is three), or a prefix with no scrambled form — makes the
 model surface read
 `NOT_COVERED` for the subject, and the run says how many it could not check. Exit
-codes match the canary flow: `0` clean, `2` residual remains, `3` nothing could be
-verified.
+codes match the canary flow: `0` clean, `2` residual remains, `3` inconclusive —
+at least one scanned surface could not establish absence (a full similarity page
+without the phrase, or no pre-erasure baseline), so the run is not attested even
+if other surfaces verified cleanly.
 
 ## Bundle a portable run pack
 

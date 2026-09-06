@@ -32,6 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Docs caught up with this branch's behaviour changes: the scorecard page said
+  `score` refuses an all-fake run when rule 5 on the same page says it is still
+  graded; the Class 5 page listed three conditions for a confirmed finding where
+  the code applies four, and did not mention the shuffled arm order; the erasure
+  exit-3 prose said "nothing could be verified" when one inconclusive surface is
+  enough; the comparison page presented two opt-in anchors and the control
+  mappings as unconditional output. Plus the search-index refusal being
+  miss-only, four adapter families missing from the adapters package README, two
+  agent-factory return contracts, the subject-erasure example's missing caveat
+  about a real vector store, four config keys the template omitted, and two of
+  the five `diff` loss signals the quickstart did not name.
+- `CONTRIBUTING.md` listed the Action self-test as a required check; it is
+  filtered to changes touching `action.yml`, and a workflow that does not run
+  never reports, so requiring it would block every unrelated pull request on a
+  check that cannot arrive.
 - An unmeasured Class 5 pair entered the signed metrics as an effect size of
   `0.0` — a number the run never established, which `diff` then read as an
   improvement, printing `[ok]` directly above its own coverage-loss line. The map

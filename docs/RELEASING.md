@@ -102,8 +102,9 @@ two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
 Then bump the **same version** in these places — surfaces this list used to
 omit, each of which shipped stale at least once:
 
-- `action.yml` — the `version` input's `default`, **and** the "(for example X.Y.Z)"
-  prose in its description
+- `action.yml` — the `version` input's `default`. (Its description's
+  "(for example 1.2.3)" is deliberately a placeholder, not the shipped version,
+  so nothing there goes stale; leave it alone.)
 - `docs/github-action.md` — the `version` row of the inputs table, and the
   `sectum-ai/sectum-ai@vX.Y.Z` pin example
 - `README.md` — the `> **Status: vX.Y.Z.**` line (it read v0.8.1 while the repo
