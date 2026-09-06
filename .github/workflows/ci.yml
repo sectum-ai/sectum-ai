@@ -26,7 +26,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
       - name: Ruff lint
         run: uv run ruff check .
@@ -36,6 +36,21 @@ jobs:
 
       - name: Type-check (mypy strict)
         run: uv run mypy
+
+      # CONTRIBUTING tells a contributor to run these hooks, and nothing here ran
+      # them: codespell was red on a clean checkout for months, and so was
+      # end-of-file-fixer (it rewrote five checked-in evidence packs). Running the
+      # whole hook set is the only version that stays true as hooks are added.
+      # `--show-diff-on-failure` prints what a hook would have rewritten, since a
+      # formatting hook "fails" by editing rather than by saying anything.
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Pre-commit hooks
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Tests
         run: uv run pytest -n auto --cov=sectum_ai --cov-report=term-missing
@@ -52,7 +67,16 @@ jobs:
           done
 
       - name: Example walkthroughs (e2e)
-        run: uv run pytest -m e2e -q
+        run: |
+          set -euo pipefail
+          # `pytest -m e2e` exits 0 when the whole file SKIPS for a missing
+          # SECTUM_RUN_E2E, so one lost env line would stop every walkthrough
+          # while the job stayed green. Both sibling steps assert this already.
+          uv run pytest -m e2e -q | tee /tmp/e2e.log
+          grep -qE "[1-9][0-9]* passed" /tmp/e2e.log || {
+            echo "::error::no e2e walkthrough ran - all skipped (SECTUM_RUN_E2E unset?)"
+            exit 1
+          }
         env:
           SECTUM_RUN_E2E: "1"
 
@@ -68,27 +92,44 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
-      # The lint-type-test job installs no extras, so every live adapter behind
-      # one is unreachable there and a bump to its package goes green having run
-      # none of the code it could break. Install the packages whose API surface
+      # The lint-type-test job installs no extras, so the adapters behind an
+      # EXTRA are unreachable there and a bump to one of those packages goes
+      # green having run none of the code it could break. (The dev group already
+      # carries psycopg, chromadb, weaviate, qdrant-client, opensearch-py, redis,
+      # phoenix and mcp, so those ARE importable in that job.) Install the packages whose API surface
       # tests/contract/test_extra_api_surface.py pins so that file executes.
       #
       # Versions come from `uv export`, i.e. what the LOCKFILE resolves, not the
       # newest on PyPI, so the contract reflects what a user of the extra gets.
-      # Installed directly rather than via `uv sync --extra huggingface`, which
-      # would also pull torch and the NVIDIA CUDA wheels (~GBs) that signature
-      # and attribute inspection does not need.
-      - name: Install the pinned extras (locked versions, no torch)
+      # Installed directly rather than via `uv sync --extra huggingface` so the
+      # set is exactly the packages the contract tests import, at the LOCKED
+      # versions. `peft` still brings torch and the NVIDIA CUDA wheels with it -
+      # `--no-deps` is not an option, because the contract tests import `peft`
+      # and it has to actually work.
+      - name: Install the pinned extras (locked versions)
         run: |
+          # GitHub's default `run:` shell has -e but NOT -o pipefail, so a grep
+          # that matched nothing exited 0 through the pipe, installed nothing,
+          # and the contract tests below all skipped while the job passed.
+          set -euo pipefail
           uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt
           grep -E '^(cohere|huggingface-hub|transformers|peft|openai|anthropic|langfuse)==' /tmp/all-reqs.txt \
             | tee /tmp/extras-reqs.txt
           uv pip install -r /tmp/extras-reqs.txt
 
       - name: Extras API contract
-        run: uv run --no-sync pytest tests/contract/test_extra_api_surface.py -v
+        run: |
+          set -euo pipefail
+          # `pytest` exits 0 when every test SKIPS for a missing import, so the
+          # job passed while checking no API surface at all. Assert they ran.
+          uv run --no-sync pytest tests/contract/test_extra_api_surface.py -v \
+            | tee /tmp/extras.log
+          grep -qE "[1-9][0-9]* passed" /tmp/extras.log || {
+            echo "::error::no extras contract test ran - every one skipped (extras not installed?)"
+            exit 1
+          }
 
   secret-scan:
     name: Secret scan
@@ -100,8 +141,13 @@ jobs:
         # gitleaks-action@v2 requires a paid/registration-gated license for
         # organization repos; the gitleaks binary itself is MIT-licensed.
         run: |
+          set -euo pipefail
           url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz"
+          # Pin the bytes, not just the URL: this archive is unpacked and RUN over
+          # the whole worktree, so a swapped release asset executes here.
+          sha="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
           curl -sSfL "$url" -o /tmp/gitleaks.tar.gz
+          echo "${sha}  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           chmod +x /tmp/gitleaks
           /tmp/gitleaks dir . --no-banner --redact
@@ -118,7 +164,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-packages
+        run: uv sync --locked --all-packages
 
       # pgvector and redis ship in-container healthchecks, so --wait blocks until
       # they are ready. chroma, weaviate, phoenix, qdrant, and opensearch do not,
@@ -150,7 +196,16 @@ jobs:
           wait_for opensearch http://localhost:9201/_cluster/health
 
       - name: Integration tests
-        run: uv run pytest -m integration -q
+        run: |
+          set -euo pipefail
+          # `pytest -m integration` exits 0 when every test SKIPS for an
+          # unreachable backend, so the job passed while testing nothing. Assert
+          # that tests actually ran.
+          uv run pytest -m integration -q | tee /tmp/integration.log
+          grep -qE "[1-9][0-9]* passed" /tmp/integration.log || {
+            echo "::error::no integration test ran - every one skipped (backends unreachable?)"
+            exit 1
+          }
 
       - name: Dump backend logs on failure
         if: failure()

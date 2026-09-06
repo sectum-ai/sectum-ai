@@ -24,8 +24,14 @@ from typing import Any
 
 from sectum_ai.evidence.dsse import dsse_binding_detail, verify_dsse_envelope
 from sectum_ai.evidence.intoto import verify_in_toto_statement
-from sectum_ai.evidence.verify import Check, VerificationResult, _check_pdf, verify_pack
-from sectum_ai.spec import EvidenceError, EvidencePack
+from sectum_ai.evidence.verify import (
+    Check,
+    VerificationResult,
+    _check_pdf,
+    check_raw_schema_stamps,
+    verify_pack,
+)
+from sectum_ai.spec import EvidenceError, EvidencePack, GroundTruthManifest
 
 EVIDENCE_MEMBER = "evidence.json"
 """The bundled evidence-pack JSON; every bundle must contain it."""
@@ -126,6 +132,7 @@ def build_bundle(members: Mapping[str, bytes]) -> bytes:
 def verify_bundle(
     bundle: bytes,
     *,
+    ground_truth: GroundTruthManifest | None = None,
     tsa_certificate: bytes | None = None,
     tsa_root: bytes | None = None,
     rekor_keyring: Mapping[str, bytes] | None = None,
@@ -137,10 +144,13 @@ def verify_bundle(
     Every member's SHA-256 must match the recorded manifest digest, the archive's
     member set must equal the manifest's (no unlisted member may ride along, no
     duplicate names), and the contained evidence pack must pass
-    :func:`verify_pack` - with ``tsa_certificate``/``tsa_root``/``rekor_keyring``
-    threaded through so a customer-pinned TSA or a private Rekor instance
-    verifies, and ``require_anchored``/``require_live`` enforced the same way as
-    on a bare pack.
+    :func:`verify_pack` - with ``ground_truth``/``tsa_certificate``/``tsa_root``/
+    ``rekor_keyring`` threaded through so a supplied ground-truth manifest, a
+    customer-pinned TSA or a private Rekor instance verifies, and
+    ``require_anchored``/``require_live`` enforced the same way as on a bare pack.
+    Every one of those has to reach the contained pack: a flag the bundle path
+    accepts and drops is worse than one it rejects, because the operator reads a
+    pass as an answer to the question they asked.
     A missing, extra, or mismatched member, or a failed pack verification, fails
     the result - so editing a bundled artifact, smuggling an unlisted one in, or
     altering the pack is caught. The result's ``anchored`` reflects the contained
@@ -243,6 +253,10 @@ def verify_bundle(
     if evidence_raw is None:
         checks.append(Check("evidence-pack", False, f"missing evidence member {evidence_member!r}"))
         return VerificationResult(passed=False, checks=tuple(checks))
+    stamped = check_raw_schema_stamps(evidence_raw)
+    if stamped is not None:
+        checks.append(stamped)
+        return VerificationResult(passed=False, checks=tuple(checks))
     try:
         pack = EvidencePack.model_validate_json(evidence_raw)
     except ValueError as error:
@@ -287,6 +301,7 @@ def verify_bundle(
     pdf_bytes = member_bytes[present_pdfs[0]] if present_pdfs else None
     pack_result = verify_pack(
         pack,
+        manifest=ground_truth,
         tsa_certificate=tsa_certificate,
         tsa_root=tsa_root,
         rekor_keyring=rekor_keyring,
@@ -294,7 +309,15 @@ def verify_bundle(
         require_anchored=require_anchored,
         require_live=require_live,
     )
-    checks.extend(pack_result.checks)
+    # A bundle that binds a PDF and does not carry it FAILs below. `verify_pack`
+    # emits its own, non-failing "not supplied" note for the standalone case, which
+    # is the right answer there and the wrong one here - drop it so the bundle's
+    # verdict is the only `audit-pdf` line.
+    checks.extend(
+        check
+        for check in pack_result.checks
+        if not (check.name == "audit-pdf" and pdf_bytes is None)
+    )
     for name in present_pdfs:
         if pack.pdf_ref is None:
             # verify_pack checks a PDF only when the pack binds one; a bundled PDF

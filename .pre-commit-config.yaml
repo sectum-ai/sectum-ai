@@ -5,8 +5,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # The sample packs and the captured TSA token are ARTEFACTS, not source:
+      # `docs/samples/` holds real `report`/`erasure` output checked in byte for
+      # byte, and the fixer appended a newline to five of them on a clean
+      # checkout. A formatting hook must not rewrite the product's own evidence.
       - id: trailing-whitespace
+        exclude: &generated ^(docs/samples/.*\.json|tests/fixtures/freetsa-token\.b64)$
       - id: end-of-file-fixer
+        exclude: *generated
       - id: check-yaml
       - id: check-toml
       - id: check-json
@@ -14,12 +20,30 @@ repos:
       - id: check-added-large-files
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
+  # Run the WORKSPACE's ruff, the way the mypy hook below runs the workspace's
+  # mypy. The upstream hooks pinned their own rev (v0.15.13, older than the
+  # `ruff>=0.16.3` this repo installs) and filtered to `types_or: [python, pyi,
+  # jupyter]`, so they never saw the Python inside the repo's 85 Markdown files -
+  # which `ruff format --check .` in CI does check. The gate a contributor runs
+  # was green on a tree CI rejected, which is the whole failure this hook set
+  # exists to prevent.
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff (lint, workspace)
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        # No `markdown`: `ruff check` has no Markdown support, so listing it here
+        # is dead config. Only `ruff format` below reads the code in the repo's
+        # `.md` files, which is what the note above is about.
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: ruff-format
+        name: ruff format (workspace)
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
@@ -30,6 +54,9 @@ repos:
     rev: v2.4.2
     hooks:
       - id: codespell
+        # The [toml] extra is what lets the hook read [tool.codespell] in
+        # pyproject.toml; without it the run is red on in-toto's own spelling.
+        additional_dependencies: ["tomli"]
 
   - repo: local
     hooks:

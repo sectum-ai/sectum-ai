@@ -15,7 +15,9 @@ RFC 3161 TSA token, the Sigstore Rekor entry, and `sectum-ai verify`.
 Because no field is omitted, adding an optional field shifts the digest of every
 existing instance. ADR-0006 added `Marker.owner_user_id` (default `None`) and
 `SyntheticTenantSpec.users` (default `()`), which moved the default scenario's
-`scenario_hash` once (`802d1643…` → `083169e0…`). That raises the question:
+`scenario_hash` once (`802d1643…` → `083169e0…` — the two values as of that
+change; later additive fields have moved it again, and the current golden lives
+in `tests/invariants/test_reproducibility.py`). That raises the question:
 should `to_canonical_json` adopt `exclude_none=True` (or `exclude_defaults=True`)
 so additive optional fields never perturb the digest?
 
@@ -26,8 +28,10 @@ Keep total serialization. **Reject `exclude_none` and `exclude_defaults`.**
 ## Consequences
 
 - **Changing the rule would break every previously issued pack.** `verify_pack`
-  recomputes `run_digest = canonical_hash(pack.run_result)` from the model and
-  matches it against the timestamp token issued at build time. Any change to
+  recomputes `attested_digest(pack)` — the canonical hash over the whole attested
+  content, of which `pack.run_result` is one member (see
+  [ADR-0016](0016-anchor-the-whole-pack.md)) — and matches it against the
+  timestamp token issued at build time. Any change to
   `to_canonical_json` changes that recomputed digest, so every prior pack would
   fail verification. Adopting exclusion is a one-time break of the verification
   contract — strictly worse than the harmless additive-field shift it avoids,
@@ -77,3 +81,25 @@ form is always valid JSON and maps equal values to equal bytes:
 
 The scope of *what* the evidence anchors bind (the whole pack, not just the run)
 is covered in [ADR-0016](0016-anchor-the-whole-pack.md).
+
+## Update (2026-09-06): two more constraints, for the same reason
+
+The 2026-05-29 sweep above named two constraints. Two more now hold, found by
+the same question asked of the two shapes it did not cover:
+
+- **No non-string mapping key.** `json.dumps` coerces one to its string form, so
+  `{1: "a"}` and `{"1": "a"}` canonicalized to the same bytes — two distinct
+  objects with one digest, exactly the injectivity failure this section exists to
+  prevent. A non-`str` key anywhere in the structure is a `TypeError`. No shipped
+  model has such a field; the constraint keeps the public helper honest for a
+  caller passing a raw dict.
+- **No unencodable string.** A lone surrogate reaches a record through the
+  standard-library JSON parser (the validator behind `model_validate_json`
+  rejects one; `json.loads` does not), and the `.encode("utf-8")` sat *outside*
+  the block that exists to turn these into typed failures — so `sectum-ai report`
+  died with a `UnicodeEncodeError` traceback at exit 1 rather than refusing the
+  record. It is a `ValueError` naming the cause.
+
+Both are refusals, not coercions, for the reason the section already gives: a
+canonical form that silently accepts a value it cannot represent injectively is
+worse than one that will not compute a digest at all.

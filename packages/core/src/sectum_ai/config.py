@@ -1245,9 +1245,10 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
             )
         return OpenAIAssistantsAgent(client, assistant_id)
     if config.kind == "anthropic-tooluse":
-        # A live Anthropic native tool-use agent is wired in code (the tool
-        # specs are Python objects carrying a ``__sectum_callable__`` sidecar
-        # so the backend can execute them in the tool-use loop). The resolver
+        # A live Anthropic native tool-use agent is wired in code (each tool is
+        # the python callable itself, carrying its spec as a
+        # ``__sectum_tool_spec__`` attribute, so the backend can execute it in
+        # the tool-use loop). The resolver
         # expects a client-factory callable referenced by
         # ``module.path:callable`` that returns an object implementing the
         # ``_AnthropicClient`` protocol the adapter consumes — typically the
@@ -1328,6 +1329,37 @@ def adapter_config(
         )
 
 
+def build_vector_slot(
+    config: SectumConfig, default: AdapterConfig | None = None
+) -> VectorStoreAdapter:
+    """The adapter filling the vector slot: the `app` resource API, or a store.
+
+    `app` and `vector_store` both fill this slot - the app's resource API is
+    probed through the same contract. Configuring both is a real ambiguity about
+    which system is under test, so it is refused rather than silently resolved.
+
+    Shared with `sectum-ai erasure`, which read `vector_store` directly and so
+    ignored a configured `app` entirely: it built a clean default fake, dropped
+    that adapter's `soft_delete` knob with it, and attested ERASURE VERIFIED
+    against a backend the operator never configured.
+    """
+    # The caller's default, not a fresh one: `erasure --soft-delete` passes a
+    # default carrying that flag, and building our own dropped it - so the run
+    # attested ERASED on the one surface the flag exists to make fail.
+    fake = default if default is not None else AdapterConfig(kind="fake")
+    app = config.adapters.get("app")
+    if app is not None and "vector_store" in config.adapters:
+        raise ConfigError(
+            "configure either 'app' or 'vector_store', not both: each fills the same "
+            "adapter slot, so a run carrying both cannot say which system it probed"
+        )
+    if app is not None:
+        with adapter_config(config, "app", fake) as cfg:
+            return build_app(cfg)
+    with adapter_config(config, "vector_store", fake) as cfg:
+        return build_vector_store(cfg)
+
+
 def build_adapters(config: SectumConfig) -> AdapterBundle:
     """Build every adapter the CLI's probe suite needs.
 
@@ -1337,18 +1369,7 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
     # `app` and `vector_store` both fill the vector slot - the app's resource API is
     # probed through the same contract. Configuring both is a real ambiguity about
     # which system is under test, so it is refused rather than silently resolved.
-    app = config.adapters.get("app")
-    if app is not None and "vector_store" in config.adapters:
-        raise ConfigError(
-            "configure either 'app' or 'vector_store', not both: each fills the same "
-            "adapter slot, so a run carrying both cannot say which system it probed"
-        )
-    if app is not None:
-        with adapter_config(config, "app", fake) as cfg:
-            vector: VectorStoreAdapter = build_app(cfg)
-    else:
-        with adapter_config(config, "vector_store", fake) as cfg:
-            vector = build_vector_store(cfg)
+    vector = build_vector_slot(config)
     with adapter_config(config, "cache", fake) as cfg:
         cache = build_cache(cfg)
     with adapter_config(config, "model", fake) as cfg:

@@ -45,7 +45,7 @@ in-memory leaky MCP server:
 4. **`sectum-ai verify`** independently re-checks the pack.
 
 The probe today exercises the MCP surface (Class 7 v1 per the
-engineering spec, §7 (internal engineering spec));
+engineering spec, §7);
 this example's value is the *next step*: showing how to wire the
 agent that calls the MCP server in production — LangGraph, AutoGen,
 or CrewAI — so the operator can verify Class 7 with the same caller
@@ -58,8 +58,8 @@ their customers actually run.
 ```
 
 You'll see three confirmed leaks per canary — one per foreign
-principal — for 24 confirmed cross-tenant findings in total. The PDF
-page-3 findings table itemises each.
+principal — for 24 confirmed cross-tenant findings in total. The PDF's
+`Findings` section itemises each.
 
 ## Swap the agent caller
 
@@ -77,7 +77,9 @@ import path by default — the directory is hyphenated and has no package marker
 Put it on the path and use the bare module name:
 
 ```sh
-export PYTHONPATH=examples/agent-tool-hijack
+# Run from THIS directory (the commands below use dir-relative paths);
+# `factories.py` lives here and a hyphenated dir is not on the import path.
+export PYTHONPATH=.
 ```
 
 [`factories.py`](factories.py) in this directory holds copy-pasteable
@@ -97,6 +99,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -119,6 +123,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[autogen]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -142,6 +148,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[crewai]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -163,6 +171,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[openai-assistants]
 export OPENAI_API_KEY=sk-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -185,6 +195,8 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[anthropic-tooluse]
 export ANTHROPIC_API_KEY=sk-ant-...
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -192,7 +204,7 @@ The Anthropic tool-use adapter scopes by caching one conversation
 history per tenant; each per-tenant user message is prefixed with
 `[tenant:<hex>]` and the tool-use loop runs to `stop_reason:
 end_turn`. Tools attach a python callable via the
-`__sectum_callable__` sidecar on each tool spec; the live backend
+`__sectum_tool_spec__` attribute on each tool callable; the live backend
 executes it on every `tool_use` block and posts the result back as a
 `tool_result` user message.
 
@@ -217,7 +229,8 @@ in front of it and point Sectum at the URL.
 The evidence pack itemises every confused-deputy and
 token-passthrough leak the probe confirmed: per-finding marker ID,
 owning tenant, observing tenant, the leaked tool result, OWASP /
-ATLAS / NIST control IDs, and a remediation pointer. The headline
+ATLAS / NIST control IDs. Class 7 findings carry no per-finding remediation
+pointer. The headline
 on page 1 is the count of confirmed Class 7 leaks under the
 configured agent.
 

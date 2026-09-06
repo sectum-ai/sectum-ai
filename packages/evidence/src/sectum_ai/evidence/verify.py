@@ -25,8 +25,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sectum_ai.evidence.chain import LocalTimestamper, attested_digest
+from sectum_ai.evidence.controls import control_mappings
 from sectum_ai.spec import (
     SCHEMA_VERSION,
+    ControlMapping,
     EvidenceError,
     EvidencePack,
     GroundTruthManifest,
@@ -119,6 +121,7 @@ def verify_pack(
         _check_schema_version(pack),
         token_check,
         _check_consistency(pack),
+        _check_control_mappings(pack),
         _check_run_scope(pack, require_live),
     ]
     rekor_anchored = False
@@ -141,6 +144,40 @@ def verify_pack(
         checks.append(_check_manifest(manifest, pack.manifest_hash))
     if pack.pdf_ref is not None and pdf_bytes is not None:
         checks.append(_check_pdf(pack.pdf_ref, pdf_bytes))
+    elif pack.pdf_ref is not None:
+        # A standalone pack legitimately verifies without its companion PDF, so
+        # this is not a failure - but omitting the check entirely left the verdict
+        # SILENT about a binding it never checked: every line `[ok]`, exit 0, and
+        # a reader concluding the PDF had been matched. Said plainly instead, the
+        # way the unanchored-timestamp check states its own limitation.
+        checks.append(
+            Check(
+                "audit-pdf",
+                ok=True,
+                detail=(
+                    "the pack binds an audit PDF that was not supplied, so this "
+                    "verification says nothing about it; put the PDF beside the pack, "
+                    "or verify the run-pack bundle, to check the binding"
+                ),
+            )
+        )
+    elif pdf_bytes is not None:
+        # The complement, which the branch above did not cover: a PDF WAS handed
+        # to us and the pack binds none. `verify` fed it from the pack's own
+        # directory, so this is an auditor document delivered beside the pack and
+        # bound by nothing - and the verdict was silent about it, exit 0, no
+        # `audit-pdf` line at all. `verify_bundle` fails the identical bytes.
+        checks.append(
+            Check(
+                "audit-pdf",
+                ok=False,
+                detail=(
+                    "an audit PDF sits beside this pack, but the pack binds no "
+                    "pdf_ref - so nothing ties that document to this run and it is "
+                    "not covered by the attested digest"
+                ),
+            )
+        )
     anchored = token_anchored or rekor_anchored
     if require_anchored and not anchored:
         checks.append(
@@ -148,9 +185,10 @@ def verify_pack(
                 "independent-anchor",
                 ok=False,
                 detail=(
-                    "no verified independent anchor binds the pack digest: the only "
+                    "no verified independent anchor binds the pack digest: its "
                     "timestamp is a local-dev token, which anyone can regenerate over "
-                    "an edited pack, so this verification is not tamper evidence. "
+                    "an edited pack, or an external token this verifier could not "
+                    "check - so this verification is not tamper evidence. "
                     "Re-create the pack with `report --tsa`/`--rekor`, or accept "
                     "integrity-only verification explicitly"
                 ),
@@ -291,6 +329,42 @@ def _schema_major_minor(version: str) -> tuple[str, str]:
     return (parts[0], parts[1] if len(parts) > 1 else "0")
 
 
+def check_raw_schema_stamps(raw: str | bytes) -> Check | None:
+    """Refuse a pack whose JSON omits a schema stamp, or names another line.
+
+    ``_check_schema_version`` reads the *parsed* pack, where a missing
+    ``schema_version`` has already become the current version by default - and
+    deleting the key leaves the parsed model, and therefore the attested digest,
+    byte-identical, so no other check sees it either. Only the bytes can tell
+    "stamped 0.7.0" from "unstamped", so this reads them; it returns ``None``
+    when both stamps are present and on this line.
+    """
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None  # the parser below reports an unreadable pack
+    if not isinstance(data, dict):
+        return None
+    run = data.get("run_result")
+    for label, stamp in (
+        ("pack", data.get("schema_version")),
+        ("run record", run.get("schema_version") if isinstance(run, dict) else None),
+    ):
+        if not isinstance(stamp, str) or _schema_major_minor(stamp) != _schema_major_minor(
+            SCHEMA_VERSION
+        ):
+            return Check(
+                "schema-version",
+                ok=False,
+                detail=(
+                    f"the {label}'s schema_version is {stamp!r}; this verifier reads "
+                    f"{SCHEMA_VERSION!r} records, and an unstamped record is not a "
+                    "current one"
+                ),
+            )
+    return None
+
+
 def _check_schema_version(pack: EvidencePack) -> Check:
     """Refuse a pack whose schema version this verifier cannot interpret.
 
@@ -300,7 +374,15 @@ def _check_schema_version(pack: EvidencePack) -> Check:
     silently mis-verified. A patch-level difference is compatible (the spec, §9 -
     every aggregate model is ``schema_version``-stamped).
     """
-    ok = _schema_major_minor(pack.schema_version) == _schema_major_minor(SCHEMA_VERSION)
+    supported = _schema_major_minor(SCHEMA_VERSION)
+    # The run record inside carries its own stamp, and its fields are what every
+    # other check reads: a 0.6.x run (which recorded every adapter slot) under a
+    # current pack stamp passed the run-scope gate on a live slot no probe drove.
+    ok = (
+        supported
+        == _schema_major_minor(pack.schema_version)
+        == _schema_major_minor(pack.run_result.schema_version)
+    )
     detail = (
         # `!r` (as the incompatible branch already does) is load-bearing, not cosmetic:
         # the pack supplies schema_version, `_schema_major_minor` reads only the major and
@@ -310,7 +392,8 @@ def _check_schema_version(pack: EvidencePack) -> Check:
         f"pack schema_version {pack.schema_version!r} is supported by this verifier"
         if ok
         else (
-            f"pack schema_version {pack.schema_version!r} is incompatible with this verifier "
+            f"pack schema_version {pack.schema_version!r} (run record "
+            f"{pack.run_result.schema_version!r}) is incompatible with this verifier "
             f"(supports {SCHEMA_VERSION!r}); verify with a matching sectum version"
         )
     )
@@ -385,6 +468,53 @@ def _check_consistency(pack: EvidencePack) -> Check:
         else "the run's manifest hash does not match the pack's"
     )
     return Check("manifest-consistency", ok=ok, detail=detail)
+
+
+def _check_control_mappings(pack: EvidencePack) -> Check:
+    """Whether the compliance claims in the pack are ones its own run earned.
+
+    The digest binds the mappings, so they cannot be edited after signing - but
+    nothing asked whether the run supports them in the first place, and a pack
+    built by any other tool carries whatever table its author chose. A clean
+    isolation run over an empty `erasure_coverage`, packed with the unfiltered
+    11-row table, therefore verified `[ok]` on every line while asserting GDPR
+    Article 17 "Erasure across the AI surfaces verified" - the exact over-claim
+    `controls.control_mappings`' filter exists to prevent, applied only at build
+    time. The OSCAL export re-derives from the run and emitted 9 rows for the
+    same pack; that divergence is the tell.
+
+    `control_mappings(run)` is a pure function of the run, so the verifier can
+    simply ask it again. A SUBSET, not an equality: asserting fewer controls than
+    the evidence earns is honest under-claiming, and `report` without the
+    compliance table produces exactly that. Only the other direction is the
+    over-claim this product exists to refuse, and it fails closed.
+
+    The comparison is over the whole mapping, so the live-surface list the
+    assertion names is bound too: "verified" over surfaces the run never
+    exercised live is the same claim one clause further in.
+    """
+    earned = {_canonical_mapping(mapping) for mapping in control_mappings(pack.run_result)}
+    unearned = [
+        mapping for mapping in pack.control_mappings if _canonical_mapping(mapping) not in earned
+    ]
+    named = ", ".join(
+        f"{mapping.framework} {'/'.join(mapping.control_ids)}" for mapping in unearned
+    )
+    detail = (
+        f"every one of the pack's {len(pack.control_mappings)} control mapping(s) is one "
+        "this run's evidence supports"
+        if not unearned
+        else (
+            f"the pack asserts {len(unearned)} control mapping(s) this run's evidence does "
+            f"not support ({named}); a compliance claim the run did not earn is not made "
+            "true by being signed"
+        )
+    )
+    return Check("control-mappings", ok=not unearned, detail=detail)
+
+
+def _canonical_mapping(mapping: ControlMapping) -> str:
+    return json.dumps(mapping.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
 def _check_manifest(manifest: GroundTruthManifest, expected_hash: str) -> Check:

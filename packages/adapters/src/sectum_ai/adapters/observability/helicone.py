@@ -33,7 +33,7 @@ from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _data_list, _refuse_capped
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _REQUEST_LIMIT = 1000
 """How many of a tenant's most recent requests to scan when searching for a marker."""
@@ -90,9 +90,10 @@ class HeliconeObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         hits: list[TraceHit] = []
-        for row in self._client.query_requests(tenant.hex):
+        rows = self._client.query_requests(tenant.hex)
+        for row in rows:
             snippet = _row_snippet(row)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(
                     TraceHit(
                         trace_id=str(row.get("request_id") or row.get("id") or ""),
@@ -105,6 +106,10 @@ class HeliconeObservability(ObservabilityAdapter):
                         snippet=snippet,
                     )
                 )
+        # Only a MISS on a full page is refused: a marker found there is a
+        # definite residual, and refusing it would lose a real erasure failure.
+        if not hits:
+            _refuse_capped("Helicone", len(rows), _REQUEST_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:

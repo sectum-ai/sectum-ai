@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# SUPERSEDED: the release workflow calls generate_package_sboms.sh, which emits
+# one CycloneDX SBOM per published package. This whole-workspace script is kept
+# for local one-off use and is referenced by no workflow or doc.
 # Generate a CycloneDX SBOM of the workspace's locked dependencies.
 #
 # Supply-chain integrity (the engineering spec, section 17): a release ships an

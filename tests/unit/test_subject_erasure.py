@@ -1,5 +1,6 @@
 """Tests for A3 Phase 0 - the by-id data-subject erasure probe."""
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from sectum_ai.adapters import (
@@ -10,6 +11,7 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
+from sectum_ai.adapters.base import Capability, ModelAdapter
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
 from sectum_ai.spec import CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -714,7 +716,7 @@ def test_an_echo_on_shared_weights_is_not_recall_either() -> None:
 def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     # The vector fingerprint check was a top-k similarity query: a stored subject
     # document ranked past k read as absent, and the surface attested ERASED.
-    from sectum_ai.probes.subject_erasure.probe import _FINGERPRINT_QUERY_K
+    from sectum_ai.probes._recall import FINGERPRINT_QUERY_K
     from sectum_ai.spec import CorpusDocument
 
     store = FakeVectorStore()
@@ -728,7 +730,7 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
             title="maria chen clinical intake note",
             content="maria chen clinical intake note filler",
         )
-        for i in range(_FINGERPRINT_QUERY_K + 5)
+        for i in range(FINGERPRINT_QUERY_K + 5)
     ]
     docs.append(
         CorpusDocument(
@@ -744,3 +746,81 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     )
     assert report.coverage()[Surface.VECTOR_DB] is not CoverageVerdict.ERASED
     assert report.unverifiable.get(Surface.VECTOR_DB, 0) == 1 or report.findings
+
+
+def test_world_knowledge_on_shared_weights_is_unverifiable_not_residual() -> None:
+    # The base-knowledge control is "the same prompt as a tenant that trained
+    # nothing", which a shared-weights model does not have: a model that trained
+    # nothing and completes "Sherlock Holmes" -> "221B Baker Street" signed a
+    # CONFIRMED HIGH residual at confidence 1.0 in a DSR attestation.
+    class _WorldKnowledge(FakeModel):
+        def __init__(self) -> None:
+            super().__init__(adapter_bleed=True)  # SHARED_WEIGHTS
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "221B Baker Street, London" if prompt.startswith("Sherlock") else "no idea"
+
+    report = SubjectErasureProbe(model=_WorldKnowledge()).verify(
+        UUID(int=0xA),
+        SubjectManifest(
+            subject_ref="u-w1",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: ("Sherlock Holmes 221B Baker Street",)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert report.findings == ()
+
+
+def test_a_model_rendering_the_phrase_its_own_way_is_still_recall() -> None:
+    # The model is the surface most able to render a memorized string its own
+    # way, and `content_recalled` tested a casefolded `in` where the five sibling
+    # residue checks normalize. A zero-width split inside the continuation suffix
+    # read as "not recalled", so the model surface attested ERASED while still
+    # returning the phrase on the very next prompt.
+    from sectum_ai.probes._recall import content_recalled
+
+    phrase = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    owner = UUID(int=0xA)
+
+    class _Memorized(ModelAdapter):
+        """Continues a prefix of the phrase, as a real per-tenant adapter does."""
+
+        synthetic = True
+
+        def __init__(self, rendering: str) -> None:
+            super().__init__("memorized", frozenset({Capability.PER_TENANT_ADAPTER}))
+            self._rendering = rendering
+
+        def train_adapter(
+            self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+        ) -> None: ...
+
+        def delete(self, tenant: UUID) -> None: ...
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            return 0.0
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            # Nothing for another tenant, and nothing for an unrelated prompt, so
+            # both of `_reproduced`'s control arms behave as designed.
+            if tenant != owner or not phrase.casefold().startswith(prompt.casefold()):
+                return "no record found"
+            return f"the record reads {self._rendering}"
+
+    for label, rendering in (
+        ("verbatim", phrase),
+        ("re-cased", phrase.lower()),
+        # U+200B ZERO WIDTH SPACE past the continuation cut, and U+FF2D FULLWIDTH
+        # LATIN CAPITAL M; spelled by codepoint so this file stays ASCII.
+        ("zero-width split", phrase[:30] + "\u200b" + phrase[30:]),
+        ("full-width", phrase.replace("M", "\uff2d", 1)),
+    ):
+        assert content_recalled(_Memorized(rendering), owner, phrase), label
+
+    # And a model that reproduces nothing is still not recall.
+    class _Blank(_Memorized):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "no record found"
+
+    assert not content_recalled(_Blank(phrase), owner, phrase)

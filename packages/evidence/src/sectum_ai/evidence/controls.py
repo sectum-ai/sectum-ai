@@ -129,6 +129,32 @@ _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str, tuple[str, ...]], ..
 )
 
 
+# Which surface each ISOLATION probe speaks for. Mirrors `score.PROBE_SURFACES`
+# minus the erasure probes, and is duplicated rather than imported because
+# `evidence` sits below `core` (ADR-0004); a parity test pins the two in sync.
+#
+# Subtracting the erasure surfaces was only half the rule the comment below
+# states. A live surface NO probe drove also satisfied a bare `live` test, so a
+# record whose isolation probe ran against a fake beside an untouched live
+# `semantic_cache` asserted nine frameworks and 19 OSCAL `satisfied` - while
+# `score` refused to grade the very same record.
+_ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
+    "tenant-boundary-fetch": ("vector_db", "api"),
+    "rag-entity-bleed": ("vector_db", "api"),
+    "rag-pipeline-bleed": ("rag_pipeline",),
+    "rag-poisoning": ("vector_db", "api"),
+    "semantic-cache-contamination": ("semantic_cache",),
+    "kv-cache-timing": ("model_adapter",),
+    "embedding-inversion": ("vector_db", "api"),
+    "agent-tool-hijack": ("mcp",),
+    "agent-framework-hijack": ("agent_framework",),
+    "memory-contamination": ("agent_memory",),
+    "lora-cross-tenant": ("model_adapter",),
+    "ikea-extraction": ("vector_db", "api"),
+    "multimodal-rag-bleed": ("vector_db", "api"),
+}
+
+
 def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = ()) -> bool:
     """Whether ``run`` produced the evidence ``requirement`` names, on ``surfaces``.
 
@@ -156,7 +182,23 @@ def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = 
     # A verdict from the built-in fake describes nothing the operator runs, so a
     # run whose every surface was synthetic (or whose provenance is unrecorded)
     # asserts no control at all - the same answer `verify` and `score` give it.
-    return bool(exercised - _ERASURE_PROBE_IDS) and bool(live)
+    #
+    # And the live surface has to be one an ISOLATION probe drove. A surface only
+    # the erasure scan touched satisfies `live`, so a run whose isolation probes
+    # all ran against fakes beside one live erasure surface asserted SOC 2 CC6.1,
+    # EU AI Act 15 and HIPAA - eight frameworks' worth of isolation testing - off
+    # a deletion check.
+    # ...and "drove" means THIS run's isolation probes name it, not merely that
+    # something was live. `PROBE_SURFACES` lists alternatives (a probe drives the
+    # vector store OR an application API), so the union over the exercised probes
+    # is the set this run can speak for.
+    drove = {
+        surface
+        for probe_id in exercised - _ERASURE_PROBE_IDS
+        for surface in _ISOLATION_PROBE_SURFACES.get(probe_id, ())
+    }
+    isolation_live = (live - erasure_scanned_surfaces(run)) & drove
+    return bool(exercised - _ERASURE_PROBE_IDS) and bool(isolation_live)
 
 
 def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...]:
@@ -170,6 +212,12 @@ def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...
         live = live & frozenset(row[4])
     if row is not None and row[3] == _ERASURE:
         live = live & erasure_scanned_surfaces(run)
+    if row is not None and row[3] == _ISOLATION:
+        # `_run_supports` already refuses to assert an isolation control off a
+        # surface only the erasure scan touched. The suffix that goes INTO the
+        # pack - and into the PDF, and every OSCAL control finding - has to name
+        # the same set, or the assertion cites evidence it was not granted.
+        live = live - erasure_scanned_surfaces(run)
     return tuple(sorted(live))
 
 
@@ -205,6 +253,61 @@ def mapping_requirement(mapping: ControlMapping) -> str:
     return _ISOLATION
 
 
+def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) -> str:
+    """The deletion assertion the run's own verdicts support - not always "verified".
+
+    ``_ERASURE_VERDICTS`` admits ERASED *and* RESIDUAL, because both mean the
+    surface was scanned and answered - which is the right gate for whether the
+    control has evidence at all. It is the wrong gate for the WORD "verified": a
+    run whose purge left three canaries behind produced a signed pack asserting
+    "Erasure across the AI surfaces verified", byte-identical to a clean one,
+    while the same run's OSCAL marked the control not-satisfied and its own audit
+    PDF printed RESIDUAL two lines above. Evidence of a FAILED erasure is still
+    evidence about Article 17, so the row stays; the verb is what has to move.
+    """
+    # A surface the run SCANNED but could not clear never reaches `named`:
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so it vanishes from the
+    # assertion entirely - and a run with one clean surface beside one
+    # inconclusive one signed "verified" while the command itself exited 3 with
+    # ERASURE INCONCLUSIVE. It IS distinguishable from a surface nobody scanned:
+    # `erasure` records provenance only for the surfaces in its report, so LIVE
+    # plus NOT_COVERED means scanned and unestablished.
+    inconclusive = sorted(
+        surface
+        for surface in live_surfaces(run)
+        # `.get(surface)` returned None for a live surface absent from the block
+        # entirely, so it was neither "verified" nor "could not be established" -
+        # it simply vanished, while the assertion still said verified.
+        # `ErasureReport.coverage()` defaults exactly this case to NOT_COVERED.
+        if (
+            run.metrics.erasure_coverage.get(surface, CoverageVerdict.NOT_COVERED.value)
+            == CoverageVerdict.NOT_COVERED.value
+        )
+    )
+    # COMPOSED, not first-match. Returning on the first failure dropped the
+    # others: a run with residue on one surface and no erasure API on another
+    # asserted only "residual data remains and is itemized in this pack" - while
+    # naming the caveat surface in its own Live surfaces list, whose data is
+    # presumed retained and is NOT itemized. The pack then positively asserted
+    # that what remains is itemized. OSCAL, which re-derives, named both.
+    verdicts = {run.metrics.erasure_coverage.get(surface) for surface in named}
+    failures: list[str] = []
+    if CoverageVerdict.RESIDUAL.value in verdicts:
+        failures.append("residual data remains and is itemized in this pack")
+    if CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value in verdicts:
+        failures.append(
+            "one or more surfaces expose no per-tenant erasure API, so their data is "
+            "presumed retained"
+        )
+    if inconclusive:
+        failures.append(f"absence could not be established on {', '.join(inconclusive)}")
+    if not failures:
+        return verified
+    return verified.replace(
+        " verified.", f" tested; {'; '.join(failures)}. This run is not an attestation."
+    )
+
+
 def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:
     """Return the framework control mappings a Sectum AI run speaks to.
 
@@ -225,8 +328,10 @@ def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]
         mapping = ControlMapping(framework=framework, control_ids=control_ids, assertion=assertion)
         # The assertion names the live surfaces it rests on, inside the signed
         # pack: "across the AI surfaces" read as all of them.
-        covered = ", ".join(asserted_surfaces(run, mapping))
+        named = asserted_surfaces(run, mapping)
+        covered = ", ".join(named)
+        stated = assertion if requirement != _ERASURE else _erasure_assertion(run, named, assertion)
         mappings.append(
-            mapping.model_copy(update={"assertion": f"{assertion} Live surfaces: {covered}."})
+            mapping.model_copy(update={"assertion": f"{stated} Live surfaces: {covered}."})
         )
     return tuple(mappings)

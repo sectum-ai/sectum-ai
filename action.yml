@@ -11,8 +11,10 @@ branding:
 inputs:
   version:
     description: >-
-      sectum-ai version to install from PyPI (for example 0.11.0). Pin it for
-      reproducible runs. Leave empty to install the latest release.
+      sectum-ai version to install from PyPI (for example 1.2.3). Pin it for
+      reproducible runs. Leave empty to install the latest release, or set
+      "skip" to use a sectum-ai already on PATH (how this repo's self-test
+      exercises the CLI built from the checkout).
     required: false
     default: "0.11.0"
   config:
@@ -39,13 +41,13 @@ inputs:
     required: false
     default: "3.12"
   fail-on-leak:
-    description: "Fail the step when the probe confirms a finding - cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2)."
+    description: "Fail the step when the probe confirms a finding - cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). Must be exactly `true` or `false`; any other value is refused when a finding is found, rather than silently downgrading the gate to a warning."
     required: false
     default: "true"
 
 outputs:
   exit-code:
-    description: "The sectum-ai probe exit code (0 = no confirmed leaks; 2 = confirmed leak; 3 = config/adapter error)."
+    description: "The sectum-ai probe exit code (0 = no confirmed findings; 2 = a confirmed finding, or a CLI usage error, which shares exit 2 - the gate step tells them apart by whether a report was written; 3 = config/adapter error)."
     value: ${{ steps.probe.outputs.exit-code }}
   results-file:
     description: "Path to the written probe report (the output-file input)."
@@ -77,7 +79,10 @@ runs:
         SECTUM_AI_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [ -n "${SECTUM_AI_VERSION}" ]; then
+        if [ "${SECTUM_AI_VERSION}" = "skip" ]; then
+          command -v sectum-ai >/dev/null || {
+            echo "::error::version: skip needs sectum-ai already on PATH"; exit 1; }
+        elif [ -n "${SECTUM_AI_VERSION}" ]; then
           python -m pip install --upgrade "sectum-ai==${SECTUM_AI_VERSION}"
         else
           python -m pip install --upgrade sectum-ai
@@ -154,7 +159,19 @@ runs:
           echo "sectum-ai: no confirmed findings."
           exit 0
         fi
+        # Exit 2 is BOTH "confirmed finding" and Click's usage-error code, so a
+        # probe that never ran (an unknown flag against a pinned older version)
+        # reported a confirmed leak over a zero-byte results file. A real finding
+        # always leaves a report behind.
+        if [ "${EXIT_CODE}" = "2" ] && [ ! -s "${RESULTS}" ]; then
+          echo "::error::sectum-ai exited 2 but wrote no report to ${RESULTS}: the probe did not run (check the step log; exit 2 is also the CLI usage error)."
+          exit 1
+        fi
         if [ "${EXIT_CODE}" = "2" ]; then
+          if [ "${FAIL_ON_LEAK}" != "true" ] && [ "${FAIL_ON_LEAK}" != "false" ]; then
+            echo "::error::fail-on-leak must be 'true' or 'false', got '${FAIL_ON_LEAK}'. Refusing to guess: any other value silently downgraded this gate to a warning."
+            exit 1
+          fi
           if [ "${FAIL_ON_LEAK}" = "true" ]; then
             echo "::error::sectum-ai confirmed a finding (see ${RESULTS}; a fake-surface finding describes the built-in fake). Set fail-on-leak: false to report without failing."
             exit 1

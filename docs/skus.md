@@ -11,11 +11,11 @@ Prices are not listed here (they change independently of the code) — see
 
 ## The four SKUs
 
-| SKU | What it proves | How you run it | Edition |
+| SKU | What the evidence shows | How you run it | Edition |
 |---|---|---|---|
-| **Erasure Attestation** (the wedge) | A churned tenant's data has actually left every configured AI surface after a GDPR Article 17 request | `sectum-ai erasure --target-tenant …` (Class 11) → DPO-facing PDF + signed `evidence.json` | OSS CLI; Cloud hosts + schedules |
-| **SOC 2 Tenant Isolation Evidence Pack** | Logical separation, boundary, and segregation between tenants hold across the AI surfaces | `sectum-ai probe --suite soc2-tenant-isolation` → control-mapped pack | OSS CLI; Cloud + auditor channel |
-| **Continuous Multi-Tenant Verification** | Isolation still holds release over release (no regression) | `sectum-ai probe` (full) + `sectum-ai baseline` / `sectum-ai diff`, scheduled | Cloud (scheduled runs + dashboard); OSS runs it one-shot |
+| **Erasure Attestation** (the wedge) | None of a churned tenant's markers is still retrievable through the scanned AI surfaces after a GDPR Article 17 request, and which surfaces went unscanned | `sectum-ai erasure --target-tenant …` (Class 11) → DPO-facing PDF + signed `evidence.json` | OSS CLI; Cloud hosts + schedules |
+| **SOC 2 Tenant Isolation Evidence Pack** | Which logical-separation, boundary, and segregation checks ran across the AI surfaces and what each found; classes no adapter could reach are recorded `NOT_COVERED`, never as a pass | `sectum-ai probe --suite soc2-tenant-isolation` → control-mapped pack | OSS CLI; Cloud + auditor channel |
+| **Continuous Multi-Tenant Verification** | Whether the checks that passed last release still pass this one, and whether the run lost coverage rather than fixing a leak | `sectum-ai probe` (full) + `sectum-ai baseline` / `sectum-ai diff`, scheduled | Cloud (scheduled runs + dashboard); OSS runs it one-shot |
 | **Open Sectum** | — (the substrate, attack catalog, adapters, and `verify`) | the `sectum-ai` CLI | OSS, free (Apache-2.0) |
 
 The first three are revenue SKUs; **Open Sectum** is the free core that makes the
@@ -54,5 +54,7 @@ and their probe sets are validated against the live catalog in CI.
 - **Hosted** — Sectum runs the synthetic tenants against your reachable
   endpoints.
 - **BYOC (bring-your-own-cloud)** — the CLI runs inside your environment; only
-  the markers, the configuration, and the signed evidence leave the box (see the
+  the markers, the configuration, the findings' evidence spans (which can include
+  a judge rationale restating observed content) and the timestamped evidence pack
+  leave the box (see the
   [threat model](threat-model.md)).

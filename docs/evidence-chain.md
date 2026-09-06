@@ -1,8 +1,12 @@
 # Evidence chain
 
-Every run produces an `EvidencePack` — a tamper-evident, control-mapped bundle
-that an auditor or Data Protection Officer accepts and that a third party
-verifies independently.
+A completed run can be assembled into an `EvidencePack` — a bundle a third
+party verifies independently with `sectum-ai verify`, no trust in Sectum AI
+required. Two things must be true before it is evidence *about your systems*:
+the digest must be bound by an independent anchor (a real RFC 3161 timestamp or
+a Rekor inclusion proof — the development default is neither), and at least one
+surface must have been live. `verify` refuses a pack missing either, and a run
+with no live surface carries no control mappings at all.
 
 ## Construction
 
@@ -18,9 +22,11 @@ verifies independently.
    timestamper (a JSON record of the digest and a wall-clock time, with no
    external anchor). Production configures an RFC 3161 Time-Stamp Authority (see
    below) and, optionally, records the digest in a Sigstore Rekor transparency log.
-4. The pack bundles the canonical run, the manifest hash, the timestamp token,
+4. The pack carries the canonical run, the manifest hash, the timestamp token,
    the Rekor inclusion proof (when enabled), the control mappings, the
-   `anchored_in_log` flag, and a human-readable PDF.
+   `anchored_in_log` and `anchored_with_timestamp` flags, and `pdf_ref` — the
+   SHA-256 of the audit PDF's bytes. The PDF travels beside the pack, not within
+   it (`sectum-ai pack` is what puts the two in one zip).
 
 ## Trusted timestamping (RFC 3161)
 
@@ -34,7 +40,11 @@ the verifier **never trusts a root carried inside the pack** — that would let 
 forged pack ship its own trust anchor. Instead `sectum-ai verify` pins the root
 independently: it ships the public [FreeTSA](https://freetsa.org) leaf and root
 built in (FreeTSA is the default TSA), and `--tsa-cert`/`--tsa-root` override
-them with a customer-pinned authority's certificates.
+them with a customer-pinned authority's certificates. Pass them **together**: a
+leaf supplied with `--tsa-cert` must be issued by the pinned root, so
+`--tsa-cert` alone leaves a customer's leaf checked against FreeTSA's root and
+`verify` refuses it. The library keeps the leaf and the roots in one flat trust
+store, so without that check a self-signed leaf would anchor its own token.
 
 RFC 3161 support is an optional extra, `sectum-ai-evidence[rfc3161]` (the
 `LocalTimestamper` path needs no third-party dependency).
@@ -101,6 +111,45 @@ anchor check; pass `--allow-synthetic` to accept a demo pack knowingly. Because
 `sectum-ai verify` is part of the open-source core, anyone can verify a Sectum AI
 evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-whole-pack.md).)
 
+`sectum-ai verify` prints one line per check. On a **pack**: `schema-version`,
+`timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
+`audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
+`in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings` when the flags,
+the pack or its siblings call for them. On a **run-pack bundle** (a `.zip`), one
+`member:<name>` line per listed member comes first and the pack's own checks
+follow, with the in-toto line naming the member it re-checked
+(`in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)
+also carries `run.json`, so it prints `bundled-run`; an `evidence-bundle.zip`
+carries none and prints nothing for it. An unreadable archive, a duplicate member
+name, a bad digest manifest and a missing evidence member add `bundle`,
+`bundle-members`, `bundle-manifest` and `evidence-pack` — failure paths a clean
+bundle never prints.
+
+`manifest-hash` is the one check a flag turns on. The pack's own digests bind
+*that the manifest hash matches*, not *which marker belonged to which tenant*;
+supplying the ground-truth manifest binds the second. The manifest lives inside
+the workdir's `substrate.json`, so extract it first:
+
+```sh
+python -c "import json,sys; json.dump(json.load(open('.sectum-ai/substrate.json'))['manifest'], sys.stdout)" > manifest.json
+uv run sectum-ai verify .sectum-ai/evidence.json --manifest manifest.json
+```
+
+With `security.manifest_key_env` set, `seed` seals the whole substrate as
+`substrate.json.enc` and deletes the plaintext, so that command has nothing to
+read - decrypt it first, or take the manifest from a run pack built with
+`sectum-ai pack --include-manifest`, which ships it sealed as
+`ground-truth-manifest.json.aes`.
+
+The `control-mappings` check asks the same question of the pack's **compliance
+claims**. The digest binds them, so they cannot be edited after signing — but
+nothing asked whether the run *earned* them, and a pack built by any other tool
+carries whatever table its author chose. `control_mappings()` is a pure function
+of the run, so the verifier recomputes it and refuses any mapping the run's
+evidence does not support: a clean isolation run over no erasure coverage cannot
+assert GDPR Article 17. Asserting *fewer* controls than the evidence earns is
+honest under-claiming and passes — only the other direction fails.
+
 ## What the pack carries — and what it does not
 
 The pack carries the manifest's *hash*, not the manifest itself. The
@@ -111,8 +160,9 @@ test condition cryptographically.
 ## Outputs
 
 - `evidence.json` — machine-readable and schema-versioned.
-- `audit-pack.pdf` — an executive summary, scope, methodology, findings table,
-  and a control-by-control coverage appendix.
+- `audit-pack.pdf` — a verification summary (including the probes exercised and
+  the confirmed findings by kind), scope and methodology, the findings, the
+  compliance control coverage, and an integrity / independent-verification block.
 - `attestation.intoto.json` — the same evidence re-expressed as an
   [in-toto Attestation](https://github.com/in-toto/attestation) Statement (v1):
   a tool-agnostic envelope whose *subject* is the run (bound by its canonical

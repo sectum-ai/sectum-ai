@@ -19,7 +19,12 @@ from collections.abc import Sequence
 from sectum_ai.adapters.fakes import FakeVectorStore
 from sectum_ai.embeddings import EmbeddingModel, cosine
 from sectum_ai.probes import RagEntityBleedProbe
-from sectum_ai.runner import StepResult, payload_int, retrieval_pivot_rate
+from sectum_ai.runner import (
+    StepResult,
+    payload_int,
+    payload_required,
+    retrieval_pivot_rate,
+)
 from sectum_ai.spec import Observation, Substrate, Surface
 
 FAKE_EMBEDDING_STRENGTH: dict[str, float] = {
@@ -56,7 +61,7 @@ def embedding_model_sweep(substrate: Substrate, models: tuple[str, ...]) -> dict
         results: list[StepResult] = []
         for step in steps:
             k = payload_int(step, "k", "5")
-            hits = store.query(step.actor_tenant_id, step.payload["query"], k)
+            hits = store.query(step.actor_tenant_id, payload_required(step, "query"), k)
             observation = Observation(
                 step_id=step.step_id,
                 surface=Surface.VECTOR_DB,
@@ -89,7 +94,7 @@ def embedding_provider_sweep(
     for model in models:
         document_vectors = model.embed([f"{doc.title} {doc.content}" for doc in documents])
         index = list(zip(documents, document_vectors, strict=True))
-        query_vectors = model.embed([step.payload["query"] for step in steps])
+        query_vectors = model.embed([payload_required(step, "query") for step in steps])
         results: list[StepResult] = []
         for step, query_vector in zip(steps, query_vectors, strict=True):
             k = payload_int(step, "k", "5")

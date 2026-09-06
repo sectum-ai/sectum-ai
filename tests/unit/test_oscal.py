@@ -339,3 +339,84 @@ def test_the_live_surface_suffix_and_the_erasure_verdict_agree() -> None:
     finding = run_to_oscal(run)["assessment-results"]["results"][0]["findings"][0]
     assert "Live surfaces: tracing, vector_db." in finding["description"]
     assert "presumed retained, after the erasure on tracing" in finding["target"]["description"]
+
+
+def test_every_observation_says_which_stack_it_describes() -> None:
+    # OSCAL states provenance once for the run and gates its CONTROL findings on
+    # it, but a GRC platform tabulates the observations - and a row from the
+    # built-in fake tabulated identically to one from production. The SARIF
+    # projection carries it per result for the same reason.
+    doc = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    )
+    observation = doc["results"][0]["observations"][0]
+    props = {p["name"]: p["value"] for p in observation["props"]}
+    assert props["sectum-surface-provenance"] == "SYNTHETIC"
+    assert props["sectum-backing-surface"] == "vector_db"
+    assert observation["description"].startswith("[synthetic surface")
+
+    live = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    live_observation = live["results"][0]["observations"][0]
+    live_props = {p["name"]: p["value"] for p in live_observation["props"]}
+    assert live_props["sectum-surface-provenance"] == "LIVE"
+    assert not live_observation["description"].startswith("[synthetic surface")
+
+    # A surface the record does not describe reads UNRECORDED, not SYNTHETIC.
+    unstated = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    unstated_props = {
+        p["name"]: p["value"] for p in unstated["results"][0]["observations"][0]["props"]
+    }
+    assert unstated_props["sectum-surface-provenance"] == "UNRECORDED"
+
+
+def test_an_unrecorded_surface_observation_is_not_told_it_describes_a_fake() -> None:
+    # Same two-valued prose beside a three-valued property, in the projection a
+    # GRC platform tabulates.
+    doc = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    description = doc["results"][0]["observations"][0]["description"]
+    assert description.startswith("[surface provenance not recorded"), description
+    assert "built-in fake" not in description
+
+
+def _erasure_states(coverage: dict[str, str], **metrics: Any) -> dict[str, str]:
+    """The OSCAL state of each deletion control for an erasure run."""
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance=dict.fromkeys(coverage, "LIVE"),
+        metrics=RunMetrics(erasure_coverage=coverage, **metrics),
+    )
+    return {
+        finding["title"]: finding["target"]["status"]["state"]
+        for result in run_to_oscal(run)["assessment-results"]["results"]
+        for finding in result.get("findings", [])
+        if "erasure verification" in finding["title"]
+    }
+
+
+def test_oscal_marks_an_inconclusive_erasure_not_satisfied() -> None:
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so a surface the run SCANNED
+    # and could not clear was invisible here - the same hole the pack's prose
+    # assertion had, fixed there and not here. The signed pack then contradicted
+    # itself inside one string: a description reading "absence could not be
+    # established on search_index. This run is not an attestation." carrying a
+    # target state of `satisfied` and "verified the erasure on every live surface
+    # it scanned". The CLI exits 3 on that same run.
+    inconclusive = _erasure_states(
+        {"vector_db": "ERASED", "search_index": "NOT_COVERED"},
+        erasure_residue={"vector_db": 0},
+    )
+    assert inconclusive, "the deletion controls must still appear"
+    assert set(inconclusive.values()) == {"not-satisfied"}, inconclusive
+
+    # An all-ERASED run still attests, and a surface nobody scanned (no
+    # provenance) must not drag it down.
+    clean = _erasure_states({"vector_db": "ERASED"}, erasure_residue={"vector_db": 0})
+    assert set(clean.values()) == {"satisfied"}, clean

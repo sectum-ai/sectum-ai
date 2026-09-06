@@ -13,11 +13,12 @@ until it bites, and it cost a designed-and-reverted change in the PR #252 review
 `canonical_hash` serializes with `model_dump(mode="json")` — every field, defaults
 included — so **adding any field to `RunResult` (or `RunMetrics`) changes the canonical
 form of every record that already exists**, including ones written by older versions. The
-digest changes; the RFC 3161 token and Rekor entry over the old digest no longer match;
+digest changes; the timestamp token over the old digest no longer matches;
 and `verify` reports **"the timestamp token attests a different digest; the evidence pack
 was altered"** — accusing an untouched pack of tampering. `tests/invariants/
 test_sample_packs_verify.py` is the guard that catches this (it did), because the shipped
-sample packs carry real anchors.
+sample packs carry a digest-binding timestamp token — a local-dev one, so
+unanchored, but still bound to the attested digest.
 
 Consequences for anyone adding a field here:
 - It is a **breaking** change for existing evidence, not an additive one, whatever the

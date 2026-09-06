@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from typer.testing import CliRunner
@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import AdapterConfig, EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum_ai.spec import RunMetrics, RunResult, SyntheticUserSpec
+from sectum_ai.spec import SCHEMA_VERSION, RunMetrics, RunResult, SyntheticUserSpec
 
 _runner = CliRunner()
 
@@ -773,7 +773,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     payload = json.loads(result.output)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"] == "1.2"  # pinned; see docs/scorecard.md
+    assert payload["methodology_version"] == "1.3"  # pinned; see docs/scorecard.md
     # The demo leaks on every surface it exercised, so the covered classes all fail.
     assert payload["weighted_score"] == 0.0
     assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
@@ -826,7 +826,7 @@ def test_score_refuses_a_run_that_exercised_no_catalog_class(tmp_path: Path) -> 
     run_path.write_text(json.dumps(record))
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 3  # a ConfigError, not a ZeroDivisionError traceback
-    assert "nothing to grade" in (result.output + str(result.exception or ""))
+    assert "can be graded" in (result.output + str(result.exception or ""))
 
 
 def test_score_rejects_sarif_and_oscal(tmp_path: Path) -> None:
@@ -1493,6 +1493,9 @@ def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str,
                 "finished_at": "2026-01-01T00:00:00+00:00",
                 "probe_versions": probe_versions,
                 "metrics": metrics,
+                # A record without a stamp is refused: the field defaults to the
+                # current version, so "missing" cannot read as "current".
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -1640,3 +1643,175 @@ def test_the_retrieval_pivot_rate_describes_the_live_surfaces_on_a_mixed_run(
     assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
     assert summary["retrieval_pivot_rate"] == 0.0  # the live pipeline did not
     assert summary["retrieval_pivot_k"] == 0
+
+
+def test_every_headline_rate_describes_the_live_surfaces_on_a_mixed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The cycle-4 filter reached the Retrieval-Pivot Rate only: the same summary
+    # reported 0% pivot on the live pipeline and 100% poisoning bleed, 100%
+    # inversion and 18% extraction from the fake vector store, as the stack's.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"]).stdout
+    )
+    assert summary["surface_provenance"]["rag_pipeline"] == "LIVE"
+    assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
+    assert summary["confirmed_on_live_surfaces"] == 0
+    for rate in ("retrieval_pivot_rate", "poisoning_bleed_delta"):
+        assert summary[rate] in (0.0, None), (rate, summary[rate])
+    assert summary["inversion_reconstruction_rate"] in (0.0, None)
+    assert summary["extraction_efficiency"] in (0.0, None)
+    # The live RAG pipeline WAS measured: the filter kept its steps rather than
+    # dropping every one of them, which would read the same in the rate alone.
+    assert summary["retrieval_pivot_n"] > 0, summary
+
+
+def test_an_unexercised_live_adapter_does_not_make_a_run_mixed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "Mixed" keyed on the configured slots, so a live observability adapter no
+    # probe drove emptied the Class 2 rate: the summary said Class 2 did not run
+    # while the scorecard failed it on the same record.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeObservability
+
+    class _LiveTracing(FakeObservability):
+        synthetic = False
+
+    monkeypatch.setattr(config_module, "build_observability", lambda _cfg: _LiveTracing())
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(
+            app,
+            [
+                "probe",
+                "--workdir",
+                str(tmp_path),
+                "--probe",
+                "rag-entity-bleed",
+                "--output",
+                "json",
+            ],
+        ).stdout
+    )
+    assert "tracing" not in summary["surface_provenance"]
+    assert summary["retrieval_pivot_n"] > 0
+    assert summary["retrieval_pivot_rate"] is not None
+
+
+def test_the_text_summary_says_how_many_findings_describe_the_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "; 0 on live surfaces" in result.output, result.output
+
+
+def test_verify_on_a_non_utf8_file_exits_cleanly(tmp_path: Path) -> None:
+    # Reading the pack's bytes for the schema stamps moved the read out of the
+    # try that mapped a decode error to exit 3, so a binary file tracebacked.
+    bad = tmp_path / "evidence.json"
+    bad.write_bytes(b"\xff\xfe\x00binary")
+    result = _runner.invoke(app, ["verify", str(bad)])
+    assert result.exit_code == 3, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "not a valid evidence pack" in result.output, result.output
+
+
+def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> None:
+    # The markers, tenants and manifest ARE the schema: a 0.6.x substrate seeded a
+    # run whose own stamp then read as current, so nothing downstream could see it.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    path = tmp_path / "substrate.json"
+    record = json.loads(path.read_text())
+    record["schema_version"] = "0.6.0"
+    path.write_text(json.dumps(record))
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+
+
+def test_a_kv_probe_with_no_resolution_does_not_cover_class_5(tmp_path: Path) -> None:
+    # The run recorded the KV probe as exercised whenever it produced any signal,
+    # so a backend whose latency metric has no resolution (one constant reading)
+    # put the probe in probe_versions and graded Class 5 PASS off a measurement
+    # that could not have found anything.
+    import sectum_ai.cli.app as app_module
+    from sectum_ai.probes.kv_cache_timing.probe import KvCacheTimingProbe, TimingSignal
+
+    def _flat(self: object, owner: object, observer: object, prefixes: object) -> TimingSignal:
+        return TimingSignal(
+            owner_tenant_id=uuid4(),
+            observed_in_tenant_id=uuid4(),
+            primed_mean_ms=100.0,
+            control_mean_ms=100.0,
+            mean_gap_ms=0.0,
+            effect_size=0.0,
+            t_statistic=0.0,
+            degrees_of_freedom=46.0,
+            p_value=1.0,
+            ci_low_ms=0.0,
+            ci_high_ms=0.0,
+            resolved=False,
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(KvCacheTimingProbe, "_measure", _flat)
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    finally:
+        monkeypatch.undo()
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert KvCacheTimingProbe.id not in run["probe_versions"], run["probe_versions"]
+    assert "kv_cache" not in run["surface_provenance"]
+    assert app_module is not None
+
+
+def test_verify_names_the_files_beside_the_pack_it_does_not_speak_for(tmp_path: Path) -> None:
+    # `verify` checked only the pack's OWN expected siblings and said nothing
+    # about anything else in the folder, so a forged `erasure-attestation.pdf`
+    # delivered beside a genuine `evidence.json` produced an all-`[ok]` verdict
+    # that read as "everything here checks out".
+    #
+    # It cannot be CHECKED: one workdir routinely holds both the probe's and the
+    # erasure run's artifacts, each pack binding only its own, so hashing the
+    # other against this pack's `pdf_ref` would call a genuine document altered -
+    # the worst false alarm a tamper-evidence product can raise. So it is named.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "erasure-attestation.pdf").write_bytes(b"%PDF-1.4 forged\n")
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert "unclaimed-siblings" in result.output, result.output
+    assert "erasure-attestation.pdf" in result.output
+    assert "says nothing about them" in result.output
+    # Still a pass: the pack itself is intact, and the extra file is not its
+    # business to judge.
+    assert result.exit_code == 0

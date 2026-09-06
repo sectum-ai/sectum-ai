@@ -173,3 +173,34 @@ def test_anthropic_tooluse_does_not_append_assistant_history_when_final_text_is_
     roles = [m["role"] for m in second_turn.messages]
     # Only the two user messages, no assistant entry in between.
     assert roles == ["user", "user"]
+
+
+def test_a_tool_with_no_executable_callable_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The broken shape the docs used to teach: the callable stored as a KEY in
+    # the spec dict. `getattr` cannot see it, so the target resolves to the dict
+    # itself, which is not callable. That tool used to be dropped silently - and
+    # a dropped tool answers every invocation with an empty string, so Class 7
+    # grades the agent surface clean over a tool that was never wired.
+    import sys
+    import types
+
+    from sectum_ai.adapters.agent._anthropic_tooluse_live import LiveAnthropicClient
+
+    # The SDK is an optional extra and is not installed here; the tool registry
+    # this test is about is built after the import guard.
+    stub = types.ModuleType("anthropic")
+    stub.Anthropic = lambda **_: object()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "anthropic", stub)
+
+    def lookup(query: str) -> str:
+        return "x"
+
+    spec = {"name": "lookup", "description": "d", "input_schema": {"type": "object"}}
+    broken = dict(spec, __sectum_callable__=lookup)
+    with pytest.raises(AdapterError, match="no python callable to execute"):
+        LiveAnthropicClient(api_key="k", model="m", tools=[broken], max_tokens=8, system="s")
+
+    # The documented shape constructs, and registers the callable.
+    lookup.__sectum_tool_spec__ = spec  # type: ignore[attr-defined]
+    client = LiveAnthropicClient(api_key="k", model="m", tools=[lookup], max_tokens=8, system="s")
+    assert client._tool_targets == {"lookup": lookup}

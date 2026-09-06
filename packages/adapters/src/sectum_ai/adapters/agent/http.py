@@ -60,5 +60,13 @@ class HttpAgent(AgentAdapter):
             raise AdapterError(f"agent HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"agent response must be a JSON object, got {type(body).__name__}")
+        # A 200 carrying an error envelope is not a run: read as an empty one, the
+        # step recorded "the agent invoked no foreign tool", which is a verdict the
+        # probe never obtained.
+        for key in ("error", "errors"):
+            if body.get(key):
+                raise AdapterError(
+                    f"agent endpoint at {self._url} returned an error: {str(body[key])[:200]}"
+                )
         tool_calls = tuple(str(call) for call in body.get("tool_calls", []))
         return AgentResult(output=str(body.get("output", "")), tool_calls=tool_calls)

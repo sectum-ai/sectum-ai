@@ -61,6 +61,14 @@ class HttpRAGPipeline(RAGPipelineAdapter):
             raise AdapterError(f"RAG HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"RAG response must be a JSON object, got {type(body).__name__}")
+        # A 200 carrying an error envelope is not an answer: read as an empty one,
+        # the query still counted toward the Retrieval-Pivot Rate's denominator as
+        # a query that did not leak.
+        for key in ("error", "errors"):
+            if body.get(key):
+                raise AdapterError(
+                    f"RAG pipeline at {self._url} returned an error: {str(body[key])[:200]}"
+                )
         retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
         return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
 

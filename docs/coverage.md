@@ -54,9 +54,9 @@ point: it is rejected at config load, since v0.10.0.)
 | KV-cache timing side channel (5) | model | a self-hosted model (vLLM/TGI/HF) — real signal needs a GPU |
 | Embedding inversion (6) | vector store | any live vector backend |
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
-| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
+| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / a generic `http` agent endpoint |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
-| LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
+| LoRA cross-tenant influence (9) | model | a self-hosted model that trains on tenant data — per-tenant adapters (HF + PEFT), or shared weights, which is the posture the probe exists to catch |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
 | Data-subject erasure — A3 DSR | vector store + cache (+ optional model, tracing, memory, search index) | vector + cache; model / tracing / memory / search index when configured |
@@ -79,20 +79,42 @@ scanning adapter yet, so it is out of scope, not fake; see the
 
 ## Known coverage gaps
 
+- **The subject-erasure vector fingerprint rarely reaches `ERASED` against a real
+  ANN store.** The check reads a top-50 similarity page and treats a *full* page
+  without the phrase as inconclusive, because a phrase still stored but ranked
+  past the page looks identical. A real approximate-nearest-neighbour store
+  returns exactly `k` whenever the tenant holds that many vectors — and an A3
+  subject erasure removes one subject's data, not the tenant's — so the page is
+  usually full and the vector surface reads `NOT_COVERED` rather than `ERASED`.
+  That is the honest answer for what this method can see, not a bug, but it means
+  the surface's clean verdict is reachable in practice only for a small tenant.
+  Class 11's tenant-level scan is unaffected: it deletes the whole tenant, so the
+  post-erasure page is short. A filtered or exact-match lookup would settle it
+  and is the natural next step.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests
   that skip without credentials, so their contract is verified offline against a mock and
   live against a real backend on demand (S3 against a local MinIO, GCS against a local
   fake-gcs-server). The search index
-  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
-  against docker-compose backends in CI every push. The agent-memory surface also has a
+  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores
+  except **Milvus** (pgvector, Chroma, Weaviate, Qdrant) run against docker-compose
+  backends in CI every push; Milvus is gated behind the compose `milvus` profile —
+  too heavy for the CI job — so its integration test skips there and is run on
+  demand. The agent-memory surface also has a
   live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow
   the same seam.
-- **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
-  require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
-  HuggingFace + PEFT. A stack that reaches generation only through a hosted API
-  (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
+- **The model probes need a self-hosted model.** Class 9 (LoRA) requires a model
+  that *trains* on tenant data: HuggingFace + PEFT (per-tenant adapters), or any
+  backend reporting shared weights. vLLM and TGI are serving-only — they declare a
+  shared prefix cache and neither per-tenant adapters nor shared weights — so
+  Class 9 is **skipped** against them and scores `NOT_COVERED`, never `PASS`.
+  Class 5 (KV timing) requires a prefix
+  cache *shared across principals*, which only the serving backends (vLLM, TGI)
+  declare: HuggingFace + PEFT loads per tenant, so the probe runs there but can find
+  nothing by construction, and its PASS is a property of the deployment, not a
+  measurement. A stack that reaches generation only through a hosted API (OpenAI /
+  Anthropic) cannot run either as-is; the Class 2 embedding sweep still does.
 - **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
   (local, BYOC-safe) plus the hosted `openai`, `cohere`, `voyage`, and `bedrock`
   (all opt-in live and key/region-gated). The Bedrock adapter covers both invoke-body

@@ -21,10 +21,16 @@ on a shared index the fetch returns the foreign document and the canary surfaces
 A tenant-isolated store instead returns **200-empty**, which is *not* a proven
 deny — the backend may have silently swallowed the request rather than enforcing
 authorization. The probe does not treat that as a clean pass: it records an
-**unverified, informational** finding flagging the 200-empty vs 403 ambiguity, so
-an enforced deny (an explicit `403`) is distinguished from a silent empty body in
-the evidence. These findings are excluded from the confirmed-leak headline and
-carry a remediation pointer to return an explicit authorization error.
+**unverified, informational** finding on every empty cross-principal fetch,
+flagging that negative authorization is unproven. Distinguishing an enforced
+`403` from a 200-empty needs an adapter that can report the refusal — the
+`fetch` contract returns a hit or nothing, so `AccessOutcome.DENIED` is reserved
+for it and is produced by no adapter today. These findings are excluded from the
+confirmed-leak headline and carry a remediation pointer to return an explicit
+authorization error.
+
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
 
 ## Status
 

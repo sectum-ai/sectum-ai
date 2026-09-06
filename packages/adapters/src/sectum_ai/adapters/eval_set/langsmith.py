@@ -18,7 +18,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, EvalSetAdapter
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _EXAMPLE_LIMIT = 1000
@@ -94,6 +94,11 @@ class LangSmithEvalSet(EvalSetAdapter):
         if dataset not in self._dataset_names():
             return []
         query_tokens = _tokens(query)
+        # `residual_present` is the caller's own residual test, not a
+        # lookalike: a suppression predicate LOOSER than the caller's fails
+        # open (the adapter says "found it, no refusal" over a hit the caller
+        # will not count, and the marker past the cap reads absent), so the
+        # two must be one function.
         hits: list[str] = []
         seen = 0
         for example in self._client.list_examples(dataset_name=dataset, limit=_EXAMPLE_LIMIT):
@@ -101,11 +106,17 @@ class LangSmithEvalSet(EvalSetAdapter):
             text = self._text(example)
             if query_tokens & _tokens(text):
                 hits.append(text)
-        if seen >= _EXAMPLE_LIMIT:
-            # A truncated page is not a scan: a fixture past it read as absent.
+        # `hits` is token-overlap; the caller counts an exact substring. Suppress
+        # the refusal only on a hit the caller would also count, or a page-filling
+        # row sharing one token (every canary shares "sectum" and "canary") hides a
+        # truncated listing and the marker past it reads as absent.
+        if not any(residual_present(query, text) for text in hits) and seen >= _EXAMPLE_LIMIT:
+            # A truncated page is not a scan: a fixture past it read as absent. A
+            # fixture FOUND on a full page already answers the question, so only a
+            # miss is refused.
             raise AdapterError(
                 f"LangSmith dataset {dataset} holds at least {_EXAMPLE_LIMIT} examples, the "
-                "listing cap, so the eval-set scan would be incomplete"
+                "listing cap, so an eval-set scan that found nothing would be incomplete"
             )
         return hits
 

@@ -30,6 +30,9 @@ attributed to a mechanism the backend does not have. The `app` family (an applic
 own resource API filling the vector slot) declares no semantic retrieval, so against it
 this probe is **skipped** and the class scores `NOT_COVERED`, never `PASS`.
 
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
+
 ## Status
 
 Implemented in Phase 5.

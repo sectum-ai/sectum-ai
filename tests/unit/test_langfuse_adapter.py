@@ -156,3 +156,25 @@ def test_langfuse_delete_that_never_settles_is_an_error(monkeypatch: pytest.Monk
     monkeypatch.setattr("sectum_ai.adapters.observability.langfuse.time.sleep", lambda _s: None)
     with pytest.raises(AdapterError, match="cannot be confirmed"):
         LangfuseObservability(client).delete(_TENANT_A)
+
+
+def test_langfuse_search_keeps_a_hit_found_on_a_truncated_listing() -> None:
+    # A truncated listing raised before `search_traces` could report what it had
+    # already found, so a marker sitting inside the scanned pages of a large
+    # tenant became an AdapterError instead of the residual it is. The four
+    # sibling trace backends refuse only a MISS on a capped listing; this one
+    # refused unconditionally. A miss on the same listing is still unknowable.
+    from sectum_ai.spec import AdapterError
+
+    client = _FakeLangfuse()
+    client.trace_api.record(user_id=_TENANT_A.hex, text="trace holding CANARY-OMEGA")
+    for index in range(1001):
+        client.trace_api.record(user_id=_TENANT_A.hex, text=f"trace {index}")
+    adapter = LangfuseObservability(client)
+
+    hits = adapter.search_traces(_TENANT_A, "CANARY-OMEGA")
+    assert len(hits) == 1, hits
+    assert "CANARY-OMEGA" in hits[0].snippet
+
+    with pytest.raises(AdapterError, match="more than 1000"):
+        adapter.search_traces(_TENANT_A, "CANARY-ABSENT")

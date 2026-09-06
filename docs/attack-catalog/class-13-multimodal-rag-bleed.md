@@ -16,8 +16,8 @@ modality.
 
 ## Method
 
-Tenants deliberately share *visual entities*: a chart type, a logo, a product photo, a
-floor plan, a signature card. Each tenant owns a *pivot image* per shared visual entity
+Tenants deliberately share *visual entities*: a chart type, a circuit board, a logo, a
+product photo, a floor plan, a signature card. Each tenant owns a *pivot image* per shared visual entity
 — its own rendered copy of that entity — and the image's caption/payload carries one of
 the tenant's canary markers. The probe issues one benign image query per shared visual
 entity from each principal's session (a tenant, or a user within a tenant — ADR-0006; a

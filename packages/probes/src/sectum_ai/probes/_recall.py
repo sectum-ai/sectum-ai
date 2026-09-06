@@ -22,10 +22,20 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 from sectum_ai.adapters import Capability, ModelAdapter
+from sectum_ai.spec import normalize_for_match, residual_present
 
 # "Smith" for "John", "@example.com" for a local part: any base model produces
 # those, so a phrase whose trailing part is shorter than this is not checked.
 MIN_CONTINUATION_CHARS = 6
+
+# The similarity page a marker/fingerprint scan reads. A marker still stored but
+# ranked past the page is invisible to `query`, so a SHORT page without it is
+# absence and a FULL one is only "not in the top k" - the caller must treat that
+# as inconclusive. Class 11 and the A3 subject probe both scan a vector store for
+# the same thing; they kept separate copies of this number, one moved to 50 and
+# the other stayed at 10, and the run that read a full page as absence signed
+# ERASURE VERIFIED over a canary the store still returned.
+FINGERPRINT_QUERY_K = 50
 
 
 def continuation_split(phrase: str) -> tuple[str, str] | None:
@@ -50,7 +60,7 @@ def continuation_split(phrase: str) -> tuple[str, str] | None:
         prefix, suffix = phrase[:cut], phrase[cut:]
     if len(suffix.strip()) < MIN_CONTINUATION_CHARS or scramble(prefix) is None:
         return None
-    return prefix, suffix.casefold()
+    return prefix, normalize_for_match(suffix)
 
 
 def scramble(prefix: str) -> str | None:
@@ -79,9 +89,24 @@ def scramble(prefix: str) -> str | None:
     return None if control == prefix else control
 
 
+def has_base_control(model: ModelAdapter) -> bool:
+    """Whether a recall from ``model`` can be told apart from base knowledge.
+
+    The control is the same prompt as a tenant that trained nothing. A model that
+    merges every tenant's weights (``SHARED_WEIGHTS``) has no such tenant, so a
+    completion the base already knew - "Hussein Obama" after "Barack" - cannot be
+    attributed to the subject's data. Its fingerprints are unverifiable, not
+    residual: the alternative was a CONFIRMED HIGH finding at confidence 1.0 in a
+    DSR attestation for a model that trained nothing.
+    """
+    return model.supports(Capability.PER_TENANT_ADAPTER) and not model.supports(
+        Capability.SHARED_WEIGHTS
+    )
+
+
 def content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:
     """Whether ``model`` still reproduces ``phrase`` for ``target``, controls applied."""
-    if _reproduced(model, target, phrase, phrase.casefold()):
+    if _reproduced(model, target, phrase, normalize_for_match(phrase)):
         return True
     split = continuation_split(phrase)
     if split is None:
@@ -98,16 +123,22 @@ def _reproduced(model: ModelAdapter, target: UUID, prompt: str, needle: str) -> 
     Smith'") signed a RESIDUAL for a tenant that trained nothing, and a hard
     delete then read as an erasure failure.
     """
-    if needle not in model.infer(target, prompt).casefold():
+    # `residual_present`, not a casefolded `in`: this is the same question the
+    # erasure scans and the capped adapters ask, and a model is the surface most
+    # able to render a memorized canary its own way. A zero-width split inside
+    # the continuation suffix read as "not recalled" - the model surface attested
+    # ERASED while still returning the canary on the next prompt. Every arm below
+    # moves with it, controls included, or the predicates diverge again.
+    if not residual_present(needle, model.infer(target, prompt)):
         return False
     control = scramble(prompt)
     if control is None:
         # A prompt with no scrambled form has no control: not evidence either way.
         return False
-    control_completion = model.infer(target, control).casefold()
-    if needle in control_completion:
+    control_completion = model.infer(target, control)
+    if residual_present(needle, control_completion):
         return False
-    if prompt.casefold() == needle and control.casefold() in control_completion:
+    if normalize_for_match(prompt) == needle and residual_present(control, control_completion):
         # The model restates its prompt (the scrambled one came back too): a
         # whole-phrase echo is not recall, on shared weights included, where the
         # base-tenant control below cannot tell.
@@ -116,5 +147,5 @@ def _reproduced(model: ModelAdapter, target: UUID, prompt: str, needle: str) -> 
         Capability.SHARED_WEIGHTS
     ):
         # A tenant that trained nothing answers from the base weights.
-        return needle not in model.infer(uuid4(), prompt).casefold()
+        return not residual_present(needle, model.infer(uuid4(), prompt))
     return True

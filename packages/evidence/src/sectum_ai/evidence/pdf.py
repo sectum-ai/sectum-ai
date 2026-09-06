@@ -19,7 +19,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
-from sectum_ai.evidence.labels import leak_label
+from sectum_ai.evidence.labels import backing_surface, leak_label
 from sectum_ai.spec import (
     ControlMapping,
     CoverageVerdict,
@@ -28,7 +28,9 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
+    rate_from_counts,
     sha256_hex,
+    wilson_interval,
 )
 
 # Canonical erasure-surface order for the coverage matrix, kept here (rather than
@@ -63,8 +65,11 @@ _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
 # it did NOT verify, so a NOT_COVERED surface is never read as erased.
 _COVERAGE_CAVEAT = (
     "Coverage states what this attestation verified, surface by surface. A "
-    "NOT_COVERED surface was out of scope, had no configured adapter, or showed "
-    "no pre-erasure baseline - it is explicitly not evidence of erasure and must "
+    "NOT_COVERED surface was out of scope, had no configured adapter, showed "
+    "no pre-erasure baseline, or was scanned without establishing the markers' "
+    "absence (the backend returned a full page of results without them, which a "
+    "marker still stored but ranked below the page produces too) - it is "
+    "explicitly not evidence of erasure and must "
     "not be read as erased. ERASED is measured through the erased tenant's own read "
     "path: a backend that retains the data while revoking that path is "
     "indistinguishable from one that purged it, from outside. ATTESTABLE WITH "
@@ -131,6 +136,24 @@ def confirmed_by_kind(run: RunResult) -> str:
     if not confirmed:
         return "0"
     parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+    # How many describe the operator's systems: an auditor read "226 confirmed
+    # cross-tenant findings" beside asserted controls while the same record's
+    # OSCAL said none was confirmed on a live surface.
+    live = sum(
+        1
+        for f in confirmed
+        if run.surface_provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
+    )
+    # Always, including - especially - when the answer is zero: gating it on the
+    # run having a live surface dropped it from the one pack where it is the whole
+    # point. Three-valued, like every label beside it: a run that records no
+    # provenance at all cannot be said to have zero live-surface findings, and
+    # saying so contradicted the scope paragraph below it in the same document.
+    parts += (
+        f"; on live surfaces {live}"
+        if run.surface_provenance
+        else "; live-surface attribution not recorded"
+    )
     return f"{len(confirmed)} ({parts})"
 
 
@@ -141,9 +164,15 @@ def probes_exercised(run: RunResult) -> str:
     when the run names them: a one-probe pack and a twelve-probe pack rendered
     identically apart from the digest.
     """
-    if not run.probe_versions:
+    # A finding is itself proof its probe executed - the reasoning
+    # `score._confirmed_probe_ids`, `baseline._exercised_probes` and
+    # `controls._run_supports` all apply. This renderer did not, so the auditor
+    # PDF read "Probes exercised: none recorded" in the same signed pack that
+    # grades that probe's class FAIL.
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    if not exercised:
         return "none recorded"
-    ids = sorted(run.probe_versions)
+    ids = sorted(exercised)
     text = f"{len(ids)}: {', '.join(ids)}"
     dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
     if dropped:
@@ -274,7 +303,23 @@ def _remediation_line(finding: Finding) -> str | None:
     return f"<i>Remediation: {escape(finding.remediation_pointer)}</i>"
 
 
-def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
+def synthetic_prefix(run: RunResult, finding: Finding) -> str:
+    """``"[synthetic surface] "`` when this finding describes a built-in fake.
+
+    Keyed on an explicit LIVE, like every sibling that answers this question.
+    SARIF floors such a finding's severity and OSCAL prefixes its observation;
+    both PDF engines rendered one identically to a live CRITICAL - in the one
+    document an auditor actually reads.
+    """
+    recorded = run.surface_provenance.get(backing_surface(finding))
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - Sectum's built-in fake, not your stack] "
+
+
+def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:
     """Return escaped finding lines, or a single 'none' line for an empty run.
 
     Each finding contributes a summary line - ending with its mapped control IDs
@@ -287,8 +332,9 @@ def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
         return ["No findings were recorded for this run."]
     lines: list[str] = []
     for finding in findings:
+        marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
         line = (
-            f"<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
+            f"{marker}<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
             f"on {escape(finding.surface.value)}: marker "
             f"{escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
         )
@@ -332,13 +378,27 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
         The formatted rate string, or ``None`` when the run recorded no rate.
     """
     metrics = run.metrics
+    # Recomputed from the record's binomial COUNTS, never relayed from the rate and
+    # interval the record asserts about itself - the rule `score._headline` already
+    # follows, and for the same reason: the counts are the evidence, the rate and
+    # interval are bookkeeping. Relaying them let a record whose counts said 334 of
+    # 350 print `2.0% (95% CI 1.9%-2.1%, n=350)` into the auditor's signed PDF,
+    # while `score` read the same record as 95.4%. Refusing to invent an interval
+    # while faithfully relaying a fabricated one reads identically to the auditor.
+    rate = rate_from_counts(
+        metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
+    )
+    # The record contradicts its own counts, so there is nothing here to state.
+    if rate is None:
+        return None
+    if metrics.retrieval_pivot_n > 0:
+        low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
+        return f"{rate:.1%} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
     if metrics.retrieval_pivot_rate is None:
         return None
-    rate = f"{metrics.retrieval_pivot_rate:.1%}"
-    if metrics.retrieval_pivot_rate_ci is None:
-        return rate
-    low, high = metrics.retrieval_pivot_rate_ci
-    return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+    # No counts, so the rate is all the record has, and any interval it asserts is
+    # uncheckable - there is no sample size to compute one from. Shown bare.
+    return f"{metrics.retrieval_pivot_rate:.1%}"
 
 
 def _render_reportlab(pack: EvidencePack) -> bytes:
@@ -379,7 +439,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
-    flow += [Paragraph(line, body) for line in _finding_lines(run.findings)]
+    flow += [Paragraph(line, body) for line in _finding_lines(run.findings, run)]
 
     coverage_rows = _coverage_rows(run)
     if coverage_rows:
@@ -418,7 +478,10 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         flow.append(Paragraph(f"<i>{escape(_COVERAGE_CAVEAT)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Compliance control coverage", heading)]
-    flow += [Paragraph(line, body) for line in _control_lines(pack.control_mappings)]
+    # Say it, rather than leaving a bare heading: the weasyprint engine does, and
+    # an empty section reads as "not rendered" where the other reads "none".
+    control_lines = _control_lines(pack.control_mappings) or ["No control mappings were recorded."]
+    flow += [Paragraph(line, body) for line in control_lines]
     flow.append(Paragraph(f"<i>{escape(COVERAGE_DISCLAIMER)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Integrity and independent verification", heading)]

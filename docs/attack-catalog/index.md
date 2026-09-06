@@ -1,6 +1,7 @@
 # Attack catalog
 
-Each probe is pluggable behind a common `Probe` interface and ships with unit
+Most probes are pluggable behind a common `Probe` interface (the Class 5, 11 and
+A3 probes predate it and are driven directly by the CLI) and ships with unit
 tests and a deterministic in-memory fake adapter. The catalog grows by phase;
 the classes below are implemented today.
 
@@ -16,7 +17,7 @@ the classes below are implemented today.
 | [8 — Persistent memory contamination](class-08-memory-contamination.md) | `memory-contamination` | `AML.T0057` | agent memory |
 | [9 — LoRA cross-tenant influence](class-09-lora-cross-tenant.md) | `lora-cross-tenant` | `AML.T0024`, `AML.T0024.000`, `AML.T0057` | model / adapter |
 | [10 — IKEA-style benign extraction](class-10-ikea-extraction.md) | `ikea-extraction` | `AML.T0024`, `AML.T0057` | vector DB |
-| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification`, `gdpr-subject-erasure-verification` | — (control check) | all configured surfaces |
+| [11 — GDPR Article 17 erasure](class-11-erasure.md) | `gdpr-erasure-verification`, `gdpr-subject-erasure-verification` | — (control check) | the eight erasure surfaces, narrowed by `--scope` (ignored with `--subject`, which covers six) |
 | [13 — Multi-modal RAG entity-bleed](class-13-multimodal-rag-bleed.md) | `multimodal-rag-bleed` | `AML.T0024`, `AML.T0057` | vector DB (multi-modal) |
 
 Every class maps to **OWASP LLM08:2025 — Vector and Embedding Weaknesses** and
@@ -32,5 +33,23 @@ it.
 The "vector DB" surface above is the *slot* those probes drive, and an application's
 own resource API can fill it (the `app` adapter family, [configuration](../configuration.md)).
 Against it, Classes 1, 2, 3, and 10 run unmodified with their findings recorded under the
-`api` surface; Classes 6 and 13 are skipped and score `NOT_COVERED`, because both describe
-a vector-space effect and an application's search is not an embedding space.
+`api` surface; Class 6 is skipped and scores `NOT_COVERED`, because it describes a
+vector-space effect and an application's search is not an embedding space. (Class 13
+is unaffected: it is in no CLI suite under any configuration, and runs from the SDK.)
+
+## The user boundary
+
+Every class below is stated tenant-to-tenant. The **user** boundary is a separate
+question with one rule, stated here rather than on each page:
+
+- A probe plans cross-user steps only where its adapter **carries the caller's
+  user**. The built-in fakes do; a live adapter does when its config says so
+  (`user_scoped: true` on the vector stores, Redis cache and memory, and the
+  HuggingFace model), and some never can - mem0's flat `user_id` space *is* the
+  tenant, a vLLM/TGI serving backend never sees the user, and the RAG-pipeline and
+  agent-framework contracts carry no user at all.
+- Where the adapter carries a user, a backend scoped to the tenant alone leaks a
+  sibling user's data and **fails** the class.
+- Where it cannot, those steps are **dropped rather than failed**: the run records
+  `user_steps_dropped`, and `diff` reports `[BOUNDARY LOST]`. That is a pass which
+  says the user boundary was not tested - never that it held.

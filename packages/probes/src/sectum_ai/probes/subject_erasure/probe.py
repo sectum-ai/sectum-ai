@@ -49,9 +49,21 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.probes._recall import content_recalled, continuation_split
+from sectum_ai.probes._recall import (
+    FINGERPRINT_QUERY_K,
+    content_recalled,
+    continuation_split,
+    has_base_control,
+)
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
-from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
+from sectum_ai.spec import (
+    Finding,
+    FindingStatus,
+    Severity,
+    Surface,
+    residual_present,
+    sha256_hex,
+)
 
 # The erasure surfaces with a by-id existence primitive in the adapter SDK today.
 # A subject's ids on any other surface cannot be checked by id yet, so they read
@@ -76,7 +88,6 @@ SUBJECT_FINGERPRINT_SURFACES: tuple[Surface, ...] = (
 )
 
 # How many nearest neighbours a fingerprint probe inspects for the subject's content.
-_FINGERPRINT_QUERY_K = 50
 
 _REMEDIATION = {
     Surface.VECTOR_DB: (
@@ -252,7 +263,13 @@ class SubjectErasureProbe:
             # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
             # canary model scan.
             supplied = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ())))
-            phrases = tuple(p for p in supplied if continuation_split(p) is not None)
+            phrases = (
+                tuple(p for p in supplied if continuation_split(p) is not None)
+                if has_base_control(model)
+                # Without a base-knowledge control every phrase is unverifiable:
+                # see `_recall.has_base_control`.
+                else ()
+            )
             if len(phrases) < len(supplied):
                 # A fingerprint the continuation check cannot verify (a bare
                 # two-word name; a prefix with no control form). It is counted, the
@@ -331,25 +348,22 @@ class SubjectErasureProbe:
         # derived copy the by-id check would miss. ``None`` when the page came back
         # full without it: a stored document ranked past k is indistinguishable
         # from an erased one, and read as erased.
-        needle = phrase.casefold()
-        hits = vector.query(target, phrase, k=_FINGERPRINT_QUERY_K)
-        if any(needle in hit.content.casefold() for hit in hits):
+        hits = vector.query(target, phrase, k=FINGERPRINT_QUERY_K)
+        if any(residual_present(phrase, hit.content) for hit in hits):
             return True
-        return None if len(hits) >= _FINGERPRINT_QUERY_K else False
+        return None if len(hits) >= FINGERPRINT_QUERY_K else False
 
     @staticmethod
     def _content_in_memory(memory: MemoryAdapter, target: UUID, phrase: str) -> bool:
         # A keyword recall of the subject's content: if the phrase still appears in any
         # recalled memory entry, that content is residual in the agent-memory store.
-        needle = phrase.casefold()
-        return any(needle in entry.casefold() for entry in memory.recall(target, phrase))
+        return any(residual_present(phrase, entry) for entry in memory.recall(target, phrase))
 
     @staticmethod
     def _content_in_search(search: SearchIndexAdapter, target: UUID, phrase: str) -> bool:
         # A full-text search for the subject's content: if the phrase still appears in
         # any returned hit, that content is residual in the derived search index.
-        needle = phrase.casefold()
-        return any(needle in hit.casefold() for hit in search.search(target, phrase))
+        return any(residual_present(phrase, hit) for hit in search.search(target, phrase))
 
     @staticmethod
     def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:

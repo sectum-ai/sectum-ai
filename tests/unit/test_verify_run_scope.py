@@ -174,3 +174,174 @@ def test_a_live_slot_no_probe_drove_cannot_pass_the_scope_gate(
     refused = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert refused.exit_code == 4, refused.output
     assert "NO surface was live" in refused.output
+
+
+def test_a_stale_run_record_inside_a_current_pack_is_refused() -> None:
+    # `report` accepted a 0.6.x run.json (which recorded every adapter slot,
+    # including a live one no probe drove), stamped the pack 0.7.0, and `verify`
+    # passed run-scope on that phantom LIVE slot.
+    from sectum_ai.spec import SCHEMA_VERSION
+
+    pack = _pack(_LIVE)
+    stale_run = pack.run_result.model_copy(update={"schema_version": "0.6.0"})
+    stale = pack.model_copy(update={"run_result": stale_run})
+    result = verify_pack(stale, require_live=True)
+    assert not result.passed
+    check = next(c for c in result.checks if c.name == "schema-version")
+    assert not check.ok
+    assert "0.6.0" in check.detail and SCHEMA_VERSION in check.detail
+
+
+def test_report_refuses_a_run_from_another_schema_line(tmp_path: Path) -> None:
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["schema_version"] = "0.6.0"
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+    assert not (tmp_path / "evidence.json").exists()
+
+
+def test_a_pack_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    # Deleting `run_result.schema_version` leaves the PARSED model - and therefore
+    # the attested digest - byte-identical, so every check passed: the stamp has
+    # to be read off the bytes. This is the ordinary upgrade path's failure mode.
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    evidence = tmp_path / "evidence.json"
+    pack = json.loads(evidence.read_text())
+    del pack["run_result"]["schema_version"]
+    evidence.write_text(json.dumps(pack))
+    result = _runner.invoke(
+        app, ["verify", str(evidence), "--allow-unanchored", "--allow-synthetic"]
+    )
+    assert result.exit_code == 4, result.output
+    assert "run record's schema_version is None" in result.output
+
+
+def test_a_bundle_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    import io
+    import json
+    import zipfile
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
+    bundle = tmp_path / "evidence-bundle.zip"
+    with zipfile.ZipFile(bundle) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    pack = json.loads(members["evidence.json"])
+    del pack["run_result"]["schema_version"]
+    members["evidence.json"] = json.dumps(pack).encode("utf-8")
+    manifest = json.loads(members["bundle-manifest.json"])
+    import hashlib
+
+    manifest["members"]["evidence.json"] = hashlib.sha256(members["evidence.json"]).hexdigest()
+    members["bundle-manifest.json"] = json.dumps(manifest).encode("utf-8")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    bundle.write_bytes(out.getvalue())
+    result = _runner.invoke(app, ["verify", str(bundle), "--allow-unanchored", "--allow-synthetic"])
+    assert result.exit_code == 4, result.output
+    assert "schema_version" in result.output
+
+
+def test_a_pack_binding_a_pdf_that_was_not_supplied_says_so() -> None:
+    # `verify_pack` checked the binding only when a PDF was handed to it and was
+    # otherwise SILENT: every line `[ok]`, exit 0, and a reader concluding the
+    # bound PDF had been matched. A standalone pack legitimately verifies without
+    # its companion, so this is not a failure - but the verdict has to say what it
+    # did not check, the way the unanchored-timestamp check states its limitation.
+    pack = _pack({"vector_db": "LIVE"}).model_copy(update={"pdf_ref": "0" * 64})
+    result = verify_pack(pack, require_anchored=False, require_live=False)
+    audit = next(check for check in result.checks if check.name == "audit-pdf")
+    assert audit.ok
+    assert "not supplied" in audit.detail
+    # Not a failure in itself: a standalone pack verifies without its companion.
+    assert "audit-pdf" not in {check.name for check in result.checks if not check.ok}
+
+
+def test_verify_binds_the_ground_truth_manifest_when_given_one(tmp_path: Path) -> None:
+    # The `manifest-hash` check existed and NO CLI path reached it: `verify`
+    # passed no manifest, so the check never ran - while the command's own
+    # closing note, and ADR-0016, both told the reader to "re-run with the
+    # original ground-truth manifest". The capability is real now.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    pack = str(tmp_path / "evidence.json")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    # A manifest from another run must FAIL, not be quietly ignored.
+    other = json.loads(good.read_text())
+    other["manifest_id"] = "some-other-run"
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+    bad = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # Without the flag the command says how to get the binding, and does not
+    # claim to have checked it.
+    plain = _runner.invoke(app, ["verify", pack, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output
+
+
+def test_verify_binds_the_manifest_on_a_bundle_too(tmp_path: Path) -> None:
+    # The flag was parsed AFTER the `.zip` branch returned, so `--manifest` on a
+    # bundle was accepted and silently dropped: exit 0, no `manifest-hash` line,
+    # and no note saying the binding went unchecked - on the artifact ADR-0016
+    # calls the deliverable. A flag a path accepts and drops is worse than one it
+    # rejects, because the operator reads the pass as an answer to their question.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    other = dict(substrate["manifest"], manifest_id="some-other-run")
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+
+    bundle = str(tmp_path / "evidence-bundle.zip")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    bad = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # And without it the bundle path says how to get the binding, as the pack
+    # path does - it used to say nothing at all.
+    plain = _runner.invoke(app, ["verify", bundle, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output

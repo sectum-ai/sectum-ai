@@ -8,7 +8,7 @@
 #     uv run sectum-ai report --config sectum-ai.yaml
 #
 # Anything omitted uses the built-in default; explicit CLI flags
-# (--seed, --workdir, --probe) override the values here.
+# (--seed, --workdir) override the values here.
 #
 # Credentials never appear inline. Adapter blocks reference environment
 # variables (for example `dsn_env: SECTUM_PGVECTOR_DSN`) so the adapter
@@ -20,9 +20,17 @@
 scenario:
   # Substrate RNG seed. Fixed for reproducibility — same seed => same manifest.
   seed: 2026
-  # Built-in profiles: "demo" (small, fast). The corpus_profile string is
-  # included in the manifest hash, so any change invalidates a baseline.
+  # Reserved for profile-driven corpora: the value is accepted but not yet
+  # applied. `sectum-ai seed` generates the demo corpus regardless and the
+  # substrate always records `corpus_profile: demo`, so changing this string
+  # changes neither the scenario hash nor a baseline.
   corpus_profile: demo
+  # Documents per tenant. The package default (500) seeds realistically; lower it
+  # for a faster run.
+  # corpus_size: 500
+  # Embedding models the Class 2 rate sweep runs. Prefixes: st:, openai:, cohere:,
+  # voyage:, bedrock:, hash-<dim>, and the legacy fake-* names.
+  # embedding_models: ["fake-deterministic"]
 
 # Where seed/probe/report write their artifacts (substrate.json, run.json,
 # evidence.json, audit-pack.pdf, attestation.intoto.json).
@@ -34,6 +42,13 @@ workdir: .sectum-ai
 #
 # Every adapter family defaults to `fake` if you omit it; you only need to
 # declare the families you've pointed at real infrastructure.
+# -----------------------------------------------------------------------------
+#
+# The ports below are each backend's own default. `compose.yaml` REMAPS most of
+# them so several can run side by side - chroma 8000 as 8001, redis 6379 as 6380,
+# weaviate 8080 as 8082, qdrant 6333 as 6335, opensearch 9200 as 9201, pgvector
+# 5432 as 5433, phoenix 6006 as 6007 - so against the repo's own compose stack,
+# use the published port.
 # -----------------------------------------------------------------------------
 adapters:
 
@@ -48,7 +63,8 @@ adapters:
     # kind: fake               # in-memory, deterministic (the default)
     # kind: pgvector           # Postgres + pgvector
     #   dsn_env: SECTUM_PGVECTOR_DSN
-    #   shared_index: false    # set true to reproduce a leaky multi-tenant setup
+    #   user_scoped: false     # true isolates by user within a tenant
+    #   (shared_index is a `fake`-only knob: a live store's tenancy is its own)
     # kind: chroma             # Chroma server
     #   host: localhost
     #   port: 8000
@@ -80,7 +96,7 @@ adapters:
 
   observability:
     # kind: phoenix            # Arize Phoenix (per-tenant project)
-    #   base_url: http://localhost:6006
+    #   base_url: http://localhost:6007   # compose.yaml publishes 6006 as 6007
     # kind: langfuse           # Langfuse cloud or self-hosted
     #   host: https://cloud.langfuse.com
     #   public_key_env: LANGFUSE_PUBLIC_KEY
@@ -90,6 +106,9 @@ adapters:
     # kind: otel               # generic OpenTelemetry (OTLP-JSON trace-query endpoint)
     #   base_url: http://localhost:4318   # any Jaeger/Tempo/collector shim that speaks
     #   query_path: /v1/traces/query   # the Sectum OTLP-JSON trace-query contract
+    #   # The shim must flag a partial page (`truncated` / `nextPageToken` /
+    #   # `next_page_token` / `nextLink`); without it a marker past the page
+    #   # reads as erased. See docs/adapters.md.
     #   tenant_attribute: tenant.id    # resource attribute carrying the tenant.hex
     # kind: helicone           # Helicone request logs (scoped by a custom property)
     #   api_key_env: HELICONE_API_KEY
@@ -144,7 +163,7 @@ adapters:
     #                          # per-tenant user message is prefixed with [tenant:<hex>]
     #                          # and the loop runs to `stop_reason: end_turn` per turn.
     #   factory: mypkg.agents:build   # REQUIRED: module.path:callable returning the
-    #                          # (client, model, tools) the adapter wraps - see
+    #                          # Anthropic client the adapter wraps - see
     #                          # docs/configuration.md. Requires the optional
     #                          # `anthropic-tooluse` extra:
     #                          # `pip install sectum-ai-adapters[anthropic-tooluse]`.
@@ -152,7 +171,8 @@ adapters:
 
   mcp:
     # kind: stdio              # stdio Model Context Protocol server
-    #   command: "uvx your-mcp-server"   # one string: the executable and its arguments
+    #   command: "uvx"                 # the executable alone - it is exec'd as given
+    #   args: ["your-mcp-server"]      # its arguments, one list entry each
     # kind: http               # streamable-HTTP MCP server
     #   url: https://mcp.example.com/mcp
     #   tenant_argument: tenant
@@ -255,3 +275,7 @@ detection:
   # Cosine-similarity gate for semantic candidates. The conservative default
   # suits the fake embedder; raise it once a real embedding model is configured.
   semantic_threshold: 0.62
+  # `local` ENFORCES the BYOC posture: detection is the only stage that embeds or
+  # judges tenant content, and in `local` mode the config fails fast on any
+  # embedder or judge that would call a hosted API.
+  mode: hosted   # hosted | local

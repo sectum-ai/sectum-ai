@@ -46,7 +46,11 @@ scan into a `_secret_format` pass that confirms a foreign secret by exact substr
 *or* by recovering a credential-shaped token from surrounding bytes (e.g. a key
 embedded in a JSON blob). It confirms only against a manifest marker, so the
 zero-false-positive invariant holds; it always includes the plain-substring test,
-so it can never miss what the old exact path caught (zero false negatives).
+so it can never miss what the old exact path caught (zero false negatives). A third
+arm, added later, recovers the marker's tokens contiguous and in order: the two
+branches above fail *together* on a secret whose hyphens the surface re-rendered
+(the format patterns need the ASCII hyphen too), and the exact and semantic tiers
+already carried that arm.
 
 **Secrets are never committed.** Secret plaintexts are generated at runtime from
 the seed; only the manifest *hash* is published, and the checked-in sample packs

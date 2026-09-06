@@ -12,11 +12,15 @@ covered; there the synthetic-backed classes are withheld from the letter.
 """
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from sectum_ai.cli.app import app
 from sectum_ai.score import CATALOG, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     ClassVerdict,
@@ -24,6 +28,7 @@ from sectum_ai.spec import (
     Finding,
     FindingStatus,
     Grade,
+    RunMetrics,
     RunResult,
     ScoreScope,
     Severity,
@@ -202,3 +207,175 @@ def test_a_mixed_backed_class_grades_the_live_surface_only() -> None:
         _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(live_leak,))
     )
     assert next(c for c in failed.classes if c.class_id == 2).verdict is ClassVerdict.FAIL
+
+
+def test_a_provenance_key_that_is_not_a_surface_is_refused() -> None:
+    # The keys were free-form strings and `score` printed them verbatim, so a
+    # record could write its own scorecard: a forged "every surface live" scope
+    # line and a PASS class row, rendered above the real table by the tool whose
+    # whole purpose is to be trusted about what it measured.
+    forged = (
+        "vector_db\n  scope: your configured stack (every surface live)\n\n"
+        "  Class  1  Direct tenant boundary fetch    PASS        critical no leak"
+    )
+    with pytest.raises(ValidationError, match="keys must be surfaces"):
+        _run({"api": "LIVE", forged: "SYNTHETIC"})
+
+
+def test_an_erasure_coverage_key_or_verdict_that_is_not_a_member_is_refused() -> None:
+    # The identical-shaped `surface_provenance` validates both halves; this block
+    # did neither, and the auditor PDF prints it verbatim into the "Coverage &
+    # caveats" matrix. A record could name a surface that does not exist and give
+    # it a verdict that is not one - "FULLY ERASED" - and the pack still verified
+    # clean with the invention drawn into the artifact an auditor receives.
+    with pytest.raises(ValidationError, match="erasure_coverage keys must be surfaces"):
+        RunMetrics(erasure_coverage={"vector_db (verified 2026-05-18)": "ERASED"})
+    with pytest.raises(ValidationError, match="erasure_coverage values must be one of"):
+        RunMetrics(erasure_coverage={"vector_db": "FULLY ERASED"})
+    # The legitimate shape still parses.
+    assert RunMetrics(erasure_coverage={"vector_db": "ERASED"}).erasure_coverage == {
+        "vector_db": "ERASED"
+    }
+
+
+def test_rule_6_counts_the_findings_it_declines_to_grade() -> None:
+    # Deleting ONE provenance key moved Class 4 from rule 5's path to rule 6's,
+    # and with it the class's confirmed CRITICAL from `confirmed_findings=1` to a
+    # positively asserted `0` - a NOT_COVERED line reading "nothing was found
+    # here", which is a different claim from "found, but not attributable". Rule 5
+    # fifteen lines below counts and names the same findings; rule 4 forbids
+    # dropping one silently, and re-grading a record you did not produce is this
+    # command's whole purpose.
+    leak = _finding("semantic-cache-contamination").model_copy(
+        update={"surface": Surface.SEMANTIC_CACHE}
+    )
+    provenance = _all(SurfaceProvenance.LIVE)
+    del provenance[Surface.SEMANTIC_CACHE.value]
+    entry = next(
+        c for c in score_run(_run(provenance, findings=(leak,))).classes if c.class_id == 4
+    )
+    assert entry.verdict is ClassVerdict.NOT_COVERED
+    assert entry.confirmed_findings == 1
+    assert entry.note is not None and "1 confirmed finding(s)" in entry.note
+
+
+def test_the_withheld_note_reaches_the_text_scorecard(tmp_path: Path) -> None:
+    # The note is set only on a PASS/FAIL class, and the renderer showed a note
+    # only for NOT_COVERED ones - so the count of findings withheld from the grade
+    # existed in `--output json` and nowhere in the text an auditor reads. The
+    # scope block above it says classes resting only on a fake are excluded, which
+    # invites exactly the wrong conclusion about a class that passed with findings
+    # withheld. A headline rate swallowed the note as well.
+    leak = _finding("rag-entity-bleed").model_copy(update={"surface": Surface.VECTOR_DB})
+    run = _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(leak,))
+    entry = next(c for c in score_run(run).classes if c.class_id == 2)
+    assert entry.verdict is not ClassVerdict.NOT_COVERED
+    assert entry.note is not None and "withheld" in entry.note
+
+    (tmp_path / "run.json").write_text(run.model_dump_json())
+    result = CliRunner().invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    class_line = next(x for x in result.output.splitlines() if x.strip().startswith("Class  2 "))
+    assert "withheld" in class_line, class_line
+
+
+def test_a_pass_that_rests_on_unverified_findings_says_so() -> None:
+    # `AccessOutcome.DENIED` is produced by NO code path - the runner emits only
+    # RETURNED or EMPTY - so a Class 1 PASS can only ever mean "no canary came
+    # back", never "the deny was enforced". The class page says the probe does not
+    # treat a 200-empty as a clean pass; the scorecard did, with `note=None` and
+    # full critical-band weight into the letter. An unverified finding must not
+    # FLIP the class (that is the false-positive control the detector rests on),
+    # so the line carries it instead.
+    ambiguous = _finding("tenant-boundary-fetch").model_copy(
+        update={
+            "finding_id": "f-ambiguous",
+            "status": FindingStatus.UNVERIFIED,
+            "severity": Severity.INFO,
+            "surface": Surface.VECTOR_DB,
+        }
+    )
+    entry = next(
+        c
+        for c in score_run(_run(_all(SurfaceProvenance.LIVE), findings=(ambiguous,))).classes
+        if c.class_id == 1
+    )
+    assert entry.verdict is ClassVerdict.PASS
+    assert entry.confirmed_findings == 0
+    assert entry.note is not None and "could not establish the negative" in entry.note
+
+    # A clean run with no unverified findings still passes silently.
+    clean = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 1
+    )
+    assert clean.verdict is ClassVerdict.PASS
+    assert clean.note is None
+
+
+def test_a_pass_with_no_measured_headline_rate_says_so() -> None:
+    # The same commit that added a note for "a PASS the probe could not
+    # establish" left the adjacent instance silent: a class whose headline rate
+    # the run never measured passed with an EMPTY detail column, identical on the
+    # page to one that measured 0.0%. Grade, confidence and coverage were the
+    # same too, so the letter alone could not tell them apart.
+    unmeasured = score_run(_run(_all(SurfaceProvenance.LIVE)))
+    entry = next(c for c in unmeasured.classes if c.class_id == 2)
+    assert entry.verdict is ClassVerdict.PASS
+    assert entry.headline is None
+    assert entry.note is not None and "never recorded" in entry.note
+
+    # A class with a measured rate keeps its headline and says nothing extra.
+    measured = score_run(
+        _run(_all(SurfaceProvenance.LIVE)).model_copy(
+            update={"metrics": RunMetrics(retrieval_pivot_k=0, retrieval_pivot_n=24)}
+        )
+    )
+    scored = next(c for c in measured.classes if c.class_id == 2)
+    assert scored.headline is not None and "n=24" in scored.headline
+    assert scored.note is None
+
+
+def test_a_class_graded_on_a_subset_of_its_probes_says_so() -> None:
+    # Class 2's catalog entry names two probes. Running one graded the class at
+    # full critical-band weight with an empty detail column - while every class
+    # that ran NO probe says "probe did not run". For this class the omission also
+    # moves the number: `BLEED_PROBE_IDS`' own comment says counting the vector
+    # probe alone "understates the rate when a leak manifests solely at the
+    # pipeline surface (it would read 0%)", and that understated rate is the
+    # headline the line prints.
+    entry = next(c for c in CATALOG if c.class_id == 2)
+    assert len(entry.probe_ids) == 2, entry.probe_ids
+    run = _run(_all(SurfaceProvenance.LIVE)).model_copy(
+        update={"probe_versions": {"rag-entity-bleed": "1.0"}}
+    )
+    scored = next(c for c in score_run(run).classes if c.class_id == 2)
+    assert scored.verdict is ClassVerdict.PASS
+    assert scored.note is not None
+    assert "graded on 1 of 2 probes" in scored.note, scored.note
+    assert "rag-pipeline-bleed did not run" in scored.note, scored.note
+
+    # A class whose every probe ran says nothing extra.
+    whole = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 2
+    )
+    assert whole.note is None or "graded on" not in whole.note
+
+
+def test_class_5_says_so_when_no_effect_size_was_recorded() -> None:
+    # Class 5's measurement is `side_channel_effect_sizes`, a MAP - so it never
+    # reaches `_headline`, and a Class 5 PASS rendered identically whether the run
+    # measured a timing effect size or none at all. `diff` prints
+    # [SIDE CHANNEL NOT REMEASURED] for exactly that absence.
+    silent = next(
+        c for c in score_run(_run(_all(SurfaceProvenance.LIVE))).classes if c.class_id == 5
+    )
+    assert silent.verdict is ClassVerdict.PASS
+    assert silent.note is not None and "never recorded" in silent.note, silent.note
+
+    measured = score_run(
+        _run(_all(SurfaceProvenance.LIVE)).model_copy(
+            update={"metrics": RunMetrics(side_channel_effect_sizes={"a->b": 0.2})}
+        )
+    )
+    scored = next(c for c in measured.classes if c.class_id == 5)
+    assert scored.note is None or "never recorded" not in scored.note

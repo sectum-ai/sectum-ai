@@ -54,8 +54,14 @@ def payload_int(step: ProbeStep, key: str, default: str) -> int:
         ) from error
 
 
-def _payload_required(step: ProbeStep, key: str) -> str:
-    """Read a required payload value, raising a typed ``AdapterError`` if absent."""
+def payload_required(step: ProbeStep, key: str) -> str:
+    """Read a required payload value, raising a typed ``AdapterError`` if absent.
+
+    Public, like its ``payload_int`` twin: it was private, so the three readers
+    outside this module indexed ``step.payload`` raw and a missing key escaped the
+    ``SectumError`` exit-code mapping as a bare ``KeyError`` - exit 1 where the
+    typed path gives 3.
+    """
     try:
         return step.payload[key]
     except KeyError as error:
@@ -115,13 +121,39 @@ class Runner:
         is dropped unless it is a plant, which runs as the tenant: judged as the
         user it would confirm leaks of a session that never existed, and the run
         may claim only the boundary it could exercise.
+
+        When the filter leaves the probe no *judged* step - a single tenant whose
+        users are the only foreign principals, on an adapter that carries no user
+        - the plants go too and the probe runs nothing. Executing the plants alone
+        put the probe id in ``probe_versions`` and graded its class PASS off zero
+        observations: the vacuous pass each planting probe's own plan guards
+        against (``docs/scorecard.md``, rule 1).
         """
         self.preflight(probe)
+        planned_steps = list(probe.plan(self._substrate))
+
+        def _droppable(step: ProbeStep) -> bool:
+            return (
+                step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
+            )
+
+        judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
+        if judged and all(_droppable(step) for step in judged):
+            # Nothing this probe would have JUDGED can run, so it asks the stack
+            # nothing: its plants go too, wherever they sit. Suppressing only the
+            # droppable plants left a plant on a user-carrying adapter running, and
+            # that alone put the probe in `probe_versions` and graded its class.
+            user_level = sum(1 for step in planned_steps if step.actor_user_id is not None)
+            self.dropped_user_steps[probe.id] = (
+                self.dropped_user_steps.get(probe.id, 0) + user_level
+            )
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=user_level)
+            return []
         results: list[StepResult] = []
         dropped = 0
-        for planned in probe.plan(self._substrate):
+        for planned in planned_steps:
             step = planned
-            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
+            if _droppable(step):
                 if step.action not in _PLANT_ACTIONS:
                     dropped += 1
                     continue
@@ -192,7 +224,7 @@ class Runner:
             raise AdapterError("a vector.query step needs a vector adapter")
         k = payload_int(step, "k", "5")
         hits = self._vector.query(
-            step.actor_tenant_id, _payload_required(step, "query"), k, user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "query"), k, user=step.actor_user_id
         )
         return Observation(
             step_id=step.step_id,
@@ -204,7 +236,7 @@ class Runner:
         if self._vector is None:
             raise AdapterError("a vector.fetch step needs a vector adapter")
         hit = self._vector.fetch(
-            step.actor_tenant_id, step.payload["doc_id"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "doc_id"), user=step.actor_user_id
         )
         # Class 1 deny-semantics: a returned object surfaced (a leak when foreign);
         # an absent one is the ambiguous 200-empty case, not a proven deny.
@@ -219,11 +251,11 @@ class Runner:
         if self._vector is None:
             raise AdapterError("a vector.upsert step needs a vector adapter")
         document = CorpusDocument(
-            doc_id=step.payload["doc_id"],
+            doc_id=payload_required(step, "doc_id"),
             tenant_id=step.actor_tenant_id,
             doc_type="poison",
-            title=step.payload["doc_id"],
-            content=step.payload["content"],
+            title=payload_required(step, "doc_id"),
+            content=payload_required(step, "content"),
             # The planting principal owns the poison, so a user-scoped store
             # filters it from a sibling user's retrieval (ADR-0006/0008).
             owner_user_id=step.actor_user_id,
@@ -236,8 +268,8 @@ class Runner:
             raise AdapterError("a cache.set step needs a cache adapter")
         self._cache.set(
             step.actor_tenant_id,
-            step.payload["key"],
-            step.payload["value"],
+            payload_required(step, "key"),
+            payload_required(step, "value"),
             user=step.actor_user_id,
         )
         return Observation(step_id=step.step_id, surface=self._cache.surface, raw_response="")
@@ -245,7 +277,9 @@ class Runner:
     def _cache_get(self, step: ProbeStep) -> Observation:
         if self._cache is None:
             raise AdapterError("a cache.get step needs a cache adapter")
-        value = self._cache.get(step.actor_tenant_id, step.payload["key"], user=step.actor_user_id)
+        value = self._cache.get(
+            step.actor_tenant_id, payload_required(step, "key"), user=step.actor_user_id
+        )
         return Observation(
             step_id=step.step_id,
             surface=self._cache.surface,
@@ -256,7 +290,7 @@ class Runner:
         if self._model is None:
             raise AdapterError("a model.train step needs a model adapter")
         self._model.train_adapter(
-            step.actor_tenant_id, [step.payload["text"]], user=step.actor_user_id
+            step.actor_tenant_id, [payload_required(step, "text")], user=step.actor_user_id
         )
         return Observation(step_id=step.step_id, surface=self._model.surface, raw_response="")
 
@@ -264,13 +298,13 @@ class Runner:
         if self._model is None:
             raise AdapterError("a model.infer step needs a model adapter")
         response = self._model.infer(
-            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "prompt"), user=step.actor_user_id
         )
         # Class 9 routing assertion: record who actually served only when it is a
         # foreign tenant (a mis-route). The probe reads this to raise a routing
         # finding; a correctly-routed or unknowable inference adds no structured data.
         served_by = self._model.served_by(
-            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "prompt"), user=step.actor_user_id
         )
         structured = (
             {"served_by_tenant": str(served_by)}
@@ -289,7 +323,10 @@ class Runner:
             raise AdapterError("an mcp.invoke step needs an MCP adapter")
         arguments = {key: value for key, value in step.payload.items() if key != "tool"}
         result = self._mcp.invoke(
-            step.actor_tenant_id, step.payload["tool"], arguments, user=step.actor_user_id
+            step.actor_tenant_id,
+            payload_required(step, "tool"),
+            arguments,
+            user=step.actor_user_id,
         )
         return Observation(
             step_id=step.step_id,
@@ -300,14 +337,16 @@ class Runner:
     def _memory_write(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.write step needs a memory adapter")
-        self._memory.remember(step.actor_tenant_id, step.payload["text"], user=step.actor_user_id)
+        self._memory.remember(
+            step.actor_tenant_id, payload_required(step, "text"), user=step.actor_user_id
+        )
         return Observation(step_id=step.step_id, surface=self._memory.surface, raw_response="")
 
     def _memory_recall(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.recall step needs a memory adapter")
         recalled = self._memory.recall(
-            step.actor_tenant_id, step.payload["query"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "query"), user=step.actor_user_id
         )
         return Observation(
             step_id=step.step_id,
@@ -318,7 +357,7 @@ class Runner:
     def _rag_ask(self, step: ProbeStep) -> Observation:
         if self._rag is None:
             raise AdapterError("a rag.ask step needs a rag adapter")
-        answer = self._rag.ask(step.actor_tenant_id, step.payload["query"])
+        answer = self._rag.ask(step.actor_tenant_id, payload_required(step, "query"))
         return Observation(
             step_id=step.step_id,
             surface=self._rag.surface,
@@ -328,7 +367,9 @@ class Runner:
     def _observability_search(self, step: ProbeStep) -> Observation:
         if self._observability is None:
             raise AdapterError("an observability.search step needs an observability adapter")
-        hits = self._observability.search_traces(step.actor_tenant_id, step.payload["marker"])
+        hits = self._observability.search_traces(
+            step.actor_tenant_id, payload_required(step, "marker")
+        )
         return Observation(
             step_id=step.step_id,
             surface=self._observability.surface,
@@ -338,7 +379,7 @@ class Runner:
     def _agent_run(self, step: ProbeStep) -> Observation:
         if self._agent is None:
             raise AdapterError("an agent.run step needs an agent adapter")
-        result = self._agent.run(step.actor_tenant_id, step.payload["task"])
+        result = self._agent.run(step.actor_tenant_id, payload_required(step, "task"))
         return Observation(
             step_id=step.step_id,
             surface=self._agent.surface,

@@ -1,5 +1,6 @@
 """Tests for Class 5 - the KV-cache timing side-channel probe."""
 
+import random
 from uuid import UUID
 
 from sectum_ai.adapters import FakeModel
@@ -449,3 +450,85 @@ def test_two_low_valued_tenants_do_not_share_a_warm_up_prefix() -> None:
     report = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=False)).run()
     assert report.findings == ()
     assert all(signal.mean_gap_ms == 0.0 for signal in report.signals)
+
+
+class _RoundRobinPool(FakeModel):
+    """No prefix cache. Latency is whichever replica the dispatcher picked.
+
+    A four-way round robin, the ordinary shape of a served model behind a load
+    balancer. Nothing here can leak: the prompt does not affect the latency at
+    all, only the call's position in the rotation does.
+    """
+
+    def __init__(self, pool: tuple[float, ...]) -> None:
+        super().__init__(prefix_cache=False)
+        self._pool = pool
+        self._calls = 0
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        index = self._calls
+        self._calls += 1
+        # Ambient jitter, so the t-test has the non-degenerate variance a real
+        # machine gives it. Identical in distribution for both arms.
+        return self._pool[index % len(self._pool)] + random.Random(index).uniform(-0.5, 0.5)
+
+
+def test_a_round_robin_replica_pool_does_not_manufacture_a_side_channel() -> None:
+    # A fixed ABBA schedule puts each arm on a fixed pair of residues mod 4 -
+    # primed at call indices {0,3}, control at {1,2} - so behind a four-way round
+    # robin, where the replica IS the call index mod 4, the arms are pinned to
+    # disjoint replica sets. Any spread across the pool then lands entirely on one
+    # arm: this pool (two fast replicas exactly where the primed arm lands)
+    # produced 12 CONFIRMED cross-tenant findings at Cohen's d = 19.5 against a
+    # model with no cache at all. ABBA cancels a LINEAR drift; a period-4
+    # systematic it does not touch.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(
+        substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))
+    ).run()
+    assert report.findings == (), (
+        "a round-robin replica pool invented "
+        f"{len(report.findings)} findings; max |d| "
+        f"{max((abs(s.effect_size) for s in report.signals), default=0.0):.2f}"
+    )
+
+
+def test_the_shuffled_arm_order_is_reproducible() -> None:
+    # The order is seeded from the tenant pair, so two runs of the same scenario
+    # against the same backend measure the same thing - the determinism the whole
+    # evidence chain rests on.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    first = KvCacheTimingProbe(substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))).run()
+    second = KvCacheTimingProbe(
+        substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))
+    ).run()
+    assert [s.mean_gap_ms for s in first.signals] == [s.mean_gap_ms for s in second.signals]
+
+
+class _NoResolutionModel(FakeModel):
+    """A backend whose latency metric returns one constant, whatever it is asked.
+
+    A real shared prefix cache may sit behind it; this metric simply cannot see
+    one. Reading that as "measured, and clean" is the over-claim.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(prefix_cache=True)
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        return 100.0
+
+
+def test_a_latency_metric_with_no_resolution_is_not_a_measurement() -> None:
+    # Every reading identical gives Cohen's d = 0.0 and p = 1.0 - arithmetically
+    # indistinguishable, downstream, from a careful null result. Class 5 recorded
+    # the probe as having run and graded the class PASS off it.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=_NoResolutionModel()).run()
+    assert report.signals, "the probe still records what it attempted"
+    assert not any(signal.resolved for signal in report.signals)
+    assert report.findings == ()
+    # A backend the metric CAN see is still resolved, and still caught.
+    real = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert all(signal.resolved for signal in real.signals)
+    assert len(real.findings) == len(real.signals)

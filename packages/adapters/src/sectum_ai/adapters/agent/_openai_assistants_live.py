@@ -19,9 +19,15 @@ Implements the ``_AssistantsClient`` protocol the adapter consumes:
 Tool execution: the live backend resolves each ``requires_action``
 event by reading the tool name + arguments off the run, calling the
 caller-supplied Python callable mapped under the same name, and
-posting the result back via ``submit_tool_outputs``. The caller
-attaches a python callable to each tool spec via the
-``__sectum_callable__`` attribute so the backend can find it.
+posting the result back via ``submit_tool_outputs``. Pass the python
+callable ITSELF as the tool, with its
+schema attached as a ``__sectum_tool_spec__`` attribute. Both sidecars
+are read off the tool object with ``getattr``, so a callable stored as a
+KEY inside the spec dict is invisible to them (and makes the spec
+unserializable for the API call). A tool whose target is not callable is
+refused rather than skipped: a dropped tool answers every invocation with
+an empty string, which grades the agent surface clean over a tool that
+was never wired.
 """
 
 from __future__ import annotations
@@ -69,12 +75,20 @@ class LiveAssistantsClient:
             if not isinstance(spec, dict) or "function" not in spec:
                 raise AdapterError(
                     "each tool must carry a `__sectum_tool_spec__` dict with the "
-                    "OpenAI function-tool schema, or be a tool-spec dict itself"
+                    "OpenAI function-tool schema"
                 )
             tool_specs.append(spec)
             function_name = spec.get("function", {}).get("name")
             callable_target = getattr(tool, "__sectum_callable__", tool)
-            if function_name and callable(callable_target):
+            if not callable(callable_target):
+                raise AdapterError(
+                    f"tool {function_name!r} has no python callable to execute: pass the "
+                    "callable itself as the tool (carrying its schema as a "
+                    "`__sectum_tool_spec__` attribute), not a spec dict with the callable "
+                    "under a key - `getattr` cannot see a dict key, and a tool that is "
+                    "silently dropped answers every invocation with an empty string"
+                )
+            if function_name:
                 self._tools[function_name] = callable_target
         assistant = self._openai.beta.assistants.create(
             model=model,

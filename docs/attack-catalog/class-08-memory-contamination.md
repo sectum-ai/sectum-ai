@@ -16,7 +16,12 @@ every other tenant's session.
 
 A foreign canary surfacing in another tenant's recall is cross-tenant memory
 contamination. With a per-tenant memory store each tenant recalls only its own
-entries and nothing surfaces.
+entries and nothing surfaces cross-tenant. The user boundary is separate: where
+the memory adapter carries a user (the built-in fake always; live Redis only with
+`user_scoped: true`; mem0 never, because its flat `user_id` space *is* the
+tenant), a store keyed by tenant alone lets one user recall a sibling user's
+note. Where it cannot, those steps are dropped rather than failed and the run
+records `user_steps_dropped`.
 
 ## Status
 

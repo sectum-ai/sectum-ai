@@ -46,9 +46,9 @@ Settings that drive substrate generation.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `seed` | int | `2026` | Drives every deterministic generator. |
-| `corpus_profile` | str | `demo` | Accepted and validated but not yet applied — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
+| `corpus_profile` | str | `demo` | Accepted but not yet applied - any string parses — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 | `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
-| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries that resolve to *real* providers trigger the Class 2 embedding-model gradient sweep — a **modelled** comparison over the sweep's own shared index, not a measurement of the configured vector store (see the Class 2 page). Legacy `fake-*` names carry a modelled recall rather than real vectors, so a mixed config drops them with a warning, and fewer than two real models records no gradient. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `bedrock:<model>` (Amazon Bedrock — Titan, or Cohere-on-Bedrock `cohere.embed-*`, opt-in `sectum-ai[bedrock]`, AWS creds + `AWS_REGION`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
+| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries that resolve to *real* providers trigger the Class 2 embedding-model gradient sweep — a **modelled** comparison over the sweep's own shared index, not a measurement of the configured vector store (see the Class 2 page). Legacy `fake-*` names carry a modelled recall rather than real vectors, so a mixed config drops them with a warning, and one real model records no gradient (a comparison needs two); with no real model at all and the built-in fake store, the offline sweep still runs and records a gradient, which the record labels as modelled rather than measured. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `bedrock:<model>` (Amazon Bedrock — Titan, or Cohere-on-Bedrock `cohere.embed-*`, opt-in `sectum-ai[bedrock]`, AWS creds + `AWS_REGION`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
 
@@ -88,11 +88,12 @@ carrying both cannot say which system it probed.
 Two things keep it honest about what it is rather than what slot it occupies. It
 declares `Surface.API`, so its findings and the run's
 [surface provenance](coverage.md) both say `api` rather than `vector_db`. And it
-declares no semantic retrieval, so **Class 6 (embedding inversion) and Class 13
-(multi-modal bleed) are skipped** — an application's search is not an embedding
-space, and a substring hit reported as *Invert ML Model* would attribute a real
-result to a mechanism that is not there. Those classes report `NOT_COVERED`, never
-`PASS` ([scorecard](scorecard.md), rules 5 and 6).
+declares no semantic retrieval, so **Class 6 (embedding inversion) is skipped**
+-- an application's search is not an embedding space, and a substring hit reported
+as *Invert ML Model* would attribute a real result to a mechanism that is not
+there. It reports `NOT_COVERED`, never `PASS` ([scorecard](scorecard.md), rules 5
+and 6). Class 13 is unaffected because it is not in the CLI's probe suite under
+any configuration; it runs from the SDK (`examples/multimodal-rag-bleed`).
 
 Why this exists: a stack whose vector store, cache, memory, and agent framework are
 all perfectly isolated — but whose `GET /api/documents/{id}` returns another
@@ -126,10 +127,17 @@ carry the calling user to the backend at all, so with it off the run exercises
 the tenant boundary only (user-level steps are not run, and the run says so) —
 and `soft_delete: bool = false` makes an erasure a no-op that the surface still
 acknowledges — the Class 11 residue. Not every
-resolver reads them. `user_scoped` is read by `vector_store`, `app`, `cache`,
-`model`, `mcp`, and `memory`. `soft_delete` is read by `vector_store`, `app`,
-`cache`, `model`, `memory`, `observability`, `search_index`, `eval_set`, and
-`backup` — but not by `mcp`. The `rag` and `agent` resolvers read neither.
+resolver reads them, **and the guard is per `kind`, not per family**: the lists
+below say where the knob exists at all, not that every backend in the family takes
+it. `user_scoped` is read by kinds under `vector_store`, `app`, `cache`, `model`,
+`mcp`, and `memory`; `soft_delete` by kinds under `vector_store`, `app`, `cache`,
+`model`, `memory`, `observability`, `search_index`, `eval_set`, and `backup`. The
+`rag` and `agent` resolvers read neither. Within a family the live backends are
+narrower than the fake: `soft_delete` models a store that acknowledges a delete
+and keeps the data, which only the built-in fakes and a few live backends can do,
+so `cache: {kind: redis, soft_delete: true}` and
+`observability: {kind: phoenix, soft_delete: true}` are both rejected, as is
+`mcp: {kind: stdio, user_scoped: true}` — the MCP clients take no such knob.
 A field in your block that the family's resolver never reads is **rejected** when
 the adapter is built (exit `3`, naming the field): `shared_idx: true`, or
 `soft_delete` under `rag`, would otherwise change nothing and the run would measure
@@ -140,10 +148,10 @@ the default. This is the field-level sibling of the unknown-family check.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `shared_index: bool = false`, `soft_delete: bool = false` | In-memory store. `shared_index: true` makes one index serve every tenant — the Class 2 retrieval-pivot leak. |
-| `pgvector` | `dsn_env: str` *(or `dsn: str`)* | PostgreSQL with the pgvector extension. Prefer the env-var form. |
-| `chroma` | `host: str = "localhost"`, `port: int = 8000` | ChromaDB server. Each tenant maps to its own collection. |
-| `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051` | Weaviate server. Each tenant maps to its own collection. |
-| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)* | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
+| `pgvector` | `dsn_env: str` *(or `dsn: str`)*, `user_scoped: bool = false` | PostgreSQL with the pgvector extension. Prefer the env-var form. |
+| `chroma` | `host: str = "localhost"`, `port: int = 8000`, `user_scoped: bool = false` | ChromaDB server. Each tenant maps to its own collection. |
+| `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051`, `user_scoped: bool = false` | Weaviate server. Each tenant maps to its own collection. |
+| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)*, `user_scoped: bool = false` | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
 | `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
 | `milvus` | `uri: str = "http://localhost:19530"`, `token_env: str` *(or `token: str`, optional)*, `user_scoped: bool = false` | Milvus server. Each tenant maps to its own collection (strong consistency); `user_scoped: true` adds a per-user filter expression. A local/self-hosted Milvus usually needs no `token`. Requires the `milvus` extra. |
 | `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = true`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
@@ -209,9 +217,12 @@ the default. This is the field-level sibling of the unknown-family check.
 |---|---|---|
 | `fake` | `shared_index: bool = false` | `FakeRAGPipeline`. `shared_index: true` makes one retriever serve every tenant — the Class 2 retrieval-pivot leak at the RAG-pipeline end (the `rag-pipeline-bleed` probe). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
-| `langchain` | `factory: str` *(required)* — `module.path:callable`, imported and called with no arguments; must return an object exposing `invoke(input) -> str \| dict` | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. These kinds are wired in code: the config names a `factory` — a `module.path:callable` that
-the resolver imports and calls with no arguments — because a composed chain, graph, or crew
-is a Python object, not a YAML value. Omitting `factory` fails at config load with
+| `langchain` | `factory: str` *(required)* — `module.path:callable`, imported and called with no arguments; must return an object exposing `invoke(input) -> str \| dict` | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. |
+
+These kinds are wired in code: the config names a `factory` — a
+`module.path:callable` that the resolver imports and calls with no arguments —
+because a composed chain, graph, or crew is a Python object, not a YAML value.
+Omitting `factory` fails when the adapter is built, with
 `adapter field 'factory' is required`.
 
 ### `observability`
@@ -222,7 +233,7 @@ is a Python object, not a YAML value. Omitting `factory` fails at config load wi
 | `phoenix` | `base_url: str` *(required)*, `prefix: str = "sectum-ai"` | `PhoenixObservability` — each tenant maps to a Phoenix project named `{prefix}-{tenant.hex}`. `delete(tenant)` removes the tenant's project. |
 | `langfuse` | `public_key_env: str` *(or `public_key: str`)*, `secret_key_env: str` *(or `secret_key: str`)*, `host: str` *(required)* | `LangfuseObservability` (Langfuse v4 SDK) — one project, each tenant scoped by trace `user_id`. `delete(tenant)` bulk-deletes the tenant's traces. |
 | `langsmith` | `api_key_env: str` *(or `api_key: str`)*, `api_url: str` *(optional)*, `prefix: str = "sectum-ai"` | `LangSmithObservability` — each tenant maps to a LangSmith project named `{prefix}-{tenant.hex}`. `delete(tenant)` deletes the project. |
-| `otel` | `base_url_env: str` *(or `base_url: str`)*, `query_path: str = "/v1/traces/query"`, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0`, `tenant_attribute: str = "tenant.id"` | `OtelObservability` — a generic OpenTelemetry reader over any endpoint that speaks the Sectum OTLP-JSON trace-query contract (a thin shim in front of Jaeger / Tempo / Grafana / a vendor backend). Scopes by the resource attribute `tenant_attribute` (= `tenant.hex`) and re-scans every span's name + attributes for the marker, so a backend that ignores the tenant filter is itself caught. `delete(tenant)` issues a scoped `DELETE`: a `404` is a purge only when the scoped query (an empty marker, which matches every span of the tenant) then returns no spans — otherwise, like a `405`/`501` (no programmatic delete API), it raises `ErasureUnsupported` so Class 11 records the surface as *attestable-with-caveat* (never a false erasure PASS), like Helicone / Datadog. Standard-library HTTP only — no optional extra. |
+| `otel` | `base_url_env: str` *(or `base_url: str`)*, `query_path: str = "/v1/traces/query"`, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0`, `tenant_attribute: str = "tenant.id"` | `OtelObservability` — a generic OpenTelemetry reader over any endpoint that speaks the Sectum OTLP-JSON trace-query contract (a thin shim in front of Jaeger / Tempo / Grafana / a vendor backend). Scopes by the resource attribute `tenant_attribute` (= `tenant.hex`) and re-scans every span's name + attributes for the marker, so a backend that ignores the tenant filter is itself caught. `delete(tenant)` issues a scoped `DELETE`: a `404` is a purge only when the scoped query (an empty marker, which matches every span of the tenant) then returns no spans — otherwise, like a `405`/`501` (no programmatic delete API), it raises `ErasureUnsupported` so Class 11 records the surface as *attestable-with-caveat* (never a false erasure PASS), like Helicone / Datadog. A truncated answer must say so: a truthy `truncated` / `nextPageToken` / `next_page_token` / `nextLink` in the response body makes the adapter refuse a MISS, because a marker beyond a partial page cannot be told apart from an erased one. A shim that never sets one cannot be caught here. Standard-library HTTP only — no optional extra. |
 | `helicone` | `api_key_env: str` *(or `api_key: str`)*, `base_url: str = "https://api.helicone.ai"`, `tenant_property: str = "tenant"` | `HeliconeObservability` — reads the tenant's logged requests via the Helicone request-query API, scoped by a custom property (`Helicone-Property-Tenant` = `tenant.hex`), and scans request/response bodies for the marker. **Read-only**: Helicone exposes no programmatic per-tenant erasure API, so `delete(tenant)` raises `ErasureUnsupported` and Class 11 records the surface as *attestable-with-caveat* (never a false erasure PASS). Standard-library HTTP — no optional extra. |
 | `datadog` | `api_key_env: str` *(or `api_key: str`)*, `application_key_env: str` *(or `application_key: str`)*, `base_url: str = "https://api.datadoghq.com"`, `tenant_tag: str = "tenant"`, `search_window: str = "now-15d"` | `DatadogObservability` — reads the tenant's spans via the Datadog spans-search API, scoped by a span tag (`@tenant:<hex>`), and scans span attributes for the marker. **Read-only**: Datadog governs deletion through retention policies, not a per-tenant span-delete API, so `delete(tenant)` raises `ErasureUnsupported` and Class 11 records the surface as *attestable-with-caveat*. `search_window` must cover the account's span retention — a span older than the window reads back absent, which the A3 erasure check cannot distinguish from erased, so too narrow a window attests a still-retained subject as ERASED. The default matches Datadog's default 15-day retention; widen it if the account keeps spans longer. Standard-library HTTP — no optional extra. |
 
@@ -233,10 +244,10 @@ is a Python object, not a YAML value. Omitting `factory` fails at config load wi
 | `fake` | `confused_deputy: bool = false`, `tool_call_passthrough: bool = false` | `FakeAgent`. Both knobs reproduce the Class 7 flaws — a tool that lost tenant scope (confused deputy) and a server that trusts a caller-supplied token (token passthrough). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpAgent` — POSTs `{tenant, task}` to the URL and parses `{output, tool_calls}`. |
 | `langgraph` | `factory: str` *(required)* — `module.path:callable` returning the compiled graph; `recursion_limit: int = 25` | `LangGraphAgent` — a compiled LangGraph `StateGraph` invoked with a per-tenant `thread_id`. The resolver imports `factory` and calls it with no arguments. Requires the optional `langgraph` extra: `pip install sectum-ai-adapters[langgraph]`. |
-| `autogen` | `factory: str` *(required)* — `module.path:callable` returning the agent; `max_turns: int = 0` | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
+| `autogen` | `factory: str` *(required)* — `module.path:callable` returning an `(assistant, user_proxy)` **pair**; `max_turns: int \| null = null` (omitted, the SDK's own default applies; a literal `0` runs a **zero-turn** conversation, so the probe observes nothing) | `AutoGenAgent` — an AutoGen `AssistantAgent` + `UserProxyAgent` pair driven by `UserProxyAgent.initiate_chat`, with each per-tenant message prefixed by a `[tenant:<hex>]` token so a tenant-aware tool reads the scope from its arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `autogen` extra: `pip install sectum-ai-adapters[autogen]`. |
 | `crewai` | `factory: str` *(required)* — `module.path:callable` returning the `Crew`; `input_key: str = "task"`, `tenant_key: str = "tenant_id"` | `CrewAIAgent` — a CrewAI `Crew` of agents + tasks kicked off per tenant via `crew.kickoff(inputs={"tenant_id": tenant.hex, "task": task})`, so templated task descriptions interpolate the tenant id and tenant-aware tools read the scope from their call arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `crewai` extra: `pip install sectum-ai-adapters[crewai]`. |
 | `openai-assistants` | `factory: str` *(required)* — `module.path:callable` returning the configured client/assistant | `OpenAIAssistantsAgent` — an OpenAI Assistant with one `Thread` cached per tenant, posted via `OpenAI().beta.threads.messages.create` + `runs.create`; each user message is prefixed with `[tenant:<hex>]` so a tenant-aware tool reads the scope from its call arguments. The resolver imports `factory` and calls it with no arguments. Requires the optional `openai-assistants` extra: `pip install sectum-ai-adapters[openai-assistants]`. |
-| `anthropic-tooluse` | `factory: str` *(required)* — `module.path:callable` returning the configured client/tools | `AnthropicToolUseAgent` — the Anthropic Messages API in native tool-use mode with one conversation history cached per tenant; each per-tenant user message is prefixed with `[tenant:<hex>]` and the tool-use loop runs to `stop_reason: end_turn` per turn, executing the python callable each registered tool spec carries on its `__sectum_callable__` sidecar. The resolver imports `factory` and calls it with no arguments. Requires the optional `anthropic-tooluse` extra: `pip install sectum-ai-adapters[anthropic-tooluse]`. |
+| `anthropic-tooluse` | `factory: str` *(required)* — `module.path:callable` returning the configured client/tools | `AnthropicToolUseAgent` — the Anthropic Messages API in native tool-use mode with one conversation history cached per tenant; each per-tenant user message is prefixed with `[tenant:<hex>]` and the tool-use loop runs to `stop_reason: end_turn` per turn, executing each registered tool, which is the python callable itself carrying its spec on a `__sectum_tool_spec__` attribute. The resolver imports `factory` and calls it with no arguments. Requires the optional `anthropic-tooluse` extra: `pip install sectum-ai-adapters[anthropic-tooluse]`. |
 
 ## `evidence`
 
@@ -249,7 +260,7 @@ is a Python object, not a YAML value. Omitting `factory` fails at config load wi
 
 `sectum-ai verify` checks an RFC 3161 token against a root pinned independently of
 the pack: it ships the public FreeTSA leaf and root built in, and
-`--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA.
+`--tsa-cert`/`--tsa-root` (PEM files) override them for a customer-pinned TSA — pass both: a leaf supplied alone must still be issued by the pinned root, and `verify` refuses it otherwise.
 Likewise it checks a Rekor inclusion proof against log keys pinned built in, and
 `--rekor-key <pem>` pins a private instance's key. See the
 [evidence chain](evidence-chain.md#trusted-timestamping-rfc-3161).
@@ -319,7 +330,7 @@ non-negotiable; a threshold that admits any negative is never recommended). It
 prints a precision/recall/F1 table and the value to paste into
 `detection.semantic_threshold`. Flags: `--embedder <kind:model>` (default: the
 configured `detection.embedder`; `st:…`, `openai:…`, `cohere:…`, `voyage:…`, `bedrock:…`, `hash-…`, or `fake`),
-`--seed`, `--workdir`, `--config`, and `--output {text,json}`. The run is
+`--seed`, `--workdir`, `--config`, and `--output {text,json}` (`sarif` and `oscal` are refused with exit `3` — a calibration projects no findings). The run is
 deterministic from the seed.
 
 `semantic_threshold: auto` skips the per-run calibration and uses a built-in
@@ -369,7 +380,7 @@ adapters:
   cache:
     kind: redis
     host: localhost
-    port: 6379
+    port: 6380              # compose.yaml publishes 6379 as 6380
   # model, mcp, memory default to plain fakes
 ```
 

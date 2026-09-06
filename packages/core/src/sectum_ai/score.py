@@ -74,6 +74,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    rate_from_counts,
     untrusted,
     wilson_interval,
 )
@@ -86,7 +87,7 @@ __all__ = [
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.2"
+METHODOLOGY_VERSION = "1.3"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -231,6 +232,29 @@ def _confidence_for(coverage: float) -> Confidence:
     return Confidence.LOW
 
 
+# The four classes `_headline` can render a rate for. A class outside this set has
+# no *renderable* headline, which is not the same as having no measurement:
+# Class 5's is `side_channel_effect_sizes`, a map rather than a scalar, so it
+# never reaches `_headline` and a Class 5 PASS rendered identically with and
+# without one. `diff` prints [SIDE CHANNEL NOT REMEASURED] for that same absence.
+_HEADLINE_RATE_CLASSES = frozenset({2, 3, 6, 10})
+_KV_TIMING_CLASS = 5
+
+
+def _confirmed_in_class(run: RunResult, entry: _CatalogClass) -> int:
+    """The class's confirmed findings, however the class was ultimately graded.
+
+    Rules 5 and 6 both decline to GRADE a class while its findings still exist,
+    and both have to say how many: a `NOT_COVERED` verdict beside a count of `0`
+    reads as "nothing was found here", which is a different claim.
+    """
+    return sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+    )
+
+
 def _rate_from_counts(metrics: RunMetrics) -> float | None:
     """Class 2's rate as its own counts give it, or ``None`` if the record has no counts.
 
@@ -247,9 +271,7 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
             "the record's Retrieval-Pivot counts are incoherent, so its headline rate "
             "cannot be trusted and the run is not graded."
         )
-    if not metrics.retrieval_pivot_n:
-        return None
-    return metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
+    return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
 def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
@@ -347,20 +369,32 @@ def _score_class(
         # this methodology cannot tie to a class. Grading it would assert a verdict
         # about a system the scorecard cannot identify, so it fails closed - the same
         # answer rule 1 gives for a class that never ran at all.
+        # Not grading the class is not the same as asserting it had no findings.
+        # Omitting this count let a record hide a confirmed CRITICAL by deleting
+        # one provenance key: the class line then positively read `0`, where rule
+        # 5 fifteen lines below counts and names the same findings. Rule 4 forbids
+        # dropping a finding silently, and the count is how the reader sees it.
+        unattributed = _confirmed_in_class(run, entry)
+        detail = (
+            f"; the {unattributed} confirmed finding(s) here are not attributed to a surface"
+            if unattributed
+            else ""
+        )
         return ClassScore(
             class_id=entry.class_id,
             name=entry.name,
             verdict=ClassVerdict.NOT_COVERED,
             severity=entry.severity,
             probe_ids=tuple(ran),
+            confirmed_findings=unattributed,
             # Say only what is known. The run records WHICH surfaces it exercised,
             # not which one backed this class, so naming the others would imply an
             # attribution this rule exists to refuse.
             note=(
                 f"expected {'one of ' if len(accepted) > 1 else ''}"
                 f"{', '.join(sorted(accepted))}, none of which this run's provenance "
-                "records; the surface it ran against cannot be attributed to a class "
-                "by this methodology"
+                f"records; the surface it ran against cannot be attributed to a class "
+                f"by this methodology{detail}"
             ),
         )
     if ran and backing and backing <= synthetic:
@@ -368,11 +402,7 @@ def _score_class(
         # cannot speak for the operator's stack in either direction - a pass is not
         # assurance and a leak is not their fault. Its findings are still counted and
         # named, so nothing is dropped silently; they just do not move this grade.
-        confirmed_synthetic = sum(
-            1
-            for finding in run.findings
-            if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
-        )
+        confirmed_synthetic = _confirmed_in_class(run, entry)
         against = ", ".join(sorted(backing))
         detail = (
             f"; the {confirmed_synthetic} finding(s) here describe that fake, not your stack"
@@ -421,6 +451,54 @@ def _score_class(
                 "this run's suite, or the substrate left it no step to take"
             ),
         )
+    # A PASS the probe could not actually establish. `AccessOutcome.DENIED` is
+    # produced by NO code path - the runner can only emit RETURNED or EMPTY - so a
+    # Class 1 PASS can only ever mean "no canary came back", never "the deny was
+    # enforced", and the class page says the probe does not treat 200-empty as a
+    # clean pass. The scorecard did, with note=None and full critical-band weight.
+    # An unverified finding must not FLIP the class (that is the false-positive
+    # control the whole detector rests on), so it says so on the line instead.
+    unverified = sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.UNVERIFIED
+        and backing_surface(finding) not in synthetic
+    )
+    # A class whose headline rate the run never measured passes with an EMPTY
+    # detail column, indistinguishable on the page from one that measured 0.0%.
+    # `_headline` returns None for both "this class has no rate" and "the rate is
+    # None", so the four classes that HAVE one are named here.
+    headline = _headline(entry, run.metrics)
+    unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
+        entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
+    )
+    # A class whose catalog entry names two probes and whose run exercised one is
+    # graded on half its evidence, at full weight, with nothing on the line to
+    # say so - while every class that ran NO probe says "probe did not run". For
+    # Class 2 the omission also moves the headline: `BLEED_PROBE_IDS`' own
+    # comment says counting the vector probe alone "understates the rate when a
+    # leak manifests solely at the pipeline surface (it would read 0%)", and that
+    # understated rate is what the line prints.
+    missing = tuple(sorted(set(entry.probe_ids) - set(ran)))
+    notes = [
+        f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
+        "that fake, not your stack"
+        if withheld
+        else "",
+        f"{unverified} unverified finding(s) here: the probe could not establish the "
+        "negative, so this is not proof the boundary was enforced"
+        if unverified and not confirmed
+        else "",
+        "this class's headline measurement was never recorded in this run, so the pass "
+        "rests on the absence of confirmed findings alone"
+        if unmeasured_rate and not confirmed
+        else "",
+        f"graded on {len(ran)} of {len(entry.probe_ids)} probes for this class; "
+        f"{', '.join(missing)} did not run"
+        if missing
+        else "",
+    ]
     return ClassScore(
         class_id=entry.class_id,
         name=entry.name,
@@ -428,13 +506,8 @@ def _score_class(
         severity=entry.severity,
         probe_ids=tuple(ran),
         confirmed_findings=confirmed,
-        headline=_headline(entry, run.metrics),
-        note=(
-            f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
-            "that fake, not your stack"
-            if withheld
-            else None
-        ),
+        headline=headline,
+        note="; ".join(part for part in notes if part) or None,
     )
 
 
@@ -498,8 +571,10 @@ def score_run(run: RunResult) -> IsolationScore:
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
     if not covered:
         raise ConfigError(
-            "no catalog class was exercised by this run, so there is nothing to grade; "
-            "run 'sectum-ai probe' against a configured stack first"
+            "no catalog class this run exercised can be graded: either no probe ran, or "
+            "every class that ran was backed only by Sectum's built-in fakes (their "
+            "verdicts describe that fake, not your stack); run 'sectum-ai probe' against "
+            "a configured stack first"
         )
     covered_weight = sum(weight[c.class_id] for c in covered)
     if not covered_weight:

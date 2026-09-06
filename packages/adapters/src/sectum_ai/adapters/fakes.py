@@ -34,7 +34,13 @@ from sectum_ai.adapters.base import (
     VectorHit,
     VectorStoreAdapter,
 )
-from sectum_ai.spec import AdapterError, CorpusDocument, ErasureUnsupported, Surface
+from sectum_ai.spec import (
+    AdapterError,
+    CorpusDocument,
+    ErasureUnsupported,
+    Surface,
+    residual_present,
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # ``search`` is the parameter/description-injection surface: a tool whose own
@@ -298,7 +304,7 @@ class FakeObservability(ObservabilityAdapter):
         return [
             TraceHit(trace_id=trace_id, project=project, snippet=text)
             for trace_id, project, text in self._traces.get(tenant, [])
-            if marker in text
+            if residual_present(marker, text)
         ]
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:

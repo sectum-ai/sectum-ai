@@ -2,8 +2,9 @@
 
 **OWASP:** LLM08:2025 · **ATLAS:** — (a control check, not an attack technique) · **NIST:** MEASURE 2.7 · **Surfaces:** vector DB, tracing, agent memory, semantic cache, model/fine-tune, search index, eval set, backup · **Probe ids:** `gdpr-erasure-verification`, `gdpr-subject-erasure-verification`
 
-Proving a tenant's data has actually left an AI system after a right-to-erasure
-request.
+Checking, surface by surface, that none of a tenant's markers is still
+retrievable after a right-to-erasure request — and stating explicitly which
+surfaces were not checked.
 
 Two probes verify erasure at two granularities. `gdpr-erasure-verification`
 verifies **tenant-level** erasure — none of a tenant's markers remain after the
@@ -31,9 +32,13 @@ scrambled prompt is what gives it away). On the vector store the fingerprint is
 a top-50 similarity query; a page that comes back full without the phrase makes
 that phrase unverifiable (a stored document ranked past the page is
 indistinguishable from an erased one), so the surface reads `NOT_COVERED` for the
-subject rather than `ERASED`. An email is cut inside its local part. A phrase the check cannot
-verify — a trailing part under six characters, a bare two-word name, a prefix
-with no scrambled form — is counted and the verifiable phrases are still
+subject rather than `ERASED`. On a model that merges every tenant's weights
+(`SHARED_WEIGHTS`) there is no untrained tenant to ask, so a completion cannot be
+told apart from the base model's own knowledge: the model surface reads
+`NOT_COVERED` for the subject rather than signing a residual it cannot attribute. An email is cut inside its local part. A phrase the check cannot
+verify — a trailing part under six characters (which is what makes most bare
+two-word names unverifiable: "Doe" is three), or a prefix with no scrambled
+form — is counted and the verifiable phrases are still
 scanned: the model surface reads `RESIDUAL` if any of them is recalled, else
 `NOT_COVERED` for the subject (never `ERASED` while something was unchecked), and
 the run says how many supplied fingerprints it could not check. The tenant probe's canary scan uses the
@@ -73,7 +78,21 @@ the evidence pack (`RunMetrics.erasure_coverage`, surface → `CoverageVerdict`)
 | `ERASED` | Covered and clean — a baseline existed and no marker is retrievable through the erased tenant's own read path after erasure. A backend that retains the data while revoking that path is indistinguishable, from outside, from one that purged it. |
 | `RESIDUAL` | Covered and failed — the backend was asked to erase and a marker survived. |
 | `ATTESTABLE_WITH_CAVEAT` | Covered, but the backend exposes no per-tenant erasure API — data presumed retained. |
-| `NOT_COVERED` | Out of scope, not scanned, or no pre-erasure baseline — **never** evidence of erasure. |
+| `NOT_COVERED` | Out of scope, not scanned, no pre-erasure baseline, or scanned but **absence could not be established** — **never** evidence of erasure. |
+
+Residue is matched with the same predicate the leak detector uses: normalization-insensitive (case, width, zero-width) **and** the marker's tokens contiguous and
+in order, which catches a canary a backend re-punctuated or wrapped across a log
+line. A surface holding such a copy used to read `ERASED`.
+
+Two things make a marker unverifiable. Both probes read the vector store with a
+top-50 similarity query, and a page that comes back **full** without a marker is
+not absence — a marker still stored but ranked past the page looks identical. On
+any surface, a backend error during the post-erasure re-scan is the second: the
+markers seen before erasure are the baseline, and the failed scan rules out none
+of them. Either way those markers are counted as unverifiable, the surface's
+human-readable verdict is `NOT VERIFIED` rather than `ERASED`, its coverage
+verdict is `NOT_COVERED`, and `sectum-ai erasure` exits 3 with
+`ERASURE INCONCLUSIVE` naming the surfaces whose absence was never established.
 
 The guarantee is anti-over-claim: a surface that was not scanned can only ever be
 `NOT_COVERED` — it can never read as `ERASED`. The overall run is "fully erased"

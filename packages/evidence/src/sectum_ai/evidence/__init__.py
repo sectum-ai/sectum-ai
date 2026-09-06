@@ -39,7 +39,12 @@ from sectum_ai.evidence.pdf import PdfEngine, render_audit_pack, render_audit_pa
 from sectum_ai.evidence.rekor import RekorTransparencyLog, rekor_keyring, verify_rekor_proof
 from sectum_ai.evidence.sarif import SARIF_VERSION, run_to_sarif
 from sectum_ai.evidence.tsa import Rfc3161Timestamper, verify_rfc3161_token
-from sectum_ai.evidence.verify import Check, VerificationResult, verify_pack
+from sectum_ai.evidence.verify import (
+    Check,
+    VerificationResult,
+    check_raw_schema_stamps,
+    verify_pack,
+)
 
 __all__ = [
     "COVERAGE_DISCLAIMER",
@@ -63,6 +68,7 @@ __all__ = [
     "build_bundle",
     "build_dsse_envelope",
     "build_evidence_pack",
+    "check_raw_schema_stamps",
     "control_mappings",
     "dsse_binding_detail",
     "envelope_statement",

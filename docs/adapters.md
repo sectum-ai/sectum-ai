@@ -82,20 +82,20 @@ is opt-in live.
 
 **Search index.** The OpenSearch search index (`kind: opensearch`, the `[opensearch]`
 extra) indexes each tenant's derived full-text documents into its own OpenSearch index
-(`{prefix}-{tenant}`) and searches with a `match` query — the tenth "hiding place",
+(`{prefix}-{tenant.hex}`) and searches with a `match` query — the tenth "hiding place",
 distinct from the vector store. Class 11 erasure seeds it, then confirms a `delete`
 purges the index; `soft_delete=True` leaves it in place — the erasure residue. A
-search whose matches exceed the page it returns is refused rather than truncated.
+search whose matches exceed the page it returns is refused rather than truncated — unless the page it *did* return already carries the phrase, which answers the question (the same miss-only rule the trace backends, mem0 and the LangSmith eval set follow).
 
 **Eval set.** The LangSmith eval set (`kind: langsmith`, the `[langsmith]` extra) maps
-each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant}`) — a dataset *is* a
+each tenant to its own LangSmith **Dataset** (`{prefix}-{tenant.hex}`) — a dataset *is* a
 curated golden eval set, the fourth "hiding place". A fixture is a dataset example,
 Class 11 erasure seeds them, and `delete` removes the tenant's dataset;
 `soft_delete=True` leaves the fixtures in place. A search that hits the 1000-example
 listing cap is refused rather than truncated.
 
 **Backup.** The S3 backup (`kind: s3`, the `[boto3]` extra) keeps each tenant's
-snapshots under the key prefix `{prefix}/{tenant}/` in one bucket (AWS S3 or any
+snapshots under the key prefix `{prefix}/{tenant.hex}/` in one bucket (AWS S3 or any
 S3-compatible store — MinIO, Ceph — via `endpoint_url`), the seventh "hiding place". A
 search lists that prefix and `delete` purges it; `no_erasure=True` models an immutable /
 object-lock (WORM) bucket that exposes no per-tenant purge, so `delete` raises
@@ -146,7 +146,18 @@ trace up by id within the tenant's own scope, so `erasure --subject` can verify 
 named trace is gone. LangSmith, Phoenix, Helicone, and Datadog each read one page
 of at most 1000 traces, and Langfuse pages to its 1000-trace budget; a miss on a
 full page (or past the budget) is refused (an `AdapterError`) rather than read as
-"erased", since a trace beyond it is indistinguishable from a deleted one. A search response that is
+"erased", since a trace beyond it is indistinguishable from a deleted one. The
+Class 11 marker scan (`search_traces`) reads the same page and refuses it on the
+same rule. The generic `otel` reader has no page cap to count, because it reads a
+caller-supplied store: its contract asks the shim to FLAG a partial page instead
+(a truthy `truncated` / `nextPageToken` / `next_page_token` / `nextLink` in the
+response body), and a miss on a flagged page is refused the same way. A shim that
+never sets one cannot be caught here, which is why the contract asks for it. In every case only a *miss* on a full page is refused: a marker found
+there is a definite residual and is reported, since one hit already answers the
+question the scan asks. The mem0 memory store and the LangSmith eval set follow
+the same rule, and mem0 additionally refuses a response whose envelope is not the
+one it reads (a renamed or re-nested `results` key used to come back as an empty
+tenant, which the subject check attested as erased). A search response that is
 an error envelope (a 200 carrying `error`/`errors`, or no `data` list) is likewise an
 error, not an empty tenant; the generic OpenTelemetry reader treats a `DELETE` that
 answers `404` as a purge only when its query then shows no spans — it asks with an
@@ -198,30 +209,38 @@ identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
 *user* identity unless `user_argument` names the tool argument to put it in.
 
 **Which boundary a run can claim.** Every adapter declares whether a call made as a
-user reaches the backend *as that user* (`carries_user`). The RAG, agent, and
-observability contracts carry no user at all, the live MCP clients carry one
+user reaches the backend *as that user* (`carries_user`). The RAG, agent,
+observability, search-index, eval-set and backup contracts — the six families
+whose methods take no `user` — carry none at all, the live MCP clients carry one
 only with `user_argument`, every live vector store, both Redis adapters, and the
 HuggingFace model carry one only with `user_scoped: true` (with the knob off,
 nothing user-specific reaches the backend), and the mem0 memory store (a flat
 `user_id` space that *is* the tenant) and the serving-only models never do. The
 runner drops user-level
 *read* steps for an adapter that does not carry the user (a user-owned plant still
-runs, as the tenant), records the count in the signed run (`user_steps_dropped`),
+runs, as the tenant — unless the filter leaves the probe no judged step at all, in
+which case the plants go too and the probe runs nothing rather than grading a
+class off zero observations), records the count in the signed run
+(`user_steps_dropped`),
 and warns; the run claims the tenant boundary alone there, and `diff` /
 `baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
 Run as the tenant and judged as the user, such a step confirmed cross-user leaks of
 a session that never existed. The built-in fakes carry the user wherever their
 family contract does (vector, app, cache, model, MCP, memory) — the fake *is* the
 backend, and `user_scoped: false` on a fake models a backend that receives the
-user and ignores it; the RAG, observability, and agent fakes cannot, like their
-contracts.
+user and ignores it. The RAG, observability, agent, search-index, eval-set and
+backup fakes cannot, like their contracts.
 
 **Extras and verification.** The framework- and SDK-backed adapters are optional
 extras, imported lazily so the base install stays light:
 `pip install sectum-ai-adapters[<name>]` for `huggingface`, `vllm`, `tgi`,
 `rag-langchain`, `langgraph`, `crewai`, `autogen`, `openai-assistants`,
 `anthropic-tooluse`, `mcp` (both MCP clients), `langsmith` (the eval-set adapter),
-`boto3` (the S3 backup), or `mem0` (the mem0 memory store).
+`boto3` (the S3 backup), `gcs` (the GCS backup), or `mem0` (the mem0 memory store).
+The backend clients are extras too — `pgvector`, `chroma`, `weaviate`, `qdrant`,
+`milvus`, `opensearch`, `pinecone`, `azure-search`, `redis`, `phoenix`, and
+`langfuse` — and a missing one is an exit-`3` `AdapterError` naming the extra,
+not an import traceback.
 The Helicone, Datadog, and OpenTelemetry readers and the HTTP RAG / agent
 adapters use only the standard library; both MCP clients need the `mcp` extra. The pgvector, Chroma, Weaviate, Qdrant,
 OpenSearch, Redis, and Phoenix adapters run against docker-compose backends in CI

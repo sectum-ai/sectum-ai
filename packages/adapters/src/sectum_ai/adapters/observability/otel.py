@@ -22,6 +22,15 @@ trace-export shape)::
               {"traceId": "<hex>", "name": "<span name>",
                "attributes": [{"key": "...", "value": {"stringValue": "..."}}]}]}]}]}
 
+A truncated answer must say so. OTLP-JSON carries no standard paging signal,
+so the contract adds one: a truthy ``"truncated"`` (or any of
+``"nextPageToken"`` / ``"next_page_token"`` / ``"nextLink"``) means the store
+returned a partial page. The adapter refuses a MISS on such a page, because a
+marker beyond it cannot be told apart from an erased one - the guard the five
+sibling trace backends get from counting rows against a known cap, which this
+contract has no equivalent of. A marker FOUND on a partial page is a definite
+residual and is returned; only the miss is refused.
+
 The backend is expected to scope by the ``tenant`` field, but the adapter
 re-checks the per-resource tenant attribute (default ``tenant.id``) and
 re-scans every span's name + attribute values for the marker, so a backend
@@ -51,7 +60,8 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.adapters.observability._listing import _refuse_truncated
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 _DEFAULT_QUERY_PATH = "/v1/traces/query"
 
@@ -80,6 +90,13 @@ class _OtelTraceStore(Protocol):
         Idempotent when the spans are already absent; raises
         ``ErasureUnsupported`` when the store exposes no delete API at all.
         """
+
+
+def _refuse_error_envelope(body: dict[str, Any], what: str) -> None:
+    """An error envelope is not an answer, whatever else the body carries."""
+    for key in ("error", "errors"):
+        if body.get(key):
+            raise AdapterError(f"{what} returned an error: {str(body[key])[:200]}")
 
 
 class OtelObservability(ObservabilityAdapter):
@@ -129,9 +146,12 @@ class OtelObservability(ObservabilityAdapter):
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         body = self._store.query(tenant.hex, marker)
+        # An error envelope is refused whether or not `resourceSpans` is there
+        # beside it: `{"resourceSpans": [], "error": "partial results"}` read as
+        # "no traces" - in the A3 check, as the subject's trace having been
+        # erased - and the four sibling backends refuse that exact shape.
+        _refuse_error_envelope(body, "OTel query")
         if "resourceSpans" not in body:
-            # A 200 with an error envelope (or the wrong shape) read as "no traces"
-            # - in the A3 check, as the subject's trace having been erased.
             detail = body.get("error") or body.get("errors") or sorted(body)
             raise AdapterError(f"OTel query returned no resourceSpans: {str(detail)[:200]}")
         hits: list[TraceHit] = []
@@ -141,7 +161,7 @@ class OtelObservability(ObservabilityAdapter):
             for scope_span in _as_list(resource_span.get("scopeSpans")):
                 for span in _as_list(scope_span.get("spans")):
                     snippet = _span_snippet(span)
-                    if marker in snippet:
+                    if residual_present(marker, snippet):
                         hits.append(
                             TraceHit(
                                 trace_id=str(span.get("traceId", "")),
@@ -149,6 +169,10 @@ class OtelObservability(ObservabilityAdapter):
                                 snippet=snippet,
                             )
                         )
+        # Only a MISS on a partial page is refused: a marker found there already
+        # answers the question, and refusing the hit would lose a real residual.
+        if not hits:
+            _refuse_truncated(body, "OTel query")
         return hits
 
     def list_projects(self) -> list[str]:
@@ -219,6 +243,17 @@ class _HttpOtelTraceStore:
             # the re-scan's residue as an erasure FAILURE instead of a caveat.
             if error.code == 404:
                 remaining = self.query(tenant_hex, "")
+                _refuse_error_envelope(remaining, "OTel post-delete re-scan")
+                if "resourceSpans" not in remaining:
+                    # The same guard `search_traces` applies to this exact call: a
+                    # 200 carrying an error envelope is not "the spans are gone",
+                    # and reading it as one recorded the surface erasable off a
+                    # response that answered nothing.
+                    detail = remaining.get("error") or remaining.get("errors") or sorted(remaining)
+                    raise AdapterError(
+                        f"OTel post-delete re-scan returned no resourceSpans, so the 404 "
+                        f"cannot be read as a purge: {str(detail)[:200]}"
+                    ) from error
                 if any(
                     _as_list(scope.get("spans"))
                     for resource in _as_list(remaining.get("resourceSpans"))

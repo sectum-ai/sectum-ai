@@ -62,18 +62,34 @@ pack, and verifies it.
 | `sectum-ai diff` | Compare two runs (or evidence packs); flag new/resolved leaks. |
 | `sectum-ai adapters` | List the adapter families and the capabilities each built-in fake reports (it does not inspect installed live backends). |
 
+Where a signal above means a metric could not be compared, `diff` labels that
+metric `[not measured]` instead of `[ok]`, and renders the side it has no value
+for as `(not measured)` rather than `0`: a filled zero is not a measurement, and
+reading one as an improvement is what let a dropped side channel, an unscanned
+erasure surface and a vanished embedding model each report a fixed leak.
+
 Exit codes: `0` the command completed and found nothing it gates on; `2` a gating
 result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake
 between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level steps
 the later run did not run because its adapter cannot carry a user, reported as
-`[BOUNDARY LOST]`, and two runs of different scenarios — a re-seed, other tenants
-or users, where every finding "resolves" because its id embeds the markers and
-principals — reported as `[SCENARIO CHANGED]`; a record from another schema line
-is refused outright), or residual / attestable-with-caveat data on an erased surface
-(`sectum-ai erasure`, where data is presumed retained); `3` config or adapter error —
-including a `probe` run in which nothing interrogated the stack, and a `report` on
-a run that names no probe (or was recorded against a since re-seeded substrate);
+`[BOUNDARY LOST]`, a probe the earlier run exercised and this one did not,
+reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
+residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, a tenant
+pair whose Class 5 timing effect size the earlier run measured and this one did not,
+reported as `[SIDE CHANNEL NOT REMEASURED]`, a headline rate the earlier run
+measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
+of different
+scenarios — a re-seed, other tenants or users, where every finding "resolves"
+because its id embeds the markers and principals — reported as
+`[SCENARIO CHANGED]`; a record from another schema line
+is refused outright — as it is by `report`, `score`, and `verify`, which also
+check the run record *inside* a pack), or residual / attestable-with-caveat data on an erased surface
+(`sectum-ai erasure`, where data is presumed retained); `3` the run could not be
+completed or graded — a config or adapter error, a `probe` run in which nothing
+interrogated the stack, a `report` on a run that names no probe (or one recorded
+against a since re-seeded substrate), an erasure run whose absence could not be
+established (`ERASURE INCONCLUSIVE`), or a record `score` refuses to grade;
 `4` evidence verification failure.
 
 `0` means "nothing this command gates on", not "no leaks": the reporting commands do
@@ -97,9 +113,11 @@ attestation, using two methods:
   full-text search index (a search) with the subject's known content and check whether
   it still surfaces, catching *derived* residual — an embedding copy, residual
   *memorization* in a fine-tune/adapter, a lingering memory entry, or an un-purged
-  index document — that a by-id check would miss. The model is checked only when it is
-  trainable (a per-tenant adapter or shared weights); a serving-only endpoint reads
-  `NOT_COVERED`.
+  index document — that a by-id check would miss. The model is checked only on a
+  **per-tenant adapter**: a shared-weights model has no untrained tenant to serve
+  as a base-knowledge control, so a completion cannot be told apart from what the
+  base model already knew, and it reads `NOT_COVERED` — as does a serving-only
+  endpoint, which trained nothing.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the
@@ -129,11 +147,15 @@ model surface the check is prefix-continuation against two controls — a
 same-shaped prefix naming nobody, and (on a per-tenant model) the same prefix as
 a tenant that trained nothing — so a completion any model would produce
 (`@example.com`, a common surname, a public figure's full name) is not counted as
-recall; give it a specific phrase, since one the check cannot verify (a trailing
-part under six characters, a bare two-word name) makes the model surface read
+recall; give it a specific phrase, since one the check cannot verify — a trailing
+part under six characters (which is what makes most bare two-word names
+unverifiable: "Doe" is three), or a prefix with no scrambled form — makes the
+model surface read
 `NOT_COVERED` for the subject, and the run says how many it could not check. Exit
-codes match the canary flow: `0` clean, `2` residual remains, `3` nothing could be
-verified.
+codes match the canary flow: `0` clean, `2` residual remains, `3` inconclusive —
+at least one scanned surface could not establish absence (a full similarity page
+without the phrase, or no pre-erasure baseline), so the run is not attested even
+if other surfaces verified cleanly.
 
 ## Bundle a portable run pack
 
@@ -170,7 +192,11 @@ For GitHub code scanning (or any SAST dashboard), pass `--output sarif` instead 
 emit a SARIF 2.1.0 log of the findings — one rule per probe, one result per
 finding. Upload it with `github/codeql-action/upload-sarif` and the cross-tenant
 findings surface in the repository's **Security** tab. An unverified candidate is
-capped at SARIF `note`, and the signed `evidence.json` stays the canonical record.
+capped at SARIF `note`, and so is a confirmed finding whose backing surface ran
+against a built-in fake — its message is prefixed `[synthetic surface - ...]`, as is
+one on a surface the record does not describe (`[surface provenance not recorded - ...]`), and each
+carries `backingSurface` and `surfaceProvenance`, so a no-`config` demo run is
+entirely `note`-level. The signed `evidence.json` stays the canonical record.
 
 For a GRC platform or auditor, pass `--output oscal` to emit a **NIST OSCAL 1.1.x
 assessment-results** document so the run can be ingested as a machine-readable,
@@ -200,8 +226,10 @@ The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays th
 canonical record.
 
 The summary carries the `run_id`, the probe count, the confirmed-finding
-count, the headline Retrieval-Pivot Rate (and per-embedding-model breakdown
-when Class 2 swept models), the per-probe finding counts, the run's
+count, the headline Retrieval-Pivot Rate (and, when two or more real embedding
+models are configured, a **modelled** embedding-model gradient over the sweep's
+own shared index — not a breakdown of the measured rate), the per-probe finding
+counts, the run's
 `surface_provenance` with `confirmed_on_live_surfaces` (the confirmed findings
 that describe your stack rather than a built-in fake), `user_steps_dropped`
 (probes whose user-level steps were not run because the adapter cannot carry a
@@ -220,3 +248,10 @@ The JSON summary carries the same uncertainty as machine-readable fields —
 and `retrieval_pivot_rate_ci` (the `[low, high]` interval) — so a CI dashboard can
 act on the rate's precision, not a bare point estimate. Because the counts are in
 the signed `evidence.json`, the interval is reproducible by a third party.
+
+The per-embedding-model gradient (`retrieval_pivot_rate_by_model`) is **not** a
+second measured rate: it is computed over the substrate under a modelled shared
+index, not against the adapters the run drove. The text renderer labels it in
+place and the JSON summary carries the same words in
+`retrieval_pivot_rate_by_model_note`, so a dashboard cannot mistake it for the
+headline.

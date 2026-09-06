@@ -238,3 +238,33 @@ def test_live_freetsa_round_trip() -> None:
     pack = build_evidence_pack(_run_result(manifest), manifest, timestamper=Rfc3161Timestamper())
     result = verify_pack(pack, manifest)
     assert result.passed, [check.detail for check in result.checks if not check.ok]
+
+
+def test_a_supplied_leaf_must_be_issued_by_the_pinned_root() -> None:
+    # The library puts the leaf and the roots in ONE flat trust store, so a
+    # self-signed leaf terminates its own chain: supplying `--tsa-cert` alone
+    # silently REPLACED the pinned root rather than adding a leaf under it, and a
+    # caller-supplied self-signed certificate self-anchored its own token.
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "not-the-pinned-root")])
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    selfsigned = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(datetime(2030, 1, 1, tzinfo=UTC))
+        .sign(key, hashes.SHA256())
+        .public_bytes(serialization.Encoding.PEM)
+    )
+    with pytest.raises(EvidenceError, match="not issued by the pinned root"):
+        verify_rfc3161_token(
+            _FIXTURE_TOKEN, _FIXTURE_DIGEST, tsa_certificate=selfsigned, tsa_root=None
+        )

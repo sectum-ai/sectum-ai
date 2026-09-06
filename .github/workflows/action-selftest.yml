@@ -60,3 +60,34 @@ jobs:
           set -euo pipefail
           [ "${OUTCOME}" = "failure" ] || { echo "::error::expected the gated run to FAIL on the leaky demo, got '${OUTCOME}'"; exit 1; }
           echo "OK: fail-on-leak failed the build on a confirmed cross-tenant leak."
+
+  workspace:
+    name: Action runs against this checkout's CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Build and install the workspace CLI
+        run: |
+          set -euo pipefail
+          uv build --all-packages --out-dir dist
+          python -m pip install --upgrade pip
+          pip install dist/sectum_ai_spec-*.whl dist/sectum_ai_adapters-*.whl \
+            dist/sectum_ai_probes-*.whl dist/sectum_ai_evidence-*.whl dist/sectum_ai-*.whl
+          sectum-ai --version
+      # `version: ""` in the jobs above installs the LATEST PUBLISHED CLI, so the
+      # composite wiring was never tested against the code in the checkout: a PR
+      # adapting action.yml to a flag added in the same PR went red for the wrong
+      # reason, and one that broke against the shipped CLI went green.
+      - name: Run the action against the already-installed CLI
+        id: probe
+        uses: ./
+        with:
+          version: "skip"
+          fail-on-leak: false
+      - name: Assert it used this checkout's CLI and reported the leak
+        run: |
+          set -euo pipefail
+          test "${{ steps.probe.outputs.exit-code }}" = "2"
+          test -s "${{ steps.probe.outputs.results-file }}"

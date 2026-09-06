@@ -18,6 +18,9 @@ adversarial.
 The extraction is confirmed when the multi-turn sequence surfaces a foreign
 canary. An isolated per-tenant store surfaces nothing.
 
+The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
+for when this class is tested cross-user and when those steps are dropped.
+
 ## Status
 
 Implemented in Phase 5.

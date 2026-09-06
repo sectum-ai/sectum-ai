@@ -23,13 +23,14 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   ...
   Class 13  Multi-modal RAG entity-bleed    NOT_COVERED critical probe did not run - ...
 
-  Methodology: docs/scorecard.md (v1.2) - weighted 0.00 over the covered classes; coverage 0.88.
+  Methodology: docs/scorecard.md (v1.3) - weighted 0.00 over the covered classes; coverage 0.88.
   Untested classes lower confidence, never the grade.
 ```
 
 The grade is **derived, not asserted**. Every input is the
-[`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`, and
-`metrics` — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
+[`RunResult`](data-models.md) — `probe_versions` (what actually ran), `findings`,
+`metrics`, and `surface_provenance` (which surfaces were live, which fell back to the
+built-in fake) — so anyone holding the run (`run.json`, or an `evidence.json` pack, which
 `score` also accepts and unwraps) recomputes the letter with this page's rules rather
 than trusting it.
 
@@ -46,15 +47,21 @@ headline is recomputed from `retrieval_pivot_k`/`_n` rather than read from the
 interval faithfully would let a doctored record print a far-too-tight interval as fact,
 which reads to an auditor exactly like one we invented. Counts that cannot be true
 (`k > n`) are refused rather than fallen back on, so a record cannot opt out of the
-recompute by corrupting them.
+recompute by corrupting them. The rule is the product's, not this command's:
+`report`'s audit PDF and `diff` / `baseline --compare` recompute the same rate
+from the same counts, so one record cannot read 0.0% in CI and 95.4% in the
+signed PDF bound to the same pack.
 
 On a run with some live surfaces, a class backed by both a live surface and a
 built-in fake is graded on the live surface's findings only: a confirmed finding
 on the fake is withheld (the class note says how many), so a leaking fake vector
 store beside a clean live RAG pipeline no longer fails Class 2 — the OSCAL and the
 JSON summary for the same record already said no leak was confirmed on a live
-surface. The Retrieval-Pivot Rate follows the same rule: on a mixed run it is
-computed over the live surfaces' query steps only. A finding's surface maps to
+surface. Every headline rate follows the same rule: on a mixed run the
+Retrieval-Pivot Rate, the poisoning bleed delta, the inversion reconstruction
+rate, and the extraction efficiency are computed over the live surfaces' steps
+only. "Mixed" is decided by what the run's steps drove, not by what the config
+named: a live adapter no probe touched does not make a run mixed. A finding's surface maps to
 the adapter that produced it (a KV-cache timing finding rests on the model
 adapter), so those findings count against a live model adapter everywhere.
 
@@ -133,8 +140,34 @@ over-claim. Six rules prevent it:
    an application's resource API can fill the vector slot — so a run's provenance may
    name a surface this methodology cannot tie to a class. Grading it would assert a
    verdict about a system the scorecard cannot identify, so it fails closed, exactly as
-   rule 1 does for a class that never ran. A record carrying no provenance block at all
-   (one produced before v0.9.0) is exempt: its absence is not evidence of a mismatch.
+   rule 1 does for a class that never ran. Its findings are counted and named on the
+   class line, exactly as rule 5's are: declining to grade a class is not the same
+   claim as finding nothing in it, and a `NOT_COVERED` beside a `0` reads as the
+   second. A record carrying no provenance block at all (one produced before v0.9.0)
+   is exempt: its absence is not evidence of a mismatch.
+
+### What a `PASS` line can still tell you
+
+A `PASS` is never silent about what it could not establish. Four notes attach to
+one:
+
+- **findings withheld** — confirmed findings on a surface backed by the built-in
+  fake, counted and named but kept out of the letter (rule 5's mixed-run half).
+- **unverified findings** — the probe ran and could not establish the negative.
+  Class 1 is the standing case: a cross-principal fetch that returns `200` with an
+  empty body is not an enforced deny, and `AccessOutcome.DENIED` is produced by no
+  code path, so a Class 1 pass means "no canary came back", never "the boundary
+  held". An unverified finding never flips a class — that is the false-positive
+  control the detector rests on — so it says so on the line instead.
+- **no recorded headline measurement** — the class has one and this run produced
+  none, so the pass rests on the absence of confirmed findings alone. Without the
+  note it is indistinguishable from a class that measured zero. Classes 2, 3, 6 and
+  10 have a rate; Class 5's is the per-pair timing effect size, a map rather than a
+  rate, and its absence is the same silence.
+- **graded on a subset of its probes** — the class's catalog entry names more than
+  one probe and this run exercised some of them. Classes 2 and 7 are the multi-probe
+  classes; for Class 2 the omission also moves the number, because counting the
+  vector probe without the pipeline probe understates the Retrieval-Pivot Rate.
 
 ## The catalog and its weights
 
@@ -171,10 +204,16 @@ folding it in would conflate two different claims. Class 12 is the
 
 ## How the letter is computed
 
-1. **Per class** — a class is *covered* when at least one of its probes appears in the
-   run's `probe_versions`, **or** produced a confirmed finding (a finding is itself proof
-   its probe ran — rule 4). A covered class is `FAIL` if any of its probes produced a
-   **confirmed** finding, else `PASS`. An uncovered class is `NOT_COVERED`.
+1. **Per class** — a class is a *candidate* for grading when at least one of its probes
+   appears in the run's `probe_versions`, **or** produced a confirmed finding (a finding
+   is itself proof its probe ran — rule 4). A candidate is still `NOT_COVERED` if rule 5
+   (every backing surface was the built-in fake) or rule 6 (the backing surface cannot be
+   attributed to a class) applies — both decline to grade a class that *did* run. A class
+   that survives both is `FAIL` when a confirmed finding rests on a **live** backing
+   surface, else `PASS`: on a mixed run the findings on a synthetic surface are withheld
+   from the letter, so a class can pass while its line names the findings withheld
+   (rule 5 and the withheld-note above). A class that is not a candidate at all is
+   `NOT_COVERED`.
 2. **Weighted score** — `sum(weight of PASS) / sum(weight of covered)`, over the
    **covered classes only**.
 3. **Base grade** — from the weighted score:
@@ -241,9 +280,13 @@ substrate. Class 13 is measured by its own
 CLI probe suite, so a plain `sectum-ai probe` run records it `NOT_COVERED` — honestly
 lowering confidence rather than quietly passing.
 
-**A run that exercised no catalog class at all is not graded.** `sectum-ai score` exits
-`3` instead: grading nothing would emit a letter that means nothing, and `F` would
-falsely read as "failed" when the truth is "never tested". It also exits `3` for a run
+**A run with no gradeable class is not graded.** `sectum-ai score` exits `3` when no
+probe ran at all, and — **on a run with at least one live surface** — when every
+class that ran was backed only by the built-in fakes (rule 5 withholds them,
+leaving nothing gradeable). A run with *no* live surface is still graded: it is
+unambiguously the demo, and its scope line says so. Grading nothing
+would emit a letter that means nothing, and `F` would falsely read as "failed" when
+the truth is "never tested". It also exits `3` for a run
 carrying a confirmed finding the catalog cannot attribute (rule 4), and for
 `--output sarif/oscal`, which project findings and have no rendering for a graded posture.
 
@@ -261,5 +304,7 @@ carry the currently-unreachable `low`/`info` weight bands).
 grade/confidence/cap tests beside them — so changing one fails CI until this page and the
 version move too.
 Any change to them is a change to what a published grade means, so bump
-`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.2` must always
-recompute to the same letter.
+`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.3` must always
+recompute to the same letter. **What counts as evidence is part of the methodology,
+not just the weights**: `v1.3` withholds findings whose backing surface was the
+built-in fake, so a run that graded `F` under `v1.2` can grade differently here.

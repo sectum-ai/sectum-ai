@@ -1,6 +1,7 @@
 """Tests for the regression-baseline engine."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sectum_ai.baseline import compare_metrics, diff_runs
 from sectum_ai.spec import RunMetrics, RunResult
@@ -230,3 +231,84 @@ def test_a_probe_that_ran_and_found_nothing_is_not_a_coverage_loss() -> None:
     clean = _run_for({"rag-poisoning": "0.7.1"})
     assert clean.metrics.per_probe_findings == {}
     assert diff_runs(baseline, clean).coverage_lost == ()
+
+
+def test_baseline_compare_refuses_a_saved_record_from_another_schema_line(tmp_path: "Path") -> None:
+    # The refusal lived in `diff`'s loader only, so `baseline --compare` read a
+    # 0.6.x baseline (which recorded every adapter slot) and flagged [SCOPE LOST]
+    # for surfaces that baseline never exercised - while the CHANGELOG said both
+    # commands refused it.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"]).exit_code == 0
+    saved = tmp_path / "baseline.json"
+    record = json.loads(saved.read_text())
+    record["schema_version"] = "0.6.0"
+    saved.write_text(json.dumps(record))
+    result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+
+
+def test_the_baseline_regression_banner_does_not_close_the_list_of_causes() -> None:
+    # The banner used to enumerate the gate's disjuncts, and went stale three
+    # times: an unrescanned erasure surface, an unremeasured side channel and an
+    # unremeasured headline rate each gated at exit 2 with no matching reason in
+    # the sentence, so a reader hunting the cause found a closed list that did not
+    # contain it. It now points at the bracketed lines, which are printed from the
+    # same result and cannot drift from it. Pinned here so nobody "helpfully"
+    # re-enumerates: `RunDiff.regressed` has ten disjuncts and gains more.
+    import inspect
+
+    from sectum_ai.cli import app as cli_app
+
+    source = inspect.getsource(cli_app.baseline)
+    assert "BASELINE REGRESSION" in source
+    assert "the bracketed lines above name which" in source
+    # And the banner itself no longer tries to list them: naming some causes and
+    # not others is what made the closed list misleading.
+    banner = source[source.index("BASELINE REGRESSION") :].split('",', 1)[0]
+    assert "a probe the baseline" not in banner, banner
+
+
+def test_an_unmeasured_headline_rate_gates_baseline_compare(tmp_path: Path) -> None:
+    # `baseline --compare` is the other CI-facing command and shares `diff_runs`,
+    # so the seventh loss signal has to reach it too - the sibling question this
+    # project has answered wrongly six cycles running.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"]).exit_code == 0
+
+    # The later run measured no headline rate at all; everything else is equal.
+    run_path = tmp_path / "run.json"
+    record = json.loads(run_path.read_text())
+    for name in (
+        "retrieval_pivot_rate",
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    ):
+        record["metrics"][name] = None
+    # The counts win over the asserted rate, so clearing the rate alone leaves
+    # Class 2 measured - which is the correct behaviour, and worth stating here.
+    record["metrics"]["retrieval_pivot_k"] = 0
+    record["metrics"]["retrieval_pivot_n"] = 0
+    run_path.write_text(json.dumps(record))
+
+    result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 2, result.output
+    assert "[RATE NOT REMEASURED] retrieval_pivot_rate" in result.output, result.output

@@ -176,10 +176,15 @@ class VectorStoreAdapter(Adapter):
     substrings instead, and a keyword hit gets recorded as embedding inversion -
     a real finding attributed to a mechanism the backend does not have.
 
-    Defaults to ``True`` because every store Sectum ships is embedding-backed, so
-    the capability cannot be forgotten when adding one. A backend that retrieves
+    Defaults to ``True`` because every LIVE store Sectum ships is embedding-backed,
+    so the capability cannot be forgotten when adding one. A backend that retrieves
     some other way sets it ``False`` and those classes report NOT_COVERED, which
     is the honest verdict for a check that could not be performed.
+
+    The built-in ``FakeVectorStore`` is the exception the default does NOT cover:
+    it ranks by lexical token overlap and still declares ``True``, so the offline
+    demo's Class 6 and 13 numbers are the probe exercising itself, not an
+    inversion. Every example that reports them says so.
     """
 
     def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:
@@ -470,6 +475,13 @@ class SearchIndexAdapter(Adapter):
     family = AdapterFamily.SEARCH_INDEX
     surface = Surface.SEARCH_INDEX
 
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
+
     @abstractmethod
     def index(self, tenant: UUID, text: str) -> None:
         """Index ``text`` as a document in ``tenant``'s scope.
@@ -505,6 +517,13 @@ class EvalSetAdapter(Adapter):
 
     family = AdapterFamily.EVAL_SET
     surface = Surface.EVAL_SET
+
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:
@@ -543,6 +562,13 @@ class BackupAdapter(Adapter):
 
     family = AdapterFamily.BACKUP
     surface = Surface.BACKUP
+
+    # No method here takes a ``user``, so a call made as a user does not reach the
+    # backend as that user. Declared like the three other user-less families (RAG,
+    # observability, agent): the runner reads this to decide whether a user-level
+    # step can be judged, and the default True once produced twelve false CRITICAL
+    # cross-user leaks on a store that had never been asked about a user.
+    carries_user = False
 
     @abstractmethod
     def add(self, tenant: UUID, text: str) -> None:

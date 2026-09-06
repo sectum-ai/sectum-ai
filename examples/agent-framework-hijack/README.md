@@ -44,7 +44,7 @@ in-memory `FakeAgent` configured with both leak knobs on:
 4. **`sectum-ai verify`** independently re-checks the pack.
 
 You'll see confirmed leaks per canary across the configured principals.
-The PDF page-3 findings table itemises each, with `surface =
+The PDF's `Findings` section itemises each, with `surface =
 agent_framework`.
 
 ## Run it
@@ -79,6 +79,10 @@ adapters:
 ```sh
 pip install sectum-ai-adapters[langgraph] langchain-openai
 export OPENAI_API_KEY=sk-...
+# `factories.py` ships in the sibling example, and a hyphenated directory with no
+# package marker is not on the import path - without this the run exits 3 with
+# "langgraph factory module 'factories' cannot be imported".
+export PYTHONPATH=../agent-tool-hijack
 sectum-ai probe --probe agent-framework-hijack --config sectum-ai.yaml --workdir out
 ```
 
@@ -88,7 +92,8 @@ The evidence pack itemises every confused-deputy and
 token-passthrough leak the probe confirmed at the agent-framework
 layer: per-finding marker ID, owning tenant, observing tenant, the
 foreign canary that surfaced in the agent's output, OWASP / ATLAS /
-NIST control IDs, and a remediation pointer. The headline on page 1 is
+NIST control IDs. Class 7 findings carry no per-finding remediation pointer.
+The headline on page 1 is
 the count of confirmed Class 7 leaks under the configured agent.
 
 Switching the agent kind does **not** change what counts as a leak —

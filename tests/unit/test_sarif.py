@@ -83,8 +83,24 @@ def test_one_result_per_finding_and_one_rule_per_probe() -> None:
 
 
 def test_level_is_severity_driven_for_confirmed_findings() -> None:
-    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    sarif = run_to_sarif(
+        _run(_finding("f-1", severity=Severity.CRITICAL)).model_copy(
+            update={"surface_provenance": {"vector_db": "LIVE"}}
+        )
+    )
+    (run,) = sarif["runs"]
     assert run["results"][0]["level"] == "error"
+
+
+def test_a_run_that_records_no_provenance_is_not_evidence_of_a_live_backend() -> None:
+    # `confirmed_on_live_surfaces` and the control mappings both key on an
+    # explicit LIVE. Keying on an explicit SYNTHETIC instead would have let an
+    # unstated surface render as a critical production alert.
+    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    assert run["results"][0]["level"] == "note"
+    # And the label says what the record says - not SYNTHETIC, which would state
+    # something the record does not. Three-valued, like every sibling renderer.
+    assert run["results"][0]["properties"]["surfaceProvenance"] == "UNRECORDED"
 
 
 def test_unverified_candidate_never_exceeds_note() -> None:
@@ -106,7 +122,10 @@ def test_rule_security_severity_tracks_the_worst_confirmed_finding() -> None:
         _finding("f-1", probe_id="p", severity=Severity.LOW),
         _finding("f-2", probe_id="p", severity=Severity.CRITICAL),
     )
-    (run,) = run_to_sarif(_run(*findings))["runs"]
+    sarif = run_to_sarif(
+        _run(*findings).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    (run,) = sarif["runs"]
     (rule,) = run["tool"]["driver"]["rules"]
     assert rule["properties"]["security-severity"] == "9.5"  # critical, not low
 
@@ -174,3 +193,46 @@ def test_rule_text_names_the_probe_kind() -> None:
     }
     assert rules["gdpr-erasure-verification"].startswith("Residual-data finding")
     assert rules["rag-entity-bleed"].startswith("Cross-principal leak finding")
+
+
+def _run_with_provenance(*findings: Finding, **provenance: str) -> RunResult:
+    return _run(*findings).model_copy(update={"surface_provenance": provenance})
+
+
+def test_a_finding_on_a_fake_surface_is_not_a_high_severity_alert() -> None:
+    # GitHub renders one alert per RESULT, so the run-level provenance property is
+    # invisible where it matters: the demo run raised 256 `error` alerts at
+    # security-severity 9.5, indistinguishable from a production scan's. Every
+    # other renderer says so inline - the text summary warns, the JSON carries
+    # `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
+    # demonstration.
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="SYNTHETIC"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "note"
+    assert result["properties"]["security-severity"] == "1.0"
+    assert result["properties"]["surfaceProvenance"] == "SYNTHETIC"
+    assert result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "note"
+    assert rule["properties"]["security-severity"] == "1.0"
+
+
+def test_the_same_finding_on_a_live_surface_is_a_critical_alert() -> None:
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="LIVE"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "error"
+    assert result["properties"]["security-severity"] == "9.5"
+    assert result["properties"]["surfaceProvenance"] == "LIVE"
+    assert not result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "error"
+
+
+def test_an_unrecorded_surface_is_not_told_it_describes_a_fake() -> None:
+    # The property went three-valued and the PROSE stayed two-valued, so a result
+    # on a surface the record does not describe was told it "describes Sectum's
+    # built-in fake" - stating something the record does not.
+    sarif = run_to_sarif(_run(_finding("f-1")))
+    message = sarif["runs"][0]["results"][0]["message"]["text"]
+    assert message.startswith("[surface provenance not recorded"), message
+    assert "built-in fake" not in message

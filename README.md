@@ -1,10 +1,14 @@
 # Sectum AI
 
-**AI data-isolation verification.** Sectum AI proves that no user can read
-another user's data — and no customer another customer's — through your vector
-DB, RAG pipeline, agent framework, semantic cache, fine-tunes, or MCP servers.
+**AI data-isolation verification.** Sectum AI tests whether one customer can read
+another customer's data — through your vector DB, RAG pipeline, agent framework,
+semantic cache, fine-tunes, or MCP servers — and whether one user can read
+another user's, on the surfaces whose adapters carry a user identity (the RAG
+pipeline and the agent framework do not, so they are tested tenant-to-tenant
+only). It records exactly which checks it was able to run.
 It provisions synthetic tenants on a live stack, seeds them with cryptographic
-canary markers, runs an 11-class attack catalog across 13 surfaces, and produces
+canary markers, runs a 12-class attack catalog (Classes 1-11 and 13) across 13
+surfaces, and produces
 a tamper-evident PDF plus a machine-readable evidence pack that auditors,
 customer security teams, and DPOs accept — and that anyone can verify
 independently, without trusting us.
@@ -52,11 +56,11 @@ memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
 indexes, tracing pipelines, agent frameworks, API. Live adapters for the
 common backends.
 
-**11 attack classes.** Direct tenant-boundary fetch, organic entity-bleed RAG
+**12 attack classes** (1-11 and 13). Direct tenant-boundary fetch, organic entity-bleed RAG
 (the flagship), semantic-cache contamination, KV-cache timing side channel,
 embedding inversion, MCP confused-deputy + token passthrough, persistent memory
 contamination, LoRA cross-tenant influence, IKEA benign extraction, RAG
-poisoning, GDPR Article 17 erasure verification.
+poisoning, GDPR Article 17 erasure verification, multi-modal RAG entity-bleed.
 
 **Tamper-evident evidence.** Every run is canonicalized, hashed, wrapped in an
 in-toto attestation envelope, and rendered to an auditor PDF; with
@@ -74,7 +78,7 @@ account is involved.
 | **SOC 2 audit evidence** | Plug a control-mapped AI isolation attestation into your Type II audit — CC6.1, CC6.6, CC6.7 evidence the auditor accepts as testing coverage of your AI features. |
 | **Pre-launch verification** | Run the probe suite against a new AI feature before launch. Catch the cross-tenant retrieval pivot, the cache contamination, the MCP confused-deputy bug while there's still time to fix it. |
 | **CI regression baselines** | Save a baseline, re-run on every prompt / embedding / model change. Sectum AI flags the regression when a stronger embedding model accidentally raises your Retrieval-Pivot Rate. |
-| **GDPR Article 17 erasure** | A churned tenant invoked their right to be forgotten. Prove their data has actually left every AI surface, in a DPO-ready cryptographically-timestamped attestation pack. |
+| **GDPR Article 17 erasure** | A churned tenant invoked their right to be forgotten. Scan every AI surface you can reach for their markers and record what came back — surface by surface, with the unscanned ones named — in a DPO-ready cryptographically-timestamped attestation pack. |
 | **EU AI Act Article 15** | Documented cybersecurity and robustness measurements for high-risk AI systems. Tamper-evident, control-mapped, and independently verifiable. |
 
 ## Scope
@@ -145,7 +149,8 @@ sectum-ai verify .sectum-ai/evidence.json --allow-unanchored --allow-synthetic
 ```
 
 Without `--config`, `probe` runs against the built-in demo stack with every leak
-knob on — that is what produces the findings above (and a non-zero exit, since
+knob on — that is what produces the confirmed findings the run reports (and a
+non-zero exit, since
 confirmed leaks exit `2`). `verify` needs both flags for a demo pack: its timestamp
 is the reproducible local-dev token (`--allow-unanchored`), and no surface was a
 live backend (`--allow-synthetic`). A pack from a configured, anchored run needs

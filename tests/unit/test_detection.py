@@ -16,7 +16,6 @@ from sectum_ai.probes.detection import (
     JudgeVerdict,
     _canonical_embedding_model,
     _token_windows,
-    _tokenize,
     cross_principal_observers,
     is_cross_principal,
     markers_naming_entity,
@@ -32,6 +31,7 @@ from sectum_ai.spec import (
     Substrate,
     Surface,
     SyntheticTenantSpec,
+    tokenize,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
 from sectum_ai.substrate.markers import _MARKER_CODENAMES
@@ -478,6 +478,47 @@ def test_secret_format_detects_a_recased_foreign_secret() -> None:
     assert found[0].severity is Severity.CRITICAL
 
 
+def test_a_re_punctuated_foreign_secret_is_still_a_confirmed_leak() -> None:
+    # _secret_format was the ONE tier without the ordered-token recovery arm, while
+    # `_exact`'s own comment asserted it already had one. Its two branches fail
+    # together on a re-punctuated secret: the normalized substring is gone, and
+    # `_SECRET_PATTERNS` need the ASCII hyphen too, so the credential SHAPE is gone
+    # with it. A dropped SECRET_CANARY is a dropped CRITICAL - the most severe
+    # finding the detector can make - where the HARD_CANARY beside it is caught.
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = next(s for s in _foreign_secrets(substrate, observer) if s.plaintext.startswith("sk-"))
+    for label, separator in (
+        ("spaces", " "),
+        # U+2011 NON-BREAKING HYPHEN and U+2013 EN DASH, spelled by codepoint so
+        # the source stays ASCII.
+        ("non-breaking hyphen", "\u2011"),
+        ("en dash", "\u2013"),
+    ):
+        rendered = secret.plaintext.replace("-", separator)
+        found = confirmed_findings(
+            DetectionPipeline(substrate).detect(
+                observer, f'{{"api_key": "{rendered}"}}', Surface.API
+            )
+        )
+        assert [f.marker_id for f in found] == [secret.marker_id], f"{label}: {found}"
+        assert found[0].severity is Severity.CRITICAL
+
+    # The zero-false-positive invariant is what the arm must not cost: a
+    # credential-shaped string matching no foreign marker still produces nothing.
+    # Built at runtime, not written out: a committed `api_key": "sk-..."` literal
+    # is what a secret scanner is FOR, and this repo's own CI caught it.
+    stranger = "sk-" + "notaforeignmarkeratall0000"
+    assert (
+        confirmed_findings(
+            DetectionPipeline(substrate).detect(
+                observer, f'{{"api_key": "{stranger}"}}', Surface.API
+            )
+        )
+        == []
+    )
+
+
 def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> None:
     # _secret_format matches on `needle in haystack or needle in shaped` - the normalized
     # substring OR the credential-SHAPE recovery. The re-case test above pins the substring
@@ -864,7 +905,7 @@ def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() 
     marker = next(
         m for m in substrate.manifest.markers if m.marker_type is MarkerType.ENTITY_CANARY
     )
-    codeword = next(b for t in _tokenize(marker.plaintext) for b in bare if t.startswith(b))
+    codeword = next(b for t in tokenize(marker.plaintext) for b in bare if t.startswith(b))
     observer = next(t for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
     # The round-7 attack shape: the bare codeword + "project" + a 5-digit number,
     # none of which is a distinctive token of the (now entropic) marker.
@@ -905,7 +946,7 @@ def test_template_tokens_stay_in_sync_with_the_generator() -> None:
     # `_entity_plaintext` ever changes, this fails, forcing the mirror to update.
     substrate = build_substrate(default_scenario(seed=2026))
     token_sets = [
-        set(_tokenize(m.plaintext))
+        set(tokenize(m.plaintext))
         for m in substrate.manifest.markers
         if m.marker_type is MarkerType.ENTITY_CANARY
     ]
@@ -936,7 +977,7 @@ def test_window_embeddings_are_cached_across_markers_in_one_observation() -> Non
     observer = Principal(tenant_id=substrate.tenants[1].tenant_id)
 
     text = "a quarterly report mentioning several projects and onboarding timelines"
-    observation_tokens = _tokenize(text)
+    observation_tokens = tokenize(text)
     foreign_entities = [
         marker
         for marker in substrate.manifest.markers
@@ -948,7 +989,7 @@ def test_window_embeddings_are_cached_across_markers_in_one_observation() -> Non
     distinct_windows = {
         " ".join(window)
         for marker in foreign_entities
-        for window in _token_windows(observation_tokens, len(_tokenize(marker.plaintext)))
+        for window in _token_windows(observation_tokens, len(tokenize(marker.plaintext)))
     }
 
     counting.calls = 0  # ignore the construction-time marker-vector embeddings
@@ -1156,3 +1197,33 @@ def test_a_token_identical_foreign_entity_confirms_even_when_the_judge_says_no(
     confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
     assert confirmed, "a token-identical foreign entity is a leak by observation"
     assert confirmed[0].confidence == 1.0
+
+
+def test_a_re_punctuated_hard_canary_is_still_a_confirmed_leak() -> None:
+    # The HARD_CANARY tier was substring-only, while both sibling tiers already
+    # had an ordered-token recovery arm. A backend that renders the canary's
+    # hyphens as spaces, or as U+2011, therefore leaked it past the detector - and
+    # a missed HARD_CANARY is an over-claimed PASS on Classes 1, 3, 4, 7, 8 and 9.
+    substrate = _substrate()
+    pipeline = DetectionPipeline(substrate)
+    observer = substrate.tenants[1].tenant_id
+    hard = _foreign_hard_marker(substrate)
+    for label, rendered in (
+        ("spaces", hard.plaintext.replace("-", " ")),
+        # U+2011 NON-BREAKING HYPHEN, spelled by codepoint so the source stays ASCII.
+        ("non-breaking hyphen", hard.plaintext.replace("-", "\u2011")),
+    ):
+        findings = confirmed_findings(
+            pipeline.detect(observer, f"retrieved chunk: {rendered}", Surface.VECTOR_DB)
+        )
+        assert len(findings) == 1, f"{label}: {findings}"
+        assert findings[0].marker_id == hard.marker_id
+        assert findings[0].severity is Severity.CRITICAL
+
+    # And an unrelated observation still produces nothing.
+    assert (
+        confirmed_findings(
+            pipeline.detect(observer, "an ordinary answer about nothing", Surface.VECTOR_DB)
+        )
+        == []
+    )

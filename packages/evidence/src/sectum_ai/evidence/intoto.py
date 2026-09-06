@@ -36,9 +36,12 @@ def _is_external_timestamp_anchor(token: str | None) -> bool:
     A genuine TSA returns a signed *binary* token (not JSON); the local
     development timestamper returns a JSON token that ``sectum-ai verify`` binds to
     the digest but reports as *unanchored* (no independent time or authority).
-    The predicate's anchor flags must match ``verify_pack``, so a JSON token -
-    the local-dev token, or anything impersonating a TSA - does not count as an
-    external anchor; only a non-JSON binary token does.
+    This is a test of SHAPE, not of validity: it has no trust roots and verifies
+    no signature, so a binary token ``verify_pack`` REJECTS still reports
+    ``anchors.timestamp: true`` here. The flag says an external anchor was
+    claimed, not that one held - a consumer reading the sidecar standalone must
+    run ``sectum-ai verify`` for the second question. What it does exclude is the
+    local-dev token, and anything else impersonating a TSA in JSON.
     """
     if token is None:
         return False

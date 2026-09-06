@@ -60,7 +60,7 @@ from sectum_ai.config import (
     build_model,
     build_observability,
     build_search_index,
-    build_vector_store,
+    build_vector_slot,
     embedder_model_name,
     load_config,
     surface_provenance,
@@ -77,6 +77,7 @@ from sectum_ai.evidence import (
     build_bundle,
     build_dsse_envelope,
     build_evidence_pack,
+    check_raw_schema_stamps,
     control_mappings,
     dsse_binding_detail,
     rekor_keyring,
@@ -128,14 +129,14 @@ from sectum_ai.runner import (
     confirmed_finding_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import score_run
+from sectum_ai.score import PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
-    ClassVerdict,
     ConfigError,
     EvidenceError,
     EvidencePack,
     Finding,
+    GroundTruthManifest,
     IsolationScore,
     MarkerType,
     RunMetrics,
@@ -483,18 +484,49 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
             )
             raise typer.Exit(code=3)
         try:
-            return Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+            substrate = Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
         except ValueError as error:
             typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
+        _refuse_other_schema_line(substrate.schema_version, str(sealed))
+        return substrate
     if plain.exists():
         try:
-            return Substrate.model_validate_json(plain.read_text())
+            raw = json.loads(plain.read_text())
+        except json.JSONDecodeError as error:
+            typer.echo(f"the substrate at {plain} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
+        # The markers, tenants and manifest ARE the schema: a substrate from
+        # another line seeded a run whose own stamp then read as current.
+        _refuse_other_schema_line(
+            raw.get("schema_version") if isinstance(raw, dict) else None, str(plain)
+        )
+        try:
+            return Substrate.model_validate(raw)
         except ValueError as error:
             typer.echo(f"the substrate at {plain} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
     typer.echo(f"no substrate at {plain}; run 'sectum-ai seed' first", err=True)
     raise typer.Exit(code=3)
+
+
+def _refuse_other_schema_line(recorded: object, what: str) -> None:
+    """Refuse a record from another ``major.minor`` schema line.
+
+    A record's fields ARE its schema: a 0.6.x run recorded every adapter slot, so
+    it read as having exercised them all - `report` signed one under a current
+    pack stamp and `verify`'s run-scope gate passed on a live slot no probe drove.
+    An absent stamp is refused too: the field defaults to the current version, so
+    "missing" cannot be read as "current".
+    """
+    if (
+        not isinstance(recorded, str)
+        or recorded.rsplit(".", 1)[0] != SCHEMA_VERSION.rsplit(".", 1)[0]
+    ):
+        raise ConfigError(
+            f"{what} is a schema {recorded!r} record; this build reads {SCHEMA_VERSION} "
+            "records only - re-run 'sectum-ai probe' to produce one"
+        )
 
 
 def _load_run(workdir: Path) -> RunResult:
@@ -504,7 +536,14 @@ def _load_run(workdir: Path) -> RunResult:
         typer.echo(f"no run at {path}; run 'sectum-ai probe' first", err=True)
         raise typer.Exit(code=3)
     try:
-        return RunResult.model_validate_json(path.read_text())
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        typer.echo(f"the run at {path} is malformed: {error}", err=True)
+        raise typer.Exit(code=3) from error
+    stamp = raw.get("schema_version") if isinstance(raw, dict) else None
+    _refuse_other_schema_line(stamp, str(path))
+    try:
+        return RunResult.model_validate(raw)
     except ValueError as error:
         typer.echo(f"the run at {path} is malformed: {error}", err=True)
         raise typer.Exit(code=3) from error
@@ -575,7 +614,7 @@ def _format_rpr(metrics: RunMetrics) -> str:
     """Render the Retrieval-Pivot Rate with its Wilson interval and sample size.
 
     Shows the point estimate, the 95% confidence interval, and ``n`` - for
-    example ``95.4% (95% CI 92.1-97.3%, n=350)`` - so the headline rate is never
+    example ``95.4% (95% CI 92.1%-97.3%, n=350)`` - so the headline rate is never
     presented as a precise number without its uncertainty (the spec's "avoid
     over-claiming"). Falls back to a bare percentage if the interval is absent
     (an older record), so the line is always safe to print.
@@ -856,16 +895,25 @@ def probe(
     kv_findings = list(kv_report.findings) if kv_report is not None else []
     findings = tuple(dedupe_findings([*suite_findings, *kv_findings]))
     confirmed = confirmed_findings(findings)
-    bleed_steps = [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
-    # On a run with any live surface the headline describes the live surfaces
-    # only: pooling the fake vector store's hits into the live pipeline's rate
-    # presented a demo leak as the configured stack's Retrieval-Pivot Rate.
-    if any(not adapter.synthetic for adapter in _slot_adapters(bundle).values()):
-        bleed_steps = [
-            result
-            for result in bleed_steps
-            if not _slot_adapters(bundle)[result[0].action.split(".", 1)[0]].synthetic
-        ]
+    exercised = _exercised_surfaces(bundle, step_results, kv_report)
+    # On a run with any live surface EVERY headline describes the live surfaces
+    # only: pooling the fake vector store's hits presented a demo leak as the
+    # configured stack's rate. "Live" is decided by what the steps drove, not by
+    # what the config named: an adapter no probe touched does not make a run mixed.
+    live_slots = {
+        family
+        for family, adapter in _slot_adapters(bundle).items()
+        if not adapter.synthetic and adapter.surface.value in exercised
+    }
+
+    def _live_only(results: list[StepResult]) -> list[StepResult]:
+        if not live_slots:
+            return results
+        return [r for r in results if r[0].action.split(".", 1)[0] in live_slots]
+
+    bleed_steps = _live_only(
+        [result for result in step_results if result[0].probe_id in BLEED_PROBE_IDS]
+    )
     # The Retrieval-Pivot Rate is a binomial proportion (k of n benign cross-tenant
     # query steps surfaced a foreign canary). Record k and n so the rate's Wilson
     # confidence interval is reproducible from the signed evidence, and compute the
@@ -875,17 +923,19 @@ def probe(
     rpr_ci = wilson_interval(rpr_k, rpr_n) if rpr_n else None
     # Class 3/6/10 headline rates over each probe's benign query steps. Poisoning
     # excludes its own vector.upsert (plant) steps, which never produce findings.
-    poison_query_steps = [
-        result
-        for result in step_results
-        if result[0].probe_id == RagPoisoningProbe.id and result[0].action == "vector.query"
-    ]
-    inversion_steps = [
-        result for result in step_results if result[0].probe_id == EmbeddingInversionProbe.id
-    ]
-    extraction_steps = [
-        result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id
-    ]
+    poison_query_steps = _live_only(
+        [
+            result
+            for result in step_results
+            if result[0].probe_id == RagPoisoningProbe.id and result[0].action == "vector.query"
+        ]
+    )
+    inversion_steps = _live_only(
+        [result for result in step_results if result[0].probe_id == EmbeddingInversionProbe.id]
+    )
+    extraction_steps = _live_only(
+        [result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id]
+    )
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),
@@ -911,7 +961,7 @@ def probe(
         surface_provenance={
             surface: provenance
             for surface, provenance in surface_provenance(bundle).items()
-            if surface in _exercised_surfaces(bundle, step_results, kv_report)
+            if surface in exercised
         },
         probe_versions={
             # What actually INTERROGATED the stack, not what the suite contained: a probe
@@ -937,7 +987,14 @@ def probe(
             # is rightly accepted) yet gives the KV probe no cross-tenant pair to time. It
             # measures nothing, and recording it would grade Class 5 PASS off zero
             # measurements.
-            **({KvCacheTimingProbe.id: __version__} if kv_report and kv_report.signals else {}),
+            # `resolved` too: a backend whose latency metric returns one constant
+            # gives d=0.0 and p=1.0, which reads downstream exactly like a careful
+            # null result. Class 5 graded PASS off a measurement with no resolution.
+            **(
+                {KvCacheTimingProbe.id: __version__}
+                if kv_report and any(signal.resolved for signal in kv_report.signals)
+                else {}
+            ),
         },
         findings=findings,
         metrics=RunMetrics(
@@ -998,6 +1055,17 @@ def probe(
                 else None
             ),
             "retrieval_pivot_rate_by_model": run.metrics.retrieval_pivot_rate_by_model,
+            # The text renderer labels this gradient "modelled shared index, not the
+            # configured store"; without the same words here a CI dashboard reads a
+            # modelled number as a second measured leak rate, which is the one thing
+            # the field's own docstring says must never happen.
+            "retrieval_pivot_rate_by_model_note": (
+                "modelled shared index, not the configured store: a per-model "
+                "gradient computed over the substrate, not measured against the "
+                "adapters this run drove"
+                if run.metrics.retrieval_pivot_rate_by_model
+                else None
+            ),
             "poisoning_bleed_delta": run.metrics.poisoning_bleed_delta,
             "inversion_reconstruction_rate": run.metrics.inversion_reconstruction_rate,
             "extraction_efficiency": run.metrics.extraction_efficiency,
@@ -1006,11 +1074,17 @@ def probe(
             # ran against the built-in fake describes that fake, and a probe whose
             # user-level steps were not run exercised the tenant boundary only.
             "surface_provenance": dict(run.surface_provenance),
-            "confirmed_on_live_surfaces": sum(
-                1
-                for finding in confirmed
-                if run.surface_provenance.get(backing_surface(finding))
-                == SurfaceProvenance.LIVE.value
+            # `null`, not 0, when the record states no provenance: zero is a
+            # measurement, and there is none.
+            "confirmed_on_live_surfaces": (
+                sum(
+                    1
+                    for finding in confirmed
+                    if run.surface_provenance.get(backing_surface(finding))
+                    == SurfaceProvenance.LIVE.value
+                )
+                if run.surface_provenance
+                else None
             ),
             "user_steps_dropped": run.metrics.user_steps_dropped,
             "run_path": str(path),
@@ -1027,7 +1101,10 @@ def probe(
         typer.echo(json.dumps(run_to_oscal(run, tool_version=__version__), indent=2))
     else:
         plural = "" if probe_count == 1 else "s"
-        typer.echo(f"ran {probe_count} probe{plural}: {_confirmed_summary(confirmed)}")
+        typer.echo(
+            f"ran {probe_count} probe{plural}: "
+            f"{_confirmed_summary(confirmed, run.surface_provenance)}"
+        )
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         if run.metrics.retrieval_pivot_rate_by_model:
@@ -1081,17 +1158,30 @@ def _scope_lines(card: IsolationScore) -> list[str]:
         "surface(s) -",
         "         any class resting only on these is excluded from the grade:",
     ]
-    lines.extend(f"           {surface}" for surface in card.synthetic_surfaces)
+    lines.extend(f"           {untrusted(surface)}" for surface in card.synthetic_surfaces)
     return lines
 
 
-def _confirmed_summary(confirmed: Sequence[Finding]) -> str:
+def _confirmed_summary(confirmed: Sequence[Finding], provenance: dict[str, str]) -> str:
     """``"3 confirmed cross-tenant findings"``, or by kind when they are not all that."""
     kinds = Counter(leak_label(f) for f in confirmed)
+    live = sum(
+        1 for f in confirmed if provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
+    )
+    # Always, including - especially - when the answer is zero: gating it on the
+    # run having a live surface dropped it from the one run where it is the whole
+    # point. Three-valued: a run recording no provenance has no live-surface
+    # count, and stating 0 would assert something it does not say.
+    if not confirmed:
+        suffix = ""
+    elif provenance:
+        suffix = f"; {live} on live surfaces"
+    else:
+        suffix = "; live-surface attribution not recorded"
     if set(kinds) <= {"cross-tenant leak"}:
-        return f"{len(confirmed)} confirmed cross-tenant findings"
+        return f"{len(confirmed)} confirmed cross-tenant findings{suffix}"
     parts = ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items()))
-    return f"{len(confirmed)} confirmed findings ({parts})"
+    return f"{len(confirmed)} confirmed findings ({parts}){suffix}"
 
 
 def _slot_adapters(bundle: AdapterBundle) -> dict[str, Adapter]:
@@ -1114,7 +1204,7 @@ def _exercised_surfaces(
     """The surfaces the executed steps actually touched, by each step's action family."""
     adapters = _slot_adapters(bundle)
     exercised = {adapters[step.action.split(".", 1)[0]].surface.value for step, _ in step_results}
-    if kv_report is not None and kv_report.signals:
+    if kv_report is not None and any(signal.resolved for signal in kv_report.signals):
         exercised.add(bundle.model.surface.value)
     return exercised
 
@@ -1122,7 +1212,13 @@ def _exercised_surfaces(
 def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
     if not dropped:
         return
-    names = ", ".join(f"{probe_id} ({count})" for probe_id, count in sorted(dropped.items()))
+    # Escaped like every other renderer of a record-derived string: the keys are
+    # probe ids the runner produced today, but the rule is uniform or it is not a
+    # rule - a scorecard renderer that was the one exception let a record forge
+    # its own PASS lines.
+    names = ", ".join(
+        f"{untrusted(probe_id)} ({count})" for probe_id, count in sorted(dropped.items())
+    )
     typer.echo(
         f"warning: user-level steps were not run for {names}: the adapter cannot carry "
         "a user identity to its backend (set its user_argument, where the family has "
@@ -1147,7 +1243,8 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     typer.echo(
         f"warning: no live adapter configured for {scope} - these verdicts describe "
         "the built-in synthetic stack, not your production systems. Configure real "
-        "adapters via --config; `sectum-ai adapters` shows the kinds available.",
+        "adapters via --config; docs/configuration.md lists every kind "
+        "(`sectum-ai adapters` shows only the built-in fakes' capabilities).",
         err=True,
     )
 
@@ -1246,6 +1343,10 @@ def report(
             "is nothing to attest; run 'sectum-ai probe' against a stack the selected "
             "probes can interrogate"
         )
+    # The artifacts disclose it (the PDF calls itself a demonstration, `verify`
+    # fails run-scope), but the operator building a pack to hand to an auditor
+    # should hear it here, the way `probe` and `erasure` say it.
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     if run.manifest_hash != canonical_hash(substrate.manifest) or run.scenario_hash != (
         canonical_hash(substrate.scenario)
     ):
@@ -1319,10 +1420,12 @@ def report(
 # ``tokenizer`` and ``public_key`` do NOT (the trailing-boundary stops ``token``
 # from matching inside ``tokens``). ``*_env`` keys name an environment variable,
 # not the secret, and are kept (handled by the caller).
-_CONFIG_SECRET_KEY_RE = re.compile(
-    r"(?:api_?key|dsn|password|passphrase|token|secret|credential|application_key)"
-    r"(?![A-Za-z0-9])"
-)
+# One pattern, shared with the log redactor. Two of them answering the same
+# question about the same shapes had already drifted: `secret_key`, `tsa_token`
+# and `db_dsn` were redacted here and logged in the clear there.
+from sectum_ai.spec._logging import SECRET_KEY_RE  # noqa: E402
+
+_CONFIG_SECRET_KEY_RE = SECRET_KEY_RE
 
 # Value-shape backstop: an inline secret can hide under a benign key name - in a
 # header value (`Authorization: Bearer ...`), embedded in a URL
@@ -1425,19 +1528,29 @@ def _run_pack_readme(run_id: str, *, sealed_manifest: bool, has_config: bool) ->
         if sealed_manifest
         else ""
     )
+    # The manifest travels only with `--include-manifest`; saying otherwise told an
+    # auditor to look for a member the pack does not carry.
+    carries = (
+        "evidence spans) and the sealed ground-truth marker manifest - material Sectum\n"
+        if sealed_manifest
+        else "evidence spans) - material Sectum\n"
+    )
     return (
         f"# Sectum AI run pack - {untrusted(run_id)}\n\n"
         "**SENSITIVE - do not post publicly.** This is a complete, reproducible record of a\n"
         "Sectum AI verification run. It carries the run details (`run.json`, including\n"
-        "evidence spans) and the ground-truth marker manifest - material Sectum normally\n"
-        "redacts. Share it only with trusted parties (for example, your auditor under NDA).\n\n"
+        f"{carries}"
+        "normally redacts. Share it only with trusted parties (for example, your auditor\n"
+        "under NDA).\n\n"
         "## Verify\n\n"
         "```sh\n"
         "sectum-ai verify run-pack.zip\n"
         "```\n\n"
-        "A pack built with `report --tsa <url> --rekor` verifies as independently anchored tamper\n"
-        "evidence; otherwise add `--allow-unanchored` (the local-dev timestamp is\n"
-        "regenerable, so it is an integrity-only check).\n\n"
+        "A pack built with `report --tsa <url> --rekor` against live adapters verifies as\n"
+        "independently anchored tamper evidence. Otherwise add `--allow-unanchored` (the\n"
+        "local-dev timestamp is regenerable, so it is an integrity-only check), and\n"
+        "`--allow-synthetic` if no surface in the run was a live backend (the verdicts then\n"
+        "describe Sectum's built-in stack, not your systems).\n\n"
         "## Contents\n\n"
         "- `evidence.json` - the signed, tamper-evident evidence pack (the canonical record)\n"
         "- `audit-pack.pdf` - the human-readable audit pack\n"
@@ -1509,6 +1622,18 @@ def pack(
                 "--include-manifest needs security.manifest_key_env set to seal the manifest"
             )
         substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
+        # The same guard `report` applies, and for a sharper reason: the sealed
+        # marker-to-tenant table is the ONLY ground truth an auditor has for
+        # re-deriving who owned which canary. Sealing a re-seeded workdir's
+        # manifest beside this run's pack shipped another substrate's ground
+        # truth at exit 0, and nothing in the pack revealed it -
+        # `manifest-consistency` compares the run to the pack, both stale.
+        if run.manifest_hash != canonical_hash(substrate.manifest):
+            raise ConfigError(
+                "the run was recorded against a different substrate than the one in "
+                f"{workdir}, so --include-manifest would seal another substrate's "
+                "ground truth beside it; re-run 'sectum-ai probe' after re-seeding"
+            )
         sealed = seal_bytes(
             substrate.manifest.model_dump_json().encode("utf-8"), load_key_from_env(key_env)
         )
@@ -1519,6 +1644,7 @@ def pack(
 
     out_path = out if out is not None else workdir / "run-pack.zip"
     out_path.write_bytes(build_bundle(members))
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     typer.echo(f"run pack -> {out_path}")
     typer.echo(
         "SENSITIVE: this pack carries the run details and ground-truth markers; "
@@ -1551,6 +1677,35 @@ def _sibling_names(pack_path: Path, slot: int) -> tuple[str, ...]:
     """Candidate sibling filenames for ``pack_path`` (0=pdf, 1=in-toto, 2=DSSE)."""
     known = _PACK_SIBLINGS.get(pack_path.name)
     return (known[slot],) if known is not None else _SIBLING_FALLBACK[slot]
+
+
+def _sibling_paths(pack_path: Path, slot: int) -> list[Path]:
+    """Every one of THIS pack's expected siblings that is present."""
+    return [
+        candidate
+        for name in _sibling_names(pack_path, slot)
+        if (candidate := pack_path.parent / name).exists()
+    ]
+
+
+def _unclaimed_siblings(pack_path: Path, slot: int) -> list[str]:
+    """Candidate-named files beside the pack that are NOT this pack's siblings.
+
+    A directory is not a closed container the way a bundle is: one workdir
+    routinely holds both the probe's `audit-pack.pdf` and the erasure run's
+    `erasure-attestation.pdf`, and each pack binds only its own. Checking the
+    other one against this pack's `pdf_ref` would report a genuine document as
+    "altered or replaced after signing" - the worst false alarm a tamper-evidence
+    product can raise. So they are NAMED rather than judged: the verdict says
+    which files in the folder it does not speak for, instead of staying silent
+    about them and reading as "everything here checks out".
+    """
+    mine = set(_sibling_names(pack_path, slot))
+    return sorted(
+        name
+        for name in _SIBLING_FALLBACK[slot]
+        if name not in mine and (pack_path.parent / name).exists()
+    )
 
 
 def _sibling_audit_pdf(pack_path: Path) -> bytes | None:
@@ -1636,6 +1791,16 @@ def verify(
         Path | None,
         typer.Option("--rekor-key", help="PEM of a Rekor public key (pins a private instance)."),
     ] = None,
+    manifest: Annotated[
+        Path | None,
+        typer.Option(
+            "--manifest",
+            help=(
+                "Path to the run's ground-truth manifest. Binds which marker "
+                "belonged to which tenant, which the pack's own digests cannot."
+            ),
+        ),
+    ] = None,
     allow_unanchored: Annotated[
         bool,
         typer.Option(
@@ -1673,11 +1838,22 @@ def verify(
         if cert_path is not None and not cert_path.exists():
             typer.echo(f"no certificate at {cert_path} for {label}", err=True)
             raise typer.Exit(code=3)
+    # Parsed before the bundle branch: it used to be read after, so `--manifest`
+    # on a `.zip` was accepted and silently dropped - the operator got exit 0 and
+    # no `manifest-hash` line, on the artifact ADR-0016 calls the deliverable.
+    ground_truth: GroundTruthManifest | None = None
+    if manifest is not None:
+        try:
+            ground_truth = GroundTruthManifest.model_validate_json(manifest.read_text())
+        except (OSError, ValidationError) as error:
+            typer.echo(f"not a valid ground-truth manifest at {manifest}: {error}", err=True)
+            raise typer.Exit(code=3) from error
     if pack.suffix == ".zip":
         # A bundle (report --bundle) carries the pack and its sidecars in one
         # archive; verify each member's digest and the contained pack together.
         bundle_result = verify_bundle(
             pack.read_bytes(),
+            ground_truth=ground_truth,
             tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
             tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
             rekor_keyring=_rekor_keyring_override(rekor_key),
@@ -1696,10 +1872,26 @@ def verify(
             typer.echo("VERIFICATION FAILED", err=True)
             raise typer.Exit(code=4)
         _echo_verdict(bundle_result.anchored, what="evidence bundle")
+        if ground_truth is None:
+            typer.echo(
+                "note: this confirms integrity and internal consistency; to also bind "
+                "which marker belonged to which tenant, re-run with "
+                "`--manifest <manifest.json>`.",
+                err=True,
+            )
         return
+    raw_pack = pack.read_bytes().decode("utf-8", errors="replace")
+    # The bytes, not the parsed model: an omitted run_result.schema_version has
+    # already become the current one by the time the pack is an object, and the
+    # attested digest cannot see the difference either.
+    stamped = check_raw_schema_stamps(raw_pack)
+    if stamped is not None:
+        typer.echo(f"[FAIL] {untrusted(stamped.name)}: {untrusted(stamped.detail)}")
+        typer.echo("VERIFICATION FAILED", err=True)
+        raise typer.Exit(code=4)
     try:
         # pydantic's ValidationError is a ValueError; this also catches invalid JSON.
-        evidence = EvidencePack.model_validate_json(pack.read_text())
+        evidence = EvidencePack.model_validate_json(raw_pack)
     except ValueError as error:
         typer.echo(f"not a valid evidence pack at {pack}: {error}", err=True)
         raise typer.Exit(code=3) from error
@@ -1707,8 +1899,10 @@ def verify(
     # audit-pack.pdf / erasure-attestation.pdf next to the json); its hash is
     # bound into the attested digest, so a swapped PDF fails verification.
     pdf_bytes = _sibling_audit_pdf(pack)
+    unclaimed = sorted({name for slot in (0, 1, 2) for name in _unclaimed_siblings(pack, slot)})
     result = verify_pack(
         evidence,
+        manifest=ground_truth,
         tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
         tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
         rekor_keyring=_rekor_keyring_override(rekor_key),
@@ -1724,34 +1918,44 @@ def verify(
     # Re-verify the in-toto sidecar if report/erasure wrote one beside the pack:
     # a swapped or corrupt statement that no longer binds this pack's run digest
     # is itemized as a failed check, never silently trusted.
-    intoto_path = _sibling_intoto(pack)
-    if intoto_path is not None:
+    for index, intoto_path in enumerate(_sibling_paths(pack, 1)):
+        label = "in-toto-attestation" if index == 0 else f"in-toto-attestation:{intoto_path.name}"
         try:
             verify_in_toto_statement(json.loads(intoto_path.read_text()), evidence)
-            typer.echo("[ok] in-toto-attestation: sidecar binds this pack's run digest")
+            typer.echo(f"[ok] {untrusted(label)}: sidecar binds this pack's run digest")
         except (ValueError, EvidenceError) as error:
-            typer.echo(f"[FAIL] in-toto-attestation: {error}")
+            typer.echo(f"[FAIL] {untrusted(label)}: {error}")
             passed = False
     # Re-verify the DSSE envelope sidecar if report wrote one: its in-toto
     # statement must still bind this pack's run digest (a swapped envelope fails).
-    dsse_path = _sibling_dsse(pack)
-    if dsse_path is not None:
+    for index, dsse_path in enumerate(_sibling_paths(pack, 2)):
+        label = "dsse-envelope" if index == 0 else f"dsse-envelope:{dsse_path.name}"
         try:
             envelope = json.loads(dsse_path.read_text())
             verify_dsse_envelope(envelope, evidence)
-            typer.echo(f"[ok] dsse-envelope: {dsse_binding_detail(envelope)}")
+            typer.echo(f"[ok] {untrusted(label)}: {dsse_binding_detail(envelope)}")
         except (ValueError, EvidenceError) as error:
-            typer.echo(f"[FAIL] dsse-envelope: {error}")
+            typer.echo(f"[FAIL] {untrusted(label)}: {error}")
             passed = False
+    if unclaimed:
+        # Silence here read as "everything in this folder checks out". A bundle is
+        # a closed container and its verifier fails an unbound member; a directory
+        # is not, so these are named rather than judged.
+        typer.echo(
+            f"[ok] unclaimed-siblings: {', '.join(untrusted(n) for n in unclaimed)} "
+            "sit beside this pack and are not bound by it, so this verification says "
+            "nothing about them; each belongs to its own pack, or to nothing"
+        )
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
     _echo_verdict(result.anchored, what="evidence pack")
-    typer.echo(
-        "note: this confirms integrity and internal consistency; to also bind which "
-        "marker belonged to which tenant, re-run with the original ground-truth manifest.",
-        err=True,
-    )
+    if ground_truth is None:
+        typer.echo(
+            "note: this confirms integrity and internal consistency; to also bind which "
+            "marker belonged to which tenant, re-run with `--manifest <manifest.json>`.",
+            err=True,
+        )
 
 
 def _parse_subject_surface_map(
@@ -1802,6 +2006,19 @@ def _load_subject_manifest(path: Path) -> SubjectManifest:
     )
 
 
+def _subject_provenance(vector: VectorStoreAdapter, others: tuple[Adapter, ...]) -> dict[str, str]:
+    """Erasure provenance, with the vector slot keyed by the reported surface.
+
+    An `app` adapter fills the vector slot and declares ``Surface.API``, so keying
+    by the adapter's own surface put it under `api` - which the "only the surfaces
+    this run scanned" filter then dropped, leaving the block empty and `verify`
+    reporting a 0.7.0 pack as one that predates surface provenance.
+    """
+    provenance = surface_provenance_of(others)
+    provenance[Surface.VECTOR_DB.value] = surface_provenance_of((vector,))[vector.surface.value]
+    return provenance
+
+
 def _emit_erasure_attestation(
     report: ErasureReport,
     *,
@@ -1840,15 +2057,31 @@ def _emit_erasure_attestation(
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
+            # A surface that established nothing has no residue COUNT - writing 0
+            # there asserts a number the run never measured, and `diff` read it as
+            # a leak that had been fixed. Two ways to establish nothing: the scan
+            # could not rule the markers out (`unverifiable_after`), or there was
+            # no pre-erasure baseline to rule out. Both are absent here and
+            # NOT_COVERED in the coverage block - and what tells them apart from a
+            # surface nobody scanned is `surface_provenance`, which this command
+            # records ONLY for the surfaces in its report. LIVE plus NOT_COVERED
+            # therefore means scanned and unestablished, which is what the
+            # deletion control assertion keys on.
             erasure_residue={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
                 if surface.erasure_supported
+                and not surface.unverifiable_after
+                and surface.markers_before > 0
             },
+            # The caveat count is the same claim about a backend with no erasure
+            # API, and needs the same guard.
             erasure_caveats={
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
                 if not surface.erasure_supported
+                and not surface.unverifiable_after
+                and surface.markers_before > 0
             },
             erasure_coverage={
                 surface.value: verdict.value for surface, verdict in report.coverage().items()
@@ -1878,14 +2111,40 @@ def _emit_erasure_attestation(
             f"{surface.surface.value}: {surface.markers_before} markers before, "
             f"{surface.residual_after} after -> {surface.verdict}"
         )
+        # "0 after" reads as a purge; say when it only means "not in the page".
+        if surface.unverifiable_after:
+            # The backend's own words when it gave them: a capped search index,
+            # eval set, memory or trace listing never ran a similarity query, and
+            # telling the operator it did is a fiction about the cause.
+            reason = surface.unverifiable_reason or (
+                "the backend returned a full similarity page without them, which a "
+                "still-stored marker ranked below the page produces too"
+            )
+            typer.echo(
+                f"  {surface.unverifiable_after} marker(s) were neither found nor ruled "
+                f"out: {untrusted(reason)}. The surface reads NOT_COVERED, not ERASED.",
+                err=True,
+            )
     if report.not_covered:
         not_covered_names = ", ".join(surface.value for surface in report.not_covered)
         typer.echo(f"not covered (NOT_COVERED): {not_covered_names}")
     for unchecked, count in sorted(report.unverifiable.items(), key=lambda item: item[0].value):
+        # The two phrase-level causes are what an operator can fix by editing the
+        # fingerprint. On the model surface there is a third, and it is the common
+        # one: a shared-weights model has no untrained tenant to use as a
+        # base-knowledge control, so EVERY phrase is unverifiable no matter how it
+        # is written. Naming only the phrase-level causes sent operators to edit a
+        # phrase that was already fine.
+        causes = "trailing part too short, or no control form for the prefix"
+        if unchecked is Surface.MODEL_ADAPTER:
+            causes += (
+                "; or the model merges every tenant's weights, so there is no untrained "
+                "tenant to serve as a base-knowledge control - a per-tenant adapter is "
+                "what makes this surface checkable"
+            )
         typer.echo(
             f"  {unchecked.value}: {count} supplied fingerprint(s) could not be checked "
-            "(trailing part too short, or no control form for the prefix), so the "
-            "surface reads NOT_COVERED",
+            f"({causes}), so the surface reads NOT_COVERED",
             err=True,
         )
     typer.echo(f"erasure attestation -> {json_path}, {pdf_path}")
@@ -1920,6 +2179,19 @@ def _emit_erasure_attestation(
                 f"{not_covered_names}.",
             )
         return
+    unverified = [
+        surface.surface.value for surface in report.surfaces if surface.unverifiable_after
+    ]
+    if unverified:
+        # The per-surface lines above carry each backend's own reason; this
+        # summary states the consequence, which is the same for all of them.
+        typer.echo(
+            f"ERASURE INCONCLUSIVE: {', '.join(unverified)} could not establish that the "
+            "tenant's markers are absent (see the reason printed for each above), so "
+            "erasure is not attested on those surfaces.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]
@@ -2019,8 +2291,9 @@ def erasure(
                 err=True,
             )
         manifest = _load_subject_manifest(subject)
-        with adapter_config(loaded, "vector_store", fake_default) as cfg:
-            subject_store = build_vector_store(cfg)
+        # The `app`-aware path, as above: the subject scan read `vector_store`
+        # directly too.
+        subject_store = build_vector_slot(loaded, fake_default)
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -2117,20 +2390,23 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
-            surface_provenance=surface_provenance_of(
+            surface_provenance=_subject_provenance(
+                subject_store,
                 (
-                    subject_store,
                     subject_cache,
                     subject_obs,
                     subject_model,
                     subject_memory,
                     subject_search,
-                )
+                ),
             ),
         )
         return
-    with adapter_config(loaded, "vector_store", fake_default) as cfg:
-        store = build_vector_store(cfg)
+    # Resolved through the same `app`-aware path `probe` uses: reading
+    # `vector_store` directly ignored a configured `app` and built a clean default
+    # fake, so the run attested ERASURE VERIFIED against a backend the operator
+    # never configured - and dropped that adapter's `soft_delete` knob with it.
+    store = build_vector_slot(loaded, fake_default)
     with adapter_config(loaded, "observability", fake_default) as cfg:
         obs = build_observability(cfg)
     with adapter_config(loaded, "memory", fake_default) as cfg:
@@ -2149,7 +2425,11 @@ def erasure(
         evalset = build_eval_set(cfg)
     with adapter_config(loaded, "backup", fake_default) as cfg:
         backup = build_backup(cfg)
-    provenance = surface_provenance_of((store, obs, memory, cache, model, search, evalset, backup))
+    provenance = surface_provenance_of((obs, memory, cache, model, search, evalset, backup))
+    # The vector slot is keyed by the surface the erasure report speaks of, not by
+    # the adapter's own: an `app` adapter fills this slot and declares
+    # Surface.API, so keying by its own surface left the block empty.
+    provenance[Surface.VECTOR_DB.value] = surface_provenance_of((store,))[store.surface.value]
     _warn_on_synthetic_surfaces(provenance)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
@@ -2306,12 +2586,23 @@ def _render_calibration_text(result: CalibrationResult) -> None:
         )
     typer.echo("")
     if result.recommended_score is None:
+        fallback = result.fallback_score
+        admitted = fallback.false_positives if fallback else 0
+        caught = fallback.true_positives if fallback else 0
         typer.echo(
-            f"no threshold separated the classes with zero false positives; "
-            f"recommending the conservative default {result.recommended_threshold:g} "
-            "(a stronger, real embedding model is expected to separate cleanly - "
-            "the offline fake embedder cannot)."
+            "no threshold separated the classes with zero false positives, so this "
+            f"run recommends nothing. The shipped default {result.recommended_threshold:g} "
+            f"admits {admitted} of {result.negatives} negatives and catches {caught} of "
+            f"{result.positives} positives on this set - applying it would "
+            + ("confirm those negatives as leaks. " if admitted else "")
+            + ("miss every known leak. " if not caught else "")
+            + "Calibrate against the embedding model you will run with, on a substrate "
+            "whose foreign entities it can separate.",
+            err=True,
         )
+        # No "apply it" block: a threshold that admits a negative is unusable, and so
+        # is one that catches nothing - the numbers this run measured are the reason.
+        raise typer.Exit(code=3)
     else:
         typer.echo(
             f"recommended semantic_threshold: {result.recommended_threshold:g} "
@@ -2327,8 +2618,22 @@ def _render_calibration_json(result: CalibrationResult) -> None:
     """Print the calibration result as one machine-parseable JSON object on stdout."""
     payload = {
         "model_name": result.model_name,
-        "recommended_threshold": result.recommended_threshold,
+        # ``null`` when nothing was recommended: publishing the shipped default
+        # here handed a CI pipeline (`jq -r .recommended_threshold`) the very
+        # value the text renderer refuses, and the command exited 0.
+        "recommended_threshold": (
+            result.recommended_threshold if result.recommended_score is not None else None
+        ),
         "zero_false_positive": result.recommended_score is not None,
+        "fallback": (
+            {
+                "threshold": result.fallback_score.threshold,
+                "false_positives": result.fallback_score.false_positives,
+                "true_positives": result.fallback_score.true_positives,
+            }
+            if result.fallback_score is not None
+            else None
+        ),
         "positives": result.positives,
         "negatives": result.negatives,
         "scores": [
@@ -2346,6 +2651,9 @@ def _render_calibration_json(result: CalibrationResult) -> None:
         ],
     }
     typer.echo(json.dumps(payload, indent=2))
+    if result.recommended_score is None:
+        # The same refusal the text renderer gives: this run recommends nothing.
+        raise typer.Exit(code=3)
 
 
 @app.command()
@@ -2422,19 +2730,95 @@ _HEADLINE_METRIC_PROBES: dict[str, frozenset[str]] = {
     "extraction_efficiency": frozenset({IkeaExtractionProbe.id}),
 }
 
+# The same question for an expanded MAP, keyed by the map's label because its
+# KEYS name something that is neither a probe nor a surface. A Class 5 effect
+# size is keyed by tenant PAIR, so a pair that survived while the model surface
+# behind it fell back to the built-in fake read `[ok] 0.8 -> 0` - directly beside
+# that surface's own `[SCOPE LOST]` line, and beside two sibling maps on the same
+# record that both read `[not measured]`.
+_MAP_METRIC_PROBES: dict[str, frozenset[str]] = {
+    "side_channel_effect_sizes": frozenset({KvCacheTimingProbe.id}),
+}
 
-def _delta_verdict(delta: MetricDelta, coverage_lost: Sequence[str] = ()) -> str:
+
+def _delta_range(delta: MetricDelta) -> str:
+    """`baseline -> current`, saying so when either side is a fill rather than a value."""
+    not_measured = "(not measured)"
+    before = not_measured if delta.baseline_absent else f"{delta.baseline:g}"
+    after = not_measured if delta.current_absent else f"{delta.current:g}"
+    return f"{before} -> {after}"
+
+
+def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
+    """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
+    return _delta_verdict(
+        delta,
+        result.coverage_lost,
+        result.boundary_lost,
+        result.scope_lost,
+        (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
+    )
+
+
+def _delta_verdict(
+    delta: MetricDelta,
+    coverage_lost: Sequence[str] = (),
+    boundary_lost: Sequence[str] = (),
+    scope_lost: Sequence[str] = (),
+    # Keyed by SURFACE or by tenant PAIR, not by probe id: `erasure_residue[...]`,
+    # `side_channel_effect_sizes[...]`. The probe-id lookup below cannot reach
+    # them, so they need their own.
+    key_lost: Sequence[str] = (),
+) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
     A metric fed by a probe this run did not exercise reads "not measured", never
     "ok": its drop to zero is missing coverage, not a fixed leak, and `[ok]
     per_probe_findings[rag-poisoning]: 24 -> 0` positively asserts the opposite.
     """
-    lost = set(coverage_lost)
-    fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset())
+    # A probe that lost its user boundary, or whose backing surface fell back to
+    # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`
+    # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.
+    lost = set(coverage_lost) | set(boundary_lost)
+    # PROBE_SURFACES lists ALTERNATIVES (a probe drives the vector store OR an
+    # application API) and a run drives exactly one of them, while `scope_lost`
+    # names only surfaces the EARLIER run exercised live. So requiring all of a
+    # probe's surfaces to be lost could never fire for the six two-surface
+    # probes - the ones feeding three of the four headline rates - and a vector
+    # store that fell back to the fake still printed `[ok] ... 24 -> 0`.
+    gone = set(scope_lost)
+    lost |= {
+        probe_id
+        for probe_id, surfaces in PROBE_SURFACES.items()
+        if any(surface.value in gone for surface in surfaces)
+    }
+    # A metric whose own key the later run does not carry: its `current` is a
+    # filled 0.0, not a measurement, and `[ok] ... 2 -> 0` there asserts a fix.
+    # `key_lost` is set where the fill happens, so it covers every expanded map -
+    # including the next one added, which is how the side-channel map, the erasure
+    # surfaces and the embedding-model gradient each had to be noticed in turn.
+    if delta.key_lost:
+        return "not measured"
+    # Neither side has a value, so there is nothing here to call ok: `[ok]
+    # extraction_efficiency: 0 -> 0` was an assertion about two runs that both
+    # measured nothing. It gates nothing either way - `regressed` is what CI
+    # reads - so this is the label telling the truth about its own line.
+    if delta.baseline_absent and delta.current_absent:
+        return "not measured"
+    # And a key that is still present but whose SURFACE lost its live backing.
+    if any(f"[{key}]" in delta.name for key in key_lost):
+        return "not measured"
+    fed_by = _HEADLINE_METRIC_PROBES.get(delta.name, frozenset()) | _MAP_METRIC_PROBES.get(
+        delta.name.split("[", 1)[0], frozenset()
+    )
     # ANY feeding probe lost: losing one of the two bleed probes changes the
     # Retrieval-Pivot Rate's denominator, and the line read "[ok]", an improvement.
     if any(f"[{probe_id}]" in delta.name for probe_id in lost) or (fed_by & lost):
+        return "not measured"
+    # The pooled counts span every probe, so ANY loss makes them incomparable -
+    # including the two keyed by surface or pair, which the probe-id set above
+    # does not carry.
+    if (lost or key_lost) and delta.name in ("confirmed_findings",) and not delta.regressed:
         return "not measured"
     if delta.informational:
         return "info"
@@ -2467,6 +2851,10 @@ def baseline(
     baseline_path = workdir / "baseline.json"
     if save:
         baseline_path.write_text(run.model_dump_json(indent=2))
+        # `--compare` discloses a synthetic run; `--save` returned before the call
+        # that does it. An all-fake run enshrined as the reference every future
+        # comparison measures against is the one place it matters most.
+        _warn_on_synthetic_surfaces(run.surface_provenance)
         typer.echo(f"baseline saved -> {baseline_path}")
         return
     if not compare:
@@ -2478,8 +2866,8 @@ def baseline(
         )
         raise typer.Exit(code=3)
     try:
-        saved = RunResult.model_validate_json(baseline_path.read_text())
-    except ValueError as error:
+        saved = _load_run_artifact(baseline_path)
+    except ConfigError as error:
         typer.echo(
             f"the baseline at {baseline_path} is malformed "
             f"(re-run 'sectum-ai baseline --save' to refresh it): {error}",
@@ -2492,8 +2880,7 @@ def baseline(
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
-            f"[{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
-            f"{delta.baseline:g} -> {delta.current:g}"
+            f"[{_lost_verdict(delta, result)}] {untrusted(delta.name)}: {_delta_range(delta)}"
         )
     for change in result.findings.severity_escalations:
         typer.echo(
@@ -2518,18 +2905,45 @@ def baseline(
             "this run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
         )
+    for surface in result.erasure_lost:
+        typer.echo(
+            f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the baseline scanned it to a "
+            "residue count and this run did not (out of scope, or its absence could not be "
+            "established); any resolved residual finding there was not re-tested"
+        )
+    for pair in result.side_channel_lost:
+        typer.echo(
+            f"[SIDE CHANNEL NOT REMEASURED] {untrusted(pair)}: the baseline measured a "
+            "timing effect size for this tenant pair and this run did not (the latency "
+            "metric had no resolution, or the probe did not run); its drop to zero is a "
+            "missing measurement, not a closed channel"
+        )
+    for name in result.metrics.headline_unmeasured:
+        typer.echo(
+            f"[RATE NOT REMEASURED] {untrusted(name)}: the baseline run measured this "
+            "headline rate and this one did not, so there is nothing to compare it "
+            "against; its drop to zero is a missing measurement, not a closed leak"
+        )
     if result.scenario_changed:
         typer.echo(
             "[SCENARIO CHANGED] the two runs used different scenarios (a re-seed, other "
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "baseline found may simply have nowhere to appear; re-baseline deliberately"
         )
+    # The other CI-facing command. Both were silent about a run describing the
+    # built-in fakes, where every other command discloses it.
+    _warn_on_synthetic_surfaces(run.surface_provenance)
     if result.regressed:
+        # NOT an enumeration of the gate's disjuncts. It was one, and it went
+        # stale three times over: an unrescanned erasure surface, an unremeasured
+        # side channel and an unremeasured headline rate all gated at exit 2 with
+        # no matching reason in the sentence, so a reader hunting the cause found
+        # a closed list that did not contain it. The bracketed lines above are
+        # printed from the same result and cannot drift from it.
         typer.echo(
-            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed, "
-            "a confirmed leak escalated in severity, a probe the baseline "
-            "covered was not run, a live surface fell back to the fake, a probe's "
-            "user-level steps were not run, or the scenario changed.",
+            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed or "
+            "escalated in severity, this run measured less than the baseline did, or "
+            "the scenario changed - the bracketed lines above name which.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -2550,15 +2964,12 @@ def _load_run_artifact(path: Path) -> RunResult:
         data = json.loads(path.read_text())
     except json.JSONDecodeError as error:
         raise ConfigError(f"{path} is not valid JSON: {error}") from error
-    # A record from another schema line means another set of fields: a run that
-    # recorded every adapter slot (0.6.x) read as having exercised them all, and
-    # a `diff` against it flagged surfaces the baseline never touched.
-    recorded = data.get("schema_version") if isinstance(data, dict) else None
-    if isinstance(recorded, str) and recorded.rsplit(".", 1)[0] != SCHEMA_VERSION.rsplit(".", 1)[0]:
-        raise ConfigError(
-            f"{path} is a schema {recorded} record; this build compares {SCHEMA_VERSION} "
-            "records only - re-run 'sectum-ai probe' to produce a comparable one"
-        )
+    inner = data.get("run_result") if isinstance(data, dict) else None
+    # Both stamps: a pack stamped 0.7.0 can wrap a 0.6.x run record.
+    stamp = data.get("schema_version") if isinstance(data, dict) else None
+    _refuse_other_schema_line(stamp, str(path))
+    if isinstance(inner, dict):
+        _refuse_other_schema_line(inner.get("schema_version"), f"the run inside {path}")
     try:
         if isinstance(data, dict) and "run_result" in data:
             return EvidencePack.model_validate(data).run_result
@@ -2654,8 +3065,7 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
     typer.echo("Metrics:")
     for delta in result.metrics.deltas:
         typer.echo(
-            f"  [{_delta_verdict(delta, result.coverage_lost)}] {untrusted(delta.name)}: "
-            f"{delta.baseline:g} -> {delta.current:g}"
+            f"  [{_lost_verdict(delta, result)}] {untrusted(delta.name)}: {_delta_range(delta)}"
         )
 
     typer.echo("")
@@ -2674,6 +3084,25 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             f"[BOUNDARY LOST] {untrusted(probe_id)}: its user-level steps were not run in "
             "the later run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
+        )
+    for surface in result.erasure_lost:
+        typer.echo(
+            f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the earlier run scanned it to a "
+            "residue count and this one did not (out of scope, or its absence could not be "
+            "established); any resolved residual finding there was not re-tested"
+        )
+    for pair in result.side_channel_lost:
+        typer.echo(
+            f"[SIDE CHANNEL NOT REMEASURED] {untrusted(pair)}: the earlier run measured a "
+            "timing effect size for this tenant pair and this one did not (the latency "
+            "metric had no resolution, or the probe did not run); its drop to zero is a "
+            "missing measurement, not a closed channel"
+        )
+    for name in result.metrics.headline_unmeasured:
+        typer.echo(
+            f"[RATE NOT REMEASURED] {untrusted(name)}: the earlier run measured this "
+            "headline rate and this one did not, so there is nothing to compare it "
+            "against; its drop to zero is a missing measurement, not a closed leak"
         )
     if result.scenario_changed:
         typer.echo(
@@ -2702,14 +3131,28 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
                 "name": delta.name,
                 "baseline": delta.baseline,
                 "current": delta.current,
+                # Which side of the pair is a fill rather than a measurement. The
+                # text renderer prints "(not measured)" for these; the JSON stated
+                # a bare 0 and a consumer read it as a clean earlier run.
+                "baseline_measured": not delta.baseline_absent,
+                "current_measured": not delta.current_absent,
                 "regressed": delta.regressed,
                 "informational": delta.informational,
+                # The load-bearing qualifier: the text renderer refuses to print
+                # `[ok]` for these, and the JSON stated the same delta as fact.
+                "verdict": _lost_verdict(delta, result),
             }
             for delta in result.metrics.deltas
         ],
         "coverage_lost": list(result.coverage_lost),
         "scope_lost": list(result.scope_lost),
         "boundary_lost": list(result.boundary_lost),
+        "erasure_lost": list(result.erasure_lost),
+        "side_channel_lost": list(result.side_channel_lost),
+        # The seventh gate reason. It reached both TEXT renderers and not this
+        # one, so a consumer recomputing the verdict from these arrays read six
+        # empty lists over a run that exits 2 - a clean run, in JSON.
+        "headline_unmeasured": list(result.metrics.headline_unmeasured),
         "scenario_changed": result.scenario_changed,
         "regressed": result.regressed,
     }
@@ -2735,7 +3178,13 @@ def _render_scorecard(card: IsolationScore, source: Path) -> None:
         typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
     typer.echo("")
     for entry in card.classes:
-        detail = entry.headline or (entry.note if entry.verdict is ClassVerdict.NOT_COVERED else "")
+        # Both, not either: the "N findings withheld" note is set only on a
+        # PASS/FAIL class, which the old NOT_COVERED condition excluded outright,
+        # and a class with a headline rate swallowed its note as well. The
+        # scorecard page promises the note says how many were withheld; it said so
+        # only in `--output json`, while the text an auditor reads showed `PASS`
+        # under a scope block implying that class was unaffected.
+        detail = " ".join(part for part in (entry.headline, entry.note) if part)
         typer.echo(
             f"  Class {entry.class_id:>2}  {entry.name:<32}"
             f"{entry.verdict.value:<12}{entry.severity.value:<9}{detail}"
@@ -2864,6 +3313,10 @@ def diff(
         _render_diff_json(earlier, later, result)
     else:
         _render_diff_text(earlier, later, result)
+    # `diff` and `baseline --compare` are the two CI-facing commands, and were the
+    # only ones that said nothing about a run describing the built-in fakes -
+    # `probe`, `report`, `pack`, `score` and `verify` all disclose it.
+    _warn_on_synthetic_surfaces(later_run.surface_provenance)
     if result.regressed:
         raise typer.Exit(code=2)
 

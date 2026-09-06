@@ -102,9 +102,9 @@ no canary, so "how do you verify a *real* subject's erasure" is the core fork.
 
 | Phase | Where | Scope |
 |---|---|---|
-| **0** ✅ | OSS | **Shipped.** By-id erasure verify + per-subject attestation; `sectum-ai erasure --subject <manifest.yaml>`. Verifies the vector store (`fetch`) and semantic cache (`get`); other surfaces read `NOT_COVERED` until their adapters gain a by-id accessor. |
+| **0** ✅ | OSS | **Shipped.** By-id erasure verify + per-subject attestation; `sectum-ai erasure --subject <manifest.yaml>`. Verifies the vector store (`fetch`), semantic cache (`get`) and tracing (`fetch_trace`); other surfaces read `NOT_COVERED` until their adapters gain a by-id accessor. |
 | **1** | Cloud (MVP) | Generic inbound **webhook** intake + outbound signed attestation; structural verification; works with any DSR system |
-| **2** ◐ | OSS + Cloud | **Content-fingerprint residual probing shipped (OSS, vector store + model):** `fingerprints` in the manifest → a semantic query (vector) or an inference call (model, gated on a trainable adapter) for the subject's content, hashed in the attestation. Remaining: native **OneTrust + Transcend** connectors (Cloud). |
+| **2** ◐ | OSS + Cloud | **Content-fingerprint residual probing shipped (OSS: vector store, model, agent memory, search index):** `fingerprints` in the manifest → a semantic query (vector) or an inference call (model, gated on a trainable adapter) for the subject's content, hashed in the attestation. Remaining: native **OneTrust + Transcend** connectors (Cloud). |
 | **3** | Cloud | Scheduled re-attestation, multi-subject batch, dashboard tie-in (overlaps E3) |
 
 ## Attestation artifact

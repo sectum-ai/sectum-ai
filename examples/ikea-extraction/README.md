@@ -61,10 +61,10 @@ Each Class 10 finding carries:
 - the `marker_id`, tying the leak back to the ground-truth manifest
 - the surface (`VECTOR_DB`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer: tenant-scoped retrieval on every turn
-  (the retrieval boundary is the only place the attack can be
-  closed), or query-level rate limits that bound the number of
-  related queries one session can issue
+Class 10 findings carry no per-finding remediation pointer. The counter-measure
+is tenant-scoped retrieval on every turn - the retrieval boundary is the only
+place the attack can be closed - or query-level rate limits that bound how many
+related queries one session can issue.
 
 ## What's *not* in this example
 

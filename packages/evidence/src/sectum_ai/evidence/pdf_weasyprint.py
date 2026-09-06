@@ -27,11 +27,13 @@ from sectum_ai.evidence.pdf import (
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    _retrieval_pivot_summary,
     confirmed_by_kind,
     probes_exercised,
     provenance_statement,
+    synthetic_prefix,
 )
-from sectum_ai.spec import EvidenceError, EvidencePack, Finding
+from sectum_ai.spec import EvidenceError, EvidencePack, Finding, RunResult
 
 # Severity -> CSS accent colour for the finding badge. A muted, print-safe
 # palette (no neon); unknown severities fall back to the neutral grey.
@@ -105,11 +107,13 @@ def _kv_table(rows: tuple[tuple[str, str], ...], *, mono_values: bool = False) -
     return f'<table class="kv">{cells}</table>'
 
 
-def _finding_html(finding: Finding) -> str:
+def _finding_html(finding: Finding, run: RunResult | None = None) -> str:
     """Render one finding as an escaped, severity-accented HTML block."""
     severity = finding.severity.value
     colour = _SEVERITY_COLOURS.get(severity, _NEUTRAL)
+    marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
     head = (
+        f"{marker}"
         f'<span class="badge" style="background:{colour}">{escape(severity)}</span>'
         f"{escape(finding.probe_id)} on {escape(finding.surface.value)}: "
         f"marker {escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
@@ -164,13 +168,20 @@ def build_audit_html(pack: EvidencePack) -> str:
     """
     run = pack.run_result
 
-    summary = (
+    summary_rows = [
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
         ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed findings", confirmed_by_kind(run)),
-    )
+    ]
+    # The flagship Class 2 metric. Its absence here meant the two engines' packs
+    # asserted different things about the same run, against this module's own
+    # promise that they "assert the same facts".
+    rpr_line = _retrieval_pivot_summary(run)
+    if rpr_line is not None:
+        summary_rows.append(("Retrieval-Pivot Rate", rpr_line))
+    summary = tuple(summary_rows)
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
@@ -182,7 +193,7 @@ def build_audit_html(pack: EvidencePack) -> str:
     )
 
     if run.findings:
-        findings_html = "".join(_finding_html(f) for f in run.findings)
+        findings_html = "".join(_finding_html(f, run) for f in run.findings)
     else:
         findings_html = '<p class="none">No findings were recorded for this run.</p>'
 

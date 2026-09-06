@@ -28,7 +28,24 @@ uv run pre-commit install   # enable git hooks
 | Format | `uv run ruff format .` |
 | Type-check | `uv run mypy` |
 | Run all pre-commit hooks | `uv run pre-commit run --all-files` |
+| Run the example walkthroughs | `SECTUM_RUN_E2E=1 uv run pytest -m e2e` |
+| Build the docs site | `uv run --group docs mkdocs build --strict` |
+| Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
+| Check the lockfile is current | `uv lock --check` (all three CI `uv sync` steps are `--locked`, so commit `uv.lock` with any dependency change) |
+| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)) — **not** a substitute for the pre-commit hook, and not substituted by it: see below. |
+
+**The secret scan is the one gate whose local and CI forms differ.** The
+pre-commit `gitleaks` hook runs `gitleaks git --pre-commit --staged`, which scans
+the **staged diff**; the `Secret scan` CI job runs `gitleaks dir .`, which scans
+**every file in the checkout**. So `uv run pre-commit run --all-files` can pass on
+a tree the CI job rejects — verified by planting a credential-shaped file and
+watching the hook pass and the directory scan fail. Run `gitleaks dir .` before
+pushing anything that adds a credential-shaped string.
+
+Two things trip the generic rule and are not secrets: a test fixture written as
+`api_key": "sk-..."` (build it at runtime instead of committing the literal), and
+a local variable whose name and assignment read like one. Both reached CI red.
 
 The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the
@@ -47,12 +64,24 @@ heavier — it needs etcd and minio — so it lives behind a compose profile: ru
   [conventionalcommits.org](https://www.conventionalcommits.org/): `feat:`,
   `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, and so on.
 - **One logical change per pull request.** Keep PRs small and reviewable.
-- **Typed public APIs.** Every public function has type hints and a docstring
-  (Google style). `mypy` runs in strict mode.
+- **Typed public APIs.** Every public function has type hints — `mypy` runs in
+  strict mode and enforces that. A docstring on anything non-obvious is the house
+  convention (Sphinx cross-references, not Google style); no linter checks it, so
+  it is a review expectation rather than a gate.
 - **Determinism.** Anything seeded must be reproducible; thread RNG explicitly,
   with no hidden global state.
 - **Never commit secrets** or customer data. Secret scanning (gitleaks) runs in
   pre-commit and CI and will block the change.
+- **The pre-commit hooks are a CI gate.** `uv run pre-commit run --all-files`
+  runs in the `Lint, type-check, test` job, so a hook that is red on a clean
+  checkout fails the build rather than surprising the next contributor. Two of
+  them are commit-time only and check nothing under `--all-files`:
+  `check-added-large-files` looks at newly *staged* files, and
+  `check-merge-conflict` at a tree mid-merge. Secret scanning is covered by the
+  standalone `Secret scan` job, which scans the whole tree. The
+  checked-in evidence packs under `docs/samples/` and the captured TSA token are
+  excluded from the whitespace hooks: they are artefacts of a run, and a
+  formatting hook must not rewrite them.
 - New runtime dependencies need a stated reason in the PR — what they enable that the
   standard library and existing dependencies cannot — and go behind an optional extra
   unless every install needs them.
@@ -74,9 +103,16 @@ section is the source of truth for that configuration:
 - Require a pull request before merging; **no direct pushes to `main`**.
 - Require **1 approving review**; dismiss stale approvals on new commits.
 - Require **CODEOWNERS** review.
-- Require status checks to pass before merging: the `CI` workflow
-  (lint, type-check, test; the docker-compose `Integration` job; the
-  `Extras API contract` job), the `secret-scan` job, and `CodeQL`.
+- Require status checks to pass before merging. These are the context names
+  GitHub reports, which is what branch protection matches on — the job's `name:`,
+  not its key: `Lint, type-check, test`, `Integration (docker-compose backends)`,
+  `Extras API contract`, `Secret scan`, `Analyze (Python)` (CodeQL), and
+  `Build docs site` (`mkdocs build --strict`). The `Action self-test` workflow is **not**
+  a required check: it is filtered to changes touching `action.yml`, and a
+  workflow that does not run never reports, so requiring it would block every
+  unrelated pull request on a check that cannot arrive.
+  `tests/unit/test_action_cli_contract.py` and
+  `tests/unit/test_action_version.py` are what run on every PR.
 - Require branches to be **up to date** before merging.
 - Require **signed commits**.
 - Require **linear history** (squash or rebase merges only).

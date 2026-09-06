@@ -15,6 +15,7 @@ from sectum_ai.spec.enums import (
     AccessOutcome,
     ClassVerdict,
     Confidence,
+    CoverageVerdict,
     FindingStatus,
     Grade,
     MarkerType,
@@ -27,6 +28,10 @@ from sectum_ai.spec.enums import (
 
 SCHEMA_VERSION = "0.7.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
+
+The blocks below are the schema changes that carried an anti-over-claim
+guarantee. The three oldest come first; from the ``(newest first)`` marker on,
+the order reverses.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
 mappings, pdf ref, transparency-log intent), not just the run record, and
@@ -45,6 +50,8 @@ which surfaced a foreign marker) and a Wilson score interval on the rate
 (``retrieval_pivot_rate_ci``). The counts make the interval reproducible from the
 signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
+
+(newest first)
 
 0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
 the user-level steps the runner did not run because the adapter cannot carry a
@@ -167,7 +174,7 @@ class PlantedLocation(SectumModel):
     """Where a marker was planted within a document."""
 
     doc_id: str
-    field: str  # one of: body, title, metadata, tags
+    field: str  # one of: body, title, metadata
 
 
 class Marker(SectumModel):
@@ -372,6 +379,30 @@ class RunMetrics(SectumModel):
     # narrowed run cannot pass for one that exercised the user boundary.
     user_steps_dropped: dict[str, int] = Field(default_factory=dict)
 
+    @field_validator("erasure_coverage")
+    @classmethod
+    def _coverage_keys_and_verdicts_are_members(cls, value: dict[str, str]) -> dict[str, str]:
+        # The identical-shaped `surface_provenance` validates both halves; this
+        # block did neither, and the auditor PDF prints it verbatim into the
+        # "Coverage & caveats" matrix. A record could name a surface that does not
+        # exist and give it a verdict that is not one - "FULLY ERASED" - and the
+        # pack verified clean with the invention drawn into the artifact.
+        surfaces = {member.value for member in Surface}
+        verdicts = {member.value for member in CoverageVerdict}
+        bad_keys = sorted(key for key in value if key not in surfaces)
+        if bad_keys:
+            raise ValueError(
+                f"erasure_coverage keys must be surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad_keys)}"
+            )
+        bad_values = sorted(key for key, verdict in value.items() if verdict not in verdicts)
+        if bad_values:
+            raise ValueError(
+                f"erasure_coverage values must be one of {sorted(verdicts)}; "
+                f"not so for: {', '.join(bad_values)}"
+            )
+        return value
+
 
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
@@ -398,6 +429,23 @@ class RunResult(SectumModel):
     findings: tuple[Finding, ...] = ()
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     schema_version: str = SCHEMA_VERSION
+
+    @field_validator("surface_provenance")
+    @classmethod
+    def _provenance_keys_are_surfaces(cls, value: dict[str, str]) -> dict[str, str]:
+        # The keys are free-form strings only because a `dict[str, str]` keeps the
+        # canonical-hash form identical to the other blocks - a key that is not a
+        # Surface names nothing this build can reason about, and `score` printed it
+        # verbatim, so a record could inject whole scorecard lines (a forged "every
+        # surface live" scope line and a PASS class row) into its own grade.
+        surfaces = {member.value for member in Surface}
+        bad = sorted(key for key in value if key not in surfaces)
+        if bad:
+            raise ValueError(
+                f"surface_provenance keys must be surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad)}"
+            )
+        return value
 
     @field_validator("surface_provenance")
     @classmethod

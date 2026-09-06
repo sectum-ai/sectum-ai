@@ -195,9 +195,20 @@ def test_the_summary_names_the_probes_exercised() -> None:
     run = _pack().run_result.model_copy(
         update={"probe_versions": {"rag-poisoning": "1", "tenant-boundary-fetch": "1"}}
     )
-    assert probes_exercised(run) == "2: rag-poisoning, tenant-boundary-fetch"
+    # The pack's findings include a `rag-entity-bleed` leak whose probe the
+    # bookkeeping above omits. A finding is itself proof its probe executed - the
+    # rule `score`, `baseline` and `controls` all apply - so it is named here too.
+    # This renderer was the one member of that family that never learned it, and
+    # printed "none recorded" in the same signed pack that graded a probe's class.
+    assert probes_exercised(run) == "3: rag-entity-bleed, rag-poisoning, tenant-boundary-fetch"
     html = build_audit_html(_pack().model_copy(update={"run_result": run}))
     assert "Probes exercised" in html and "rag-poisoning, tenant-boundary-fetch" in html
+
+    # A run with no bookkeeping at all, but a finding, still names its probe.
+    bare = run.model_copy(update={"probe_versions": {}})
+    assert probes_exercised(bare) == "1: rag-entity-bleed", probes_exercised(bare)
+    # And a run with neither says so.
+    assert probes_exercised(bare.model_copy(update={"findings": ()})) == "none recorded"
 
 
 def test_the_summary_counts_confirmed_findings_by_what_they_are() -> None:
@@ -214,7 +225,20 @@ def test_the_summary_counts_confirmed_findings_by_what_they_are() -> None:
         else None
     )
     assert residual is not None
-    run = pack.run_result.model_copy(update={"findings": (residual, pack.run_result.findings[0])})
-    assert confirmed_by_kind(run) == "2 (cross-tenant 1, residual-data 1)"
+    run = pack.run_result.model_copy(
+        update={
+            "findings": (residual, pack.run_result.findings[0]),
+            # The fixture states no provenance, and the qualifier is three-valued:
+            # a run that records none has no live-surface count, so saying "0"
+            # would assert something it does not say. Declare the premise.
+            "surface_provenance": {"vector_db": "SYNTHETIC"},
+        }
+    )
+    # The qualifier is unconditional within a run that HAS a provenance block:
+    # withholding it when the answer is zero dropped it from the one pack where it
+    # is the whole point.
+    assert confirmed_by_kind(run) == "2 (cross-tenant 1, residual-data 1; on live surfaces 0)"
+    unrecorded = run.model_copy(update={"surface_provenance": {}})
+    assert "live-surface attribution not recorded" in confirmed_by_kind(unrecorded)
     html = build_audit_html(pack.model_copy(update={"run_result": run}))
     assert "Confirmed findings" in html and "Confirmed cross-tenant findings" not in html

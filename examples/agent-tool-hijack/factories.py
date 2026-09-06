@@ -198,10 +198,10 @@ def make_openai_assistants() -> tuple[Any, str]:
     and the OpenAI key from ``OPENAI_API_KEY``. The pair is returned for the
     CLI resolver's ``OpenAIAssistantsAgent(client, assistant_id)`` construction.
 
-    The Assistant is created with a `lookup` tool spec carrying a
-    ``__sectum_callable__`` sidecar so the live backend's
-    ``submit_tool_outputs`` loop can execute the python callable on each
-    ``requires_action`` event.
+    The Assistant is created from the `lookup` callable carrying a
+    ``__sectum_tool_spec__`` attribute, so the live backend reads the schema off
+    the sidecar and executes the function itself on each ``requires_action``
+    event via its ``submit_tool_outputs`` loop.
 
     Requires ``pip install sectum-ai-adapters[openai-assistants]``.
     """
@@ -223,14 +223,19 @@ def make_openai_assistants() -> tuple[Any, str]:
             },
         },
     }
-    # The live backend resolves the python callable for each tool_use via the
-    # ``__sectum_callable__`` sidecar; attach it to the spec object directly.
-    tool_spec["__sectum_callable__"] = lookup
+    # Both sidecars are read off the TOOL OBJECT with `getattr`, so they have to
+    # be attributes, not dict keys: a `tool_spec["__sectum_callable__"] = lookup`
+    # is invisible to `getattr` (the backend then falls back to the dict, which is
+    # not callable) and makes the spec unserializable for the API call. Attaching
+    # the spec to the function is the shape the adapter documents - it resolves
+    # `__sectum_tool_spec__` for the schema and the function itself as the
+    # callable.
+    lookup.__sectum_tool_spec__ = tool_spec  # type: ignore[attr-defined]
 
     client = LiveAssistantsClient()
     assistant_id = client.create_assistant(
         model=os.environ.get("SECTUM_AGENT_MODEL", "gpt-4o-mini"),
-        tools=[tool_spec],
+        tools=[lookup],
         name="sectum-assistant",
         instructions=_SECTUM_TOOL_SYSTEM,
     )
@@ -251,7 +256,7 @@ def make_anthropic_tooluse() -> Any:
     ``AnthropicToolUseAgent(client)`` construction; the live backend drives
     the tool-use loop to ``stop_reason: end_turn`` per ``run`` and executes
     the python callable each tool spec carries on its
-    ``__sectum_callable__`` sidecar.
+    ``__sectum_tool_spec__`` attribute, with the function itself as the callable.
 
     Requires ``pip install sectum-ai-adapters[anthropic-tooluse]``.
     """
@@ -270,12 +275,13 @@ def make_anthropic_tooluse() -> Any:
             "required": ["query"],
         },
     }
-    tool_spec["__sectum_callable__"] = lookup
+    # An attribute, not a dict key - see the note in `make_openai_assistants`.
+    lookup.__sectum_tool_spec__ = tool_spec  # type: ignore[attr-defined]
 
     return LiveAnthropicClient(
         api_key=None,
         model=os.environ.get("SECTUM_AGENT_MODEL", "claude-sonnet-4-6"),
-        tools=[tool_spec],
+        tools=[lookup],
         max_tokens=1024,
         system=_SECTUM_TOOL_SYSTEM,
     )

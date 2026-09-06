@@ -59,10 +59,10 @@ Each Class 1 finding carries:
 - the leaked marker id + plaintext + `evidence_span`
 - the surface (`VECTOR_DB` — the surface this probe emits)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure:
-  per-tenant namespace scoping (Pinecone namespaces, Weaviate
-  multi-tenancy, pgvector schema-per-tenant) + an auth check on
-  every read path
+A confirmed Class 1 leak carries no per-finding remediation pointer (only the
+UNVERIFIED 200-empty finding does, naming an explicit deny). The counter-measure
+is per-tenant namespace scoping - Pinecone namespaces, Weaviate multi-tenancy,
+pgvector schema-per-tenant - plus an auth check on every read path.
 
 ## Swap the in-memory store for a real backend
 
@@ -78,16 +78,19 @@ adapters:
   vector_store:
     kind: pgvector
     dsn_env: SECTUM_PGVECTOR_DSN
-    shared_index: true   # delete to enforce per-tenant scoping
+    # user_scoped: true   # isolate by user within a tenant, too
 ```
 
 ```sh
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe tenant-boundary-fetch --config sectum-ai.yaml --workdir out
 ```
 
-A real engagement runs the probe with `shared_index: false` to
-*verify* isolation holds; the demo here flips it to `true` so the
-walkthrough has a leak to show.
+`shared_index` is a **`fake`-only** knob — a live store's tenancy is its own,
+and passing it to a live kind is refused with exit `3`. The demo above flips it
+on the built-in fake so the walkthrough has a leak to show; a real engagement
+points the same probe at the store as it is deployed and reports what it finds.
 
 ## What's *not* in this example
 
@@ -95,6 +98,9 @@ walkthrough has a leak to show.
   tests the existence of the scoping boundary; bypass-via-forged-
   credentials is out of scope (Sectum does not test the
   authentication layer itself).
-- **403-vs-200-with-empty ambiguity.** A real engagement extends
-  the probe to flag stores that return an empty 200 instead of a
-  proper 403 — currently those are treated as "no leak observed".
+- **403-vs-200-with-empty ambiguity.** The probe flags it: a
+  cross-principal fetch that comes back empty rather than explicitly
+  denied yields an INFO/UNVERIFIED finding ("negative authorization is
+  unproven"), never a silent pass, and the scorecard's class line says
+  how many. An empty 200 still is not proof of enforcement — which is
+  why the finding is UNVERIFIED and does not fail the class.
