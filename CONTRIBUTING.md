@@ -33,7 +33,19 @@ uv run pre-commit install   # enable git hooks
 | Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
 | Check the lockfile is current | `uv lock --check` (all three CI `uv sync` steps are `--locked`, so commit `uv.lock` with any dependency change) |
-| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)). The `Secret scan` CI job runs this; the pre-commit `detect-private-key` hook does **not** cover it, and a credential-shaped test fixture written as `api_key": "sk-..."` trips gitleaks' generic rule. Build such fixtures at runtime instead of committing the literal. |
+| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)) — **not** a substitute for the pre-commit hook, and not substituted by it: see below. |
+
+**The secret scan is the one gate whose local and CI forms differ.** The
+pre-commit `gitleaks` hook runs `gitleaks git --pre-commit --staged`, which scans
+the **staged diff**; the `Secret scan` CI job runs `gitleaks dir .`, which scans
+**every file in the checkout**. So `uv run pre-commit run --all-files` can pass on
+a tree the CI job rejects — verified by planting a credential-shaped file and
+watching the hook pass and the directory scan fail. Run `gitleaks dir .` before
+pushing anything that adds a credential-shaped string.
+
+Two things trip the generic rule and are not secrets: a test fixture written as
+`api_key": "sk-..."` (build it at runtime instead of committing the literal), and
+a local variable whose name and assignment read like one. Both reached CI red.
 
 The default `uv run pytest` stays fully offline: the integration tests in
 `tests/integration/` skip themselves unless their backend is reachable. Bring the

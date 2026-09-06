@@ -143,7 +143,7 @@ def residual_present(needle: str, haystack: str) -> bool:
         return False
     if normalize_for_match(needle) in normalize_for_match(haystack):
         return True
-    needle_tokens = tokenize(needle)
-    return bool(needle_tokens) and ordered_within_span(
-        tokenize(haystack), needle_tokens, max_interposed=0
-    )
+    wanted = tokenize(needle)
+    if not wanted:
+        return False
+    return ordered_within_span(tokenize(haystack), wanted, max_interposed=0)
