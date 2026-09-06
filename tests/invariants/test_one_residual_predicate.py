@@ -87,16 +87,16 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
 
     # Names that mean "the thing we are looking for" on the left of an `in`.
     needles = {"marker", "needle", "query", "plaintext", "phrase", "canary", "secret"}
-    # Membership tests that are not the residue question: container lookups, and
-    # the detector's own normalized haystack, whose normalization IS the shared one.
-    allowed_files = {"detection.py"}
+    # Membership tests that are NOT the residue question: the right-hand side is
+    # already normalized by the shared normalizer, so the comparison is the shared
+    # predicate spelled out. Named by VARIABLE, not by file: excluding a whole
+    # file would be the same hole this test exists to close, one level up.
+    normalized = {"haystack", "shaped"}
 
     roots = [Path("packages/adapters/src"), Path("packages/probes/src")]
     offenders: list[str] = []
     for root in roots:
         for path in sorted(root.rglob("*.py")):
-            if path.name in allowed_files:
-                continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Compare) or len(node.ops) != 1:
@@ -109,6 +109,8 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
                 if isinstance(left, ast.Name) and left.id.lower() in needles:
                     right = node.comparators[0]
                     if isinstance(right, ast.Set | ast.Dict | ast.Tuple | ast.List):
+                        continue
+                    if isinstance(right, ast.Name) and right.id in normalized:
                         continue
                     offenders.append(f"{path}:{node.lineno}")
 
