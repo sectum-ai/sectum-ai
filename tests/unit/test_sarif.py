@@ -98,7 +98,9 @@ def test_a_run_that_records_no_provenance_is_not_evidence_of_a_live_backend() ->
     # unstated surface render as a critical production alert.
     (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
     assert run["results"][0]["level"] == "note"
-    assert run["results"][0]["properties"]["surfaceProvenance"] == "SYNTHETIC"
+    # And the label says what the record says - not SYNTHETIC, which would state
+    # something the record does not. Three-valued, like every sibling renderer.
+    assert run["results"][0]["properties"]["surfaceProvenance"] == "UNRECORDED"
 
 
 def test_unverified_candidate_never_exceeds_note() -> None:

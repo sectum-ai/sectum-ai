@@ -26,7 +26,7 @@ from typing import Any
 
 from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, live_surfaces
 from sectum_ai.evidence.labels import backing_surface, leak_label
-from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity, SurfaceProvenance
+from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
@@ -161,9 +161,14 @@ def _rule(
     }
 
 
-def _result(finding: Finding, live: frozenset[str] = frozenset()) -> dict[str, Any]:
+def _result(
+    finding: Finding,
+    live: frozenset[str] = frozenset(),
+    run_provenance: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Build the SARIF result for a single finding."""
     on_a_fake = _describes_a_fake(finding, live)
+    run_provenance = run_provenance or {}
     detail = finding.evidence_span or (
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
         f"observed in tenant {finding.observed_in_tenant_id}"
@@ -196,9 +201,12 @@ def _result(finding: Finding, live: frozenset[str] = frozenset()) -> dict[str, A
             "nist": list(finding.nist),
             "security-severity": _security_severity(finding, live),
             "backingSurface": backing_surface(finding),
-            "surfaceProvenance": (
-                SurfaceProvenance.SYNTHETIC.value if on_a_fake else SurfaceProvenance.LIVE.value
-            ),
+            # Three-valued, like every sibling: `verify`'s run-scope, `score`'s
+            # UNRECORDED scope, the PDF's "Surface provenance: not recorded" and
+            # OSCAL all distinguish "the record does not say" from "the record says
+            # SYNTHETIC". Labelling an unstated surface SYNTHETIC would state
+            # something the record does not.
+            "surfaceProvenance": run_provenance.get(backing_surface(finding), "UNRECORDED"),
         },
     }
 
@@ -233,7 +241,9 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                         "rules": [_rule(pid, fs, live) for pid, fs in by_probe.items()],
                     }
                 },
-                "results": [_result(finding, live) for finding in findings],
+                "results": [
+                    _result(finding, live, dict(run.surface_provenance)) for finding in findings
+                ],
                 "properties": {
                     "runId": run.run_id,
                     "scenarioHash": run.scenario_hash,

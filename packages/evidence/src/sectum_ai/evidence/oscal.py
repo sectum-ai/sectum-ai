@@ -58,7 +58,7 @@ from sectum_ai.evidence.controls import (
     mapping_requirement,
 )
 from sectum_ai.evidence.labels import backing_surface, leak_label
-from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus
+from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus, SurfaceProvenance
 
 if TYPE_CHECKING:
     from sectum_ai.spec import ControlMapping, RunResult
@@ -138,8 +138,21 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
         f"observed in tenant {finding.observed_in_tenant_id}"
     )
+    # Which stack the observation describes, per ROW. OSCAL states it once for the
+    # run and gates its control findings on it, but a GRC platform tabulates these
+    # observations - and a row from the built-in fake tabulated identically to one
+    # from production. The SARIF projection carries it per result for the same
+    # reason; this is its sibling.
+    backing = backing_surface(finding)
+    provenance = run.surface_provenance.get(backing, "UNRECORDED")
+    on_a_fake = provenance != SurfaceProvenance.LIVE.value
     description = (
-        f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
+        (
+            "[synthetic surface - describes Sectum's built-in fake, not the operator's stack] "
+            if on_a_fake
+            else ""
+        )
+        + f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
         f"{finding.surface.value} surface. {finding.status.value.upper()} "
         f"{finding.severity.value} {leak_label(finding)}: {evidence}"
     )
@@ -151,6 +164,8 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
         _prop("sectum-surface", finding.surface.value),
         _prop("sectum-owner-tenant-id", str(finding.owner_tenant_id)),
         _prop("sectum-observed-in-tenant-id", str(finding.observed_in_tenant_id)),
+        _prop("sectum-backing-surface", backing),
+        _prop("sectum-surface-provenance", provenance),
     ]
     if finding.marker_id is not None:
         props.append(_prop("sectum-marker-id", finding.marker_id))

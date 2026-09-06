@@ -339,3 +339,33 @@ def test_the_live_surface_suffix_and_the_erasure_verdict_agree() -> None:
     finding = run_to_oscal(run)["assessment-results"]["results"][0]["findings"][0]
     assert "Live surfaces: tracing, vector_db." in finding["description"]
     assert "presumed retained, after the erasure on tracing" in finding["target"]["description"]
+
+
+def test_every_observation_says_which_stack_it_describes() -> None:
+    # OSCAL states provenance once for the run and gates its CONTROL findings on
+    # it, but a GRC platform tabulates the observations - and a row from the
+    # built-in fake tabulated identically to one from production. The SARIF
+    # projection carries it per result for the same reason.
+    doc = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    )
+    observation = doc["results"][0]["observations"][0]
+    props = {p["name"]: p["value"] for p in observation["props"]}
+    assert props["sectum-surface-provenance"] == "SYNTHETIC"
+    assert props["sectum-backing-surface"] == "vector_db"
+    assert observation["description"].startswith("[synthetic surface")
+
+    live = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    live_observation = live["results"][0]["observations"][0]
+    live_props = {p["name"]: p["value"] for p in live_observation["props"]}
+    assert live_props["sectum-surface-provenance"] == "LIVE"
+    assert not live_observation["description"].startswith("[synthetic surface")
+
+    # A surface the record does not describe reads UNRECORDED, not SYNTHETIC.
+    unstated = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    unstated_props = {
+        p["name"]: p["value"] for p in unstated["results"][0]["observations"][0]["props"]
+    }
+    assert unstated_props["sectum-surface-provenance"] == "UNRECORDED"

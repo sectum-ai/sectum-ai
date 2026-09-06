@@ -1328,6 +1328,32 @@ def adapter_config(
         )
 
 
+def build_vector_slot(config: SectumConfig) -> VectorStoreAdapter:
+    """The adapter filling the vector slot: the `app` resource API, or a store.
+
+    `app` and `vector_store` both fill this slot - the app's resource API is
+    probed through the same contract. Configuring both is a real ambiguity about
+    which system is under test, so it is refused rather than silently resolved.
+
+    Shared with `sectum-ai erasure`, which read `vector_store` directly and so
+    ignored a configured `app` entirely: it built a clean default fake, dropped
+    that adapter's `soft_delete` knob with it, and attested ERASURE VERIFIED
+    against a backend the operator never configured.
+    """
+    fake = AdapterConfig(kind="fake")
+    app = config.adapters.get("app")
+    if app is not None and "vector_store" in config.adapters:
+        raise ConfigError(
+            "configure either 'app' or 'vector_store', not both: each fills the same "
+            "adapter slot, so a run carrying both cannot say which system it probed"
+        )
+    if app is not None:
+        with adapter_config(config, "app", fake) as cfg:
+            return build_app(cfg)
+    with adapter_config(config, "vector_store", fake) as cfg:
+        return build_vector_store(cfg)
+
+
 def build_adapters(config: SectumConfig) -> AdapterBundle:
     """Build every adapter the CLI's probe suite needs.
 
@@ -1337,18 +1363,7 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
     # `app` and `vector_store` both fill the vector slot - the app's resource API is
     # probed through the same contract. Configuring both is a real ambiguity about
     # which system is under test, so it is refused rather than silently resolved.
-    app = config.adapters.get("app")
-    if app is not None and "vector_store" in config.adapters:
-        raise ConfigError(
-            "configure either 'app' or 'vector_store', not both: each fills the same "
-            "adapter slot, so a run carrying both cannot say which system it probed"
-        )
-    if app is not None:
-        with adapter_config(config, "app", fake) as cfg:
-            vector: VectorStoreAdapter = build_app(cfg)
-    else:
-        with adapter_config(config, "vector_store", fake) as cfg:
-            vector = build_vector_store(cfg)
+    vector = build_vector_slot(config)
     with adapter_config(config, "cache", fake) as cfg:
         cache = build_cache(cfg)
     with adapter_config(config, "model", fake) as cfg:

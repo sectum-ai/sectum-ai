@@ -429,3 +429,22 @@ def test_erasure_that_could_not_establish_absence_is_inconclusive(
     # And the per-surface line says why "0 after" is not a purge.
     assert "-> NOT VERIFIED" in result.output
     assert "full similarity page" in result.output
+
+
+def test_erasure_honours_a_configured_app_adapter(tmp_path: Path) -> None:
+    # `erasure` read `vector_store` directly while `probe` resolves the same slot
+    # from `app` too, so a config carrying only `app` built a clean DEFAULT fake:
+    # the run dropped that adapter's soft_delete knob and attested ERASURE
+    # VERIFIED against a backend the operator never configured.
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text(
+        "workdir: " + str(tmp_path) + "\nadapters:\n  app:\n    kind: fake\n    soft_delete: true\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+    result = _runner.invoke(
+        app,
+        ["erasure", "--workdir", str(tmp_path), "--config", str(config), "--scope", "vector_db"],
+    )
+    assert "ERASURE VERIFIED" not in result.output, result.output
+    assert "RESIDUAL DATA" in result.output, result.output
+    assert result.exit_code == 2

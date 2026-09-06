@@ -60,7 +60,7 @@ from sectum_ai.config import (
     build_model,
     build_observability,
     build_search_index,
-    build_vector_store,
+    build_vector_slot,
     embedder_model_name,
     load_config,
     surface_provenance,
@@ -2167,8 +2167,9 @@ def erasure(
                 err=True,
             )
         manifest = _load_subject_manifest(subject)
-        with adapter_config(loaded, "vector_store", fake_default) as cfg:
-            subject_store = build_vector_store(cfg)
+        # The `app`-aware path, as above: the subject scan read `vector_store`
+        # directly too.
+        subject_store = build_vector_slot(loaded)
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -2277,8 +2278,11 @@ def erasure(
             ),
         )
         return
-    with adapter_config(loaded, "vector_store", fake_default) as cfg:
-        store = build_vector_store(cfg)
+    # Resolved through the same `app`-aware path `probe` uses: reading
+    # `vector_store` directly ignored a configured `app` and built a clean default
+    # fake, so the run attested ERASURE VERIFIED against a backend the operator
+    # never configured - and dropped that adapter's `soft_delete` knob with it.
+    store = build_vector_slot(loaded)
     with adapter_config(loaded, "observability", fake_default) as cfg:
         obs = build_observability(cfg)
     with adapter_config(loaded, "memory", fake_default) as cfg:

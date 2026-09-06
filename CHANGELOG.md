@@ -32,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`erasure` ignored a configured `app` adapter.** `probe` resolves the vector
+  slot from `app` or `vector_store`; the erasure command read `vector_store`
+  directly, so a config carrying only `app` built a clean *default fake* — the
+  adapter's `soft_delete` knob went with it, and the run attested ERASURE
+  VERIFIED against a backend the operator never configured. Both erasure paths
+  now share the `app`-aware builder.
+- Every OSCAL observation says which stack it describes. OSCAL states provenance
+  once for the run and gates its *control* findings on it, but a GRC platform
+  tabulates the observations, and a row from the built-in fake tabulated
+  identically to one from production — the same gap the SARIF projection had.
+  Both labels are three-valued now: a surface the record does not describe reads
+  `UNRECORDED`, not `SYNTHETIC`, matching `verify`, `score` and the PDF.
 - `verify` was silent about a binding it never checked: a pack that names an
   audit PDF but is verified without one printed every line `[ok]` and exited 0,
   so a reader concluded the PDF had been matched. A standalone pack legitimately
