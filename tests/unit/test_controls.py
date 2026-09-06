@@ -353,3 +353,28 @@ def test_a_scanned_but_inconclusive_surface_blocks_the_verified_claim() -> None:
     )
     for assertion in _deletion_assertions(narrowed):
         assert "verified" in assertion, assertion
+
+
+def test_every_way_the_erasure_failed_is_stated_not_just_the_first() -> None:
+    # The branches returned on the first failure, so a run with residue on one
+    # surface AND no erasure API on another asserted only "residual data remains
+    # and is itemized in this pack" - while naming the caveat surface in its own
+    # Live surfaces list, whose data is presumed retained and is NOT itemized.
+    # The pack positively asserted that what remains is itemized. OSCAL, which
+    # re-derives, named both; that divergence is the tell.
+    run = _erasure_run(
+        {
+            "vector_db": "ERASED",
+            "search_index": "RESIDUAL",
+            "tracing": "ATTESTABLE_WITH_CAVEAT",
+            "agent_memory": "NOT_COVERED",
+        },
+        erasure_residue={"vector_db": 0, "search_index": 3},
+        erasure_caveats={"tracing": 4},
+    )
+    for assertion in _deletion_assertions(run):
+        assert "verified" not in assertion, assertion
+        assert "residual data remains" in assertion, assertion
+        assert "presumed retained" in assertion, assertion
+        assert "absence could not be established on agent_memory" in assertion, assertion
+        assert "This run is not an attestation." in assertion, assertion

@@ -49,7 +49,13 @@ from sectum_ai.spec.models import (
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
-from sectum_ai.spec.text import normalize_for_match, residual_present, untrusted
+from sectum_ai.spec.text import (
+    normalize_for_match,
+    ordered_within_span,
+    residual_present,
+    tokenize,
+    untrusted,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -97,11 +103,13 @@ __all__ = [
     "json_schemas",
     "normal_quantile",
     "normalize_for_match",
+    "ordered_within_span",
     "rate_from_counts",
     "redact_sensitive",
     "residual_present",
     "sha256_hex",
     "to_canonical_json",
+    "tokenize",
     "untrusted",
     "wilson_interval",
     "write_json_schemas",

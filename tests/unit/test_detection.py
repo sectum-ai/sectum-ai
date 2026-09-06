@@ -16,7 +16,6 @@ from sectum_ai.probes.detection import (
     JudgeVerdict,
     _canonical_embedding_model,
     _token_windows,
-    _tokenize,
     cross_principal_observers,
     is_cross_principal,
     markers_naming_entity,
@@ -32,6 +31,7 @@ from sectum_ai.spec import (
     Substrate,
     Surface,
     SyntheticTenantSpec,
+    tokenize,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
 from sectum_ai.substrate.markers import _MARKER_CODENAMES
@@ -905,7 +905,7 @@ def test_a_benign_mention_of_the_bare_codeword_does_not_confirm_a_real_marker() 
     marker = next(
         m for m in substrate.manifest.markers if m.marker_type is MarkerType.ENTITY_CANARY
     )
-    codeword = next(b for t in _tokenize(marker.plaintext) for b in bare if t.startswith(b))
+    codeword = next(b for t in tokenize(marker.plaintext) for b in bare if t.startswith(b))
     observer = next(t for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id)
     # The round-7 attack shape: the bare codeword + "project" + a 5-digit number,
     # none of which is a distinctive token of the (now entropic) marker.
@@ -946,7 +946,7 @@ def test_template_tokens_stay_in_sync_with_the_generator() -> None:
     # `_entity_plaintext` ever changes, this fails, forcing the mirror to update.
     substrate = build_substrate(default_scenario(seed=2026))
     token_sets = [
-        set(_tokenize(m.plaintext))
+        set(tokenize(m.plaintext))
         for m in substrate.manifest.markers
         if m.marker_type is MarkerType.ENTITY_CANARY
     ]
@@ -977,7 +977,7 @@ def test_window_embeddings_are_cached_across_markers_in_one_observation() -> Non
     observer = Principal(tenant_id=substrate.tenants[1].tenant_id)
 
     text = "a quarterly report mentioning several projects and onboarding timelines"
-    observation_tokens = _tokenize(text)
+    observation_tokens = tokenize(text)
     foreign_entities = [
         marker
         for marker in substrate.manifest.markers
@@ -989,7 +989,7 @@ def test_window_embeddings_are_cached_across_markers_in_one_observation() -> Non
     distinct_windows = {
         " ".join(window)
         for marker in foreign_entities
-        for window in _token_windows(observation_tokens, len(_tokenize(marker.plaintext)))
+        for window in _token_windows(observation_tokens, len(tokenize(marker.plaintext)))
     }
 
     counting.calls = 0  # ignore the construction-time marker-vector embeddings

@@ -310,3 +310,26 @@ def test_a_pass_that_rests_on_unverified_findings_says_so() -> None:
     )
     assert clean.verdict is ClassVerdict.PASS
     assert clean.note is None
+
+
+def test_a_pass_with_no_measured_headline_rate_says_so() -> None:
+    # The same commit that added a note for "a PASS the probe could not
+    # establish" left the adjacent instance silent: a class whose headline rate
+    # the run never measured passed with an EMPTY detail column, identical on the
+    # page to one that measured 0.0%. Grade, confidence and coverage were the
+    # same too, so the letter alone could not tell them apart.
+    unmeasured = score_run(_run(_all(SurfaceProvenance.LIVE)))
+    entry = next(c for c in unmeasured.classes if c.class_id == 2)
+    assert entry.verdict is ClassVerdict.PASS
+    assert entry.headline is None
+    assert entry.note is not None and "never measured" in entry.note
+
+    # A class with a measured rate keeps its headline and says nothing extra.
+    measured = score_run(
+        _run(_all(SurfaceProvenance.LIVE)).model_copy(
+            update={"metrics": RunMetrics(retrieval_pivot_k=0, retrieval_pivot_n=24)}
+        )
+    )
+    scored = next(c for c in measured.classes if c.class_id == 2)
+    assert scored.headline is not None and "n=24" in scored.headline
+    assert scored.note is None

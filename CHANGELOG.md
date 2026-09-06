@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The shared residue predicate was weaker than the detector it was shared to
+  agree with.** `residual_present` tested a normalized substring where every
+  detection tier tests a substring **or** the marker's tokens contiguous and in
+  order. So a trace holding a re-punctuated canary — a hyphen rendered as a
+  space, as U+2011, or wrapped across a log line — was a CONFIRMED CRITICAL leak
+  on the detection path and *absent* on the erasure path, and the surface read
+  `ERASED` and signed "Erasure across the AI surfaces verified" over it. Two
+  paths, one question, opposite answers on the same bytes. The recovery arm now
+  lives in the predicate, at `max_interposed=0`: a canary is one opaque token and
+  nothing may sit inside it, so out-of-order, altered and interposed text all
+  stay clean.
+- **The deletion assertion stated only the FIRST way the erasure failed.** A run
+  with residue on one surface and no erasure API on another asserted "residual
+  data remains and is itemized in this pack" while naming the caveat surface in
+  its own live-surface list — whose data is presumed retained and is *not*
+  itemized. Every failure mode composes now.
+- **`diff --output json` omitted the seventh gate reason.** `headline_unmeasured`
+  reached both text renderers and not the JSON, so a consumer recomputing the
+  verdict from the reason arrays read six empty lists over a run that exits 2.
+- **A class whose headline rate was never measured passed with an empty detail
+  column**, indistinguishable on the page from one that measured 0.0% — same
+  grade, same confidence, same coverage. It says so now.
+- **The residue sweep was blind to the family it exists to protect.** It required
+  a bare name on the left of the `in`, so `marker.plaintext` — the shape every
+  Class 11 scan uses — was invisible: it caught the adapter family it had been
+  calibrated against and missed all six probe-side residue tests.
 - **A run the tool refused to attest still signed "Erasure ... verified".** The
   previous entry made the deletion assertion depend on the outcome for `RESIDUAL`
   and for a caveat surface, and missed the third way to fail: a surface the run

@@ -6,7 +6,10 @@ decides whether a canary is *still there* in text a backend controls, and is sha
 so that no two code paths can answer that question differently.
 """
 
+import re
 import unicodedata
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def untrusted(text: str) -> str:
@@ -76,6 +79,39 @@ def normalize_for_match(text: str) -> str:
     return unicodedata.normalize("NFKC", _strip_format_chars(text)).casefold()
 
 
+def tokenize(text: str) -> list[str]:
+    return _TOKEN_RE.findall(normalize_for_match(text))
+
+
+def ordered_within_span(haystack: list[str], needle: list[str], max_interposed: int = 1) -> bool:
+    """Whether ``needle``'s tokens occur in order, close together, inside ``haystack``.
+
+    The needle tokens must appear in the same order within a window of at most
+    ``len(needle) + max_interposed`` tokens. This catches a leak that interposes
+    a token between the entity's words, while rejecting both a reordered
+    coincidence (every token present but out of order) and a scattered one (the
+    tokens spread across an unrelated span). Greedy matching is exact for the
+    distinct-token canary phrases this gates.
+    """
+    if not needle:
+        return False
+    max_span = len(needle) + max_interposed
+    for start in range(len(haystack)):
+        if haystack[start] != needle[0]:
+            continue
+        if len(needle) == 1:
+            # A single-token needle is satisfied by the anchor alone; returning
+            # here also avoids indexing ``needle[1]`` in the loop below.
+            return True
+        matched = 1
+        for pos in range(start + 1, min(start + max_span, len(haystack))):
+            if haystack[pos] == needle[matched]:
+                matched += 1
+                if matched == len(needle):
+                    return True
+    return False
+
+
 def residual_present(needle: str, haystack: str) -> bool:
     """Whether ``needle`` still appears in ``haystack``, normalization-insensitively.
 
@@ -87,7 +123,27 @@ def residual_present(needle: str, haystack: str) -> bool:
     had seen but the scan would not count read as absent - and a surface still
     holding a re-cased copy of the canary was signed ERASED.
 
+    Two arms, the same two every detection tier carries. The substring test, and
+    the marker's tokens contiguous and in order - which recovers a canary the
+    surface RE-PUNCTUATED (a hyphen rendered as a space, as U+2011, or wrapped
+    across a log line). Without the second, the detector called a trace holding
+    such a canary a CONFIRMED CRITICAL leak while this predicate called the same
+    bytes absent, so the erasure scan read ERASED and signed "verified" over it.
+    Two paths, one question, opposite answers - which is the whole reason this
+    function is shared.
+
+    ``max_interposed=0``: contiguous. The entity tier allows one interposed token
+    because a paraphrase legitimately splits an entity name; a canary is one
+    opaque token and nothing may sit inside it.
+
     An empty ``needle`` is never present: an empty-plaintext marker would otherwise
     substring-match every observation and confirm a leak on all of them.
     """
-    return bool(needle) and normalize_for_match(needle) in normalize_for_match(haystack)
+    if not needle:
+        return False
+    if normalize_for_match(needle) in normalize_for_match(haystack):
+        return True
+    needle_tokens = tokenize(needle)
+    return bool(needle_tokens) and ordered_within_span(
+        tokenize(haystack), needle_tokens, max_interposed=0
+    )

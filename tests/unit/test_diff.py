@@ -949,3 +949,31 @@ def test_a_changed_embedding_model_list_does_not_fail_the_gate(tmp_path: Path) -
     )
     assert cli.exit_code == 0, cli.output
     assert "[not measured] retrieval_pivot_rate_by_model[st:old]" in cli.output, cli.output
+
+
+def test_the_json_diff_carries_every_gate_reason(tmp_path: Path) -> None:
+    # `headline_unmeasured` reached both TEXT renderers and not the JSON, so a
+    # consumer recomputing the verdict from the reason arrays read six empty
+    # lists over a run that exits 2 - a clean run, in machine-readable form.
+    probes = {"probe_versions": {"rag-entity-bleed": "1", "rag-poisoning": "1"}}
+    earlier = _run(
+        metrics=RunMetrics(retrieval_pivot_rate=0.125, poisoning_bleed_delta=0.125)
+    ).model_copy(update=probes)
+    later = _run(metrics=RunMetrics()).model_copy(update=probes)
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "gr-e.json", earlier)),
+            str(_write(tmp_path / "gr-l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    payload = json.loads(cli.output)
+    assert payload["regressed"] is True
+    assert payload["headline_unmeasured"] == ["retrieval_pivot_rate", "poisoning_bleed_delta"]
+    # Every other reason array is empty, so this one is the only explanation the
+    # payload offers for the verdict - which is exactly why it had to be there.
+    for name in ("coverage_lost", "scope_lost", "boundary_lost", "erasure_lost"):
+        assert payload[name] == [], name

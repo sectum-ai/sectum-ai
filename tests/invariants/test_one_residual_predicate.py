@@ -103,10 +103,20 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
                     continue
                 if not isinstance(node.ops[0], ast.In | ast.NotIn):
                     continue
+                # `<marker-ish> in <text>`. The left side is a Name (`needle`)
+                # OR an Attribute (`marker.plaintext`) - the shape every Class 11
+                # scan uses, and the one the first version of this sweep could not
+                # see, so it caught the adapter family it was calibrated on and
+                # missed all six probe-side residue tests.
                 left = node.left
-                # `x in y` where x names a marker, and y is not a set/dict/tuple
-                # literal (those are membership lookups, a different question).
-                if isinstance(left, ast.Name) and left.id.lower() in needles:
+                name = (
+                    left.id
+                    if isinstance(left, ast.Name)
+                    else left.attr
+                    if isinstance(left, ast.Attribute)
+                    else ""
+                )
+                if name.lower() in needles:
                     right = node.comparators[0]
                     if isinstance(right, ast.Set | ast.Dict | ast.Tuple | ast.List):
                         continue
@@ -118,3 +128,32 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
         "these ask 'is this canary still there' with a raw substring test instead of "
         f"`residual_present`, so they will disagree with every other caller: {offenders}"
     )
+
+
+def test_the_shared_predicate_answers_the_detector_s_question() -> None:
+    # The predicate was shared across seven modules and was still WEAKER than the
+    # detector it was meant to agree with: `residual_present` tested a substring
+    # where every detection tier tests a substring OR the marker's tokens
+    # contiguous and in order. So a trace holding a re-punctuated canary was a
+    # CONFIRMED CRITICAL leak on one path and absent on the other - and the
+    # erasure scan, reading the second, signed "Erasure ... verified" over it.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, separator in (
+        ("verbatim", "-"),
+        ("space", " "),
+        # U+2011 NON-BREAKING HYPHEN and U+2013 EN DASH, by codepoint.
+        ("non-breaking hyphen", "\u2011"),
+        ("en dash", "\u2013"),
+    ):
+        rendered = canary.replace("-", separator)
+        assert residual_present(canary, f'{{"prompt": "lookup {rendered}"}}'), label
+
+    # And the arm costs nothing on the other side: the tokens must be contiguous
+    # and in order, so none of these is the canary.
+    for label, text in (
+        ("out of order", " ".join(reversed(canary.split("-")))),
+        ("one token wrong", canary.replace("-", " ")[:-4] + "ZZZZ"),
+        ("a token interposed", canary.replace("-", " X ", 1)),
+        ("unrelated", "an ordinary trace with nothing in it"),
+    ):
+        assert not residual_present(canary, text), label

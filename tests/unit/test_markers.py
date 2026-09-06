@@ -12,7 +12,7 @@ import random
 import re
 import string
 
-from sectum_ai.probes.detection import _tokenize
+from sectum_ai.spec import tokenize
 from sectum_ai.substrate.markers import (
     _HARD_PREFIX,
     _MARKER_CODENAMES,
@@ -34,7 +34,7 @@ def _split_entity(plaintext: str) -> tuple[str, str, str]:
     assert sep == "-", plaintext
     codename = head[len("Project ") :]
     base = next(b for b in _MARKER_CODENAMES if codename.startswith(b))
-    return base, _tokenize(codename)[0], serial
+    return base, tokenize(codename)[0], serial
 
 
 # --- the entity-canary codename (the round-7 change) ----------------------------
@@ -64,10 +64,10 @@ def test_entity_plaintext_serial_is_the_zero_padded_sequence() -> None:
 
 
 def test_entity_codename_fuses_entropy_into_a_single_token() -> None:
-    # No separator between codeword and entropy: `_tokenize` ([a-z0-9]+) must see
+    # No separator between codeword and entropy: `tokenize` ([a-z0-9]+) must see
     # exactly one token, so a benign mention of the bare codeword cannot match it.
     base, token, _serial = _split_entity(_entity_plaintext(random.Random(2), 1))
-    assert _tokenize(_entity_plaintext(random.Random(2), 1)) == ["project", token, "00001"]
+    assert tokenize(_entity_plaintext(random.Random(2), 1)) == ["project", token, "00001"]
     assert token.startswith(base.lower())  # legible: still begins with the codeword
     assert len(token) == len(base) + 5  # ... but strictly longer (entropy fused on)
 

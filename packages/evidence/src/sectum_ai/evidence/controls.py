@@ -242,24 +242,28 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
         for surface in live_surfaces(run)
         if run.metrics.erasure_coverage.get(surface) == CoverageVerdict.NOT_COVERED.value
     )
+    # COMPOSED, not first-match. Returning on the first failure dropped the
+    # others: a run with residue on one surface and no erasure API on another
+    # asserted only "residual data remains and is itemized in this pack" - while
+    # naming the caveat surface in its own Live surfaces list, whose data is
+    # presumed retained and is NOT itemized. The pack then positively asserted
+    # that what remains is itemized. OSCAL, which re-derives, named both.
     verdicts = {run.metrics.erasure_coverage.get(surface) for surface in named}
+    failures: list[str] = []
     if CoverageVerdict.RESIDUAL.value in verdicts:
-        return verified.replace(
-            " verified.", " tested; residual data remains and is itemized in this pack."
-        )
+        failures.append("residual data remains and is itemized in this pack")
     if CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value in verdicts:
-        return verified.replace(
-            " verified.",
-            " tested; one or more surfaces expose no per-tenant erasure API, so their "
-            "data is presumed retained.",
+        failures.append(
+            "one or more surfaces expose no per-tenant erasure API, so their data is "
+            "presumed retained"
         )
     if inconclusive:
-        return verified.replace(
-            " verified.",
-            " tested; absence could not be established on "
-            f"{', '.join(inconclusive)}, so this run is not an attestation.",
-        )
-    return verified
+        failures.append(f"absence could not be established on {', '.join(inconclusive)}")
+    if not failures:
+        return verified
+    return verified.replace(
+        " verified.", f" tested; {'; '.join(failures)}. This run is not an attestation."
+    )
 
 
 def control_mappings(run: RunResult | None = None) -> tuple[ControlMapping, ...]:

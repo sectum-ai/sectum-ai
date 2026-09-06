@@ -3102,6 +3102,10 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "boundary_lost": list(result.boundary_lost),
         "erasure_lost": list(result.erasure_lost),
         "side_channel_lost": list(result.side_channel_lost),
+        # The seventh gate reason. It reached both TEXT renderers and not this
+        # one, so a consumer recomputing the verdict from these arrays read six
+        # empty lists over a run that exits 2 - a clean run, in JSON.
+        "headline_unmeasured": list(result.metrics.headline_unmeasured),
         "scenario_changed": result.scenario_changed,
         "regressed": result.regressed,
     }

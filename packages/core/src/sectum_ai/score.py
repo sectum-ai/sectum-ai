@@ -232,6 +232,11 @@ def _confidence_for(coverage: float) -> Confidence:
     return Confidence.LOW
 
 
+# The four classes `_headline` can render a rate for. A class outside this set has
+# no headline metric at all, so an empty detail column says nothing was omitted.
+_HEADLINE_RATE_CLASSES = frozenset({2, 3, 6, 10})
+
+
 def _confirmed_in_class(run: RunResult, entry: _CatalogClass) -> int:
     """The class's confirmed findings, however the class was ultimately graded.
 
@@ -456,6 +461,12 @@ def _score_class(
         and finding.status is FindingStatus.UNVERIFIED
         and backing_surface(finding) not in synthetic
     )
+    # A class whose headline rate the run never measured passes with an EMPTY
+    # detail column, indistinguishable on the page from one that measured 0.0%.
+    # `_headline` returns None for both "this class has no rate" and "the rate is
+    # None", so the four classes that HAVE one are named here.
+    headline = _headline(entry, run.metrics)
+    unmeasured_rate = headline is None and entry.class_id in _HEADLINE_RATE_CLASSES
     notes = [
         f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
         "that fake, not your stack"
@@ -465,6 +476,10 @@ def _score_class(
         "negative, so this is not proof the boundary was enforced"
         if unverified and not confirmed
         else "",
+        "this class's headline rate was never measured in this run, so the pass rests "
+        "on the absence of confirmed findings alone"
+        if unmeasured_rate and not confirmed
+        else "",
     ]
     return ClassScore(
         class_id=entry.class_id,
@@ -473,7 +488,7 @@ def _score_class(
         severity=entry.severity,
         probe_ids=tuple(ran),
         confirmed_findings=confirmed,
-        headline=_headline(entry, run.metrics),
+        headline=headline,
         note="; ".join(part for part in notes if part) or None,
     )
 
