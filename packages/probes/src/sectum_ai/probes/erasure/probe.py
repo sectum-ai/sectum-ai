@@ -36,6 +36,7 @@ from sectum_ai.spec import (
     Severity,
     Substrate,
     Surface,
+    residual_present,
 )
 
 # The canonical, ordered set of surfaces a Class 11 erasure run can verify - the
@@ -455,7 +456,10 @@ class ErasureProbe:
         return [
             marker
             for marker in markers
-            if any(marker.plaintext in entry for entry in memory.recall(target, marker.plaintext))
+            if any(
+                residual_present(marker.plaintext, entry)
+                for entry in memory.recall(target, marker.plaintext)
+            )
         ]
 
     def _scan_cache(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
@@ -463,7 +467,11 @@ class ErasureProbe:
         if self._cache is None:
             return []
         values = self._cache.values(target)
-        return [marker for marker in markers if any(marker.plaintext in value for value in values)]
+        return [
+            marker
+            for marker in markers
+            if any(residual_present(marker.plaintext, value) for value in values)
+        ]
 
     def _scan_model(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers the model still reproduces.
@@ -495,7 +503,10 @@ class ErasureProbe:
         return [
             marker
             for marker in markers
-            if any(marker.plaintext in hit for hit in search_index.search(target, marker.plaintext))
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in search_index.search(target, marker.plaintext)
+            )
         ]
 
     def _scan_eval(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
@@ -506,7 +517,10 @@ class ErasureProbe:
         return [
             marker
             for marker in markers
-            if any(marker.plaintext in hit for hit in eval_set.search(target, marker.plaintext))
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in eval_set.search(target, marker.plaintext)
+            )
         ]
 
     def _scan_backup(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
@@ -517,7 +531,10 @@ class ErasureProbe:
         return [
             marker
             for marker in markers
-            if any(marker.plaintext in hit for hit in backup.search(target, marker.plaintext))
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in backup.search(target, marker.plaintext)
+            )
         ]
 
     @staticmethod
@@ -541,7 +558,7 @@ class ErasureProbe:
             if document is None:
                 continue
             hits = self._vector.query(target, document.title, k=FINGERPRINT_QUERY_K)
-            if any(marker.plaintext in hit.content for hit in hits):
+            if any(residual_present(marker.plaintext, hit.content) for hit in hits):
                 return True
             if len(hits) >= FINGERPRINT_QUERY_K:
                 inconclusive = True

@@ -14,7 +14,7 @@ Requires the ``opensearch`` optional dependency:
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, SearchIndexAdapter
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 # OpenSearch's default index.max_result_window; a tenant with more matching
 # documents than this is refused rather than silently truncated.
@@ -98,13 +98,11 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         # holds it answers that - refusing would lose a definite residual. So only
         # a MISS on a truncated page is refused, as on the eval-set and trace
         # backends.
-        # Case-insensitive: two callers ask this, and the A3 subject check
-        # casefolds where Class 11 does not. Suppress the refusal whenever EITHER
-        # would count a hit - keyed on the stricter one, a full page carrying the
-        # phrase in another case was refused instead of returned, and the subject
-        # probe turns that into an exit-3 error over a genuine residual.
-        needle = query.casefold()
-        if total_count > len(rows) and not any(needle in text.casefold() for text in contents):
+        # `residual_present` is the caller's own residual test, not a lookalike:
+        # a suppression predicate LOOSER than the caller's fails open (the adapter
+        # says "found it, no refusal" over a hit the caller will not count, and the
+        # marker past the cap reads absent), so the two must be one function.
+        if total_count > len(rows) and not any(residual_present(query, text) for text in contents):
             raise AdapterError(
                 f"OpenSearch matched {total_count} documents for the tenant but returned "
                 f"{len(rows)}; a search-index scan that found nothing would be incomplete"

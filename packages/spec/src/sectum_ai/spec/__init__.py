@@ -49,7 +49,7 @@ from sectum_ai.spec.models import (
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, wilson_interval
-from sectum_ai.spec.text import untrusted
+from sectum_ai.spec.text import normalize_for_match, residual_present, untrusted
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -96,7 +96,9 @@ __all__ = [
     "get_logger",
     "json_schemas",
     "normal_quantile",
+    "normalize_for_match",
     "redact_sensitive",
+    "residual_present",
     "sha256_hex",
     "to_canonical_json",
     "untrusted",

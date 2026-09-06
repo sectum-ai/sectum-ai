@@ -18,7 +18,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, EvalSetAdapter
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _EXAMPLE_LIMIT = 1000
@@ -94,9 +94,11 @@ class LangSmithEvalSet(EvalSetAdapter):
         if dataset not in self._dataset_names():
             return []
         query_tokens = _tokens(query)
-        # Case-insensitive: two callers ask this, and the A3 subject check
-        # casefolds. Suppress the refusal whenever EITHER would count a hit.
-        needle = query.casefold()
+        # `residual_present` is the caller's own residual test, not a
+        # lookalike: a suppression predicate LOOSER than the caller's fails
+        # open (the adapter says "found it, no refusal" over a hit the caller
+        # will not count, and the marker past the cap reads absent), so the
+        # two must be one function.
         hits: list[str] = []
         seen = 0
         for example in self._client.list_examples(dataset_name=dataset, limit=_EXAMPLE_LIMIT):
@@ -108,7 +110,7 @@ class LangSmithEvalSet(EvalSetAdapter):
         # the refusal only on a hit the caller would also count, or a page-filling
         # row sharing one token (every canary shares "sectum" and "canary") hides a
         # truncated listing and the marker past it reads as absent.
-        if not any(needle in text.casefold() for text in hits) and seen >= _EXAMPLE_LIMIT:
+        if not any(residual_present(query, text) for text in hits) and seen >= _EXAMPLE_LIMIT:
             # A truncated page is not a scan: a fixture past it read as absent. A
             # fixture FOUND on a full page already answers the question, so only a
             # miss is refused.

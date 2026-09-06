@@ -25,7 +25,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, MemoryAdapter
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 # get_all(limit=) is capped by mem0 itself; the default (100) silently truncated.
 _GET_ALL_LIMIT = 10000
@@ -148,14 +148,16 @@ class Mem0Memory(MemoryAdapter):
         result = self._client.get_all(user_id=self._scope(tenant), limit=_GET_ALL_LIMIT)
         memories = self._memories(result)
         query_tokens = _tokens(query)
-        # Case-insensitive: two callers ask this, and the A3 subject check
-        # casefolds. Suppress the refusal whenever EITHER would count a hit.
-        needle = query.casefold()
+        # `residual_present` is the caller's own residual test, not a
+        # lookalike: a suppression predicate LOOSER than the caller's fails
+        # open (the adapter says "found it, no refusal" over a hit the caller
+        # will not count, and the marker past the cap reads absent), so the
+        # two must be one function.
         recalled = [text for text in memories if query_tokens & _tokens(text)]
         # `recalled` is token-overlap; the caller counts an exact substring, and
         # every canary shares the tokens "sectum" and "canary" - so suppress the
         # refusal only on a hit the caller would also count.
-        found = any(needle in text.casefold() for text in recalled)
+        found = any(residual_present(query, text) for text in recalled)
         if not found and len(_rows(result)) >= _GET_ALL_LIMIT:
             # mem0's get_all defaults to limit=100 and pages no further; a
             # subject's memory past the window read as not recalled - ERASED. The

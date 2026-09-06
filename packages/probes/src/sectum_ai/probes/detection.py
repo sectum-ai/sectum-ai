@@ -23,7 +23,6 @@ tested as an invariant).
 import hashlib
 import math
 import re
-import unicodedata
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -40,6 +39,7 @@ from sectum_ai.spec import (
     Substrate,
     Surface,
     get_logger,
+    normalize_for_match,
 )
 
 _log = get_logger(__name__)
@@ -123,30 +123,8 @@ def redact_secret(plaintext: str) -> str:
     return f"{plaintext[:4]}...[redacted]"
 
 
-def _strip_format_chars(text: str) -> str:
-    """Drop Unicode format characters (category ``Cf``): zero-width spaces/joiners.
-
-    A leaked canary split with a zero-width character (``SEC​TUM-...``) reads
-    identically to a human but evades a raw substring test; removing format
-    characters before matching closes that evasion.
-    """
-    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
-
-
-def _normalize_for_match(text: str) -> str:
-    """Case-, width-, and zero-width-insensitive form for canary substring matching.
-
-    A model that re-cased, NFKC-normalized (e.g. full-width), or zero-width-split
-    a leaked canary would slip past a raw ``in`` test; normalizing the needle and
-    the haystack the same way before matching catches it. Used only to decide
-    *whether* a canary is present - the original text and the canonical canary are
-    what the evidence pack quotes.
-    """
-    return unicodedata.normalize("NFKC", _strip_format_chars(text)).casefold()
-
-
 def _tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(_normalize_for_match(text))
+    return _TOKEN_RE.findall(normalize_for_match(text))
 
 
 # How many foreign tokens may sit *between* a marker's tokens and still count
@@ -659,10 +637,10 @@ class DetectionPipeline:
         self, observer: Principal, text: str, surface: Surface, probe_id: str
     ) -> list[Finding]:
         findings: list[Finding] = []
-        haystack = _normalize_for_match(text)
+        haystack = normalize_for_match(text)
         haystack_tokens = _tokenize(text)
         for marker in self._foreign(observer, MarkerType.HARD_CANARY):
-            needle = _normalize_for_match(marker.plaintext)
+            needle = normalize_for_match(marker.plaintext)
             # ``needle`` guards an empty-plaintext marker (which would substring-
             # match every observation); normalizing both sides catches a canary
             # the surface re-cased, NFKC-folded, or zero-width-split.
@@ -707,15 +685,24 @@ class DetectionPipeline:
         matches no foreign marker produces no finding.
         """
         findings: list[Finding] = []
-        haystack = _normalize_for_match(text)
+        haystack = normalize_for_match(text)
         shaped = {
-            _normalize_for_match(match)
+            normalize_for_match(match)
             for pattern in _SECRET_PATTERNS
             for match in pattern.findall(text)
         }
+        haystack_tokens = _tokenize(text)
         for marker in self._foreign(observer, MarkerType.SECRET_CANARY):
-            needle = _normalize_for_match(marker.plaintext)
-            if needle and (needle in haystack or needle in shaped):
+            needle = normalize_for_match(marker.plaintext)
+            # The same ordered-token arm the exact and semantic tiers carry.
+            # `_SECRET_PATTERNS` need the ASCII hyphen too, so a secret the
+            # surface re-punctuated (hyphen -> space, U+2011, en dash) failed
+            # BOTH branches above: substring and credential-shape together.
+            marker_tokens = _tokenize(marker.plaintext)
+            recovered = bool(marker_tokens) and _ordered_within_span(
+                haystack_tokens, marker_tokens, 0
+            )
+            if needle and (needle in haystack or needle in shaped or recovered):
                 findings.append(
                     self._finding(
                         marker,
@@ -742,7 +729,7 @@ class DetectionPipeline:
         # is re-embedded once per foreign marker (~Nx the HTTP calls on a real
         # embedder). The cache makes each window embed exactly once per observation.
         window_cache: dict[str, tuple[float, ...]] = {}
-        haystack = _normalize_for_match(text)
+        haystack = normalize_for_match(text)
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
             # A foreign entity whose plaintext is literally present is a leak by
             # observation, not a judgement: the text contains another principal's
@@ -751,7 +738,7 @@ class DetectionPipeline:
             # alone - and a judge answering "no" (a cautious, flaky, or hostile
             # model) silently downgraded a real cross-tenant leak to a candidate.
             # The threshold could also skip it before the judge ever saw it.
-            needle = _normalize_for_match(marker.plaintext)
+            needle = normalize_for_match(marker.plaintext)
             # Substring, or the marker's tokens contiguous and in order: the entity
             # with its separator changed ("Quasar7K2Q 00001" for "Quasar7K2Q-00001")
             # is the same text to a reader, and reached the judge alone - where a

@@ -1,4 +1,12 @@
-"""Rendering strings that came out of the record under scrutiny."""
+"""Strings that came out of the record under scrutiny: rendering them, and matching them.
+
+Both halves exist because the text Sectum handles is adversarial. :func:`untrusted`
+renders a hostile string without letting it forge our output; :func:`residual_present`
+decides whether a canary is *still there* in text a backend controls, and is shared
+so that no two code paths can answer that question differently.
+"""
+
+import unicodedata
 
 
 def untrusted(text: str) -> str:
@@ -44,3 +52,42 @@ def _escape(char: str) -> str:
     if code < 0x10000:
         return f"\\u{code:04x}"
     return f"\\U{code:08x}"
+
+
+def _strip_format_chars(text: str) -> str:
+    """Drop Unicode format characters (category ``Cf``): zero-width spaces/joiners.
+
+    A leaked canary split with a zero-width character (``SEC​tum-...``) reads
+    identically to a human but evades a raw substring test; removing format
+    characters before matching closes that evasion.
+    """
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
+def normalize_for_match(text: str) -> str:
+    """Case-, width-, and zero-width-insensitive form for canary substring matching.
+
+    A backend that re-cased, NFKC-normalized (e.g. full-width), or zero-width-split
+    a canary would slip past a raw ``in`` test; normalizing the needle and the
+    haystack the same way before matching catches it. Used only to decide *whether*
+    a canary is present - the original text and the canonical canary are what the
+    evidence pack quotes.
+    """
+    return unicodedata.normalize("NFKC", _strip_format_chars(text)).casefold()
+
+
+def residual_present(needle: str, haystack: str) -> bool:
+    """Whether ``needle`` still appears in ``haystack``, normalization-insensitively.
+
+    THE single answer to "is this canary still there", deliberately shared between
+    the probes that count residue and the adapters that decide whether a truncated
+    listing needs refusing. Two predicates for one question is a fail-open: the
+    erasure scans tested a raw case-sensitive ``in`` while the adapter guarding
+    them suppressed its cap refusal on a casefolded hit, so a marker the adapter
+    had seen but the scan would not count read as absent - and a surface still
+    holding a re-cased copy of the canary was signed ERASED.
+
+    An empty ``needle`` is never present: an empty-plaintext marker would otherwise
+    substring-match every observation and confirm a leak on all of them.
+    """
+    return bool(needle) and normalize_for_match(needle) in normalize_for_match(haystack)

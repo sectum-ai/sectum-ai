@@ -786,3 +786,57 @@ def test_an_inconclusive_scan_on_one_surface_does_not_abort_the_run() -> None:
     vector = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
     assert vector.erased
     assert not report.erased
+
+
+class _CaseSensitivePurgeSearchIndex(FakeSearchIndex):
+    """A search index whose purge matches the canary's literal spelling only.
+
+    The ordinary partial purge: the backend's delete walks the documents that
+    match the canary as written, and a derived copy that re-cased it survives.
+    That is the hiding place Class 11 exists to find, and the scan has to see it.
+    """
+
+    def __init__(self, canaries: tuple[str, ...]) -> None:
+        super().__init__(soft_delete=False)
+        self._canaries = canaries
+
+    def delete(self, tenant: UUID) -> None:
+        self._documents[tenant] = [
+            text
+            for text in self._documents.get(tenant, [])
+            if not any(canary in text for canary in self._canaries)
+        ]
+
+
+def test_erasure_counts_a_marker_the_index_re_cased_as_residual() -> None:
+    # A raw case-sensitive `in` here signed ERASURE VERIFIED over a canary the
+    # tenant's own search index still returns: the pre-scan saw the canonical
+    # copy, the purge removed only that one, and the surviving re-cased copy
+    # was invisible to the post-scan. The A3 sibling on the same bytes called
+    # it RESIDUAL - two predicates, one question.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canaries = tuple(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.HARD_CANARY
+    )
+    search = _CaseSensitivePurgeSearchIndex(canaries)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            search.index(
+                marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}"
+            )
+            search.index(
+                marker.owner_tenant_id,
+                f"derived copy mentioning {marker.plaintext.lower()}",
+            )
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), search_index=search
+    ).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.SEARCH_INDEX].markers_before > 0
+    assert surfaces[Surface.SEARCH_INDEX].residual_after > 0
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.RESIDUAL
+    assert not report.erased
+    assert any(finding.surface is Surface.SEARCH_INDEX for finding in report.findings)

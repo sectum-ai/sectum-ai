@@ -56,7 +56,14 @@ from sectum_ai.probes._recall import (
     has_base_control,
 )
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
-from sectum_ai.spec import Finding, FindingStatus, Severity, Surface, sha256_hex
+from sectum_ai.spec import (
+    Finding,
+    FindingStatus,
+    Severity,
+    Surface,
+    residual_present,
+    sha256_hex,
+)
 
 # The erasure surfaces with a by-id existence primitive in the adapter SDK today.
 # A subject's ids on any other surface cannot be checked by id yet, so they read
@@ -341,9 +348,8 @@ class SubjectErasureProbe:
         # derived copy the by-id check would miss. ``None`` when the page came back
         # full without it: a stored document ranked past k is indistinguishable
         # from an erased one, and read as erased.
-        needle = phrase.casefold()
         hits = vector.query(target, phrase, k=FINGERPRINT_QUERY_K)
-        if any(needle in hit.content.casefold() for hit in hits):
+        if any(residual_present(phrase, hit.content) for hit in hits):
             return True
         return None if len(hits) >= FINGERPRINT_QUERY_K else False
 
@@ -351,15 +357,13 @@ class SubjectErasureProbe:
     def _content_in_memory(memory: MemoryAdapter, target: UUID, phrase: str) -> bool:
         # A keyword recall of the subject's content: if the phrase still appears in any
         # recalled memory entry, that content is residual in the agent-memory store.
-        needle = phrase.casefold()
-        return any(needle in entry.casefold() for entry in memory.recall(target, phrase))
+        return any(residual_present(phrase, entry) for entry in memory.recall(target, phrase))
 
     @staticmethod
     def _content_in_search(search: SearchIndexAdapter, target: UUID, phrase: str) -> bool:
         # A full-text search for the subject's content: if the phrase still appears in
         # any returned hit, that content is residual in the derived search index.
-        needle = phrase.casefold()
-        return any(needle in hit.casefold() for hit in search.search(target, phrase))
+        return any(residual_present(phrase, hit) for hit in search.search(target, phrase))
 
     @staticmethod
     def _content_recalled(model: ModelAdapter, target: UUID, phrase: str) -> bool:

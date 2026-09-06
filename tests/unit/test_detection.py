@@ -478,6 +478,44 @@ def test_secret_format_detects_a_recased_foreign_secret() -> None:
     assert found[0].severity is Severity.CRITICAL
 
 
+def test_a_re_punctuated_foreign_secret_is_still_a_confirmed_leak() -> None:
+    # _secret_format was the ONE tier without the ordered-token recovery arm, while
+    # `_exact`'s own comment asserted it already had one. Its two branches fail
+    # together on a re-punctuated secret: the normalized substring is gone, and
+    # `_SECRET_PATTERNS` need the ASCII hyphen too, so the credential SHAPE is gone
+    # with it. A dropped SECRET_CANARY is a dropped CRITICAL - the most severe
+    # finding the detector can make - where the HARD_CANARY beside it is caught.
+    substrate = _substrate()
+    observer = substrate.tenants[0].tenant_id
+    secret = next(s for s in _foreign_secrets(substrate, observer) if s.plaintext.startswith("sk-"))
+    for label, separator in (
+        ("spaces", " "),
+        # U+2011 NON-BREAKING HYPHEN and U+2013 EN DASH, spelled by codepoint so
+        # the source stays ASCII.
+        ("non-breaking hyphen", "\u2011"),
+        ("en dash", "\u2013"),
+    ):
+        rendered = secret.plaintext.replace("-", separator)
+        found = confirmed_findings(
+            DetectionPipeline(substrate).detect(
+                observer, f'{{"api_key": "{rendered}"}}', Surface.API
+            )
+        )
+        assert [f.marker_id for f in found] == [secret.marker_id], f"{label}: {found}"
+        assert found[0].severity is Severity.CRITICAL
+
+    # The zero-false-positive invariant is what the arm must not cost: a
+    # credential-shaped string matching no foreign marker still produces nothing.
+    assert (
+        confirmed_findings(
+            DetectionPipeline(substrate).detect(
+                observer, '{"api_key": "sk-notaforeignmarkeratall0000"}', Surface.API
+            )
+        )
+        == []
+    )
+
+
 def test_secret_format_recovers_a_shaped_secret_the_substring_arm_misses() -> None:
     # _secret_format matches on `needle in haystack or needle in shaped` - the normalized
     # substring OR the credential-SHAPE recovery. The re-case test above pins the substring

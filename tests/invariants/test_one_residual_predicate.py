@@ -1,0 +1,49 @@
+"""One predicate answers "is this canary still there" - everywhere it is asked.
+
+Two code paths ask that question about the same bytes: the Class 11 scans that
+COUNT residue, and the capped-listing adapters that decide whether an incomplete
+page needs refusing. When the two disagree, the disagreement is a fail-open in
+one specific direction: an adapter whose suppression is LOOSER than the caller's
+count says "found it, no need to refuse" over a hit the caller will not count, so
+the marker sitting past the cap reads as absent and the surface is signed ERASED.
+
+That is not hypothetical - it shipped. The scans tested a raw case-sensitive
+``in`` while the adapters guarding them suppressed on a casefolded hit, and a
+search index still returning a re-cased copy of the tenant's canary attested
+clean. The fix is not "casefold the scans too": matching the two predicates by
+hand is what failed, and a third normalization (zero-width, NFKC) would split
+them again. There is one function, and these tests pin that there is one.
+"""
+
+from sectum_ai.adapters.eval_set import langsmith
+from sectum_ai.adapters.memory import mem0
+from sectum_ai.adapters.search_index import opensearch
+from sectum_ai.probes.erasure import probe as erasure_probe
+from sectum_ai.probes.subject_erasure import probe as subject_probe
+from sectum_ai.spec import residual_present
+
+
+def test_every_residual_question_resolves_to_the_same_function() -> None:
+    # `is`, not an equality of behaviour: two lookalikes that agree today are
+    # exactly what drifted apart before, and only identity survives the next
+    # normalization someone adds to one of them.
+    for module in (erasure_probe, subject_probe, langsmith, mem0, opensearch):
+        assert module.residual_present is residual_present, module.__name__
+
+
+def test_residual_present_sees_every_rendering_a_backend_can_apply() -> None:
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, haystack in (
+        ("verbatim", f"row mentioning {canary}"),
+        ("re-cased", f"row mentioning {canary.lower()}"),
+        # U+200B ZERO WIDTH SPACE, U+FF33 FULLWIDTH LATIN CAPITAL S: spelled by
+        # codepoint so this file stays ASCII.
+        ("zero-width split", f"row mentioning {canary[:6]}\u200b{canary[6:]}"),
+        ("full-width", f"row mentioning \uff33{canary[1:]}"),
+    ):
+        assert residual_present(canary, haystack), label
+
+    assert not residual_present(canary, "a row mentioning nothing of the sort")
+    # An empty-plaintext marker would otherwise substring-match every observation
+    # and confirm a leak on all of them.
+    assert not residual_present("", "any text at all")

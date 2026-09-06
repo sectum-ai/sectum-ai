@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A surface still holding a re-cased copy of the tenant's canary was signed
+  `ERASURE VERIFIED`.** The Class 11 scans tested residue with a raw
+  case-sensitive `in`, so an ordinary partial purge — the backend's delete walks
+  the documents matching the canary as written, and a derived copy that re-cased
+  it survives — attested clean over a marker the tenant's own search index still
+  returns. Its A3 sibling casefolded and called the same bytes `RESIDUAL`, and
+  `detection.py` states the rule both were meant to follow: a backend that
+  re-cased, NFKC-normalized or zero-width-split a canary slips past a raw `in`.
+  Worse, the capped-listing adapters guarding those scans had been made
+  case-INSENSITIVE one commit earlier, so the adapter suppressed its "this page
+  was truncated" refusal on a hit the scan would then not count, and the marker
+  past the cap read as absent. A suppression predicate looser than the caller's
+  count is a fail-open by construction. There is now one `residual_present` in
+  `sectum_ai.spec`, shared by both erasure probes, all three capped adapters and
+  the detector, and an invariant test pins that they resolve to the same function
+  object — matching two predicates by hand is what failed, and behavioural
+  equality today does not survive the next normalization added to one of them.
+- **A re-punctuated foreign credential was a dropped CRITICAL.** `_secret_format`
+  was the one detection tier without the ordered-token recovery arm — while
+  `_exact`'s own comment asserted it already had one. Its two branches fail
+  together on a secret whose hyphens the surface rendered as spaces, U+2011 or an
+  en dash: the normalized substring is gone, and `_SECRET_PATTERNS` need the
+  ASCII hyphen too, so the credential shape is gone with it. The HARD_CANARY
+  beside it was caught the whole time.
+
 ### Changed
 
 - **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
@@ -75,10 +102,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   similarity page" — whatever the backend actually said, and threw away the
   adapter's own message naming the real cap. A caveat surface whose post-scan
   also failed now keeps its itemized caveat findings, which its own coverage
-  verdict promises. And the cap-refusal suppression is case-insensitive: it has
-  two callers and the subject-erasure one casefolds, so a full page carrying the
-  phrase in another case was refused instead of returned, turning a genuine
-  residual into an error.
+  verdict promises. And the cap-refusal suppression is case-insensitive, so a
+  full page carrying the phrase in another case was refused instead of returned,
+  turning a genuine residual into an error. (The reason given for that last
+  change was wrong — the eval-set adapter has one caller, not two, and it is
+  case-sensitive. See the residue-predicate entry below, which supersedes it.)
 - Docs caught up with this branch's behaviour changes: the scorecard page said
   `score` refuses an all-fake run when rule 5 on the same page says it is still
   graded; the Class 5 page listed three conditions for a confirmed finding where
