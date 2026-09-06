@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Three payload reads outside the runner were untyped.** `payload_required` was
+  private while its `payload_int` twin was public, so `sweep.py` and
+  `multimodal.py` indexed `step.payload` raw and a missing key escaped the
+  `SectumError` exit-code mapping as a bare `KeyError` — exit 1 where the typed
+  path gives 3. It is public now, and no reader indexes the payload directly.
 - **`baseline --compare`'s failure banner enumerated the gate's causes, and named
   seven of ten.** An unrescanned erasure surface, an unremeasured side channel
   and an unremeasured headline rate each gated at exit 2 with no matching reason

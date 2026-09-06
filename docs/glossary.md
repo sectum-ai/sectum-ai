@@ -38,7 +38,11 @@ principal's session proves a leak. Three types
   exact substring, a credential-format detector (the shape is recovered even from
   surrounding bytes), **or** the same ordered-token recovery arm the other two tiers
   carry — a re-punctuated secret defeats the first two together, because the format
-  patterns need the ASCII hyphen too, and redacted in the finding's evidence span so a
+  patterns need the ASCII hyphen too. **Known gap:** a surface that strips the
+  separators *entirely* (`912-34-5678` rendered `912345678`) is caught by none of
+  the three, because the token boundaries the recovery arm needs are gone with
+  them. Recovering that would mean matching any nine-digit run against any SSN
+  marker, which is the false-positive trade this detector refuses to make, and redacted in the finding's evidence span so a
   pack never reproduces the credential verbatim. Tests PII/secret surfacing and
   redaction.
 
