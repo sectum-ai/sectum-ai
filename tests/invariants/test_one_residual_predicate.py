@@ -18,6 +18,7 @@ them again. There is one function, and these tests pin that there is one.
 from sectum_ai.adapters.eval_set import langsmith
 from sectum_ai.adapters.memory import mem0
 from sectum_ai.adapters.search_index import opensearch
+from sectum_ai.probes import _recall
 from sectum_ai.probes.erasure import probe as erasure_probe
 from sectum_ai.probes.subject_erasure import probe as subject_probe
 from sectum_ai.spec import residual_present
@@ -27,7 +28,11 @@ def test_every_residual_question_resolves_to_the_same_function() -> None:
     # `is`, not an equality of behaviour: two lookalikes that agree today are
     # exactly what drifted apart before, and only identity survives the next
     # normalization someone adds to one of them.
-    for module in (erasure_probe, subject_probe, langsmith, mem0, opensearch):
+    # `_recall` is the sixth, and it was missed by the first pass at this: the
+    # MODEL surface asks the same question through `content_recalled`, and a
+    # canary the model re-rendered read as "not recalled" - ERASED - one commit
+    # after the other five were unified. That is why this is a sweep, not a list.
+    for module in (erasure_probe, subject_probe, _recall, langsmith, mem0, opensearch):
         assert module.residual_present is residual_present, module.__name__
 
 

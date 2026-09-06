@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The MODEL surface attested `ERASED` while still returning the canary.**
+  `content_recalled` — the sixth place that asks "is this string still there",
+  and the one the previous commit's unification missed — tested a casefolded
+  `in` where the other five normalize. A model that reproduced the canary with a
+  zero-width split past the continuation cut read as "not recalled", so the
+  surface most able to re-render a memorized string was the one surface still
+  matching it literally. Both control arms move with it, or the predicates
+  diverge again. The invariant test that pins one function object now sweeps
+  `_recall` too, which is why it is a sweep and not a list.
 - **CI installed whatever resolved, not what the lockfile pins.** All three
   `uv sync --all-packages` steps are now `--locked`, and nothing else asserted
   the committed `uv.lock` matches the pyprojects — while the extras job depends
