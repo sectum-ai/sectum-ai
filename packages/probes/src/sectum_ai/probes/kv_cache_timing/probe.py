@@ -85,6 +85,11 @@ class TimingSignal:
     p_value: float
     ci_low_ms: float
     ci_high_ms: float
+    # False when every one of the 48 readings came back identical: the backend's
+    # latency metric has no resolution here, so the pair was not measured. Without
+    # it a flat metric produced d=0.0, p=1.0 - arithmetically indistinguishable
+    # downstream from a careful null result, and Class 5 graded PASS off it.
+    resolved: bool = True
 
     def is_significant_at(self, alpha: float) -> bool:
         """Whether the gap clears ``alpha`` and is practically large and directional.
@@ -96,6 +101,8 @@ class TimingSignal:
         pair comparisons) so the *family-wise* false-positive rate across every
         pair stays at ``_ALPHA``, rather than ``_ALPHA`` leaking once per pair.
         """
+        if not self.resolved:
+            return False
         return (
             self.p_value < alpha
             and self.effect_size >= _EFFECT_THRESHOLD
@@ -382,6 +389,7 @@ class KvCacheTimingProbe:
             p_value=round(p_value, 10),
             ci_low_ms=round(mean_gap - margin, 2),
             ci_high_ms=round(mean_gap + margin, 2),
+            resolved=len(set(primed) | set(control)) > 1,
         )
 
     def _finding(self, signal: TimingSignal, alpha: float) -> Finding:

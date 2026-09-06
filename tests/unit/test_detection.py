@@ -1156,3 +1156,33 @@ def test_a_token_identical_foreign_entity_confirms_even_when_the_judge_says_no(
     confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
     assert confirmed, "a token-identical foreign entity is a leak by observation"
     assert confirmed[0].confidence == 1.0
+
+
+def test_a_re_punctuated_hard_canary_is_still_a_confirmed_leak() -> None:
+    # The HARD_CANARY tier was substring-only, while both sibling tiers already
+    # had an ordered-token recovery arm. A backend that renders the canary's
+    # hyphens as spaces, or as U+2011, therefore leaked it past the detector - and
+    # a missed HARD_CANARY is an over-claimed PASS on Classes 1, 3, 4, 7, 8 and 9.
+    substrate = _substrate()
+    pipeline = DetectionPipeline(substrate)
+    observer = substrate.tenants[1].tenant_id
+    hard = _foreign_hard_marker(substrate)
+    for label, rendered in (
+        ("spaces", hard.plaintext.replace("-", " ")),
+        # U+2011 NON-BREAKING HYPHEN, spelled by codepoint so the source stays ASCII.
+        ("non-breaking hyphen", hard.plaintext.replace("-", "\u2011")),
+    ):
+        findings = confirmed_findings(
+            pipeline.detect(observer, f"retrieved chunk: {rendered}", Surface.VECTOR_DB)
+        )
+        assert len(findings) == 1, f"{label}: {findings}"
+        assert findings[0].marker_id == hard.marker_id
+        assert findings[0].severity is Severity.CRITICAL
+
+    # And an unrelated observation still produces nothing.
+    assert (
+        confirmed_findings(
+            pipeline.detect(observer, "an ordinary answer about nothing", Surface.VECTOR_DB)
+        )
+        == []
+    )

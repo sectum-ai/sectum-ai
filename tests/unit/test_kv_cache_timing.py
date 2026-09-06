@@ -503,3 +503,32 @@ def test_the_shuffled_arm_order_is_reproducible() -> None:
         substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))
     ).run()
     assert [s.mean_gap_ms for s in first.signals] == [s.mean_gap_ms for s in second.signals]
+
+
+class _NoResolutionModel(FakeModel):
+    """A backend whose latency metric returns one constant, whatever it is asked.
+
+    A real shared prefix cache may sit behind it; this metric simply cannot see
+    one. Reading that as "measured, and clean" is the over-claim.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(prefix_cache=True)
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        return 100.0
+
+
+def test_a_latency_metric_with_no_resolution_is_not_a_measurement() -> None:
+    # Every reading identical gives Cohen's d = 0.0 and p = 1.0 - arithmetically
+    # indistinguishable, downstream, from a careful null result. Class 5 recorded
+    # the probe as having run and graded the class PASS off it.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=_NoResolutionModel()).run()
+    assert report.signals, "the probe still records what it attempted"
+    assert not any(signal.resolved for signal in report.signals)
+    assert report.findings == ()
+    # A backend the metric CAN see is still resolved, and still caught.
+    real = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert all(signal.resolved for signal in real.signals)
+    assert len(real.findings) == len(real.signals)

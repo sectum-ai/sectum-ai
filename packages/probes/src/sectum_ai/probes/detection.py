@@ -660,12 +660,23 @@ class DetectionPipeline:
     ) -> list[Finding]:
         findings: list[Finding] = []
         haystack = _normalize_for_match(text)
+        haystack_tokens = _tokenize(text)
         for marker in self._foreign(observer, MarkerType.HARD_CANARY):
             needle = _normalize_for_match(marker.plaintext)
             # ``needle`` guards an empty-plaintext marker (which would substring-
             # match every observation); normalizing both sides catches a canary
             # the surface re-cased, NFKC-folded, or zero-width-split.
-            if needle and needle in haystack:
+            #
+            # The ordered-token arm is the second recovery path both sibling tiers
+            # already have (`_secret_format` and `_semantic`): substring alone
+            # missed a canary a backend re-punctuated - a hyphen rendered as a
+            # space, or as U+2011 - and a missed HARD_CANARY is an over-claimed
+            # PASS on Classes 1, 3, 4, 7, 8 and 9.
+            marker_tokens = _tokenize(marker.plaintext)
+            recovered = bool(marker_tokens) and _ordered_within_span(
+                haystack_tokens, marker_tokens, 0
+            )
+            if needle and (needle in haystack or recovered):
                 findings.append(
                     self._finding(
                         marker,

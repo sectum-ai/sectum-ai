@@ -156,7 +156,14 @@ def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = 
     # A verdict from the built-in fake describes nothing the operator runs, so a
     # run whose every surface was synthetic (or whose provenance is unrecorded)
     # asserts no control at all - the same answer `verify` and `score` give it.
-    return bool(exercised - _ERASURE_PROBE_IDS) and bool(live)
+    #
+    # And the live surface has to be one an ISOLATION probe drove. A surface only
+    # the erasure scan touched satisfies `live`, so a run whose isolation probes
+    # all ran against fakes beside one live erasure surface asserted SOC 2 CC6.1,
+    # EU AI Act 15 and HIPAA - eight frameworks' worth of isolation testing - off
+    # a deletion check.
+    isolation_live = live - erasure_scanned_surfaces(run)
+    return bool(exercised - _ERASURE_PROBE_IDS) and bool(isolation_live)
 
 
 def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...]:

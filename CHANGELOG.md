@@ -32,6 +32,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Eight frameworks' worth of isolation controls were asserted off a deletion
+  check.** The isolation requirement asked only whether *some* surface was live,
+  so a run whose isolation probes every one ran against a built-in fake, beside
+  one live surface that only the erasure scan touched, asserted SOC 2 CC6.1/6.6/
+  6.7, EU AI Act 15 and HIPAA. The live surface must now be one an isolation
+  probe actually drove.
+- **Class 5 graded PASS off a measurement with no resolution.** A backend whose
+  latency metric returns one constant gives Cohen's d = 0.0 and p = 1.0 —
+  arithmetically indistinguishable, downstream, from a careful null result — and
+  the run recorded the probe as exercised. Such a pair is now marked unresolved,
+  so the class reads NOT_COVERED rather than passing a check that could not have
+  found anything.
+- **A canary the backend re-punctuated slipped past the detector.** The
+  HARD_CANARY tier matched by substring alone while both sibling tiers already
+  had an ordered-token recovery arm, so a marker rendered with spaces or a
+  non-breaking hyphen instead of its own was missed — and a missed hard canary is
+  an over-claimed PASS on Classes 1, 3, 4, 7, 8 and 9.
+- Phoenix's `delete` swallowed every 404, so a deployment with no delete route
+  was recorded erasure-supported and its residue read as the customer's flow
+  failing rather than as a backend limitation; it re-checks first, as the OTel
+  sibling already did. The HTTP RAG and agent adapters turned a 200 carrying an
+  error envelope into a clean empty answer — and the Retrieval-Pivot Rate counts
+  steps, so a query the backend never answered still sat in the denominator as a
+  query that did not leak.
 - **The Class 5 timing probe manufactured 12 confirmed cross-tenant findings
   against a model with no cache.** The ABBA schedule derived arm order from
   `trial % 2`, which pins each arm to a fixed pair of residues mod 4 — primed at

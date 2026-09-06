@@ -195,3 +195,30 @@ def test_a_row_about_specific_surfaces_needs_one_of_them_live() -> None:
     vector_live = _run(provenance={"vector_db": "LIVE", "mcp": "SYNTHETIC"})
     owasp = next(m for m in control_mappings(vector_live) if m.framework == "OWASP LLM Top 10")
     assert owasp.assertion.endswith("Live surfaces: vector_db.")
+
+
+def test_isolation_controls_need_a_surface_an_isolation_probe_drove() -> None:
+    # `live` was any live surface at all, so a run whose isolation probes every
+    # one ran against a built-in fake, beside a single live surface that only the
+    # ERASURE scan touched, asserted eight frameworks' worth of isolation testing
+    # - SOC 2 CC6.1/6.6/6.7, EU AI Act 15, HIPAA - off a deletion check.
+    moment = datetime(2026, 5, 18, 12, 30, tzinfo=UTC)
+
+    def _mixed(vector: str) -> RunResult:
+        return RunResult(
+            run_id="run-1",
+            scenario_hash="s",
+            manifest_hash="m",
+            started_at=moment,
+            finished_at=moment,
+            metrics=RunMetrics(erasure_coverage={"tracing": "ERASED"}),
+            probe_versions={"tenant-boundary-fetch": "1", "gdpr-erasure-verification": "1"},
+            surface_provenance={"vector_db": vector, "tracing": "LIVE"},
+        )
+
+    fake_isolation = {m.framework for m in control_mappings(_mixed("SYNTHETIC"))}
+    assert "SOC 2 (TSC)" not in fake_isolation, fake_isolation
+    assert "GDPR" in fake_isolation, "the erasure control it DID earn is still asserted"
+
+    # The same run with the vector store live earns the isolation controls.
+    assert "SOC 2 (TSC)" in {m.framework for m in control_mappings(_mixed("LIVE"))}

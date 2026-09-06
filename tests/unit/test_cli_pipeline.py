@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from typer.testing import CliRunner
@@ -1752,3 +1752,40 @@ def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> N
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3, result.output
     assert "schema '0.6.0'" in result.output
+
+
+def test_a_kv_probe_with_no_resolution_does_not_cover_class_5(tmp_path: Path) -> None:
+    # The run recorded the KV probe as exercised whenever it produced any signal,
+    # so a backend whose latency metric has no resolution (one constant reading)
+    # put the probe in probe_versions and graded Class 5 PASS off a measurement
+    # that could not have found anything.
+    import sectum_ai.cli.app as app_module
+    from sectum_ai.probes.kv_cache_timing.probe import KvCacheTimingProbe, TimingSignal
+
+    def _flat(self: object, owner: object, observer: object, prefixes: object) -> TimingSignal:
+        return TimingSignal(
+            owner_tenant_id=uuid4(),
+            observed_in_tenant_id=uuid4(),
+            primed_mean_ms=100.0,
+            control_mean_ms=100.0,
+            mean_gap_ms=0.0,
+            effect_size=0.0,
+            t_statistic=0.0,
+            degrees_of_freedom=46.0,
+            p_value=1.0,
+            ci_low_ms=0.0,
+            ci_high_ms=0.0,
+            resolved=False,
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(KvCacheTimingProbe, "_measure", _flat)
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    finally:
+        monkeypatch.undo()
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert KvCacheTimingProbe.id not in run["probe_versions"], run["probe_versions"]
+    assert "kv_cache" not in run["surface_provenance"]
+    assert app_module is not None

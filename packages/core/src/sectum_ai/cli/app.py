@@ -987,7 +987,14 @@ def probe(
             # is rightly accepted) yet gives the KV probe no cross-tenant pair to time. It
             # measures nothing, and recording it would grade Class 5 PASS off zero
             # measurements.
-            **({KvCacheTimingProbe.id: __version__} if kv_report and kv_report.signals else {}),
+            # `resolved` too: a backend whose latency metric returns one constant
+            # gives d=0.0 and p=1.0, which reads downstream exactly like a careful
+            # null result. Class 5 graded PASS off a measurement with no resolution.
+            **(
+                {KvCacheTimingProbe.id: __version__}
+                if kv_report and any(signal.resolved for signal in kv_report.signals)
+                else {}
+            ),
         },
         findings=findings,
         metrics=RunMetrics(
@@ -1186,7 +1193,7 @@ def _exercised_surfaces(
     """The surfaces the executed steps actually touched, by each step's action family."""
     adapters = _slot_adapters(bundle)
     exercised = {adapters[step.action.split(".", 1)[0]].surface.value for step, _ in step_results}
-    if kv_report is not None and kv_report.signals:
+    if kv_report is not None and any(signal.resolved for signal in kv_report.signals):
         exercised.add(bundle.model.surface.value)
     return exercised
 
