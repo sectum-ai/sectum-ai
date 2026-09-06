@@ -79,6 +79,18 @@ scanning adapter yet, so it is out of scope, not fake; see the
 
 ## Known coverage gaps
 
+- **The subject-erasure vector fingerprint rarely reaches `ERASED` against a real
+  ANN store.** The check reads a top-50 similarity page and treats a *full* page
+  without the phrase as inconclusive, because a phrase still stored but ranked
+  past the page looks identical. A real approximate-nearest-neighbour store
+  returns exactly `k` whenever the tenant holds that many vectors — and an A3
+  subject erasure removes one subject's data, not the tenant's — so the page is
+  usually full and the vector surface reads `NOT_COVERED` rather than `ERASED`.
+  That is the honest answer for what this method can see, not a bug, but it means
+  the surface's clean verdict is reachable in practice only for a small tenant.
+  Class 11's tenant-level scan is unaffected: it deletes the whole tenant, so the
+  post-erasure page is short. A filtered or exact-match lookup would settle it
+  and is the natural next step.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests

@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **One inconclusive scan aborted the whole erasure run.** The vector scan
+  degrades to "absence not established" on its own; every other surface's adapter
+  *raises* when it cannot trust its listing, and nothing caught it — so a capped
+  trace, memory, eval-set or search listing ended the run instead of marking that
+  one surface uncovered. Each surface now records it and the rest still scan.
+- The OTel post-delete re-scan read a 200 carrying an error envelope as "the
+  spans are gone", so a 404 from a router with no delete route was recorded as a
+  purge. Its own `search_traces` already refuses that exact shape.
+- Documented: the subject-erasure vector fingerprint rarely reaches `ERASED`
+  against a real approximate-nearest-neighbour store, because such a store
+  returns a full page whenever the tenant holds that many vectors and a full page
+  without the phrase is inconclusive by design. That is the honest answer for
+  what the method can see; the tenant-level Class 11 scan is unaffected.
 - Three adapter families whose methods take no `user` inherited
   `carries_user = True`, the flag the runner reads to decide whether a user-level
   step can be judged — the default that once produced twelve false CRITICAL

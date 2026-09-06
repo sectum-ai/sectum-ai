@@ -219,6 +219,16 @@ class _HttpOtelTraceStore:
             # the re-scan's residue as an erasure FAILURE instead of a caveat.
             if error.code == 404:
                 remaining = self.query(tenant_hex, "")
+                if "resourceSpans" not in remaining:
+                    # The same guard `search_traces` applies to this exact call: a
+                    # 200 carrying an error envelope is not "the spans are gone",
+                    # and reading it as one recorded the surface erasable off a
+                    # response that answered nothing.
+                    detail = remaining.get("error") or remaining.get("errors") or sorted(remaining)
+                    raise AdapterError(
+                        f"OTel post-delete re-scan returned no resourceSpans, so the 404 "
+                        f"cannot be read as a purge: {str(detail)[:200]}"
+                    ) from error
                 if any(
                     _as_list(scope.get("spans"))
                     for resource in _as_list(remaining.get("resourceSpans"))

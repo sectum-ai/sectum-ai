@@ -757,3 +757,32 @@ def test_a_marker_ranked_past_the_page_is_not_attested_erased() -> None:
     assert surface.coverage_verdict is CoverageVerdict.NOT_COVERED
     assert not surface.erased
     assert not report.erased
+
+
+def test_an_inconclusive_scan_on_one_surface_does_not_abort_the_run() -> None:
+    # The vector scan degrades to "absence not established" on its own; every
+    # other surface's adapter RAISES when it cannot trust its listing, and nothing
+    # caught it - so one inconclusive trace, memory, eval-set or search scan
+    # aborted the whole erasure run instead of marking that one surface uncovered.
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+
+    class _UntrustworthyObservability(FakeObservability):
+        def search_traces(self, tenant: UUID, marker: str) -> list[object]:  # type: ignore[override]
+            raise AdapterError("the listing was capped, so a miss is not absence")
+
+    report = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_UntrustworthyObservability(),
+    ).run(target)
+    tracing = next(s for s in report.surfaces if s.surface is Surface.TRACING)
+    assert tracing.unverifiable_after > 0
+    assert tracing.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not tracing.erased
+    # The other surface was still scanned, and the run as a whole is not ERASED.
+    vector = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert vector.erased
+    assert not report.erased

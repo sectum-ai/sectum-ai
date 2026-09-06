@@ -26,6 +26,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.probes._recall import FINGERPRINT_QUERY_K, content_recalled
 from sectum_ai.spec import (
+    AdapterError,
     CoverageVerdict,
     ErasureUnsupported,
     Finding,
@@ -347,15 +348,45 @@ class ErasureProbe:
         API is recorded as *attestable-with-caveat* (data presumed retained,
         never a false PASS) rather than crashing the run or being misreported
         as a flow failure (spec §7, Class 11, hiding place #8).
+
+        Catches ``AdapterError`` for the same reason one surface further out. The
+        vector scan degrades to "absence not established" on its own; every other
+        surface's adapter *raises* when it cannot trust its listing, and nothing
+        caught it - so one inconclusive trace, memory, eval-set or search scan
+        aborted the whole erasure run instead of marking that one surface
+        uncovered. The verdict for the surface is the same either way: not
+        ERASED, and NOT_COVERED in the coverage block.
         """
-        before = scan(target, markers)
+        try:
+            before = scan(target, markers)
+        except AdapterError:
+            return (
+                SurfaceErasure(
+                    surface=surface, markers_before=0, residual_after=0, unverifiable_after=1
+                ),
+                [],
+            )
         supported = True
         try:
             delete(target)
         except ErasureUnsupported:
             supported = False
         self._inconclusive.pop(surface, None)
-        residual = scan(target, markers)
+        try:
+            residual = scan(target, markers)
+        except AdapterError:
+            # Present before, and the post-scan could not establish absence: the
+            # markers it did see are the baseline, and none of them is ruled out.
+            return (
+                SurfaceErasure(
+                    surface=surface,
+                    markers_before=len(before),
+                    residual_after=0,
+                    erasure_supported=supported,
+                    unverifiable_after=max(len(before), 1),
+                ),
+                [],
+            )
         surface_result = SurfaceErasure(
             surface=surface,
             markers_before=len(before),
