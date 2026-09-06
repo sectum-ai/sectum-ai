@@ -3,7 +3,7 @@
 This example reproduces **Attack Class 4**: cross-tenant
 contamination of a semantic or prompt cache (the engineering spec,
 §7). Tenant X primes the cache with a query whose answer contains a
-`HARD_CANARY`; tenant Y issues a semantically-near query. On a
+`HARD_CANARY`; tenant Y issues the identical query. On a
 cache that does not key by tenant, tenant Y receives tenant X's
 cached answer — canary intact.
 

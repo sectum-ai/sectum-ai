@@ -63,7 +63,7 @@ rm -rf .sectum-ai
 # the cast showed 0 findings, contradicting the title. Change neither without
 # re-recording and re-checking the rate the cast prints.
 cast=demo.cast
-asciinema rec --overwrite --title "Sectum AI — 95% leakage in 90 seconds" --command "bash -c '
+asciinema rec --overwrite --title "Sectum AI — measured cross-tenant leakage" --command "bash -c '
   # === 1. Seed a 4-tenant marker substrate (Acme, Globex, Initech, Hooli)
   sectum-ai seed --workdir .sectum-ai --config sectum-ai.yaml
   echo

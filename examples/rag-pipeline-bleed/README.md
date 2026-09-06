@@ -25,8 +25,9 @@ verifies the retriever, this one verifies the pipeline that wraps it.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex, Initech,
    Hooli), generates their corpora, and plants canary markers.
-2. **`sectum-ai probe --probe rag-pipeline-bleed`** issues one benign shared-entity
-   query per tenant through the demo RAG pipeline — a shared-index retriever with
+2. **`sectum-ai probe --probe rag-pipeline-bleed`** issues a benign query for each
+   shared entity from each tenant - six per tenant, 24 in all - through the demo
+   RAG pipeline — a shared-index retriever with
    no tenant scoping.
 3. **`sectum-ai report`** assembles a tamper-evident evidence pack (JSON + PDF).
 4. **`sectum-ai verify`** independently re-checks the pack's integrity.

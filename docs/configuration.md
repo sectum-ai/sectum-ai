@@ -88,11 +88,12 @@ carrying both cannot say which system it probed.
 Two things keep it honest about what it is rather than what slot it occupies. It
 declares `Surface.API`, so its findings and the run's
 [surface provenance](coverage.md) both say `api` rather than `vector_db`. And it
-declares no semantic retrieval, so **Class 6 (embedding inversion) and Class 13
-(multi-modal bleed) are skipped** — an application's search is not an embedding
-space, and a substring hit reported as *Invert ML Model* would attribute a real
-result to a mechanism that is not there. Those classes report `NOT_COVERED`, never
-`PASS` ([scorecard](scorecard.md), rules 5 and 6).
+declares no semantic retrieval, so **Class 6 (embedding inversion) is skipped**
+-- an application's search is not an embedding space, and a substring hit reported
+as *Invert ML Model* would attribute a real result to a mechanism that is not
+there. It reports `NOT_COVERED`, never `PASS` ([scorecard](scorecard.md), rules 5
+and 6). Class 13 is unaffected because it is not in the CLI's probe suite under
+any configuration; it runs from the SDK (`examples/multimodal-rag-bleed`).
 
 Why this exists: a stack whose vector store, cache, memory, and agent framework are
 all perfectly isolated — but whose `GET /api/documents/{id}` returns another

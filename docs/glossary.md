@@ -70,9 +70,12 @@ pipelines. (`prompt_logs` exists in the `Surface` enum but no probe emits it;
 logs are reached through the tracing surface.)
 
 ## Probe
-A pluggable attack class implementing the `Probe` protocol (a deterministic
-`plan` method and a `detect` method that emits `Finding` objects). Each probe
-declares its OWASP / ATLAS / NIST mappings and the surfaces it touches.
+An attack class, usually implementing the `Probe` protocol (a deterministic
+`plan` method and a `detect` method that emits `Finding` objects) and declaring
+its OWASP / ATLAS / NIST mappings and the surfaces it touches. The Class 5, 11
+and A3 probes predate the protocol and are driven directly by the CLI, so they
+declare neither `plan` nor `detect`; the
+[Class 5 page](attack-catalog/class-05-kv-cache-timing.md) says so too.
 See the [attack catalog overview](attack-catalog/index.md).
 
 ## Finding

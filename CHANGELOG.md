@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while the command's own closing note and ADR-0016 both told the reader to
   "re-run with the original ground-truth manifest".
 
+### Changed
+
+- **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
+  user-level steps the runner did not run because the adapter cannot carry a user
+  identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
+  longer accepted by `verify` (the usual minor-bump rule); regenerate them.
+- **Scorecard methodology `1.3`.** What counts as evidence is part of the
+  methodology, not only the weights: `1.2` graded a class on findings whose
+  backing surface was the built-in fake, `1.3` withholds them. A run that graded
+  `F` under `1.2` can grade differently here, so the stamp moves with the rule
+  that a given version always recomputes to the same letter.
+- **The Action's output strings changed.** The step summary now reads
+  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
+  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
+  built-in fakes too. A workflow grepping the old text needs updating.
+- **`surface_provenance` keys must be surfaces.** The values were validated and
+  the keys were not, so a hand-edited record could name anything — and `score`
+  printed it verbatim, letting a record forge its own scorecard lines. A key that
+  is not a `Surface` is now a validation error.
+- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
+  the same "modelled shared index, not the configured store" caveat the text
+  renderer prints, so a dashboard cannot read the gradient as a measured rate.
+
 ### Fixed
 
 - **The shared residue predicate was weaker than the detector it was shared to
@@ -104,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modules, so it structurally could not see a sibling that never imported the
   predicate, which is exactly how this family stayed behind for twelve cycles.
 - **`diff` stated a filled zero as a measurement on the OTHER side of the arrow.**
-  The previous release taught it that an absent CURRENT value is not a
+  An earlier entry in this section taught it that an absent CURRENT value is not a
   measurement; `baseline` fills an absent value the same way, so
   `[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader the earlier run
   had measured a clean zero, and `[ok] extraction_efficiency: 0 -> 0` called two
@@ -116,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   omitting the metric.
 - **The MODEL surface attested `ERASED` while still returning the canary.**
   `content_recalled` — the sixth place that asks "is this string still there",
-  and the one the previous commit's unification missed — tested a casefolded
+  and the one an earlier entry's unification missed — tested a casefolded
   `in` where the other five normalize. A model that reproduced the canary with a
   zero-width split past the continuation cut read as "not recalled", so the
   surface most able to re-render a memorized string was the one surface still
@@ -182,7 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unaffected. A class with a headline rate swallowed its note as well.
 - **Four headline leak rates read `[ok] ... -> 0` in both CI gates on a run that
   never measured them.** `diff` and `baseline --compare` fill an absent rate with
-  `0.0`, and the previous release taught only the expanded metric MAPS that such
+  `0.0`, and an earlier entry in this section taught only the expanded metric MAPS that such
   a fill is not a measurement — the scalars kept relaying it. Configuring a
   single live adapter leaves the other probes no live step, so all four go
   unmeasured at once while `confirmed_findings` holds steady: the gates printed
@@ -230,32 +253,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   en dash: the normalized substring is gone, and `_SECRET_PATTERNS` need the
   ASCII hyphen too, so the credential shape is gone with it. The HARD_CANARY
   beside it was caught the whole time.
-
-### Changed
-
-- **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
-  user-level steps the runner did not run because the adapter cannot carry a user
-  identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
-  longer accepted by `verify` (the usual minor-bump rule); regenerate them.
-- **Scorecard methodology `1.3`.** What counts as evidence is part of the
-  methodology, not only the weights: `1.2` graded a class on findings whose
-  backing surface was the built-in fake, `1.3` withholds them. A run that graded
-  `F` under `1.2` can grade differently here, so the stamp moves with the rule
-  that a given version always recomputes to the same letter.
-- **The Action's output strings changed.** The step summary now reads
-  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
-  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
-  built-in fakes too. A workflow grepping the old text needs updating.
-- **`surface_provenance` keys must be surfaces.** The values were validated and
-  the keys were not, so a hand-edited record could name anything — and `score`
-  printed it verbatim, letting a record forge its own scorecard lines. A key that
-  is not a `Surface` is now a validation error.
-- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
-  the same "modelled shared index, not the configured store" caveat the text
-  renderer prints, so a dashboard cannot read the gradient as a measured rate.
-
-### Fixed
-
 - **Every metric map `diff` expands treats a lost key as unmeasured**, except
   `per_probe_findings`, which omits a key precisely because it measured zero (see
   the entry above), and
@@ -1121,7 +1118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   over-stated their inputs; the rag-poisoning plan queries from principals foreign
   to a planted poison; Langfuse pages where the other four read one page; the
   samples table no longer carries sizes that drift on every regeneration.
-
 
 ## [0.11.0] - 2026-09-01
 

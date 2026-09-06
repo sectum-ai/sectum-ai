@@ -9,7 +9,8 @@ finding), adversarial RAG poisoning, semantic-cache contamination, KV-cache
 timing, embedding inversion, agent / MCP tool-call hijacking, persistent-memory
 contamination, LoRA cross-tenant influence, IKEA-style benign extraction, the
 GDPR Article 17 erasure-verification wedge, and multi-modal RAG entity-bleed —
-behind a single pluggable `Probe` interface, plus the exact → semantic →
+mostly behind a single pluggable `Probe` interface (the Class 5, 11 and A3
+probes predate it and are driven directly by the CLI), plus the exact → semantic →
 calibrated-judge detection pipeline that turns observations into
 manifest-grounded `Finding`s.
 

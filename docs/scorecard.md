@@ -140,8 +140,28 @@ over-claim. Six rules prevent it:
    an application's resource API can fill the vector slot — so a run's provenance may
    name a surface this methodology cannot tie to a class. Grading it would assert a
    verdict about a system the scorecard cannot identify, so it fails closed, exactly as
-   rule 1 does for a class that never ran. A record carrying no provenance block at all
-   (one produced before v0.9.0) is exempt: its absence is not evidence of a mismatch.
+   rule 1 does for a class that never ran. Its findings are counted and named on the
+   class line, exactly as rule 5's are: declining to grade a class is not the same
+   claim as finding nothing in it, and a `NOT_COVERED` beside a `0` reads as the
+   second. A record carrying no provenance block at all (one produced before v0.9.0)
+   is exempt: its absence is not evidence of a mismatch.
+
+### What a `PASS` line can still tell you
+
+A `PASS` is never silent about what it could not establish. Three notes attach to
+one:
+
+- **findings withheld** — confirmed findings on a surface backed by the built-in
+  fake, counted and named but kept out of the letter (rule 5's mixed-run half).
+- **unverified findings** — the probe ran and could not establish the negative.
+  Class 1 is the standing case: a cross-principal fetch that returns `200` with an
+  empty body is not an enforced deny, and `AccessOutcome.DENIED` is produced by no
+  code path, so a Class 1 pass means "no canary came back", never "the boundary
+  held". An unverified finding never flips a class — that is the false-positive
+  control the detector rests on — so it says so on the line instead.
+- **no measured headline rate** — the class has a headline metric and this run
+  produced none, so the pass rests on the absence of confirmed findings alone. Without
+  the note it is indistinguishable from a class that measured `0.0%`.
 
 ## The catalog and its weights
 

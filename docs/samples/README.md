@@ -58,7 +58,7 @@ uv run sectum-ai verify docs/samples/erasure-attestation-evidence.json \
 ```
 
 An `INTEGRITY OK - UNANCHORED` outcome (the verdict `--allow-unanchored` produces;
-plain `VERIFIED` is reserved for a TSA- or Rekor-anchored pack) means the whole-pack attested digest matches the
+a TSA- or Rekor-anchored pack reads `VERIFIED (independently anchored)`) means the whole-pack attested digest matches the
 timestamped token and the manifest hash agrees between the run and the pack.
 Mutating a single byte of the attested content makes `verify` exit `4` with a
 `[FAIL]` line — that demonstrates the tamper-evident property end to end.

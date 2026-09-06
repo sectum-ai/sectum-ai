@@ -1,6 +1,7 @@
 # Attack catalog
 
-Each probe is pluggable behind a common `Probe` interface and ships with unit
+Most probes are pluggable behind a common `Probe` interface (the Class 5, 11 and
+A3 probes predate it and are driven directly by the CLI) and ships with unit
 tests and a deterministic in-memory fake adapter. The catalog grows by phase;
 the classes below are implemented today.
 

@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 # Cuts a signed release of all five workspace packages on a `v*` tag push:
-#   build  -> sbom  -> sign  -> publish-pypi  -> github-release
+#   (build | sbom)  ->  sign  ->  publish-pypi  ->  github-release
+#   (build and sbom have no dependency on each other and run in parallel)
 #
 # The trust model is keyless and tokenless. Sigstore (Fulcio + Rekor) signs
 # every distribution and its SBOM with a short-lived certificate bound to the

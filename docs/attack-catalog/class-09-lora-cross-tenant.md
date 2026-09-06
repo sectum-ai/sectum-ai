@@ -16,7 +16,9 @@ runs inference from every other tenant's session.
 
 A foreign canary reproduced in another tenant's inference is weight bleed — a
 confirmed cross-tenant leak. With per-tenant-isolated adapters, inference draws
-only on the calling tenant's own adapter and nothing surfaces.
+only on the calling tenant's own adapter and nothing surfaces cross-tenant --
+but the probe also runs cross-USER, so an adapter scoped to the tenant alone
+still leaks a sibling user's memorized content and fails the class.
 
 The probe also asserts **routing**: when the adapter reports which tenant's weights
 served an inference (`served_by_tenant`), an answer served by a foreign tenant's

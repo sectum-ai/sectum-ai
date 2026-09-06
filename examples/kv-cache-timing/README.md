@@ -37,13 +37,16 @@ two-sided **Welch's t-test** on the two latency distributions and
 reports the t-statistic, degrees of freedom, p-value, a 95% confidence
 interval on the gap, and Cohen's d.
 
-The two conditions are **interleaved**, alternating which is timed
-first, rather than measured as two blocks. Anything that drifts during
-a run — thermal throttling, CPU frequency scaling, a noisy neighbour —
-would otherwise land entirely on whichever block ran second and read as
-a timing gap. Alternating makes the two conditions' mean measurement
-positions equal, so a linear drift cancels instead of masquerading as a
-side channel.
+The two conditions are **interleaved in a per-pair seeded but exactly
+balanced order** (12 of each), rather than measured as two blocks.
+Anything that drifts during a run — thermal throttling, CPU frequency
+scaling, a noisy neighbour — would otherwise land entirely on whichever
+block ran second and read as a timing gap. Balance is what cancels a
+linear drift: it makes the two conditions' mean measurement positions
+equal. The order is shuffled rather than
+strictly alternating because a fixed ABBA schedule is itself a period-2
+signal — behind a round-robin dispatcher it manufactured 12 confirmed
+findings against a model with no cache at all.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
