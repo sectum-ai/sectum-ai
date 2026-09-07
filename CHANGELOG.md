@@ -46,6 +46,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Every surface was live" was answered from a block the findings contradict.**
+  `surface_provenance` records the surfaces a run ACCOUNTED for, not the ones its
+  findings name, and three renderers read it as if the two were the same. A record
+  listing seven live surfaces whose findings also rest on an eighth put "every
+  surface exercised by this run was a live, configured backend … These findings
+  describe those systems" into the audit PDF, passed `verify --require-live`, and
+  printed `scope: your configured stack (every surface live)` directly above four
+  scorecard class lines reading "none of which this run's provenance records". All
+  three now call one predicate (`labels.unaccounted_surfaces`), name the surfaces,
+  and `verify` fails closed on them like every other unknown.
+- **OSCAL stated `satisfied` for a live surface its coverage block never mentions.**
+  The residual scan iterated the coverage block's own keys, so a live surface with
+  no key at all was never looked at — and the finding's `status.state` came back
+  `satisfied` inside a `description` carrying `_erasure_assertion`'s own words,
+  "absence could not be established on semantic_cache. This run is not an
+  attestation." A GRC platform reads the state. `controls.py` already defaulted the
+  missing key to `NOT_COVERED`; this is the same hole, fixed there and not here.
+  A parity test now pins the two modules to the same answer over 25 coverage
+  shapes, and the erasure verdict no longer says "markers remaining, or presumed
+  retained" over a surface whose absence was merely unestablished.
+- **The scorecard graded an unattributable finding as certainly the operator's.**
+  Rule 5 withholds a confirmed leak on a KNOWN fake because "a leak is not their
+  fault"; a leak on a surface the provenance block never recorded was the one case
+  treated as certainly theirs. The same record, class and finding scored `A` with a
+  note when the key read `SYNTHETIC` and `F` with `note=None` when the key was
+  simply absent. It is now `NOT_COVERED` with the count named — never a `PASS`,
+  which would let deleting one provenance key turn a confirmed leak into assurance
+  — and a class with attributable findings still FAILs on those.
+- **`verify` judged another pack's genuine artifacts.** A pack whose filename
+  Sectum does not generate had every candidate sibling name in each slot and judged
+  all of them, so `verify` on a renamed erasure pack reported the probe run's
+  `audit-pack.pdf`, `attestation.intoto.json` and `run.json` as "altered or
+  replaced after signing" and exited 4 over an untampered folder. Which file
+  belongs to a pack is now decided by content — exactly one binds its run digest —
+  with another present pack's declared sibling attributed to that pack when nothing
+  binds, and everything else listed under `unclaimed-siblings`. A candidate no
+  present pack claims is still judged, so a tampered sidecar remains a failure. The
+  second audit PDF beside a renamed pack, previously neither checked nor named, is
+  now one or the other.
+- **`verify` said nothing about the `run.json` beside a pack.** `verify_bundle` has
+  bound it since the bundle existed; the standalone path neither bound it nor named
+  it, so deleting every finding from `run.json` left `verify` at exit 0 — and
+  `score`, which prefers `run.json` over the pack, graded the emptied record `A`.
+  A `run-record` check binds it for the pack names Sectum generates. The `run.json`
+  beside an erasure attestation is the PROBE run's and is named, not judged.
+- **An erasure-only pack claimed to attest isolation.** The methodology paragraph
+  asserted "this pack attests the isolation of those surfaces" on every pack,
+  including one whose only probe was `gdpr-erasure-verification` — verbatim the
+  claim `controls._run_supports` exists to refuse. The mapping table was fixed and
+  the prose above it was not, so both shipped erasure samples carried it.
+- **The coverage matrix said "verified clean" over Sectum's own fake.** Every other
+  per-row artifact prefixes a synthetic surface; the matrix an auditor tabulates
+  was the last one that did not.
+- **An empty timestamp token counted as an external anchor.** The in-toto sidecar's
+  shape test is "not JSON, therefore a real TSA's binary token", and `json.loads("")`
+  raises — so a pack carrying no timestamp announced `anchors.timestamp: true`.
+  `rekor_proof` had the same empty-claim bug one line down.
+- **OSCAL dropped the erasure residue when a leak was also confirmed.** First-match,
+  not composed: a record carrying both took the isolation branch and the residue
+  vanished from the description of the very result reporting it.
+- **SARIF could not tell a clean scan from an absent one.** A run with no findings
+  and a run in which nothing executed both projected as `results: []` — identical
+  in a code-scanning tab, where an empty tab reads as assurance. The projection now
+  carries `probesExercised` and a `no-probe-executed` notification.
+- **Every bundle `audit-pdf` line names its member.** The first present PDF's
+  verdict came back under the bare name, so on a bundle carrying two documents the
+  failure a reader most needs placed was the one that named nothing.
+- **An unverified residue read as a confirmed one.** `leak_label` gave every
+  residual finding the same phrase whatever its status, so a surface with no
+  per-tenant erasure API — whose absence was never established — read "residual-data
+  finding" beside a marker that really was still retrievable. The cross-principal
+  labels have said leak-vs-candidate all along. `is_cross_principal` now answers the
+  question OSCAL was asking by comparing that label's prose.
+- **The synthetic-surface warning was silent on a record with no provenance.**
+  Two-valued where `verify`'s run-scope, `score`'s `UNRECORDED` scope and the audit
+  PDF are all three-valued: the one run whose subject cannot be established was the
+  one the operator heard nothing about.
+
 - **The "Live surfaces:" suffix named a surface the control was not granted on.**
   The rule that an isolation control needs a surface THIS run's probes drove went
   into the predicate and not into the suffix beside it — whose own comment says it

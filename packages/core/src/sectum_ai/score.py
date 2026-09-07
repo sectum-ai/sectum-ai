@@ -430,6 +430,21 @@ def _score_class(
         and finding.status is FindingStatus.CONFIRMED
         and backing_surface(finding) in synthetic
     )
+    # Rule 5's sibling, and the one case that was graded as certainly the
+    # operator's: a finding whose backing surface the run's provenance never
+    # recorded cannot be attributed to their stack any more than one on a known
+    # fake can. The same record, class and finding graded A with a note when the
+    # block said SYNTHETIC and F with `note=None` when the key was simply absent.
+    # Withheld from the letter, never from the page - and never as a PASS, which
+    # would let dropping one provenance key turn a confirmed leak into assurance.
+    unattributed = sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and run.surface_provenance
+        and backing_surface(finding) not in run.surface_provenance
+    )
     confirmed = (
         sum(
             1
@@ -437,6 +452,7 @@ def _score_class(
             if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
         )
         - withheld
+        - unattributed
     )
     if not ran:
         # Rule 1: a class whose probe never ran can only be NOT_COVERED - never PASS.
@@ -449,6 +465,25 @@ def _score_class(
             note=(
                 "probe did not run - no configured adapter satisfies it, it was not in "
                 "this run's suite, or the substrate left it no step to take"
+            ),
+        )
+    if unattributed and not confirmed:
+        # Not a PASS and not a FAIL: neither is supportable. NOT_COVERED lowers
+        # coverage and confidence and grants nothing, which is what "this class's
+        # only confirmed evidence cannot be placed" actually means. A class that
+        # ALSO has attributable confirmed findings still fails on those - rule 4
+        # never drops contradicting evidence - and names these on the same line.
+        return ClassScore(
+            class_id=entry.class_id,
+            name=entry.name,
+            verdict=ClassVerdict.NOT_COVERED,
+            severity=entry.severity,
+            probe_ids=tuple(ran),
+            confirmed_findings=unattributed,
+            note=(
+                f"the {unattributed} confirmed finding(s) here rest on a surface this "
+                "run's provenance does not record, so they can be attributed neither to "
+                "your stack nor to Sectum's built-in fake; this class is not graded"
             ),
         )
     # A PASS the probe could not actually establish. `AccessOutcome.DENIED` is
@@ -485,6 +520,10 @@ def _score_class(
         f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
         "that fake, not your stack"
         if withheld
+        else "",
+        f"{unattributed} confirmed finding(s) here rest on a surface this run's "
+        "provenance does not record and are excluded from this verdict"
+        if unattributed
         else "",
         f"{unverified} unverified finding(s) here: the probe could not establish the "
         "negative, so this is not proof the boundary was enforced"
@@ -571,10 +610,11 @@ def score_run(run: RunResult) -> IsolationScore:
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
     if not covered:
         raise ConfigError(
-            "no catalog class this run exercised can be graded: either no probe ran, or "
-            "every class that ran was backed only by Sectum's built-in fakes (their "
-            "verdicts describe that fake, not your stack); run 'sectum-ai probe' against "
-            "a configured stack first"
+            "no catalog class this run exercised can be graded: no probe ran, every class "
+            "that ran was backed only by Sectum's built-in fakes (their verdicts describe "
+            "that fake, not your stack), or their confirmed findings rest on surfaces this "
+            "run's provenance does not record; run 'sectum-ai probe' against a configured "
+            "stack first"
         )
     covered_weight = sum(weight[c.class_id] for c in covered)
     if not covered_weight:

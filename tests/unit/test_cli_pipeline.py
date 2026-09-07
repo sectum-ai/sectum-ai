@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import AdapterConfig, EvidenceConfig
@@ -770,7 +770,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
     assert payload["methodology_version"] == "1.3"  # pinned; see docs/scorecard.md
@@ -803,7 +803,7 @@ def test_score_on_an_isolated_stack_grades_well(tmp_path: Path) -> None:
     _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--config", str(config_path)])
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["grade"] == "A"
     assert payload["capped_by"] is None
     assert payload["weighted_score"] == 1.0
@@ -1201,7 +1201,7 @@ def test_score_grades_an_evidence_pack_when_only_the_pack_is_present(tmp_path: P
     (tmp_path / "run.json").unlink()  # auditor received the pack only
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    assert json.loads(result.output)["grade"] == "F"
+    assert json.loads(result.stdout)["grade"] == "F"
 
 
 def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) -> None:
@@ -1219,7 +1219,7 @@ def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) ->
     pack_path.write_text(json.dumps(pack))
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["run_id"] != "run-LAST-GOOD-RELEASE"  # the stale pack was not graded
     assert payload["grade"] == "F"  # today's leaky run governs
 
@@ -1335,7 +1335,7 @@ def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     run_path = tmp_path / "run.json"
     leaking = json.loads(run_path.read_text())
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
-    leaking_card = json.loads(result.output)
+    leaking_card = json.loads(result.stdout)
     assert leaking_card["grade"] == "F"
 
     doctored = {**leaking, "findings": []}
@@ -1811,9 +1811,28 @@ def test_verify_names_the_files_beside_the_pack_it_does_not_speak_for(tmp_path: 
     )
     assert "unclaimed-siblings" in result.output, result.output
     assert "erasure-attestation.pdf" in result.output
-    assert "says nothing about them" in result.output
+    assert "says nothing about it" in result.output, result.output
     # Still a pass: the pack itself is intact, and the extra file is not its
     # business to judge.
+    assert result.exit_code == 0
+
+
+def test_several_unclaimed_siblings_are_named_in_the_plural(tmp_path: Path) -> None:
+    # The sentence has two forms and the singular one is now the common case
+    # (an erasure pack's neighbouring `run.json` is unclaimed on its own), so
+    # both are pinned - a list rendered "run.json sit beside this pack" is the
+    # kind of sloppiness that costs an audit document its authority.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "erasure-attestation.pdf").write_bytes(b"%PDF-1.4 someone else's\n")
+    (tmp_path / "erasure-attestation.intoto.json").write_text("{}")
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert "says nothing about them" in result.output, result.output
+    assert "erasure-attestation.intoto.json, erasure-attestation.pdf sit beside" in result.output
     assert result.exit_code == 0
 
 
@@ -1845,3 +1864,73 @@ def test_the_documented_verify_check_count_is_what_verify_prints(tmp_path: Path)
         f"verify prints {len(printed)} checks; RECORDING.md says otherwise: "
         f"{[line.split(':')[0] for line in printed]}"
     )
+
+
+def _full_workdir(workdir: Path) -> None:
+    _seed_and_probe(workdir)
+    _runner.invoke(app, ["report", "--workdir", str(workdir)])
+    _runner.invoke(app, ["erasure", "--workdir", str(workdir), "--target-tenant", "Acme Robotics"])
+
+
+def _verify(pack: Path) -> Result:
+    return _runner.invoke(app, ["verify", str(pack), "--allow-unanchored", "--allow-synthetic"])
+
+
+def test_a_renamed_pack_checks_the_document_it_binds_and_names_the_other(tmp_path: Path) -> None:
+    # A pack whose filename is not in `_PACK_SIBLINGS` has BOTH pdf names as
+    # candidates and the first that existed was the one re-hashed, so a folder
+    # holding both documents had one checked and the other neither checked nor
+    # named. Which is which is decidable: exactly one hashes to `pdf_ref`.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "delivered-to-the-auditor.json"
+    renamed.write_bytes((tmp_path / "evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[ok] audit-pdf: the audit PDF matches" in result.output, result.output
+    assert "erasure-attestation.pdf" in result.output, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+
+def test_a_renamed_erasure_pack_does_not_accuse_the_probe_runs_artifacts(tmp_path: Path) -> None:
+    # The same fallback ran the probe run's genuine `audit-pack.pdf`,
+    # `attestation.intoto.json` and `run.json` against the erasure pack, printing
+    # "altered or replaced after signing" and VERIFICATION FAILED over an
+    # untampered folder - the worst false alarm a tamper-evidence product can
+    # raise, and the reason `_unclaimed_siblings` exists at all.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "erasure-for-the-auditor.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    for other in ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json", "run.json"):
+        assert other in result.output, (other, result.output)
+
+
+def test_a_renamed_pack_alone_with_a_tampered_sidecar_still_fails(tmp_path: Path) -> None:
+    # The guard on the rule above. "Somebody else's file" is only an answer when
+    # somebody else is actually there; with no other pack in the folder to claim
+    # it, a sidecar that binds nothing is judged, not excused.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "alone"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "evidence.dsse.json").write_text('{"payload": "e30="}')
+    result = _verify(delivered / "mypack.json")
+    assert result.exit_code == 4, result.output
+    assert "[FAIL] dsse-envelope" in result.output, result.output
+
+
+def test_a_renamed_pack_never_binds_the_run_record_beside_it(tmp_path: Path) -> None:
+    # `run.json` is the one candidate every run writes under the same name, so
+    # the per-pack table is the only thing that can say whether the one beside a
+    # pack is that pack's own record. Judging it on an unrecognised filename
+    # reported a genuine probe `run.json` as altered beside any renamed erasure
+    # pack. It is named as unclaimed there instead.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "delivered.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert "run-record" not in result.output, result.output
+    assert "run.json" in result.output, result.output

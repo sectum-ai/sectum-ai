@@ -234,6 +234,13 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     """
     findings = list(run.findings)
     live = live_surfaces(run)
+    # A run with no findings and a run in which nothing executed both projected as
+    # `results: []` - "tested, clean" and "never tested", identical in a
+    # code-scanning tab. Every sibling projection states what ran: `score` rule 1
+    # refuses a PASS for a probe that did not run, the PDF prints
+    # `probes_exercised`, OSCAL lists `reviewed-controls`. A finding counts as
+    # proof its probe ran, the same rule `score._confirmed_probe_ids` applies.
+    exercised = sorted(set(run.probe_versions) | {finding.probe_id for finding in findings})
     by_probe: dict[str, list[Finding]] = {}
     for finding in findings:
         by_probe.setdefault(finding.probe_id, []).append(finding)
@@ -253,8 +260,28 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                 "results": [
                     _result(finding, live, dict(run.surface_provenance)) for finding in findings
                 ],
+                "invocations": [
+                    {
+                        "executionSuccessful": True,
+                        "toolExecutionNotifications": [
+                            {
+                                "level": "warning",
+                                "descriptor": {"id": "sectum.no-probe-executed"},
+                                "message": {
+                                    "text": (
+                                        "No Sectum AI probe executed in this run. An empty "
+                                        "result list here is an ABSENT scan, not a clean one."
+                                    )
+                                },
+                            }
+                        ],
+                    }
+                    if not exercised
+                    else {"executionSuccessful": True}
+                ],
                 "properties": {
                     "runId": run.run_id,
+                    "probesExercised": exercised,
                     "scenarioHash": run.scenario_hash,
                     "manifestHash": run.manifest_hash,
                     # Which stack the results describe. Absent from the projection,

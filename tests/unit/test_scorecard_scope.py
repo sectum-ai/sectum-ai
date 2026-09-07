@@ -11,6 +11,7 @@ at a real assessment, and its fakes are silent gaps the operator believes were
 covered; there the synthetic-backed classes are withheld from the letter.
 """
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -379,3 +380,100 @@ def test_class_5_says_so_when_no_effect_size_was_recorded() -> None:
     )
     scored = next(c for c in measured.classes if c.class_id == 5)
     assert scored.note is None or "never recorded" not in scored.note
+
+
+def test_the_scope_line_names_a_surface_the_findings_rest_on_that_the_block_omits(
+    tmp_path: Path,
+) -> None:
+    # `scope:` describes the provenance BLOCK, and the block records what the run
+    # accounted for. A record listing every surface it recorded as live, whose
+    # findings also rest on one it did not, printed "your configured stack (every
+    # surface live)" directly above four class lines reading "none of which this
+    # run's provenance records ... confirmed finding(s) here are not attributed to
+    # a surface". Rule 6 was doing its job per class; the headline contradicted it.
+    CliRunner().invoke(app, ["seed", "--workdir", str(tmp_path)])
+    CliRunner().invoke(app, ["probe", "--workdir", str(tmp_path)])
+    record = tmp_path / "run.json"
+    run = json.loads(record.read_text())
+    run["surface_provenance"] = dict.fromkeys(run["surface_provenance"], "LIVE")
+    dropped = run["surface_provenance"].pop("vector_db")
+    assert dropped == "LIVE"
+    assert any(f["surface"] == "vector_db" for f in run["findings"])
+    record.write_text(json.dumps(run))
+
+    result = CliRunner().invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "(every surface live)" not in result.output, result.output
+    assert "provenance never recorded" in result.output, result.output
+    assert "\n           vector_db\n" in result.output, result.output
+
+
+def _class2_run(provenance: dict[str, str]) -> RunResult:
+    # Class 4 rides along, clean and live, so the record still has something to
+    # grade when class 2 comes back NOT_COVERED - otherwise `score` refuses the
+    # whole run and the class verdict under test is never reached.
+    entry = next(e for e in CATALOG if e.class_id == 2)
+    leak = _finding(entry.probe_ids[0]).model_copy(update={"surface": Surface.VECTOR_DB})
+    return _run(
+        {**provenance, Surface.SEMANTIC_CACHE.value: SurfaceProvenance.LIVE.value},
+        findings=(leak,),
+    ).model_copy(
+        update={
+            "probe_versions": {
+                **dict.fromkeys(entry.probe_ids, "1.0"),
+                "semantic-cache-contamination": "1.0",
+            }
+        }
+    )
+
+
+def test_a_finding_on_an_unrecorded_surface_is_not_graded_as_the_operators() -> None:
+    # Rule 5 withholds a leak on a KNOWN fake because "a leak is not their fault".
+    # A leak on a surface the block never recorded was the one case graded as
+    # certainly theirs: the same record, class and finding scored A with a note
+    # when the key read SYNTHETIC and F with `note=None` when the key was simply
+    # absent. Unknown is not "definitely yours" - and it is not a PASS either,
+    # which would let deleting one provenance key turn a confirmed leak into
+    # assurance. NOT_COVERED grants nothing and lowers confidence instead.
+    withheld = score_run(_class2_run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}))
+    assert next(c for c in withheld.classes if c.class_id == 2).verdict is ClassVerdict.PASS
+
+    unrecorded = score_run(_class2_run({"rag_pipeline": "LIVE"}))
+    class2 = next(c for c in unrecorded.classes if c.class_id == 2)
+    assert class2.verdict is ClassVerdict.NOT_COVERED, class2
+    # Named, never dropped: rule 4.
+    assert class2.confirmed_findings == 1
+    assert class2.note is not None and "provenance does not record" in class2.note
+
+
+def test_an_unattributable_finding_never_hides_an_attributable_one() -> None:
+    # The class still FAILS on the finding that CAN be placed; the other is named
+    # on the same line. Withholding the whole class would drop live evidence.
+    entry = next(e for e in CATALOG if e.class_id == 2)
+    unplaceable = _finding(entry.probe_ids[0]).model_copy(update={"surface": Surface.VECTOR_DB})
+    placed = _finding(entry.probe_ids[1]).model_copy(
+        update={"finding_id": "f-live", "surface": Surface.RAG_PIPELINE}
+    )
+    run = _run({"rag_pipeline": "LIVE"}, findings=(unplaceable, placed)).model_copy(
+        update={"probe_versions": dict.fromkeys(entry.probe_ids, "1.0")}
+    )
+    class2 = next(c for c in score_run(run).classes if c.class_id == 2)
+    assert class2.verdict is ClassVerdict.FAIL, class2
+    assert class2.confirmed_findings == 1
+    assert class2.note is not None and "provenance does not record" in class2.note
+
+
+def test_a_run_recording_no_provenance_at_all_still_grades_its_classes() -> None:
+    # The guard on the rule above. An UNRECORDED-scope run has its own scope line
+    # and deliberately grades; treating every finding in it as unattributable
+    # would make every class NOT_COVERED and `score` would refuse the run.
+    entry = next(e for e in CATALOG if e.class_id == 2)
+    leak = _finding(entry.probe_ids[0]).model_copy(update={"surface": Surface.VECTOR_DB})
+    run = _run({}, findings=(leak,)).model_copy(
+        update={"probe_versions": dict.fromkeys(entry.probe_ids, "1.0")}
+    )
+    card = score_run(run)
+    assert card.scope is ScoreScope.UNRECORDED
+    class2 = next(c for c in card.classes if c.class_id == 2)
+    assert class2.verdict is ClassVerdict.FAIL, class2
+    assert class2.confirmed_findings == 1

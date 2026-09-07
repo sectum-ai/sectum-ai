@@ -284,7 +284,7 @@ def test_cli_diff_json_output_is_machine_parseable(tmp_path: Path) -> None:
     new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b")))
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 2
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["regressed"] is True
     assert [f["finding_id"] for f in payload["findings"]["appeared"]] == ["b"]
     assert [f["finding_id"] for f in payload["findings"]["newly_confirmed"]] == ["b"]
@@ -335,7 +335,7 @@ def test_cli_diff_changed_finding_in_json(tmp_path: Path) -> None:
     new = _write(tmp_path / "new.json", _run(_finding("x", severity=Severity.CRITICAL)))
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 2
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     changed = payload["findings"]["changed"]
     assert [c["finding_id"] for c in changed] == ["x"]
     assert changed[0]["previous_severity"] == "low"
@@ -366,7 +366,7 @@ def test_cli_diff_caveat_increase_is_informational_not_a_regression(tmp_path: Pa
     )
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     delta = next(d for d in payload["metrics"] if d["name"] == "erasure_caveats[backup]")
     assert delta["informational"] is True
     assert delta["regressed"] is False
@@ -604,7 +604,7 @@ def test_the_json_diff_carries_the_qualifier_the_text_diff_refuses_to_omit(
             "json",
         ],
     )
-    payload = json.loads(cli.output[cli.output.index("{") :])
+    payload = json.loads(cli.stdout)
     residue = next(m for m in payload["metrics"] if m["name"] == "erasure_residue[vector_db]")
     assert residue["verdict"] == "not measured", payload["metrics"]
     assert payload["erasure_lost"] == ["vector_db"]
@@ -873,7 +873,7 @@ def test_the_json_diff_says_which_side_of_a_metric_was_measured(tmp_path: Path) 
             "json",
         ],
     )
-    metrics = {m["name"]: m for m in json.loads(cli.output)["metrics"]}
+    metrics = {m["name"]: m for m in json.loads(cli.stdout)["metrics"]}
     # measured earlier, not measured later
     assert metrics["retrieval_pivot_rate"]["baseline_measured"] is True
     assert metrics["retrieval_pivot_rate"]["current_measured"] is False
@@ -970,10 +970,24 @@ def test_the_json_diff_carries_every_gate_reason(tmp_path: Path) -> None:
             "json",
         ],
     )
-    payload = json.loads(cli.output)
+    payload = json.loads(cli.stdout)
     assert payload["regressed"] is True
     assert payload["headline_unmeasured"] == ["retrieval_pivot_rate", "poisoning_bleed_delta"]
     # Every other reason array is empty, so this one is the only explanation the
     # payload offers for the verdict - which is exactly why it had to be there.
     for name in ("coverage_lost", "scope_lost", "boundary_lost", "erasure_lost"):
         assert payload[name] == [], name
+
+
+def test_the_json_stream_carries_only_json(tmp_path: Path) -> None:
+    # The machine-readable modes write their document to stdout and every
+    # warning to stderr, so `... --output json > out.json` is parseable however
+    # noisy the run was. The suite asserted this by parsing the MERGED stream,
+    # which passes only while nothing happens to warn about - and a record with
+    # no surface provenance is exactly the case that should.
+    old = _write(tmp_path / "old.json", _run(_finding("a")))
+    new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b")))
+    result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
+    assert json.loads(result.stdout)["regressed"] is True
+    assert "surface provenance" in result.stderr, result.stderr
+    assert result.stderr not in result.stdout

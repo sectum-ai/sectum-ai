@@ -22,15 +22,15 @@ from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
 from sectum_ai.evidence.pdf import (
     _COVERAGE_CAVEAT,
-    _COVERAGE_VERDICT_GLOSS,
-    _SCOPE_METHODOLOGY,
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
     _retrieval_pivot_summary,
     confirmed_by_kind,
+    coverage_gloss,
     probes_exercised,
     provenance_statement,
+    scope_methodology,
     synthetic_prefix,
 )
 from sectum_ai.spec import EvidenceError, EvidencePack, Finding, RunResult
@@ -144,7 +144,7 @@ def _coverage_html(pack: EvidencePack) -> str:
     cells = "".join(
         f"<tr><td>{escape(surface)}</td>"
         f'<td class="verdict">{escape(verdict)}</td>'
-        f"<td>{escape(_COVERAGE_VERDICT_GLOSS.get(verdict, ''))}</td></tr>"
+        f"<td>{escape(coverage_gloss(pack.run_result, surface, verdict))}</td></tr>"
         for surface, verdict in rows
     )
     table = (
@@ -189,7 +189,7 @@ def build_audit_html(pack: EvidencePack) -> str:
 
     # The provenance statement leads: every sentence after it is conditional on it.
     methodology = f'<p class="method">{escape(provenance_statement(run))}</p>' + "".join(
-        f'<p class="method">{escape(text)}</p>' for text in _SCOPE_METHODOLOGY
+        f'<p class="method">{escape(text)}</p>' for text in scope_methodology(run)
     )
 
     if run.findings:

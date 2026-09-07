@@ -277,7 +277,7 @@ def test_cli_calibrate_json_output_is_parseable() -> None:
         app, ["calibrate", "--embedder", "hash-256", "--seed", "7", "--output", "json"]
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["model_name"] == "hash-256"
     assert payload["zero_false_positive"] is True
     assert payload["positives"] > 0

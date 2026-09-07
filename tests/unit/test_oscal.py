@@ -6,7 +6,12 @@ from typing import Any
 from uuid import UUID
 
 from sectum_ai.evidence import OSCAL_VERSION, run_to_oscal
-from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
+from sectum_ai.evidence.controls import (
+    COVERAGE_DISCLAIMER,
+    ERASURE,
+    control_mappings,
+    mapping_requirement,
+)
 from sectum_ai.spec import (
     Finding,
     FindingStatus,
@@ -244,9 +249,9 @@ def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
         "CCPA/CPRA 1798.105 — erasure verification",
     }
     verdicts = {f["target"]["description"] for f in result["findings"]}
-    assert all("markers remaining" in v and "cross" not in v for v in verdicts)
+    assert all("could not verify the erasure" in v and "cross" not in v for v in verdicts)
     assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
-    assert "presumed retained, on vector_db" in result["description"]
+    assert "unverified on vector_db" in result["description"]
 
 
 def test_metadata_carries_the_surface_provenance() -> None:
@@ -286,7 +291,7 @@ def test_a_caveat_surface_does_not_verify_the_erasure() -> None:
     assert all("presumed retained" in f["target"]["description"] for f in result["findings"])
     assert "scanned an erasure" in result["description"]
     assert "verified an erasure" not in result["description"]
-    assert "presumed retained, on backup" in result["description"]
+    assert "unverified on backup" in result["description"]
     assert "cross-principal" not in result["description"]
 
 
@@ -338,7 +343,7 @@ def test_the_live_surface_suffix_and_the_erasure_verdict_agree() -> None:
     )
     finding = run_to_oscal(run)["assessment-results"]["results"][0]["findings"][0]
     assert "Live surfaces: tracing, vector_db." in finding["description"]
-    assert "presumed retained, after the erasure on tracing" in finding["target"]["description"]
+    assert "could not verify the erasure on tracing" in finding["target"]["description"]
 
 
 def test_every_observation_says_which_stack_it_describes() -> None:
@@ -420,3 +425,108 @@ def test_oscal_marks_an_inconclusive_erasure_not_satisfied() -> None:
     # provenance) must not drag it down.
     clean = _erasure_states({"vector_db": "ERASED"}, erasure_residue={"vector_db": 0})
     assert set(clean.values()) == {"satisfied"}, clean
+
+
+def test_a_live_surface_absent_from_the_coverage_block_is_not_satisfied() -> None:
+    # The residual scan iterated the coverage block's OWN keys, so a live surface
+    # with no key at all was never looked at: `status.state` came back `satisfied`
+    # with "verified the erasure on every live surface it scanned" - inside a
+    # finding whose `description` carried `_erasure_assertion`'s own words,
+    # "absence could not be established on semantic_cache. This run is not an
+    # attestation." A GRC platform reads the state. `ErasureReport.coverage()`
+    # defaults this case to NOT_COVERED and `controls.py` already did too; this is
+    # the same hole, fixed there and not here.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "semantic_cache": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
+    assert all("semantic_cache" in f["target"]["description"] for f in result["findings"])
+    assert "unverified on semantic_cache" in result["description"]
+
+
+def test_the_oscal_state_and_the_control_assertion_never_disagree() -> None:
+    # The structural guard, not another instance: `controls._erasure_assertion`
+    # and this module both decide "did the erasure verify?", from the same run,
+    # and have now diverged twice - once on a scanned-but-unestablished surface,
+    # once on a live surface missing from the block entirely. A `satisfied` state
+    # whose own description says "This run is not an attestation" is the artifact
+    # that ships when they disagree.
+    surfaces = ("vector_db", "semantic_cache", "backup")
+    verdicts = ("ERASED", "RESIDUAL", "ATTESTABLE_WITH_CAVEAT", "NOT_COVERED", None)
+    checked = 0
+    for first in verdicts:
+        for second in verdicts:
+            coverage = {
+                surface: verdict
+                for surface, verdict in zip(surfaces, (first, second, "ERASED"), strict=False)
+                if verdict is not None
+            }
+            if not coverage:
+                continue
+            run = _run().model_copy(
+                update={
+                    "probe_versions": {"gdpr-erasure-verification": "1"},
+                    "surface_provenance": dict.fromkeys(surfaces, "LIVE"),
+                    "metrics": RunMetrics(erasure_coverage=coverage),
+                }
+            )
+            erasure = [
+                mapping
+                for mapping in control_mappings(run)
+                if mapping_requirement(mapping) == ERASURE
+            ]
+            if not erasure:
+                continue
+            checked += 1
+            claims_verified = all("not an attestation" not in m.assertion for m in erasure)
+            states = {
+                f["target"]["status"]["state"]
+                for f in run_to_oscal(run)["assessment-results"]["results"][0]["findings"]
+                if "erasure" in f["title"]
+            }
+            assert states, coverage
+            assert (states == {"satisfied"}) == claims_verified, (
+                coverage,
+                states,
+                erasure[0].assertion,
+            )
+    assert checked >= 15, checked
+
+
+def test_a_residual_erasure_and_a_confirmed_leak_are_both_stated() -> None:
+    # First-match, not composed: a record carrying BOTH took the isolation branch
+    # and the residue vanished from the description of the very result reporting
+    # it - the same defect `_erasure_assertion` fixed one module over by composing
+    # its clauses instead of returning on the first failure.
+    leak = _finding("f-leak", probe_id="cross-tenant-retrieval")
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1", "cross-tenant-retrieval": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "backup": "LIVE"},
+            "findings": (leak,),
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED", "backup": "RESIDUAL"}),
+        }
+    )
+    described = run_to_oscal(run)["assessment-results"]["results"][0]["description"]
+    assert "unverified on backup" in described, described
+    assert "cross-principal leak was confirmed" in described, described
+
+
+def test_an_erasure_run_still_claims_nothing_about_isolation() -> None:
+    # The guard: an erasure run did not test isolation, so composing must not add
+    # "no cross-principal leakage was confirmed" to a run that never looked.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    described = run_to_oscal(run)["assessment-results"]["results"][0]["description"]
+    assert "scanned an erasure" in described, described
+    assert "cross-principal" not in described, described

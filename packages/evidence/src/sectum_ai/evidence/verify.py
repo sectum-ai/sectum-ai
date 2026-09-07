@@ -26,6 +26,7 @@ from dataclasses import dataclass
 
 from sectum_ai.evidence.chain import LocalTimestamper, attested_digest
 from sectum_ai.evidence.controls import control_mappings
+from sectum_ai.evidence.labels import unaccounted_surfaces
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     ControlMapping,
@@ -429,19 +430,50 @@ def _check_run_scope(pack: EvidencePack, require_live: bool) -> Check:
     # way in, but a gate that fails open on anything unexpected is still wrong.
     live = sum(1 for p in provenance.values() if p == SurfaceProvenance.LIVE.value)
     synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
-    if not synthetic:
+    # The block records the surfaces the run ACCOUNTED for. Findings resting on a
+    # surface missing from it are exactly the case this gate exists to catch - and
+    # the gate read the block alone, so a pack recording only its live surfaces
+    # passed `--require-live` over confirmed findings on an unrecorded one. Fails
+    # closed like the "predates the block" branch above: unknown is not live.
+    unaccounted = unaccounted_surfaces(pack.run_result)
+    unaccounted_detail = (
+        ""
+        if not unaccounted
+        else (
+            f"; findings here also rest on {', '.join(unaccounted)}, which this pack's "
+            "provenance never recorded, so whether those were live cannot be "
+            "established from it"
+        )
+    )
+    if not synthetic and not unaccounted:
         return Check(
             "run-scope",
             ok=True,
             detail="every surface this run exercised was a live backend",
         )
+    if not synthetic:
+        return Check(
+            "run-scope",
+            ok=not require_live,
+            detail=(
+                f"every one of the {len(provenance)} surfaces this run RECORDED was a "
+                f"live backend{unaccounted_detail}"
+                + ("" if require_live else "; accepted by --allow-synthetic")
+            ),
+        )
     if live:
         return Check(
             "run-scope",
-            ok=True,
+            ok=not (require_live and unaccounted),
             detail=(
                 f"{live} of {len(provenance)} surfaces were live; these ran against "
-                f"Sectum's built-in fake and describe no real system: {', '.join(synthetic)}"
+                f"Sectum's built-in fake and describe no real system: "
+                f"{', '.join(synthetic)}{unaccounted_detail}"
+                + (
+                    ""
+                    if not (unaccounted and not require_live)
+                    else "; accepted by --allow-synthetic"
+                )
             ),
         )
     return Check(
@@ -451,6 +483,7 @@ def _check_run_scope(pack: EvidencePack, require_live: bool) -> Check:
             "NO surface was live - every verdict in this pack describes Sectum's "
             "built-in synthetic stack, not any production system. A grade, a metric, "
             "or a clean result here is not evidence about the operator's systems"
+            f"{unaccounted_detail}"
             + (
                 ". Re-run against configured adapters, or accept a demo pack explicitly"
                 if require_live

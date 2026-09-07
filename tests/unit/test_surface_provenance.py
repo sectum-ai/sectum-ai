@@ -203,3 +203,27 @@ def test_kv_cache_findings_count_as_live_when_the_model_adapter_is_live(
     assert summary["surface_provenance"] == {"model_adapter": "LIVE"}
     assert summary["confirmed_findings"] > 0
     assert summary["confirmed_on_live_surfaces"] == summary["confirmed_findings"]
+
+
+def test_a_run_recording_no_provenance_warns_the_operator(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Two-valued where every sibling is three-valued: the warning fired for a
+    # SYNTHETIC surface and stayed silent for a record with no provenance block
+    # at all - the one run whose subject cannot be established either way, and so
+    # the one the operator heard nothing about. `verify`'s run-scope, `score`'s
+    # UNRECORDED scope and the audit PDF's "Surface provenance: not recorded" all
+    # state it.
+    _warn_on_synthetic_surfaces({})
+    unrecorded = capsys.readouterr()
+    assert "records no surface provenance" in unrecorded.err, unrecorded.err
+    assert "cannot be established" in unrecorded.err
+    assert unrecorded.out == ""
+
+    # A fully live run still says nothing: there is nothing to disclose.
+    _warn_on_synthetic_surfaces({"vector_db": "LIVE"})
+    assert capsys.readouterr().err == ""
+
+    # And the SYNTHETIC case is unchanged.
+    _warn_on_synthetic_surfaces({"vector_db": "SYNTHETIC"})
+    assert "no live adapter configured" in capsys.readouterr().err

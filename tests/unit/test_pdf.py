@@ -439,3 +439,68 @@ def test_both_pdf_engines_mark_a_finding_that_describes_a_fake() -> None:
     live_html = build_audit_html(EvidencePack(run_result=live, manifest_hash=live.manifest_hash))
     assert "[synthetic surface" in fake_html
     assert "[synthetic surface" not in live_html
+
+
+def test_an_erasure_only_pack_does_not_claim_to_attest_isolation() -> None:
+    # `_SCOPE_METHODOLOGY[0]` said "this pack attests the isolation of those
+    # surfaces" on EVERY pack, including an erasure attestation whose only probe
+    # was `gdpr-erasure-verification`. That is verbatim the claim
+    # `controls._run_supports` exists to refuse - the mapping table was fixed and
+    # the prose one section above it was not, so both shipped samples carried it.
+    from sectum_ai.evidence.pdf import scope_methodology
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    base = {
+        "run_id": "r",
+        "scenario_hash": "s",
+        "manifest_hash": "m" * 64,
+        "started_at": moment,
+        "finished_at": moment,
+    }
+    erasure_only = RunResult(**base, probe_versions={"gdpr-erasure-verification": "1"})
+    assert "attests the isolation" not in scope_methodology(erasure_only)[0]
+    assert "makes no claim about tenant isolation" in scope_methodology(erasure_only)[0]
+
+    # An isolation run keeps the original wording, and a mixed one does too.
+    isolation = RunResult(**base, probe_versions={"tenant-boundary-fetch": "1"})
+    assert "attests the isolation" in scope_methodology(isolation)[0]
+    mixed = RunResult(
+        **base,
+        probe_versions={"gdpr-erasure-verification": "1", "tenant-boundary-fetch": "1"},
+    )
+    assert "attests the isolation" in scope_methodology(mixed)[0]
+    # Every paragraph after the first is untouched either way.
+    assert scope_methodology(erasure_only)[1:] == scope_methodology(isolation)[1:]
+
+
+def test_the_coverage_matrix_says_which_rows_describe_a_fake() -> None:
+    # The matrix was the only per-row artifact with no surface provenance, so a
+    # surface that was Sectum's own in-memory fake read "verified clean - no
+    # marker retrievable...". Every sibling states it per row, because a
+    # run-level paragraph does not reach a reader tabulating rows.
+    from sectum_ai.evidence.pdf import coverage_gloss
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance={"vector_db": "LIVE", "semantic_cache": "SYNTHETIC"},
+    )
+    live = coverage_gloss(run, "vector_db", "ERASED")
+    assert live.startswith("verified clean"), live
+
+    fake = coverage_gloss(run, "semantic_cache", "ERASED")
+    assert fake.startswith("[synthetic surface"), fake
+    assert "verified clean" in fake
+
+    absent = coverage_gloss(run, "agent_memory", "ERASED")
+    assert absent.startswith("[surface provenance not recorded"), absent
+
+    # NOT_COVERED asserts nothing about the surface, so it needs no prefix.
+    assert (
+        coverage_gloss(run, "semantic_cache", "NOT_COVERED") == "not verified by this attestation"
+    )

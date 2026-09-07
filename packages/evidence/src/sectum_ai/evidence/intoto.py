@@ -43,7 +43,11 @@ def _is_external_timestamp_anchor(token: str | None) -> bool:
     run ``sectum-ai verify`` for the second question. What it does exclude is the
     local-dev token, and anything else impersonating a TSA in JSON.
     """
-    if token is None:
+    # An EMPTY token is not a claim of anything, and `json.loads("")` raises -
+    # so the "not JSON, therefore a real TSA's binary token" rule read `""` as an
+    # external anchor and the sidecar announced `anchors.timestamp: true` for a
+    # pack carrying no timestamp at all.
+    if not token or not token.strip():
         return False
     try:
         json.loads(token)
@@ -81,7 +85,9 @@ def to_in_toto_statement(pack: EvidencePack) -> dict[str, Any]:
             ],
             "anchors": {
                 "timestamp": _is_external_timestamp_anchor(pack.tsa_token),
-                "transparency_log": pack.rekor_proof is not None,
+                # `is not None` said true for `""`, the same empty-claim bug one
+                # line above; both fields are `str | None`.
+                "transparency_log": bool(pack.rekor_proof and pack.rekor_proof.strip()),
             },
         },
     }

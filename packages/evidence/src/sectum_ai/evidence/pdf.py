@@ -18,8 +18,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
-from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
-from sectum_ai.evidence.labels import backing_surface, leak_label
+from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, COVERAGE_DISCLAIMER
+from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ControlMapping,
     CoverageVerdict,
@@ -100,7 +100,25 @@ def provenance_statement(run: RunResult) -> str:
         )
     live = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.LIVE.value)
     synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
+    # The block is what the run ACCOUNTED for; the findings may rest on more. See
+    # `labels.unaccounted_surfaces` for what shipped before this qualifier existed.
+    unaccounted = unaccounted_surfaces(run)
+    trailer = (
+        ""
+        if not unaccounted
+        else (
+            f" This run's findings also rest on {', '.join(unaccounted)}, which its "
+            "provenance block never recorded: whether those were live backends or "
+            "Sectum's built-in fakes cannot be established from this pack."
+        )
+    )
     if not synthetic:
+        if unaccounted:
+            return (
+                "Surface provenance: every surface this run RECORDED was a live, "
+                f"configured backend ({', '.join(live)}), and findings on those "
+                f"surfaces describe those systems.{trailer}"
+            )
         return (
             "Surface provenance: every surface exercised by this run was a live, "
             f"configured backend ({', '.join(live)}). These findings describe those "
@@ -112,13 +130,13 @@ def provenance_statement(run: RunResult) -> str:
             f"run ({', '.join(synthetic)}) was Sectum's built-in synthetic store, so "
             "the findings, metrics, and any clean result below describe that synthetic "
             "stack and NOT a production system. This pack is a demonstration, not an "
-            "attestation."
+            f"attestation.{trailer}"
         )
     return (
         f"Surface provenance: {len(live)} of {len(provenance)} surfaces were live, "
         f"configured backends ({', '.join(live)}). The remaining surfaces "
         f"({', '.join(synthetic)}) were Sectum's built-in synthetic stores; results "
-        "attributed to them describe that fake and not a production system."
+        f"attributed to them describe that fake and not a production system.{trailer}"
     )
 
 
@@ -214,6 +232,14 @@ class PdfEngine(StrEnum):
 # and 8.4). Factual and anti-hype (section 20): what was tested, how detection
 # works, and the explicit limits (no remediation, test coverage not legal
 # certification).
+_ERASURE_METHODOLOGY: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. This pack attests "
+    "whether those markers are still retrievable after erasure on the surfaces "
+    "scanned; it makes no claim about tenant isolation, which no probe in this "
+    "run measured."
+)
+
 _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
     "markers, recorded in a hashed ground-truth manifest. Probes run from each "
@@ -318,6 +344,47 @@ def synthetic_prefix(run: RunResult, finding: Finding) -> str:
     if recorded is None:
         return "[surface provenance not recorded - not evidence of a live backend] "
     return "[synthetic surface - Sectum's built-in fake, not your stack] "
+
+
+def coverage_gloss(run: RunResult, surface: str, verdict: str) -> str:
+    """The coverage row's plain-English verdict, scoped to the surface it is about.
+
+    `verified clean - no marker retrievable...` over a surface that was Sectum's
+    own in-memory fake is the same over-claim `synthetic_prefix` exists to stop
+    one section above, and the coverage matrix was the only per-row artifact
+    without it: SARIF prefixes and floors, OSCAL prefixes and tags the
+    provenance, the finding rows prefix. A run-level paragraph does not reach a
+    reader tabulating rows - OSCAL's own comment says so.
+
+    NOT_COVERED needs no prefix: it already asserts nothing about the surface.
+    """
+    gloss = _COVERAGE_VERDICT_GLOSS.get(verdict, "")
+    if not gloss or verdict == CoverageVerdict.NOT_COVERED.value:
+        return gloss
+    recorded = run.surface_provenance.get(surface)
+    if recorded == SurfaceProvenance.LIVE.value:
+        return gloss
+    if recorded is None:
+        return f"[surface provenance not recorded - not evidence of a live backend] {gloss}"
+    return f"[synthetic surface - Sectum's built-in fake, not your stack] {gloss}"
+
+
+def scope_methodology(run: RunResult) -> tuple[str, ...]:
+    """The methodology paragraphs, with the isolation claim only where it is earned.
+
+    The first paragraph asserted "this pack attests the isolation of those
+    surfaces" on every pack - including an erasure attestation whose only probe
+    was `gdpr-erasure-verification`. That is verbatim the claim
+    `controls._run_supports` exists to refuse ("a run in which only
+    gdpr-erasure-verification executed used to satisfy this test and ship SOC 2 /
+    ISO / EU AI Act mappings ... in the artifact built for auditors"): the mapping
+    table was fixed and the prose one section above it was not, so both shipped
+    erasure samples carry it.
+    """
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    if exercised and not exercised - _ERASURE_PROBE_IDS:
+        return (_ERASURE_METHODOLOGY, *_SCOPE_METHODOLOGY[1:])
+    return _SCOPE_METHODOLOGY
 
 
 def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:
@@ -437,7 +504,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
 
     flow += [Spacer(1, 12), Paragraph("Scope and methodology", heading)]
     flow += [Paragraph(escape(provenance_statement(run)), body)]
-    flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
+    flow += [Paragraph(escape(text), body) for text in scope_methodology(run)]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
     flow += [Paragraph(line, body) for line in _finding_lines(run.findings, run)]
@@ -453,7 +520,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
             ]
         ]
         for surface, verdict in coverage_rows:
-            gloss = _COVERAGE_VERDICT_GLOSS.get(verdict, "")
+            gloss = coverage_gloss(run, surface, verdict)
             table_data.append(
                 [
                     Paragraph(escape(surface), body),

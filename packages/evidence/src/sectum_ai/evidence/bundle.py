@@ -312,12 +312,11 @@ def verify_bundle(
     # A bundle that binds a PDF and does not carry it FAILs below. `verify_pack`
     # emits its own, non-failing "not supplied" note for the standalone case, which
     # is the right answer there and the wrong one here - drop it so the bundle's
-    # verdict is the only `audit-pdf` line.
-    checks.extend(
-        check
-        for check in pack_result.checks
-        if not (check.name == "audit-pdf" and pdf_bytes is None)
-    )
+    # verdict is the only `audit-pdf` line. Its verdict on the FIRST present PDF is
+    # dropped too and re-stated below: it lands under the bare name `audit-pdf`,
+    # so on a bundle carrying two documents the second failure named its member
+    # and the first did not - the one a reader most needs named.
+    checks.extend(check for check in pack_result.checks if check.name != "audit-pdf")
     for name in present_pdfs:
         if pack.pdf_ref is None:
             # verify_pack checks a PDF only when the pack binds one; a bundled PDF
@@ -327,7 +326,7 @@ def verify_bundle(
                     f"audit-pdf:{name}", False, "the pack binds no pdf_ref, so this PDF is unbound"
                 )
             )
-        elif name != present_pdfs[0]:
+        else:
             checks.append(_check_pdf(pack.pdf_ref, member_bytes[name], name=f"audit-pdf:{name}"))
     if pack.pdf_ref is not None and pdf_bytes is None:
         checks.append(

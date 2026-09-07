@@ -57,7 +57,7 @@ from sectum_ai.evidence.controls import (
     live_surfaces,
     mapping_requirement,
 )
-from sectum_ai.evidence.labels import backing_surface, leak_label
+from sectum_ai.evidence.labels import backing_surface, is_cross_principal, leak_label
 from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus, SurfaceProvenance
 
 if TYPE_CHECKING:
@@ -234,9 +234,15 @@ def _finding(
         objective = "erasure verification"
         failed = has_residual
         verdict = (
-            "Sectum AI found markers remaining, or presumed retained, after the erasure "
-            f"on {', '.join(residual_surfaces)}; the erasure objective is not satisfied "
-            "for this run."
+            # Three distinct failures reach this line - a marker still retrievable,
+            # a surface with no per-tenant erasure API, and a scan that could not
+            # rule the markers out - and stating the first two over the third
+            # asserted a residue the run never measured. `_erasure_assertion` names
+            # which is which in this same finding's `description`.
+            "Sectum AI could not verify the erasure on "
+            f"{', '.join(residual_surfaces)}: a marker remained, the data is presumed "
+            "retained, or its absence could not be established; the erasure objective "
+            "is not satisfied for this run."
             if failed
             else "Sectum AI verified the erasure on every live surface it scanned for this run."
         )
@@ -347,20 +353,34 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # is NOT_COVERED is scanned-and-unestablished (`erasure` records provenance
     # only for the surfaces in its report), and it is a failure like any other.
     scanned = erasure_scanned_surfaces(run)
+    erasure_run = bool(run.metrics.erasure_coverage)
+    # Keyed on the LIVE surfaces, not on the coverage block's own keys. A live
+    # surface absent from the block entirely was never iterated, so it was neither
+    # verified nor unestablished - it vanished, and this export stated `satisfied`
+    # plus "verified the erasure on every live surface it scanned" in a finding
+    # whose `description` carried `controls._erasure_assertion`'s own words:
+    # "absence could not be established on semantic_cache. This run is not an
+    # attestation." A GRC platform reads `status.state`. `ErasureReport.coverage()`
+    # defaults exactly this case to NOT_COVERED, and `_erasure_assertion` already
+    # defaults it that way - the same hole, fixed there and not here, twice now.
+    coverage = (
+        {
+            surface: run.metrics.erasure_coverage.get(surface, CoverageVerdict.NOT_COVERED.value)
+            for surface in live
+        }
+        if erasure_run
+        else {}
+    )
     residual_surfaces = tuple(
         sorted(
             s
-            for s, v in run.metrics.erasure_coverage.items()
-            if s in live
-            and (
-                (s in scanned and v != CoverageVerdict.ERASED.value)
-                or v == CoverageVerdict.NOT_COVERED.value
-            )
+            for s, v in coverage.items()
+            if (s in scanned and v != CoverageVerdict.ERASED.value)
+            or v == CoverageVerdict.NOT_COVERED.value
         )
     )
-    has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)
+    has_confirmed_leak = any(is_cross_principal(f) for f in attested)
     has_residual = bool(residual_surfaces)
-    erasure_run = bool(run.metrics.erasure_coverage)
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
@@ -403,31 +423,40 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
             "no control finding is stated. The observations describe that synthetic "
             "stack, not any production system."
         )
-    elif erasure_run and not has_confirmed_leak:
-        result_description = (
-            "Sectum AI scanned an erasure across the live configured AI surfaces. "
-            + (
-                f"Markers remained, or were presumed retained, on {', '.join(residual_surfaces)}; "
-                "see the observations and findings."
-                if has_residual
-                else "No marker remained on any live surface scanned."
-            )
-            + excluded
-        )
-    elif has_confirmed_leak:
-        result_description = (
-            "Sectum AI provisioned synthetic tenants seeded with cryptographic "
-            "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. At least one manifest-grounded cross-principal "
-            "leak was confirmed on a live surface; see the observations and findings." + excluded
-        )
     else:
-        result_description = (
+        # COMPOSED, not first-match - the lesson `_erasure_assertion` learned one
+        # module over. A record carrying BOTH a residual erasure and a confirmed
+        # cross-principal leak fell to the isolation branch, and the residue
+        # vanished from the description of the very result that reports it.
+        isolation_lead = (
             "Sectum AI provisioned synthetic tenants seeded with cryptographic "
             "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. No cross-principal leakage was confirmed on "
-            "the live surfaces tested." + excluded
+            "configured AI surfaces. "
         )
+        parts: list[str] = []
+        if erasure_run:
+            parts.append(
+                "Sectum AI scanned an erasure across the live configured AI surfaces. "
+                + (
+                    f"The erasure is unverified on {', '.join(residual_surfaces)}: a marker "
+                    "remained, the data is presumed retained, or its absence could not be "
+                    "established; see the observations and findings."
+                    if has_residual
+                    else "No marker remained on any live surface scanned."
+                )
+            )
+        if has_confirmed_leak:
+            parts.append(
+                isolation_lead + "At least one manifest-grounded cross-principal leak was "
+                "confirmed on a live surface; see the observations and findings."
+            )
+        elif not erasure_run:
+            # An erasure run did not test isolation, so it says nothing either way.
+            parts.append(
+                isolation_lead + "No cross-principal leakage was confirmed on the live "
+                "surfaces tested."
+            )
+        result_description = " ".join(parts) + excluded
 
     result: dict[str, Any] = {
         "uuid": _uuid(run.run_id, "result"),

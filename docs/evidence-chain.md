@@ -114,11 +114,19 @@ evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-wh
 `sectum-ai verify` prints one line per check. On a **pack**: `schema-version`,
 `timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
 `audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
-`in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings` when the flags,
-the pack or its siblings call for them. On a **run-pack bundle** (a `.zip`), one
-`member:<name>` line per listed member comes first and the pack's own checks
-follow, with the in-toto line naming the member it re-checked
-(`in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)
+`run-record`, `in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings`
+when the flags, the pack or its siblings call for them. `run-record` re-checks
+the `run.json` beside the pack against the record the pack attests — `probe` and
+`report` write both, and `score` prefers `run.json`, so an edited one graded a
+record the pack does not vouch for. Which neighbouring files a pack claims is
+decided by its filename first and, for a name Sectum does not generate, by which
+of them binds this pack's run digest; every other candidate is listed under
+`unclaimed-siblings` rather than judged, because a folder is not a closed
+container and calling another pack's genuine document altered is the worst false
+alarm this tool can raise. On a **run-pack bundle** (a `.zip`) it *is* a closed
+container: one `member:<name>` line per listed member comes first and the pack's
+own checks follow, each PDF and sidecar line naming the member it re-checked
+(`audit-pdf:audit-pack.pdf`, `in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)
 also carries `run.json`, so it prints `bundled-run`; an `evidence-bundle.zip`
 carries none and prints nothing for it. An unreadable archive, a duplicate member
 name, a bad digest manifest and a missing evidence member add `bundle`,

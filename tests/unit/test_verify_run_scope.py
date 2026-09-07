@@ -13,6 +13,7 @@ the library reports, the command line sets policy.
 
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from typer.testing import CliRunner
@@ -23,8 +24,11 @@ from sectum_ai.evidence.pdf import provenance_statement
 from sectum_ai.evidence.verify import Check, VerificationResult
 from sectum_ai.spec import (
     EvidencePack,
+    Finding,
+    FindingStatus,
     GroundTruthManifest,
     RunResult,
+    Severity,
     Surface,
     SurfaceProvenance,
     canonical_hash,
@@ -345,3 +349,122 @@ def test_verify_binds_the_manifest_on_a_bundle_too(tmp_path: Path) -> None:
     assert plain.exit_code == 0, plain.output
     assert "manifest-hash" not in plain.output, plain.output
     assert "--manifest <manifest.json>" in plain.output, plain.output
+
+
+def test_verify_binds_the_run_record_beside_the_pack(tmp_path: Path) -> None:
+    # `verify_bundle` has bound `run.json` since the bundle existed. The
+    # standalone path neither bound it NOR named it unclaimed, so deleting every
+    # finding from `run.json` left `verify` at exit 0 with no line about it - and
+    # `score`, which PREFERS `run.json` over the pack, then graded the emptied
+    # record A. `probe` and `report` always write that file, so this is the
+    # ordinary shipped flow, not a third-party record.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack, flags = str(tmp_path / "evidence.json"), ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", pack, *flags])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] run-record: run.json matches the attested run" in ok.output, ok.output
+
+    run_path = tmp_path / "run.json"
+    emptied = json.loads(run_path.read_text())
+    assert emptied["findings"], "the demo run must have findings to delete"
+    emptied["findings"] = []
+    run_path.write_text(json.dumps(emptied))
+
+    tampered = _runner.invoke(app, ["verify", pack, *flags])
+    assert tampered.exit_code == 4, tampered.output
+    assert "[FAIL] run-record" in tampered.output, tampered.output
+
+
+def test_the_erasure_pack_does_not_bind_the_probe_runs_record(tmp_path: Path) -> None:
+    # The `run.json` beside an erasure attestation is the PROBE run's; the
+    # erasure run's record lives only inside the attestation. Binding it would
+    # report a genuine file as altered - the false alarm the per-pack sibling
+    # table exists to avoid - so it is NAMED as unclaimed instead.
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", "Acme Robotics"]
+    ).exit_code in (0, 2, 3)
+    result = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert "[FAIL] run-record" not in result.output, result.output
+    assert "[ok] run-record" not in result.output, result.output
+    assert (
+        "[ok] unclaimed-siblings: run.json sits beside this pack and is not bound by it"
+        in result.output
+    ), result.output
+
+
+def _finding_on(surface: Surface) -> Finding:
+    return Finding(
+        finding_id=f"f-{surface.value}",
+        probe_id="cross-tenant-retrieval",
+        severity=Severity.CRITICAL,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=uuid4(),
+        observed_in_tenant_id=uuid4(),
+        surface=surface,
+    )
+
+
+def _run_with(provenance: dict[str, str], *findings: Finding) -> RunResult:
+    return _run(provenance).model_copy(update={"findings": findings})
+
+
+def test_a_surface_the_findings_rest_on_but_the_block_omits_is_not_live() -> None:
+    # The block records the surfaces a run ACCOUNTED for, and this gate read it
+    # alone: a pack recording only its live surfaces passed `--require-live` over
+    # confirmed findings on an unrecorded one. Unknown is not live.
+    run = _run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE))
+    result = verify_pack(build_evidence_pack(run, _MANIFEST), require_live=True)
+    assert not result.passed
+    check = _scope(result)
+    assert not check.ok
+    assert Surface.SEMANTIC_CACHE.value in check.detail, check.detail
+    assert "never recorded" in check.detail, check.detail
+
+
+def test_the_unaccounted_surface_is_still_reported_when_synthetic_is_allowed() -> None:
+    # Same policy split as every other scope verdict: the library reports, the CLI
+    # decides. Silence under `--allow-synthetic` would drop the only line saying
+    # the pack cannot account for where some of its findings came from.
+    run = _run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE))
+    result = verify_pack(build_evidence_pack(run, _MANIFEST))
+    assert result.passed
+    assert Surface.SEMANTIC_CACHE.value in _scope(result).detail
+
+
+def test_a_kv_cache_finding_is_accounted_for_by_the_model_adapter() -> None:
+    # The one finding surface that is deliberately not its own provenance key: the
+    # KV timing probe names the cache while the model adapter is what ran. Reading
+    # `finding.surface` here would report every KV run as unaccounted.
+    run = _run_with(
+        {Surface.MODEL_ADAPTER.value: SurfaceProvenance.LIVE.value},
+        _finding_on(Surface.KV_CACHE),
+    )
+    check = _scope(verify_pack(build_evidence_pack(run, _MANIFEST), require_live=True))
+    assert check.ok, check.detail
+    assert check.detail == "every surface this run exercised was a live backend"
+
+
+def test_the_audit_pdf_names_a_surface_its_provenance_block_omits() -> None:
+    # "These findings describe those systems" was false for the findings resting on
+    # a surface the block never listed - in the paragraph that fixes the whole
+    # document's subject.
+    statement = provenance_statement(_run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE)))
+    assert "every surface exercised by this run" not in statement, statement
+    assert Surface.SEMANTIC_CACHE.value in statement, statement
+    assert "never recorded" in statement, statement

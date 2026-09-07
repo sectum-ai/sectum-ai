@@ -236,3 +236,49 @@ def test_an_unrecorded_surface_is_not_told_it_describes_a_fake() -> None:
     message = sarif["runs"][0]["results"][0]["message"]["text"]
     assert message.startswith("[surface provenance not recorded"), message
     assert "built-in fake" not in message
+
+
+def test_a_run_in_which_nothing_executed_is_not_a_clean_scan() -> None:
+    # `results: []` was the projection of BOTH "we tested and found nothing" and
+    # "nothing was tested" - identical in a code-scanning tab, where an empty tab
+    # reads as assurance. Every sibling projection states what ran: `score` rule 1
+    # refuses a PASS for a probe that did not run, the PDF prints the probes
+    # exercised, OSCAL lists its reviewed controls.
+    nothing = run_to_sarif(_run())["runs"][0]
+    assert nothing["results"] == []
+    assert nothing["properties"]["probesExercised"] == []
+    notifications = nothing["invocations"][0]["toolExecutionNotifications"]
+    assert [n["descriptor"]["id"] for n in notifications] == ["sectum.no-probe-executed"]
+    assert "ABSENT scan, not a clean one" in notifications[0]["message"]["text"]
+
+
+def test_a_clean_run_that_did_execute_says_which_probes_ran() -> None:
+    ran = _run().model_copy(update={"probe_versions": {"cross-tenant-retrieval": "1.0"}})
+    projected = run_to_sarif(ran)["runs"][0]
+    assert projected["results"] == []
+    assert projected["properties"]["probesExercised"] == ["cross-tenant-retrieval"]
+    assert "toolExecutionNotifications" not in projected["invocations"][0]
+
+
+def test_a_finding_counts_as_proof_its_probe_ran() -> None:
+    # The same rule `score._confirmed_probe_ids` applies: a record whose
+    # bookkeeping disagrees with its own findings cannot report that nothing ran.
+    projected = run_to_sarif(_run(_finding("f-1")))["runs"][0]
+    assert projected["properties"]["probesExercised"], projected["properties"]
+    assert "toolExecutionNotifications" not in projected["invocations"][0]
+
+
+def test_an_unverified_residue_is_a_candidate_not_a_finding() -> None:
+    # `leak_label` gave every residual finding the same phrase whatever its
+    # status, so an UNVERIFIED one - a surface with no per-tenant erasure API,
+    # whose absence was never established - read "CRITICAL residual-data finding"
+    # in the Security tab beside a marker that really was still retrievable. The
+    # cross-principal labels have said leak-vs-candidate all along.
+    same = _finding("f-r").model_copy(update={"observed_in_tenant_id": _OWNER})
+    confirmed = run_to_sarif(_run(same))["runs"][0]["results"][0]["message"]["text"]
+    assert "residual-data finding" in confirmed, confirmed
+
+    unverified = same.model_copy(update={"status": FindingStatus.UNVERIFIED})
+    text = run_to_sarif(_run(unverified))["runs"][0]["results"][0]["message"]["text"]
+    assert "residual-data candidate" in text, text
+    assert "residual-data finding" not in text, text
