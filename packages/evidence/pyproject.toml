@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "sectum-ai-spec",
-    "reportlab>=4",
+    "reportlab>=5.0.1",
 ]
 
 [project.optional-dependencies]
