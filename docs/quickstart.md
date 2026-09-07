@@ -139,9 +139,12 @@ fingerprints:
 sectum-ai erasure --subject subject.yaml --config sectum-ai.yaml
 ```
 
-A surface is `ERASED` only when every supplied id is gone **and** no supplied content
-still surfaces; every other surface reads `NOT_COVERED`, so the attestation never
-implies coverage it did not verify. Fingerprint probing is best-effort — a clean
+This check runs **after** the controller's deletion, so it establishes *absence*
+and never an erasure: a surface where every supplied id is gone **and** no supplied
+content still surfaces reads `ABSENCE CHECKED`, recorded `NOT_COVERED` in the
+coverage block, so the attestation never implies coverage it did not verify. A
+surviving id or a phrase that still surfaces reads `RESIDUAL DATA`. Only Class 11,
+which plants canaries and counts them *before* the erasure, can attest `ERASED`. Fingerprint probing is best-effort — a clean
 result is evidence the content no longer surfaces, not proof of absence. On the
 model surface the check is prefix-continuation against two controls — a
 same-shaped prefix naming nobody, and (on a per-tenant model) the same prefix as

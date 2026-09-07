@@ -2261,6 +2261,10 @@ def _emit_erasure_attestation(
                 for surface in report.surfaces
                 if surface.erasure_supported
                 and not surface.unverifiable_after
+                # A SUPPLIED count is not a measurement either: the A3 check runs
+                # after the deletion, so `0` here would assert a residue number
+                # over a surface nothing was ever established to be on.
+                and surface.baseline_observed
                 and surface.markers_before > 0
             },
             # The caveat count is the same claim about a backend with no erasure
@@ -2270,6 +2274,7 @@ def _emit_erasure_attestation(
                 for surface in report.surfaces
                 if not surface.erasure_supported
                 and not surface.unverifiable_after
+                and surface.baseline_observed
                 and surface.markers_before > 0
             },
             erasure_coverage={
@@ -2296,10 +2301,15 @@ def _emit_erasure_attestation(
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
 
     for surface in report.surfaces:
-        typer.echo(
-            f"{surface.surface.value}: {surface.markers_before} markers before, "
-            f"{surface.residual_after} after -> {surface.verdict}"
+        # "N markers before" is a measurement on the Class 11 path and a count of
+        # what the manifest ASKED about on the A3 one, where nothing was scanned
+        # before the controller's deletion. One sentence cannot mean both.
+        counted = (
+            f"{surface.markers_before} markers before, {surface.residual_after} after"
+            if surface.baseline_observed
+            else f"{surface.markers_before} checked, {surface.residual_after} still present"
         )
+        typer.echo(f"{surface.surface.value}: {counted} -> {surface.verdict}")
         # "0 after" reads as a purge; say when it only means "not in the page".
         if surface.unverifiable_after:
             # The backend's own words when it gave them: a capped search index,
@@ -2381,6 +2391,24 @@ def _emit_erasure_attestation(
             err=True,
         )
         raise typer.Exit(code=3)
+    # The A3 data-subject check runs only AFTER the controller's deletion, so a
+    # clean result is evidence of ABSENCE and never an attested erasure. It used
+    # to print "ERASURE VERIFIED" at exit 0 over a manifest of record ids that
+    # never existed - the vacuous attestation `SurfaceErasure.erased` refuses on
+    # the Class 11 path, reached by giving the shared field a second meaning.
+    checked = [s.surface.value for s in report.surfaces if not s.baseline_observed]
+    if checked and len(checked) == len(report.surfaces):
+        typer.echo(
+            f"NO RESIDUAL FOUND: none of the subject's records or content still "
+            f"surfaces on {', '.join(checked)}."
+        )
+        typer.echo(
+            "  scope: this check runs after the controller's deletion, so it establishes "
+            "absence on the surfaces scanned - it is NOT an attested erasure, and the "
+            "coverage block records these surfaces as NOT_COVERED.",
+            err=True,
+        )
+        return
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]

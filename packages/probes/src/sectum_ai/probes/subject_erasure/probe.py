@@ -210,6 +210,7 @@ class SubjectErasureProbe:
                             surface=Surface.VECTOR_DB,
                             markers_before=len(ids) + len(phrases),
                             residual_after=len(present) + len(surfacing),
+                            baseline_observed=False,
                         )
                     )
                 findings.extend(
@@ -307,6 +308,7 @@ class SubjectErasureProbe:
                         surface=Surface.AGENT_MEMORY,
                         markers_before=len(phrases),
                         residual_after=len(surfacing),
+                        baseline_observed=False,
                     )
                 )
                 findings.extend(
@@ -327,6 +329,7 @@ class SubjectErasureProbe:
                         surface=Surface.SEARCH_INDEX,
                         markers_before=len(phrases),
                         residual_after=len(surfacing),
+                        baseline_observed=False,
                     )
                 )
                 findings.extend(
@@ -385,7 +388,15 @@ class SubjectErasureProbe:
 
     @staticmethod
     def _surface(surface: Surface, ids: Sequence[str], present: Sequence[str]) -> SurfaceErasure:
-        return SurfaceErasure(surface=surface, markers_before=len(ids), residual_after=len(present))
+        # `markers_before` is what the manifest ASKED about, never what a scan
+        # observed: this check runs after the controller's deletion, so nothing
+        # establishes the records were ever there. See `SurfaceErasure`.
+        return SurfaceErasure(
+            surface=surface,
+            markers_before=len(ids),
+            residual_after=len(present),
+            baseline_observed=False,
+        )
 
     def _residual_finding(
         self, target: UUID, surface: Surface, subject_ref: str, record_id: str

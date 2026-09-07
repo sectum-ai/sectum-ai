@@ -1,6 +1,8 @@
 """Tests for A3 Phase 0 - the by-id data-subject erasure probe."""
 
+import json
 from collections.abc import Sequence
+from pathlib import Path
 from uuid import UUID
 
 from sectum_ai.adapters import (
@@ -26,9 +28,15 @@ def _populated_store() -> tuple[FakeVectorStore, UUID, str]:
     return store, tenant, docs[0].doc_id
 
 
-def test_subject_erasure_is_erased_when_every_supplied_id_is_gone() -> None:
+def test_a_clean_subject_check_establishes_absence_and_never_attests_erasure() -> None:
+    # This check runs AFTER the controller's deletion, so nothing establishes the
+    # records were ever there: `markers_before` is what the manifest ASKED about.
+    # Sharing `SurfaceErasure` gave that field a second meaning and defeated the
+    # guard its sibling documents - "a surface with no markers before erasure
+    # yields no baseline, so its erasure cannot be attested; `erased` is False
+    # rather than vacuously True". A manifest of ids that never existed produced
+    # `ERASED` on four surfaces and a signed pack asserting ERASURE VERIFIED.
     store, tenant, _present = _populated_store()
-    # Only ids that were never in the store (the deletion already removed them).
     manifest = SubjectManifest(
         subject_ref="user-1", records={Surface.VECTOR_DB: ("deleted-1", "deleted-2")}
     )
@@ -36,8 +44,10 @@ def test_subject_erasure_is_erased_when_every_supplied_id_is_gone() -> None:
     surfaces = {s.surface: s for s in report.surfaces}
     assert surfaces[Surface.VECTOR_DB].markers_before == 2
     assert surfaces[Surface.VECTOR_DB].residual_after == 0
-    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
-    assert report.erased
+    assert not surfaces[Surface.VECTOR_DB].baseline_observed
+    assert surfaces[Surface.VECTOR_DB].verdict == "ABSENCE CHECKED"
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
     assert report.findings == ()
 
 
@@ -150,8 +160,11 @@ def test_subject_erasure_fingerprint_erased_when_content_absent() -> None:
         fingerprints={Surface.VECTOR_DB: ("zzxq nonexistent 90218 phrase",)},
     )
     report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
-    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
-    assert report.erased
+    # Absence checked, never an attested erasure: nothing established the
+    # phrase was there before the controller deleted it.
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_combines_id_and_content_into_one_verdict() -> None:
@@ -401,7 +414,8 @@ def test_subject_erasure_memory_fingerprint_flags_residual_content() -> None:
 
 def test_subject_erasure_memory_fingerprint_erased_when_purged() -> None:
     # The customer's erasure purged the tenant's memory: a recall surfaces nothing,
-    # so the surface reads ERASED.
+    # so the surface reads ABSENCE CHECKED - not ERASED. This probe never saw the
+    # memory before the deletion, so it cannot attest the deletion happened.
     tenant = UUID(int=8)
     memory = FakeMemory()
     memory.remember(tenant, _MEMORY_PHRASE)
@@ -410,8 +424,9 @@ def test_subject_erasure_memory_fingerprint_erased_when_purged() -> None:
         subject_ref="u-mem2", records={}, fingerprints={Surface.AGENT_MEMORY: (_MEMORY_PHRASE,)}
     )
     report = SubjectErasureProbe(memory=memory).verify(tenant, manifest)
-    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.ERASED
-    assert report.erased
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_memory_soft_delete_leaves_residue() -> None:
@@ -467,7 +482,7 @@ def test_subject_erasure_search_fingerprint_flags_residual_content() -> None:
 
 def test_subject_erasure_search_fingerprint_erased_when_purged() -> None:
     # The customer's erasure dropped the tenant's documents from the index: a search
-    # surfaces nothing, so the surface reads ERASED.
+    # surfaces nothing, so the surface reads ABSENCE CHECKED - never ERASED.
     tenant = UUID(int=9)
     search = FakeSearchIndex()
     search.index(tenant, _SEARCH_PHRASE)
@@ -476,8 +491,9 @@ def test_subject_erasure_search_fingerprint_erased_when_purged() -> None:
         subject_ref="u-si2", records={}, fingerprints={Surface.SEARCH_INDEX: (_SEARCH_PHRASE,)}
     )
     report = SubjectErasureProbe(search_index=search).verify(tenant, manifest)
-    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.ERASED
-    assert report.erased
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_search_soft_delete_leaves_residue() -> None:
@@ -824,3 +840,36 @@ def test_a_model_rendering_the_phrase_its_own_way_is_still_recall() -> None:
             return "no record found"
 
     assert not content_recalled(_Blank(phrase), owner, phrase)
+
+
+def test_the_cli_never_signs_a_subject_check_as_a_verified_erasure(tmp_path: Path) -> None:
+    # End to end, because the harm was in the artifact: a manifest of record ids
+    # that never existed printed "1 markers before, 0 after -> ERASED" on four
+    # surfaces, "ERASURE VERIFIED" at exit 0, and a SIGNED pack whose coverage
+    # block said ERASED with a residue count of 0. A DPO reading that pack cannot
+    # tell it from the Class 11 attestation, which earns the word.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text(
+        "subject_ref: dsr-1\n"
+        "records:\n"
+        "  vector_db: [an-id-that-never-existed]\n"
+        "  semantic_cache: [another-id-that-never-existed]\n"
+    )
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    result = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--subject", str(manifest)])
+    assert result.exit_code == 0, result.output
+    assert "ERASURE VERIFIED" not in result.output, result.output
+    assert "markers before" not in result.output, result.output
+    assert "NO RESIDUAL FOUND" in result.output, result.output
+    assert "NOT an attested erasure" in result.output, result.output
+
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    metrics = pack["run_result"]["metrics"]
+    assert "ERASED" not in set(metrics["erasure_coverage"].values()), metrics
+    # And no residue COUNT for a surface nothing was established to be on.
+    assert metrics["erasure_residue"] == {}, metrics

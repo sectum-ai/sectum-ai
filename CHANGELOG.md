@@ -46,6 +46,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A data-subject check signed `ERASED` over a surface nothing was ever found on.**
+  The A3 `erasure --subject` probe shares `SurfaceErasure` with Class 11, whose `erased`
+  guard keys on `markers_before > 0` and whose docstring says a surface with no baseline
+  "cannot be attested — `erased` is `False` rather than **vacuously `True`**". Class 11
+  plants canaries and counts what it finds; A3 runs *after* the controller's deletion and
+  put the count of ids and phrases the manifest **asked about** in the same field. A
+  manifest of record ids that never existed printed `1 markers before, 0 after -> ERASED`
+  on four surfaces, `ERASURE VERIFIED` at exit 0, and a signed pack whose coverage block
+  said `ERASED` with a residue count of `0` — indistinguishable, to the DPO it is built
+  for, from the attestation that earns the word. A supplied count is now marked as such:
+  the surface reads `ABSENCE CHECKED`, the coverage block records `NOT_COVERED`, no
+  residue count is written, and the summary says plainly that this establishes absence
+  and is not an attested erasure. A surviving id or a phrase that still surfaces is still
+  `RESIDUAL DATA` — a hit is a hit either way.
+
 - **The leak detector missed a canary split inside its own body.** `residual_present`
   recovered a re-punctuated canary only where the split landed on a separator — four of a
   40-character canary's 39 positions — while its docstring, the Class 11 page and the

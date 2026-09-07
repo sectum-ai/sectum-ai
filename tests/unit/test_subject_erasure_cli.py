@@ -27,10 +27,15 @@ def test_erasure_subject_verifies_and_writes_attestation(tmp_path: Path) -> None
     result = CliRunner().invoke(
         app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
     )
-    # The default fakes are empty, so the supplied ids are already gone -> ERASED
-    # -> exit 0, and the subject-scoped attestation is written.
+    # The default fakes are empty, so the supplied ids do not surface. That is
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion and nothing establishes the records were ever there, so "1 markers
+    # before, 0 after -> ERASED / ERASURE VERIFIED" was a vacuous attestation - the
+    # one `SurfaceErasure.erased` refuses on the Class 11 path.
     assert result.exit_code == 0, result.output
-    assert "ERASURE VERIFIED" in result.output
+    assert "ERASURE VERIFIED" not in result.output
+    assert "NO RESIDUAL FOUND" in result.output
+    assert "NOT an attested erasure" in result.output
     assert (tmp_path / "erasure-evidence.json").exists()
     assert (tmp_path / "erasure-attestation.intoto.json").exists()
     # The pass states its boundary: the unverifiable surfaces read NOT_COVERED.
@@ -85,7 +90,7 @@ def test_erasure_subject_fingerprint_notes_best_effort(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
     )
-    # Empty fake store -> the content does not surface -> ERASED (exit 0), and the
+    # Empty fake store -> the content does not surface -> ABSENCE CHECKED (exit 0), and the
     # run states that fingerprint probing is best-effort (a clean result is evidence,
     # not proof).
     assert result.exit_code == 0, result.output
@@ -112,7 +117,7 @@ def test_erasure_subject_model_fingerprint_warns_synthetic_and_verifies(tmp_path
         app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
     )
     # The default fake model memorized nothing, so the phrase is not reproduced ->
-    # ERASED (exit 0); and because it is the built-in synthetic model, the run warns
+    # ABSENCE CHECKED (exit 0); and because it is the built-in synthetic model, it warns
     # the model_adapter verdict is not against production weights, and states that
     # content-fingerprint probing is best-effort.
     assert result.exit_code == 0, result.output
@@ -132,7 +137,7 @@ def test_erasure_subject_memory_and_search_fingerprints_warn_synthetic(tmp_path:
     result = CliRunner().invoke(
         app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
     )
-    # The default fakes are empty, so nothing surfaces -> ERASED (exit 0); and because
+    # The default fakes are empty, so nothing surfaces -> ABSENCE CHECKED (exit 0); and because
     # both surfaces run against the built-in synthetic stores, the run names them in
     # the not-production warning so the DSR attestation stays honest.
     assert result.exit_code == 0, result.output

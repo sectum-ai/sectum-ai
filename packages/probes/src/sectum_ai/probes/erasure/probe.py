@@ -95,6 +95,15 @@ class SurfaceErasure:
     # said so. The vector scan's cause is a full similarity page; every other
     # surface's adapter raises with its own, which the operator needs to act on.
     unverifiable_reason: str | None = None
+    # Whether ``markers_before`` was OBSERVED on the surface, or merely supplied.
+    # Class 11 plants its own canaries and counts what it finds, so the count is a
+    # baseline. The A3 data-subject check is post-hoc - the controller has already
+    # deleted - so its count is the ids and phrases the manifest ASKED about, and
+    # nothing establishes they were ever there. Sharing this dataclass silently
+    # changed the meaning of the field the `erased` guard below keys on, so a
+    # manifest of ids that never existed produced "1 markers before, 0 after ->
+    # ERASED" on four surfaces and a signed pack asserting ERASURE VERIFIED.
+    baseline_observed: bool = True
 
     @property
     def erased(self) -> bool:
@@ -102,12 +111,16 @@ class SurfaceErasure:
 
         A surface with no markers before erasure yields no baseline, so its
         erasure cannot be attested - ``erased`` is ``False`` rather than
-        vacuously ``True``. A caveat surface (no programmatic erasure API) is
-        never ``erased``: its data is presumed retained.
+        vacuously ``True``. A count that was SUPPLIED rather than observed is not
+        a baseline either (``baseline_observed``). A caveat surface (no
+        programmatic erasure API) is never ``erased``: its data is presumed
+        retained.
         """
         if not self.erasure_supported:
             return False
         if self.unverifiable_after:
+            return False
+        if not self.baseline_observed:
             return False
         return self.markers_before > 0 and self.residual_after == 0
 
@@ -120,17 +133,22 @@ class SurfaceErasure:
         is presumed retained until it ages out of the backend's retention
         window. Itemized as a caveat, not conflated with a flow failure.
         """
-        return not self.erasure_supported and self.markers_before > 0
+        return not self.erasure_supported and self.markers_before > 0 and self.baseline_observed
 
     @property
     def verdict(self) -> str:
-        """Human-readable: ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, or NO BASELINE."""
-        if self.markers_before == 0:
-            return "NO BASELINE"
-        if not self.erasure_supported:
+        """ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, NO BASELINE, or ABSENCE CHECKED."""
+        if not self.erasure_supported and self.baseline_observed:
             return "ATTESTABLE WITH CAVEAT"
         if self.residual_after > 0:
             return "RESIDUAL DATA"
+        if not self.baseline_observed:
+            # Nothing was established to be there, so nothing can be attested
+            # gone. Distinct from NO BASELINE, which means the scan looked and
+            # found none: here the scan ran only AFTER the controller's deletion.
+            return "ABSENCE CHECKED"
+        if self.markers_before == 0:
+            return "NO BASELINE"
         if self.unverifiable_after:
             return "NOT VERIFIED"
         return "ERASED"
@@ -147,12 +165,17 @@ class SurfaceErasure:
         case in the coverage matrix. The anti-over-claim invariant holds here too:
         this property returns ``ERASED`` only when :attr:`erased` is true.
         """
-        if self.markers_before == 0:
-            return CoverageVerdict.NOT_COVERED
-        if not self.erasure_supported:
+        # A caveat is a statement about the BACKEND (no per-tenant erasure API),
+        # and its `residual_after` is by construction the retained count - so it
+        # is decided first or every caveat surface reads RESIDUAL.
+        if not self.erasure_supported and self.baseline_observed:
             return CoverageVerdict.ATTESTABLE_WITH_CAVEAT
+        # A hit is a hit whether or not a baseline was established: content still
+        # surfacing IS residual data, so this outranks the no-baseline branches.
         if self.residual_after > 0:
             return CoverageVerdict.RESIDUAL
+        if self.markers_before == 0 or not self.baseline_observed:
+            return CoverageVerdict.NOT_COVERED
         if self.unverifiable_after:
             return CoverageVerdict.NOT_COVERED
         return CoverageVerdict.ERASED
