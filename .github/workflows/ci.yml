@@ -201,11 +201,31 @@ jobs:
           # `pytest -m integration` exits 0 when every test SKIPS for an
           # unreachable backend, so the job passed while testing nothing. Assert
           # that tests actually ran.
-          uv run pytest -m integration -q | tee /tmp/integration.log
+          uv run pytest -m integration -q -rs | tee /tmp/integration.log
           grep -qE "[1-9][0-9]* passed" /tmp/integration.log || {
             echo "::error::no integration test ran - every one skipped (backends unreachable?)"
             exit 1
           }
+          # ...and that the ones that ran are ALL of them. "N passed" alone cannot
+          # tell a healthy run from one where three quarters silently skipped:
+          # measured, `12 passed, 39 skipped` and `42 passed, 9 skipped` both match
+          # it and both exit 0. The readiness poll above covers the five HTTP
+          # backends; pgvector and redis come up under a compose healthcheck and
+          # can still refuse the connection (wrong credentials, say), which skips
+          # their tests with no other signal. Milvus is the one deliberate skip,
+          # behind its compose profile.
+          # Captured rather than `grep -qv`: with -q AND -v, grep implementations
+          # disagree about whether the status reflects the inverted match or the
+          # pattern, and the wrong one passes silently. A non-empty capture is
+          # unambiguous everywhere.
+          unreachable="$(grep "^SKIPPED" /tmp/integration.log \
+            | grep "backend not reachable" \
+            | grep -v "Milvus backend not reachable" || true)"
+          if [ -n "$unreachable" ]; then
+            echo "::error::an integration backend was unreachable, so its tests skipped:"
+            echo "$unreachable"
+            exit 1
+          fi
 
       - name: Dump backend logs on failure
         if: failure()

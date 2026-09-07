@@ -40,7 +40,7 @@ this directory is renamed with a `retrieval-pivot-` or `erasure-attestation-`
 prefix, so the command below checks the JSON pack alone and says so on its
 `audit-pdf` line — run the example's `run.sh` to check the PDF binding against
 the pack it was generated with. (The retrieval-pivot `evidence.json` is not
-committed at all — ~293 KB — so its PDF and sidecar have no pack here to bind
+committed at all — ~298 KB — so its PDF and sidecar have no pack here to bind
 to.) These are produced by the offline demo flow, so:
 
 - their timestamp is the local-dev token — `--allow-unanchored` accepts
@@ -99,12 +99,13 @@ cp examples/erasure-attestation/out-residual/erasure-attestation.intoto.json doc
 PDF from its committed pack and fails if they differ, so a renderer change cannot
 leave them stating a rule the tool no longer follows. That guard needs a
 committed pack to render *from*, and the retrieval-pivot pack is not committed
-(next paragraph) — so its PDF is the one shipped artifact that can drift
-silently. Regenerate all three together, and re-read the regenerated
-retrieval-pivot PDF when the renderer changes.
+(next paragraph) — so its PDF **and its in-toto sidecar** are the shipped
+artifacts that can drift silently. The sidecar is checked only for in-toto
+structure, never against a regenerated run. Regenerate all three together, and
+re-read the regenerated retrieval-pivot PDF when the renderer changes.
 
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
-(~293 KB with 343 findings); run the example locally to inspect the JSON
+(~298 KB with 343 findings); run the example locally to inspect the JSON
 structure, or read the
 [`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum_ai/spec/models.py)
 schema.

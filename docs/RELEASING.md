@@ -7,8 +7,9 @@ it.
 A release ships **all five packages** (`sectum-ai`, `sectum-ai-spec`,
 `sectum-ai-probes`, `sectum-ai-adapters`, `sectum-ai-evidence`) to PyPI at the
 same version, with a CycloneDX SBOM and a Sigstore (keyless) bundle per
-distribution, attached to a matching GitHub Release whose notes are taken
-verbatim from `CHANGELOG.md`.
+distribution, attached to a matching GitHub Release whose notes are taken from
+`CHANGELOG.md` — verbatim for a final tag; a pre-release that falls back to
+`[Unreleased]` gets a one-line banner prepended saying so.
 
 The credential story is **OIDC end to end**: PyPI publishes via Trusted
 Publisher, and Sigstore signs against the workflow's short-lived OIDC identity.
@@ -121,8 +122,11 @@ that predated the correctness fixes those releases existed to deliver.
 `tests/unit/test_action_version.py` now fails the build if the Action default, the
 docs table, the docs pin, the README status line, the `docs/index.md` version
 line, or the `SECURITY.md` supported-minor row drifts from the package version,
-so this step cannot be silently skipped again. (The `action.yml` prose is
-unguarded — check it by hand.)
+so this step cannot be silently skipped again. Its seventh test guards a
+*different* version: `docs/data-models.md`'s `current SCHEMA_VERSION is X.Y.Z`
+line, against `sectum_ai.spec.SCHEMA_VERSION`. That moves only when the schema
+does, so update and stage that page in any release that bumps it. (The
+`action.yml` prose is unguarded — check it by hand.)
 
 ### 2. Re-validate the ATLAS technique catalog
 
@@ -195,9 +199,10 @@ is created automatically with the CHANGELOG section as its body.
 | `v0.1.0-alpha.2` | Pre-release (`alpha`) | Falls back to `## [Unreleased]`. |
 | `v0.1.0-beta.3` | Pre-release (`beta`) | Falls back to `## [Unreleased]`. |
 
-Other tag forms never reach the workflow: the `push` trigger is `v*` tags only,
-and `scripts/check_release_version.py` additionally rejects a `v*` tag that is not
-`vX.Y.Z[-pre]` (such as `v0.1`).
+Other tag forms are refused before anything is built. The `push` trigger is `v*`
+tags only, so a tag like `v0.1` does start the workflow — and
+`scripts/check_release_version.py` fails it in the first job, because `v0.1` is not
+`vX.Y.Z[-pre]`. The maintainer gets a red Release run, not silence.
 
 **The workflow has a second trigger.** `workflow_dispatch` runs the staged
 bootstrap: with `publish_package` set to one distribution it publishes exactly

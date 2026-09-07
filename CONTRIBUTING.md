@@ -33,7 +33,8 @@ uv run pre-commit install   # enable git hooks
 | Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
 | Check the lockfile is current | `uv lock --check` (all three CI `uv sync` steps are `--locked`, so commit `uv.lock` with any dependency change) |
-| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)) — **not** a substitute for the pre-commit hook, and not substituted by it: see below. |
+| Run the Extras API contract | The extras are **not** in the dev group, so a plain `uv run pytest` skips all 12 of these silently and the required `Extras API contract` check can be red on a locally-green tree. Install them at the locked versions first: `uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt`, then `grep -E '^(cohere\|huggingface-hub\|transformers\|peft\|openai\|anthropic\|langfuse)==' /tmp/all-reqs.txt > /tmp/extras-reqs.txt && uv pip install -r /tmp/extras-reqs.txt && uv run --no-sync pytest tests/contract/test_extra_api_surface.py`. |
+| Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)) — **not** a substitute for the pre-commit hook, and not substituted by it: see below. Run the examples first and it reports ~60 hits in `examples/*/out/`, which `gitleaks dir` scans despite `.gitignore`; those are the substrate's own canaries, and CI is unaffected because `Secret scan` runs on a fresh checkout. |
 
 **The secret scan is the one gate whose local and CI forms differ.** The
 pre-commit `gitleaks` hook runs `gitleaks git --pre-commit --staged`, which scans

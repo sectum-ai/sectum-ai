@@ -1,10 +1,11 @@
 """Invariant: every evidence pack shipped in docs/samples/ passes ``sectum-ai verify``.
 
-docs/samples/README.md promises "Every pack here verifies under the open-source
-``sectum-ai verify``". These are the flagship public artifacts a prospective
-auditor, DPO, or CISO inspects, so an untampered-but-failing sample is a
-worst-case credibility failure for a product sold on independently verifiable,
-tamper-evident evidence.
+docs/samples/README.md promises "The two erasure ``evidence.json`` packs verify
+under the open-source ``sectum-ai verify``" - it used to say "every pack here",
+which is why this file's title still generalises. These are the flagship public
+artifacts a prospective auditor, DPO, or CISO inspects, so an
+untampered-but-failing sample is a worst-case credibility failure for a product
+sold on independently verifiable, tamper-evident evidence.
 
 This guards against the failure mode that shipped once already: a change to the
 attested-digest scheme (ADR-0016 moved the anchor from the run digest to the

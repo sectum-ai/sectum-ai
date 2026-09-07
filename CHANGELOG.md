@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The integration gate could not tell a healthy run from a mostly-skipped one.**
+  Its guard asserts that *some* test ran, and measured, `12 passed, 39 skipped`
+  and `42 passed, 9 skipped` both satisfy it at exit 0. The readiness poll covers
+  the five HTTP backends, but pgvector and redis come up under a compose
+  healthcheck and can still refuse the connection — wrong credentials, say --
+  which skips their tests with no other signal. The step now fails when any
+  backend other than the deliberately profile-gated Milvus reports unreachable.
 - **Nine compliance frameworks asserted off a live surface no probe drove.**
   `_run_supports` tested `live` as a run-wide existential: subtracting the erasure
   surfaces left a live surface *nothing* touched still satisfying it. A record
