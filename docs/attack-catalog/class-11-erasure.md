@@ -80,9 +80,14 @@ the evidence pack (`RunMetrics.erasure_coverage`, surface → `CoverageVerdict`)
 | `ATTESTABLE_WITH_CAVEAT` | Covered, but the backend exposes no per-tenant erasure API — data presumed retained. |
 | `NOT_COVERED` | Out of scope, not scanned, no pre-erasure baseline, or scanned but **absence could not be established** — **never** evidence of erasure. |
 
-Residue is matched with the same predicate the leak detector uses: normalization-insensitive (case, width, zero-width) **and** the marker's tokens contiguous and
-in order, which catches a canary a backend re-punctuated or wrapped across a log
-line. A surface holding such a copy used to read `ERASED`.
+Residue is matched with the same predicate the leak detector uses, in three
+arms: normalization-insensitive (case, width, zero-width); the marker's tokens
+contiguous and in order, which catches a canary a backend re-punctuated **at a
+separator** (a hyphen rendered as a space or as U+2011); and — for a marker
+carrying an opaque 16-character-or-longer token, which every canary does — the
+alphanumeric projection, which catches one split *inside* that body, where an
+80-column log almost always wraps it. A surface holding any such copy used to
+read `ERASED`.
 
 Two things make a marker unverifiable. Both probes read the vector store with a
 top-50 similarity query, and a page that comes back **full** without a marker is

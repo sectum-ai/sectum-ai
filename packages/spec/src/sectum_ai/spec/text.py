@@ -10,6 +10,13 @@ import re
 import unicodedata
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+# A canary's body is 26 base32 characters (a secret canary's, 48); the longest
+# token in a natural-language phrase or an entity codename is well under this.
+# The projection arm below is scoped to needles carrying one, because that is the
+# only shape where dropping every separator cannot manufacture a coincidence.
+_OPAQUE_TOKEN_LEN = 16
 
 
 def untrusted(text: str) -> str:
@@ -123,14 +130,22 @@ def residual_present(needle: str, haystack: str) -> bool:
     had seen but the scan would not count read as absent - and a surface still
     holding a re-cased copy of the canary was signed ERASED.
 
-    Two arms, the same two every detection tier carries. The substring test, and
-    the marker's tokens contiguous and in order - which recovers a canary the
-    surface RE-PUNCTUATED (a hyphen rendered as a space, as U+2011, or wrapped
-    across a log line). Without the second, the detector called a trace holding
-    such a canary a CONFIRMED CRITICAL leak while this predicate called the same
-    bytes absent, so the erasure scan read ERASED and signed "verified" over it.
-    Two paths, one question, opposite answers - which is the whole reason this
+    Three arms, each recovering a rendering the one before it misses. The
+    substring test. The marker's tokens contiguous and in order - which recovers a
+    canary the surface RE-PUNCTUATED at a separator (a hyphen rendered as a space
+    or as U+2011). Without the second, the detector called a trace holding such a
+    canary a CONFIRMED CRITICAL leak while this predicate called the same bytes
+    absent, so the erasure scan read ERASED and signed "verified" over it. Two
+    paths, one question, opposite answers - which is the whole reason this
     function is shared.
+
+    The second arm requires EXACT token equality, so it recovers only a split that
+    lands on a separator: four of a 40-character canary's 39 positions. A wrap
+    INSIDE the opaque body - where an 80-column log almost always breaks it - was
+    missed, in both directions, for as long as the claim said otherwise. The third
+    arm is the alphanumeric projection, scoped to a needle carrying a token of
+    ``_OPAQUE_TOKEN_LEN`` or more so that dropping every separator cannot
+    manufacture a match out of an unrelated join.
 
     ``max_interposed=0``: contiguous. The entity tier allows one interposed token
     because a paraphrase legitimately splits an entity name; a canary is one
@@ -144,6 +159,24 @@ def residual_present(needle: str, haystack: str) -> bool:
     if normalize_for_match(needle) in normalize_for_match(haystack):
         return True
     wanted = tokenize(needle)
-    if not wanted:
-        return False
-    return ordered_within_span(tokenize(haystack), wanted, max_interposed=0)
+    if wanted and ordered_within_span(tokenize(haystack), wanted, max_interposed=0):
+        return True
+    # Third arm: the alphanumeric projection, for a needle carrying an opaque
+    # token. The token arm above requires EXACT token equality, so it recovers a
+    # split only where one lands on an existing separator - four of a hard
+    # canary's 39 positions. A hard wrap inside the 26-character base32 body, the
+    # overwhelmingly likely place an 80-column log breaks it, was not recovered,
+    # and this predicate is the primary leak detector as well as the erasure
+    # scan's: a leaked canary read as a clean PASS and a surviving one was signed
+    # ERASED. Dropping every separator recovers it, and cannot invent one - the
+    # projection is order-preserving and contiguous, so a reordered, interposed or
+    # merely prefix-matching haystack still fails, and 16+ opaque characters
+    # cannot be produced by a coincidental join.
+    if any(len(token) >= _OPAQUE_TOKEN_LEN for token in wanted):
+        return _squash(needle) in _squash(haystack)
+    return False
+
+
+def _squash(text: str) -> str:
+    """``normalize_for_match`` with every non-alphanumeric character removed."""
+    return _NON_ALNUM_RE.sub("", normalize_for_match(text))

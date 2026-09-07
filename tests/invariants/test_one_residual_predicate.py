@@ -195,3 +195,51 @@ def test_the_shared_predicate_answers_the_detector_s_question() -> None:
         ("unrelated", "an ordinary trace with nothing in it"),
     ):
         assert not residual_present(canary, text), label
+
+
+def test_a_canary_split_inside_its_opaque_body_is_still_present() -> None:
+    # The token arm requires EXACT token equality, so it recovers a split only
+    # where one lands on a separator: 4 of this canary's 39 positions. An 80-column
+    # log wraps inside the 26-character base32 body, and the docstring, this page's
+    # class doc and the CHANGELOG all claimed the arm caught it. It did not - in
+    # BOTH directions, since this is the leak detector as well as the erasure scan:
+    # a leaked canary read as a clean PASS and a survivor was signed ERASED.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    body = canary.index("UURK")
+    # Every split point, not a sampled few: the arm has to be indifferent to where
+    # the wrap lands, which is the whole property the old one lacked.
+    for cut in range(1, len(canary)):
+        wrapped = f"audit prompt={canary[:cut]}\n        {canary[cut:]} ok"
+        assert residual_present(canary, wrapped), (cut, canary[cut - 1 : cut + 1])
+    assert body  # the body starts past the prefix; the loop above covers it
+
+    # A secret canary is the same shape with a longer body.
+    key = "sk-" + "bC9dEf7gHiJkLmNoPqRsTuVwXyZ012345AbCdEfGhIjKlMn"
+    assert residual_present(key, f"key {key[:20]}\n   {key[20:]} end")
+
+
+def test_the_projection_arm_cannot_invent_a_canary() -> None:
+    # Dropping every separator is order-preserving and contiguous, so it recovers
+    # a rendering and never manufactures one.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, text in (
+        ("one character off", canary[:-1] + "V"),
+        ("a different canary", "SECTUM-CANARY-AAAA6HUSUBK7RGQ42MLR2ZMN5U"),
+        ("out of order", " ".join(reversed(canary.split("-")))),
+        ("a token interposed", canary.replace("-", " X ", 1)),
+        ("prefix only", canary[:22]),
+        ("the body without its prefix", canary[14:]),
+        ("unrelated", "an ordinary trace with nothing in it"),
+    ):
+        assert not residual_present(canary, f"row {text} end"), label
+
+
+def test_a_needle_with_no_opaque_token_keeps_the_two_arm_behaviour() -> None:
+    # The projection is scoped to a needle carrying a 16+ character opaque token,
+    # because that is the only shape where joining across a separator cannot be a
+    # coincidence. A name, an SSN and an entity codename are all below it, so
+    # removing their separators must NOT make them match.
+    assert residual_present("Barack Hussein Obama", "row Barack  Hussein\nObama end")
+    assert not residual_present("Barack Hussein Obama", "row BarackHusseinObama end")
+    assert not residual_present("912-34-5678", "ssn 912345678 end")
+    assert not residual_present("ZephyrK3F7A", "codename Zephyr K3F7A end")

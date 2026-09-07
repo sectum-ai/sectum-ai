@@ -46,6 +46,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The leak detector missed a canary split inside its own body.** `residual_present`
+  recovered a re-punctuated canary only where the split landed on a separator — four of a
+  40-character canary's 39 positions — while its docstring, the Class 11 page and the
+  CHANGELOG all claimed it caught one "wrapped across a log line", which is where an
+  80-column log almost always breaks it. This is the primary leak detector *and* the
+  erasure scan: a leaked canary read as a clean PASS, and a surviving one was signed
+  `ERASED`. A third arm matches the alphanumeric projection, scoped to a needle carrying
+  a 16-character-or-longer opaque token so that dropping every separator cannot
+  manufacture a match; every one of the predicate's false-positive guards still holds,
+  and a name, an SSN or an entity codename keeps the two-arm behaviour exactly.
+- **`probe --output json` wrote two warnings to stdout.** They were the only two of the
+  CLI's warnings that omitted `err=True`, so the JSON report began with prose and `jq`
+  read nothing from it — which is the shipped Action's own pipeline: all three of its
+  outputs went empty and the step summary printed "unknown" for a run that confirmed
+  findings, while the gate step's emptiness guard passed because the file was not empty.
+  An AST sweep over the CLI now fails the build if any warning is written to stdout.
+- **An erasure surface that lost its delete API read as an erasure that succeeded.**
+  `_erasure_lost` unioned residue with caveats on both sides, so a surface crossing from
+  `erasure_residue` into `erasure_caveats` — a backend swapped for one with no per-tenant
+  delete API, whose data is *presumed retained* — still counted as scanned. Its caveat
+  findings are deliberately `UNVERIFIED`, so `newly_confirmed` could not fire either:
+  two confirmed residual leaks read `[ok] confirmed_findings: 2 -> 0` under `RESULT: no
+  regression` at exit 0. That is verbatim the harm this signal was written to stop, fixed
+  for the `unverifiable_after` shape and not for its `erasure_supported` sibling.
+- **`[SCENARIO CHANGED]` gated the run and never reached the metric verdicts.** Across a
+  re-seed nothing is comparable — different tenants, markers and corpus — yet every
+  metric line still read `[ok] confirmed_findings: 3 -> 0` and `[ok]
+  retrieval_pivot_rate: 0.4 -> 0`, two lines above a banner saying the comparison is not
+  meaningful. Both renderers now read `not measured`.
+
 - **Deleting one provenance key turned GRADE F into GRADE A.** Withholding an
   unattributable confirmed finding from the letter (the entry below) made the class
   `NOT_COVERED` — and a `NOT_COVERED` class leaves the weighted *denominator*, so the

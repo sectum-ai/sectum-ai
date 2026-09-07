@@ -991,3 +991,95 @@ def test_the_json_stream_carries_only_json(tmp_path: Path) -> None:
     assert json.loads(result.stdout)["regressed"] is True
     assert "surface provenance" in result.stderr, result.stderr
     assert result.stderr not in result.stdout
+
+
+def test_an_erasure_surface_that_lost_its_delete_api_is_a_regression(tmp_path: Path) -> None:
+    # `_erasure_lost` unioned residue with caveats on BOTH sides, so a surface
+    # crossing from `erasure_residue` into `erasure_caveats` still counted as
+    # "scanned" and the gate never fired. That crossing is a backend swapped for
+    # one with no per-tenant delete API - the data is *presumed retained* - and its
+    # caveat findings are deliberately UNVERIFIED, so `newly_confirmed` could not
+    # fire either. Two confirmed residual leaks read `[ok] confirmed_findings:
+    # 2 -> 0` under `RESULT: no regression` at exit 0.
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        _finding("b", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=2, erasure_residue={"vector_db": 2}),
+    )
+    later = _run(
+        _finding("c", status=FindingStatus.UNVERIFIED),
+        metrics=RunMetrics(erasure_caveats={"vector_db": 0}),
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
+    assert "[ok] confirmed_findings" not in cli.output, cli.output
+
+
+def test_a_surface_that_gained_a_delete_api_is_not_a_regression(tmp_path: Path) -> None:
+    # The guard: caveat -> residue is coverage GAINED. Only the direction that
+    # loses a measurement gates.
+    earlier = _run(metrics=RunMetrics(erasure_caveats={"vector_db": 0}))
+    later = _run(metrics=RunMetrics(erasure_residue={"vector_db": 0}))
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 0, cli.output
+    assert "ERASURE NOT RESCANNED" not in cli.output, cli.output
+
+
+def test_a_changed_scenario_makes_every_metric_unmeasured(tmp_path: Path) -> None:
+    # `[SCENARIO CHANGED]` gates the run and never reached `_delta_verdict`, so
+    # every metric line above the banner still read `[ok] N -> 0` - the same
+    # positive assertion ("these leaks were fixed") that the banner one line below
+    # says is not a meaningful comparison. Different tenants, markers and corpus:
+    # the later number is a different measurement, not a smaller one.
+    # Both runs exercise the same probe against the same live surface, so no OTHER
+    # gate can account for the verdicts: `scenario_changed` is the only difference.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=1, per_probe_findings={"rag-entity-bleed": 1}),
+    ).model_copy(update=exercised)
+    later = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
+        update={**exercised, "scenario_hash": "a-different-scenario"}
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[SCENARIO CHANGED]" in cli.output, cli.output
+    assert "[ok]" not in cli.output, cli.output
+    payload = json.loads(
+        runner.invoke(
+            app,
+            [
+                "diff",
+                str(tmp_path / "e.json"),
+                str(tmp_path / "l.json"),
+                "--output",
+                "json",
+            ],
+        ).stdout
+    )
+    assert {m["verdict"] for m in payload["metrics"]} == {"not measured"}, payload["metrics"]

@@ -491,10 +491,25 @@ def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
     residue count (`cli.app` omits it rather than writing a 0 it never measured),
     and its coverage verdict is NOT_COVERED. Without this the drop read as an
     erasure that had succeeded.
+
+    Two ways to stop counting, and the union below caught only one. A surface can
+    also cross from `erasure_residue` into `erasure_caveats` - the backend was
+    swapped for one with no per-tenant delete API, so `delete` raises
+    `ErasureUnsupported` and the data is *presumed retained*. It is still
+    "scanned", so the union saw no loss, and the caveat findings are deliberately
+    UNVERIFIED so `newly_confirmed` could not fire either: two confirmed residual
+    leaks read as `[ok] confirmed_findings: 2 -> 0` under `RESULT: no regression`
+    at exit 0, over a run that never asked the backend to erase anything. That is
+    verbatim the harm this function was written to stop, fixed for the
+    `unverifiable_after` shape and not for its `erasure_supported` sibling.
     """
     earlier_scanned = set(earlier.metrics.erasure_residue) | set(earlier.metrics.erasure_caveats)
     later_scanned = set(later.metrics.erasure_residue) | set(later.metrics.erasure_caveats)
-    return tuple(sorted(earlier_scanned - later_scanned))
+    lost = earlier_scanned - later_scanned
+    # The COUNT is the measurement; a caveat is the absence of one. Only this
+    # direction: caveat -> residue is a surface that gained a delete API.
+    lost |= set(earlier.metrics.erasure_residue) - set(later.metrics.erasure_residue)
+    return tuple(sorted(lost))
 
 
 def _scope_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:

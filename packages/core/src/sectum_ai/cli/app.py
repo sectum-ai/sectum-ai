@@ -595,7 +595,8 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
             f"warning: {', '.join(untrusted(name) for name in modelled_only)} "
             "excluded from the embedding-model gradient - fake-* names carry a "
             "modelled recall, not real vectors, so they cannot be compared "
-            "against a real provider"
+            "against a real provider",
+            err=True,
         )
     if len(real) > 1:
         return embedding_provider_sweep(substrate, real)
@@ -604,7 +605,8 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
         # "comparison" from a config that asked for several.
         typer.echo(
             "warning: no embedding-model gradient recorded - a comparison needs "
-            "two or more real embedding models, and only one was configured"
+            "two or more real embedding models, and only one was configured",
+            err=True,
         )
         return {}
     if isinstance(vector, FakeVectorStore):
@@ -2944,6 +2946,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
         result.boundary_lost,
         result.scope_lost,
         (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
+        scenario_changed=result.scenario_changed,
     )
 
 
@@ -2956,6 +2959,8 @@ def _delta_verdict(
     # `side_channel_effect_sizes[...]`. The probe-id lookup below cannot reach
     # them, so they need their own.
     key_lost: Sequence[str] = (),
+    *,
+    scenario_changed: bool = False,
 ) -> str:
     """The status tag for a metric delta line: regression, informational, or ok.
 
@@ -2963,6 +2968,14 @@ def _delta_verdict(
     "ok": its drop to zero is missing coverage, not a fixed leak, and `[ok]
     per_probe_findings[rag-poisoning]: 24 -> 0` positively asserts the opposite.
     """
+    # Across a RE-SEED nothing is comparable: different tenants, markers and
+    # corpus, so a metric's drop is a different measurement, not a smaller one.
+    # The gate fired and the banner printed, and every metric line above it still
+    # read `[ok] confirmed_findings: 3 -> 0` and `[ok] retrieval_pivot_rate: 0.4
+    # -> 0` - the same positive assertion this function exists to refuse, two
+    # lines above a banner saying the comparison is not meaningful.
+    if scenario_changed:
+        return "not measured"
     # A probe that lost its user boundary, or whose backing surface fell back to
     # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`
     # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.
