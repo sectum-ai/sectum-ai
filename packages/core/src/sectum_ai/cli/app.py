@@ -132,6 +132,7 @@ from sectum_ai.runner import (
 from sectum_ai.score import PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
+    ClassVerdict,
     ConfigError,
     EvidenceError,
     EvidencePack,
@@ -1718,27 +1719,21 @@ _SIBLING_FALLBACK: tuple[tuple[str, ...], ...] = (
     ("evidence.dsse.json",),
     ("run.json",),
 )
-# Slot 3 has no fallback. Every other slot's candidates are named per pack kind
-# (`audit-pack.pdf` vs `erasure-attestation.pdf`), so an unrecognised pack name
-# can still be told from a filename; `run.json` is the one candidate every run
-# writes under the same name, and the table is the ONLY thing that says whether
-# the one beside a pack is that pack's own record. Judging it on a pack Sectum
-# cannot identify reported a genuine probe `run.json` as "altered or replaced
-# after signing" beside any renamed erasure pack. It is named as unclaimed there
-# instead - `_unclaimed_siblings` reads `_SIBLING_FALLBACK`, so it still appears.
-_UNATTRIBUTABLE_BY_NAME: frozenset[int] = frozenset({3})
 
 
 def _sibling_names(pack_path: Path, slot: int) -> tuple[str, ...]:
     """Candidate sibling filenames for ``pack_path`` (0=pdf, 1=in-toto, 2=DSSE, 3=run)."""
     known = _PACK_SIBLINGS.get(pack_path.name)
     if known is None:
-        return () if slot in _UNATTRIBUTABLE_BY_NAME else _SIBLING_FALLBACK[slot]
+        return _SIBLING_FALLBACK[slot]
     return (known[slot],) if known[slot] else ()
 
 
+_Binds = Callable[[Path, EvidencePack], bool]
+
+
 def _claimed_siblings(
-    pack_path: Path, slot: int, binds: Callable[[Path], bool]
+    pack_path: Path, slot: int, pack: EvidencePack, binds: _Binds
 ) -> tuple[list[Path], list[str]]:
     """Split the slot's existing candidates into the ones to judge and the ones to name.
 
@@ -1760,7 +1755,7 @@ def _claimed_siblings(
     # Content decides first: a candidate that binds this pack's run digest is this
     # pack's, whoever else declares a file by that name (a pack copied to another
     # filename binds the very same siblings its original does).
-    bound = [candidate for candidate in present if binds(candidate)]
+    bound = [candidate for candidate in present if binds(candidate, pack)]
     # Only when NOTHING binds does the question "tampered, or somebody else's?"
     # arise, and the table answers it where it can: a candidate that is ANOTHER
     # pack's declared sibling, with that pack in the same folder, is that pack's.
@@ -1769,16 +1764,29 @@ def _claimed_siblings(
     # reported as a mismatch, with VERIFICATION FAILED over an untampered folder.
     # A candidate no present pack claims is still judged, so a tampered sidecar
     # remains a failure rather than quietly becoming somebody else's file.
-    judged = bound or [c for c in present if not _owned_elsewhere(pack_path, c.name, slot)]
+    judged = bound or [c for c in present if not _owned_elsewhere(pack_path, c.name, slot, binds)]
     return judged, sorted(c.name for c in present if c not in judged)
 
 
-def _owned_elsewhere(pack_path: Path, name: str, slot: int) -> bool:
-    """True when ``name`` is another pack's declared sibling and that pack is present."""
-    return any(
-        owner != pack_path.name and siblings[slot] == name and (pack_path.parent / owner).exists()
-        for owner, siblings in _PACK_SIBLINGS.items()
-    )
+def _owned_elsewhere(pack_path: Path, name: str, slot: int, binds: _Binds) -> bool:
+    """True when ``name`` is another PRESENT pack's sibling *and that pack binds it*.
+
+    ``.exists()`` alone was the whole test, so any file named `evidence.json` -
+    sixteen bytes of garbage will do - turned a `[FAIL] audit-pdf: altered or
+    replaced after signing` on a renamed pack into `[ok]` at exit 0. "Somebody
+    else's document" is a claim about a binding, and a binding is checkable: the
+    owner has to parse as a pack that actually binds this file.
+    """
+    for owner, siblings in _PACK_SIBLINGS.items():
+        if owner == pack_path.name or siblings[slot] != name:
+            continue
+        try:
+            other = EvidencePack.model_validate_json((pack_path.parent / owner).read_bytes())
+        except (OSError, ValueError):
+            continue
+        if binds(pack_path.parent / name, other):
+            return True
+    return False
 
 
 def _sibling_paths(pack_path: Path, slot: int) -> list[Path]:
@@ -1810,7 +1818,37 @@ def _unclaimed_siblings(pack_path: Path, slot: int) -> list[str]:
     )
 
 
-def _sibling_audit_pdf(pack_path: Path, pdf_ref: str | None) -> tuple[bytes | None, list[str]]:
+def _binds_pdf(path: Path, pack: EvidencePack) -> bool:
+    try:
+        return pack.pdf_ref is not None and sha256_hex(path.read_bytes()) == pack.pdf_ref
+    except OSError:
+        return False
+
+
+def _binds_in_toto(path: Path, pack: EvidencePack) -> bool:
+    try:
+        verify_in_toto_statement(json.loads(path.read_text()), pack)
+    except (OSError, ValueError, EvidenceError):
+        return False
+    return True
+
+
+def _binds_dsse(path: Path, pack: EvidencePack) -> bool:
+    try:
+        verify_dsse_envelope(json.loads(path.read_text()), pack)
+    except (OSError, ValueError, EvidenceError):
+        return False
+    return True
+
+
+def _binds_run_record(path: Path, pack: EvidencePack) -> bool:
+    try:
+        return bool(json.loads(path.read_text()) == json.loads(pack.run_result.model_dump_json()))
+    except (OSError, ValueError):
+        return False
+
+
+def _sibling_audit_pdf(pack_path: Path, pack: EvidencePack) -> tuple[bytes | None, list[str]]:
     """The audit PDF beside ``pack_path`` that this pack binds, and the ones it does not.
 
     The ``report`` and ``erasure`` commands write the audit PDF next to the
@@ -1828,9 +1866,7 @@ def _sibling_audit_pdf(pack_path: Path, pdf_ref: str | None) -> tuple[bytes | No
     Falling back to the first when none matches keeps a single tampered PDF a
     FAIL instead of quietly becoming an unclaimed sibling.
     """
-    judged, others = _claimed_siblings(
-        pack_path, 0, lambda p: pdf_ref is not None and sha256_hex(p.read_bytes()) == pdf_ref
-    )
+    judged, others = _claimed_siblings(pack_path, 0, pack, _binds_pdf)
     if not judged:
         return None, others
     # `verify_pack` re-hashes ONE document against `pdf_ref`; the rest are named.
@@ -2012,7 +2048,7 @@ def verify(
     # Re-hash the audit PDF if it sits beside the pack (report/erasure write
     # audit-pack.pdf / erasure-attestation.pdf next to the json); its hash is
     # bound into the attested digest, so a swapped PDF fails verification.
-    pdf_bytes, other_pdfs = _sibling_audit_pdf(pack, evidence.pdf_ref)
+    pdf_bytes, other_pdfs = _sibling_audit_pdf(pack, evidence)
     unclaimed = sorted(
         {name for slot in (0, 1, 2, 3) for name in _unclaimed_siblings(pack, slot)}
         | set(other_pdfs)
@@ -2035,35 +2071,28 @@ def verify(
     # Re-verify the in-toto sidecar if report/erasure wrote one beside the pack:
     # a swapped or corrupt statement that no longer binds this pack's run digest
     # is itemized as a failed check, never silently trusted.
-    # The run record beside the pack. `verify_bundle` has bound this since the
-    # bundle existed; the standalone path neither bound it NOR named it as
-    # unclaimed, so deleting every finding from `run.json` left `verify` at exit 0
-    # with no line about it - and `score`, which prefers `run.json` over the pack,
-    # then graded the emptied record A.
-    for run_path in _sibling_paths(pack, 3):
-        try:
-            beside = json.loads(run_path.read_text())
-        except (OSError, ValueError) as error:
-            typer.echo(f"[FAIL] run-record: unreadable {untrusted(run_path.name)}: {error}")
-            passed = False
-            continue
-        if beside == json.loads(evidence.run_result.model_dump_json()):
+    # The run record beside the pack. `verify_bundle` binds this because a bundle
+    # is a closed container that LISTS it; a directory is not, so here it is
+    # STATED and never judged. Judged, it accused the ordinary `probe; report;
+    # probe` workflow - whose second run legitimately rewrites `run.json` - of
+    # tampering, and `verify` cannot tell a later run from an edited one: neither
+    # is anchored. Silence was the original defect (`score` prefers `run.json`, so
+    # an emptied one graded A while `verify` said nothing), and an accusation is
+    # the wrong cure. Both outcomes name the consequence instead.
+    run_paths, other_runs = _claimed_siblings(pack, 3, evidence, _binds_run_record)
+    unclaimed = sorted(set(unclaimed) | set(other_runs))
+    for run_path in run_paths:
+        if _binds_run_record(run_path, evidence):
             typer.echo(f"[ok] run-record: {untrusted(run_path.name)} matches the attested run")
         else:
             typer.echo(
-                f"[FAIL] run-record: {untrusted(run_path.name)} does not match the run this "
-                "pack attests; it was altered or replaced after signing"
+                f"[ok] run-record: {untrusted(run_path.name)} is NOT the run this pack "
+                "attests - a later run, or an altered copy; this verdict says nothing "
+                "about it, and `sectum-ai score` reads that file in preference to this "
+                "pack, so point `score` at the pack to be sure what you are grading"
             )
-            passed = False
 
-    def _binds_in_toto(path: Path) -> bool:
-        try:
-            verify_in_toto_statement(json.loads(path.read_text()), evidence)
-        except (OSError, ValueError, EvidenceError):
-            return False
-        return True
-
-    intoto_paths, other_intoto = _claimed_siblings(pack, 1, _binds_in_toto)
+    intoto_paths, other_intoto = _claimed_siblings(pack, 1, evidence, _binds_in_toto)
     unclaimed = sorted(set(unclaimed) | set(other_intoto))
     for index, intoto_path in enumerate(intoto_paths):
         label = "in-toto-attestation" if index == 0 else f"in-toto-attestation:{intoto_path.name}"
@@ -2076,14 +2105,7 @@ def verify(
 
     # Re-verify the DSSE envelope sidecar if report wrote one: its in-toto
     # statement must still bind this pack's run digest (a swapped envelope fails).
-    def _binds_dsse(path: Path) -> bool:
-        try:
-            verify_dsse_envelope(json.loads(path.read_text()), evidence)
-        except (OSError, ValueError, EvidenceError):
-            return False
-        return True
-
-    dsse_paths, other_dsse = _claimed_siblings(pack, 2, _binds_dsse)
+    dsse_paths, other_dsse = _claimed_siblings(pack, 2, evidence, _binds_dsse)
     unclaimed = sorted(set(unclaimed) | set(other_dsse))
     for index, dsse_path in enumerate(dsse_paths):
         label = "dsse-envelope" if index == 0 else f"dsse-envelope:{dsse_path.name}"
@@ -3340,7 +3362,15 @@ def _render_scorecard(card: IsolationScore, run: RunResult, source: Path) -> Non
     for line in _scope_lines(card, run):
         typer.echo(line)
     if card.capped_by is not None:
-        typer.echo(f"  capped by a failing {card.capped_by.value}-band class")
+        # Two causes floor the letter now, and naming the wrong one sends the
+        # reader to the wrong line of the table below.
+        failing = {c.severity for c in card.classes if c.verdict is ClassVerdict.FAIL}
+        typer.echo(
+            f"  capped by a failing {card.capped_by.value}-band class"
+            if card.capped_by in failing
+            else f"  capped by confirmed findings in a {card.capped_by.value}-band class that "
+            "rest on a surface this run's provenance does not record"
+        )
     typer.echo("")
     for entry in card.classes:
         # Both, not either: the "N findings withheld" note is set only on a

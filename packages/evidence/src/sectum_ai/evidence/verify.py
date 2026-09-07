@@ -16,8 +16,10 @@ Integrity vs. subject: every check above concerns the *bytes*. A run against
 Sectum's own in-memory fakes passes all of them, so "the signature is valid" and
 "this describes a real system" were unrelated facts and only the first was
 checked. ``require_live=True`` closes that: a pack whose run touched no live backend
-is refused rather than read as an attestation. The CLI turns it on by default; the
-library defaults to ``False`` (it reports, the CLI decides).
+is refused rather than read as an attestation - as is one whose findings rest on
+a surface its provenance never recorded, since unknown is not live either. The CLI
+turns it on by default; the library defaults to ``False`` (it reports, the CLI
+decides).
 """
 
 import json
@@ -456,7 +458,8 @@ def _check_run_scope(pack: EvidencePack, require_live: bool) -> Check:
             "run-scope",
             ok=not require_live,
             detail=(
-                f"every one of the {len(provenance)} surfaces this run RECORDED was a "
+                f"every one of the {len(provenance)} "
+                f"surface{'' if len(provenance) == 1 else 's'} this run RECORDED was a "
                 f"live backend{unaccounted_detail}"
                 + ("" if require_live else "; accepted by --allow-synthetic")
             ),

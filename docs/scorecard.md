@@ -23,7 +23,7 @@ Multi-tenant isolation: GRADE F   (confidence: high - 10/11 classes covered)
   ...
   Class 13  Multi-modal RAG entity-bleed    NOT_COVERED critical probe did not run - ...
 
-  Methodology: docs/scorecard.md (v1.3) - weighted 0.00 over the covered classes; coverage 0.88.
+  Methodology: docs/scorecard.md (v1.4) - weighted 0.00 over the covered classes; coverage 0.88.
   Untested classes lower confidence, never the grade.
 ```
 
@@ -148,11 +148,15 @@ over-claim. Six rules prevent it:
 
 ### What a `PASS` line can still tell you
 
-A `PASS` is never silent about what it could not establish. Four notes attach to
+A `PASS` is never silent about what it could not establish. Five notes attach to
 one:
 
 - **findings withheld** — confirmed findings on a surface backed by the built-in
   fake, counted and named but kept out of the letter (rule 5's mixed-run half).
+- **findings not attributable** — confirmed findings resting on a surface this
+  run's provenance does not record. Withheld like rule 5's, and named the same
+  way, but unlike a known fake they are not evidence the operator is *clear*
+  either: they cap the letter at the class's band (rule 7).
 - **unverified findings** — the probe ran and could not establish the negative.
   Class 1 is the standing case: a cross-principal fetch that returns `200` with an
   empty body is not an enforced deny, and `AccessOutcome.DENIED` is produced by no
@@ -207,8 +211,12 @@ folding it in would conflate two different claims. Class 12 is the
 1. **Per class** — a class is a *candidate* for grading when at least one of its probes
    appears in the run's `probe_versions`, **or** produced a confirmed finding (a finding
    is itself proof its probe ran — rule 4). A candidate is still `NOT_COVERED` if rule 5
-   (every backing surface was the built-in fake) or rule 6 (the backing surface cannot be
-   attributed to a class) applies — both decline to grade a class that *did* run. A class
+   (every backing surface was the built-in fake), rule 6 (the backing surface cannot be
+   attributed to a class) or rule 7 (its only confirmed findings rest on a surface the
+   provenance does not record) applies — all three decline to grade a class that *did*
+   run. Rule 7 alone also **caps** the letter at that class's band: declining to grade
+   a class removes it from the weighted denominator, so withholding on its own would
+   make the grade better, which is the opposite of what withholding means. A class
    that survives both is `FAIL` when a confirmed finding rests on a **live** backing
    surface, else `PASS`: on a mixed run the findings on a synthetic surface are withheld
    from the letter, so a class can pass while its line names the findings withheld
@@ -287,8 +295,10 @@ leaving nothing gradeable). A run with *no* live surface is still graded: it is
 unambiguously the demo, and its scope line says so. Grading nothing
 would emit a letter that means nothing, and `F` would falsely read as "failed" when
 the truth is "never tested". It also exits `3` for a run
-carrying a confirmed finding the catalog cannot attribute (rule 4), and for
-`--output sarif/oscal`, which project findings and have no rendering for a graded posture.
+carrying a confirmed finding the catalog cannot attribute (rule 4), when every class
+that ran had only confirmed findings resting on surfaces the provenance does not record
+(rule 7), and for `--output sarif/oscal`, which project findings and have no rendering
+for a graded posture.
 
 `score` itself exits `0` whatever the letter — it reports a posture, it does not gate.
 `sectum-ai probe` is the CI gate (exit `2` on a confirmed leak).
@@ -304,7 +314,9 @@ carry the currently-unreachable `low`/`info` weight bands).
 grade/confidence/cap tests beside them — so changing one fails CI until this page and the
 version move too.
 Any change to them is a change to what a published grade means, so bump
-`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.3` must always
+`METHODOLOGY_VERSION` (and this page) together — a scorecard stamped `v1.4` must always
 recompute to the same letter. **What counts as evidence is part of the methodology,
 not just the weights**: `v1.3` withholds findings whose backing surface was the
-built-in fake, so a run that graded `F` under `v1.2` can grade differently here.
+built-in fake, and `v1.4` adds rule 7 (a confirmed finding on a surface the
+provenance never records is withheld too, and caps the letter at its class's band),
+so a run that graded `F` under `v1.2` — or `A` under `v1.3` — can grade differently here.

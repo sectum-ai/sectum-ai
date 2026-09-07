@@ -87,7 +87,7 @@ __all__ = [
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.3"
+METHODOLOGY_VERSION = "1.4"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -345,6 +345,29 @@ def _scope_of(run: RunResult) -> tuple[ScoreScope, frozenset[str]]:
     return scope, synthetic
 
 
+def _unattributed_in_class(run: RunResult, entry: _CatalogClass) -> int:
+    """Confirmed findings in ``entry`` resting on a surface the provenance never records.
+
+    Shared by the class verdict and by the grade cap in :func:`score_run`, which
+    have to agree: the verdict alone withheld such a finding from the letter, and
+    a withheld class leaves the weighted DENOMINATOR - so deleting one provenance
+    key turned a confirmed critical leak from GRADE F into GRADE A, which is
+    exactly what the withholding was written to prevent.
+
+    Empty for a run recording no provenance at all: that run has its own
+    UNRECORDED scope and grades deliberately.
+    """
+    if not run.surface_provenance:
+        return 0
+    return sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) not in run.surface_provenance
+    )
+
+
 def _score_class(
     entry: _CatalogClass,
     run: RunResult,
@@ -437,14 +460,7 @@ def _score_class(
     # block said SYNTHETIC and F with `note=None` when the key was simply absent.
     # Withheld from the letter, never from the page - and never as a PASS, which
     # would let dropping one provenance key turn a confirmed leak into assurance.
-    unattributed = sum(
-        1
-        for finding in run.findings
-        if finding.probe_id in entry.probe_ids
-        and finding.status is FindingStatus.CONFIRMED
-        and run.surface_provenance
-        and backing_surface(finding) not in run.surface_provenance
-    )
+    unattributed = _unattributed_in_class(run, entry)
     confirmed = (
         sum(
             1
@@ -481,9 +497,10 @@ def _score_class(
             probe_ids=tuple(ran),
             confirmed_findings=unattributed,
             note=(
-                f"the {unattributed} confirmed finding(s) here rest on a surface this "
+                f"the {unattributed} confirmed finding(s) here rest on surfaces this "
                 "run's provenance does not record, so they can be attributed neither to "
-                "your stack nor to Sectum's built-in fake; this class is not graded"
+                "your stack nor to Sectum's built-in fake; this class is not graded, and "
+                "the letter is capped at this class's band"
             ),
         )
     # A PASS the probe could not actually establish. `AccessOutcome.DENIED` is
@@ -521,8 +538,9 @@ def _score_class(
         "that fake, not your stack"
         if withheld
         else "",
-        f"{unattributed} confirmed finding(s) here rest on a surface this run's "
-        "provenance does not record and are excluded from this verdict"
+        f"{unattributed} confirmed finding(s) here rest on surfaces this run's "
+        "provenance does not record and are excluded from this verdict; the letter is "
+        "capped at this class's band"
         if unattributed
         else "",
         f"{unverified} unverified finding(s) here: the probe could not establish the "
@@ -630,7 +648,20 @@ def score_run(run: RunResult) -> IsolationScore:
     coverage = covered_weight / total_weight
 
     failed = [c for c in covered if c.verdict is ClassVerdict.FAIL]
-    capped_by = max((c.severity for c in failed), key=_SEVERITY_ORDER.index) if failed else None
+    # A class withheld from the letter leaves the DENOMINATOR, so withholding
+    # alone made the grade BETTER: the same record graded F with a provenance key
+    # present and A with it deleted. Withholding says "this is not evidence about
+    # your stack"; it must not also say "and therefore you passed". The band caps
+    # the letter exactly as a failing class does - rule 3's mechanism, for the
+    # same reason: a confirmed finding nobody can place is not assurance.
+    # Rule 5's synthetic-backed classes are deliberately NOT here: there the
+    # record positively states the surface was Sectum's own fake, and a leak on a
+    # fake is not the operator's fault in either direction.
+    unplaceable_bands: list[Severity] = [
+        entry.severity for entry in CATALOG if _unattributed_in_class(run, entry)
+    ]
+    capping: list[Severity] = [c.severity for c in failed] + unplaceable_bands
+    capped_by = max(capping, key=_SEVERITY_ORDER.index) if capping else None
     # Rule 3: the letter is the WORSE of the weighted grade and the band cap, so a
     # failing critical-band class floors it at F and many failures can still push lower.
     grade = _grade_for(weighted_score)

@@ -566,7 +566,7 @@ def test_the_catalog_matches_the_published_methodology() -> None:
     # silent change to what a published grade MEANS stays green. This pins the contract:
     # changing the catalog, a weight, or a threshold must break here and force a
     # METHODOLOGY_VERSION bump (and a docs update) rather than sliding through.
-    assert METHODOLOGY_VERSION == "1.3"
+    assert METHODOLOGY_VERSION == "1.4"
     assert [(entry.class_id, entry.severity) for entry in CATALOG] == [
         (1, Severity.CRITICAL),
         (2, Severity.CRITICAL),

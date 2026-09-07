@@ -101,8 +101,9 @@ family it cannot reach — so "the signature is valid" and "this describes a rea
 system" were unrelated facts, and only the first was checked. The `run-scope`
 check closes that: it reports the run's signed
 [surface provenance](coverage.md), and `sectum-ai verify` **refuses** (exit 4) a
-pack in which no surface was live — or which carries no provenance block at all,
-since its subject cannot be established either way. The block covers only the
+pack in which no surface was live — one which carries no provenance block at all,
+since its subject cannot be established either way — and one whose findings rest
+on a surface the block never records, since unknown is not live either. The block covers only the
 surfaces the run's probes drove: a live backend in a slot no probe touched (a
 tracing adapter, on a probe run) is not recorded, so it cannot stand in for the
 probed surfaces at this gate. A third party receiving a vendor's pack is the
@@ -115,15 +116,20 @@ evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-wh
 `timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
 `audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
 `run-record`, `in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings`
-when the flags, the pack or its siblings call for them. `run-record` re-checks
-the `run.json` beside the pack against the record the pack attests — `probe` and
-`report` write both, and `score` prefers `run.json`, so an edited one graded a
-record the pack does not vouch for. Which neighbouring files a pack claims is
-decided by its filename first and, for a name Sectum does not generate, by which
-of them binds this pack's run digest; every other candidate is listed under
-`unclaimed-siblings` rather than judged, because a folder is not a closed
+when the flags, the pack or its siblings call for them. `run-record` states whether
+the `run.json` beside the pack is the record the pack attests — `probe` and
+`report` write both, and `score` reads `run.json` in preference to the pack, so
+one that is a *different* run is graded instead of this one. It is stated and
+never judged: `probe; report; probe` legitimately rewrites that file, and no
+verifier can tell a later run from an edited one, since neither is anchored.
+Which neighbouring files a pack claims is decided by content — exactly one binds
+this pack's run digest — and, when none does, by whether another pack sitting in
+the same folder *binds* the file (its mere presence under the right name is not
+enough: that let a decoy excuse a tampered document). Everything else is listed
+under `unclaimed-siblings` rather than judged, because a folder is not a closed
 container and calling another pack's genuine document altered is the worst false
-alarm this tool can raise. On a **run-pack bundle** (a `.zip`) it *is* a closed
+alarm this tool can raise. A candidate no present pack binds is still judged, so
+a tampered sidecar delivered on its own remains a failure. On a **run-pack bundle** (a `.zip`) it *is* a closed
 container: one `member:<name>` line per listed member comes first and the pack's
 own checks follow, each PDF and sidecar line naming the member it re-checked
 (`audit-pdf:audit-pack.pdf`, `in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)

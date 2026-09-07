@@ -72,12 +72,29 @@ def test_the_slot_list_covers_every_field_of_the_bundle() -> None:
     )
 
 
-def test_each_slot_contributes_a_distinct_known_surface() -> None:
+@pytest.mark.parametrize(
+    "config",
+    [
+        SectumConfig(),
+        # The one configuration that changes a slot's surface today: an `app`
+        # adapter fills the vector slot and declares `api`. The invariant is about
+        # every buildable bundle, and checking only the default one would pass a
+        # future adapter that reuses a surface straight through.
+        SectumConfig(adapters={"app": AdapterConfig(kind="fake")}),
+    ],
+    ids=["default", "app-in-the-vector-slot"],
+)
+def test_each_slot_contributes_a_distinct_known_surface(config: SectumConfig) -> None:
     # Two slots collapsing onto one surface would silently overwrite each other in
-    # the provenance dict, hiding one family's liveness behind another's.
-    bundle = build_adapters(SectumConfig())
+    # the provenance dict, hiding one family's liveness behind another's:
+    # `surface_provenance_of` is a dict comprehension keyed by the surface, so the
+    # last slot in `_BUNDLE_SLOTS` order would win and the other's LIVE/SYNTHETIC
+    # would vanish from the signed record without a trace.
+    bundle = build_adapters(config)
     surfaces = [getattr(bundle, slot).surface for slot in _BUNDLE_SLOTS]
     assert len(set(surfaces)) == len(surfaces), "two bundle slots report one surface"
+    # And the block the run signs carries one entry per slot, not fewer.
+    assert len(surface_provenance(bundle)) == len(_BUNDLE_SLOTS)
     assert all(s in Surface for s in surfaces)
 
 

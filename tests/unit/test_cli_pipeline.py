@@ -773,7 +773,7 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     payload = json.loads(result.stdout)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"] == "1.3"  # pinned; see docs/scorecard.md
+    assert payload["methodology_version"] == "1.4"  # pinned; see docs/scorecard.md
     # The demo leaks on every surface it exercised, so the covered classes all fail.
     assert payload["weighted_score"] == 0.0
     assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
@@ -1922,15 +1922,72 @@ def test_a_renamed_pack_alone_with_a_tampered_sidecar_still_fails(tmp_path: Path
     assert "[FAIL] dsse-envelope" in result.output, result.output
 
 
-def test_a_renamed_pack_never_binds_the_run_record_beside_it(tmp_path: Path) -> None:
-    # `run.json` is the one candidate every run writes under the same name, so
-    # the per-pack table is the only thing that can say whether the one beside a
-    # pack is that pack's own record. Judging it on an unrecognised filename
-    # reported a genuine probe `run.json` as altered beside any renamed erasure
-    # pack. It is named as unclaimed there instead.
+def test_a_renamed_pack_states_the_run_record_delivered_with_it(tmp_path: Path) -> None:
+    # Exempting `run.json` on an unrecognised filename re-opened the hole the check
+    # was written to close: a pack delivered under another name, next to a gutted
+    # `run.json`, verified at exit 0 with no line about it - and `score`, which
+    # prefers `run.json`, then graded that record. Now that the line states rather
+    # than accuses, it is safe to print for every pack name.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "delivered"
+    delivered.mkdir()
+    (delivered / "for-the-auditor.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    gutted = json.loads((tmp_path / "run.json").read_text())
+    assert gutted["findings"], "the demo run must have findings to delete"
+    gutted["findings"] = []
+    (delivered / "run.json").write_text(json.dumps(gutted))
+
+    result = _verify(delivered / "for-the-auditor.json")
+    assert "is NOT the run this pack attests" in result.output, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+
+def test_a_run_record_another_present_pack_binds_is_that_packs(tmp_path: Path) -> None:
+    # The `run.json` beside an erasure attestation is the PROBE run's, and the
+    # probe's pack is right there binding it - so it is that pack's business, not
+    # this one's, and it is listed rather than described.
     _full_workdir(tmp_path)
-    renamed = tmp_path / "delivered.json"
+    renamed = tmp_path / "erasure-delivered.json"
     renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
     result = _verify(renamed)
+    assert result.exit_code == 0, result.output
     assert "run-record" not in result.output, result.output
-    assert "run.json" in result.output, result.output
+    assert "unclaimed-siblings" in result.output and "run.json" in result.output, result.output
+
+
+def test_a_file_merely_named_like_another_pack_does_not_excuse_a_tampered_one(
+    tmp_path: Path,
+) -> None:
+    # "Somebody else's document" is a claim about a BINDING, and the ownership test
+    # was `.exists()`. Sixteen bytes of garbage named `evidence.json` turned a
+    # `[FAIL] audit-pdf: altered or replaced after signing` on a renamed pack into
+    # `[ok]` at exit 0 - a decoy that disarms the tamper check.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "delivered"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "audit-pack.pdf").write_bytes(b"%PDF-1.4 forged\n")
+
+    alone = _verify(delivered / "mypack.json")
+    assert alone.exit_code == 4, alone.output
+    assert "[FAIL] audit-pdf" in alone.output, alone.output
+
+    (delivered / "evidence.json").write_text("not even a pack")
+    decoyed = _verify(delivered / "mypack.json")
+    assert decoyed.exit_code == 4, decoyed.output
+    assert "[FAIL] audit-pdf" in decoyed.output, decoyed.output
+
+
+def test_a_genuine_other_pack_still_claims_its_own_document(tmp_path: Path) -> None:
+    # The guard on the rule above: ownership must still work when the owner is real.
+    # A renamed erasure pack beside a genuine `evidence.json` must not judge that
+    # pack's `audit-pack.pdf` - the false alarm the whole table exists to avoid.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "erasure-delivered.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "audit-pack.pdf" in result.output, result.output

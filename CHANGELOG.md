@@ -46,6 +46,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deleting one provenance key turned GRADE F into GRADE A.** Withholding an
+  unattributable confirmed finding from the letter (the entry below) made the class
+  `NOT_COVERED` — and a `NOT_COVERED` class leaves the weighted *denominator*, so the
+  letter improved. The same record graded `F` with a key present as `LIVE` and `A` with
+  the key deleted, which is exactly what the withholding was written to prevent.
+  Withholding says "this is not evidence about your stack"; it must not also say "and
+  therefore you passed". Rule 7 now caps the letter at that class's band, the mechanism
+  rule 3 already uses for a failing class. **Methodology `1.4`** — what counts as
+  evidence is part of the methodology, so the stamp moves with it.
+- **A file merely NAMED like another pack excused a tampered one.** The rule that a
+  candidate sibling belonging to another *present* pack is that pack's business tested
+  only `.exists()`. Sixteen bytes of garbage named `evidence.json` turned a `[FAIL]
+  audit-pdf: altered or replaced after signing` on a renamed pack into `[ok]` at exit 0
+  — a decoy that disarms the tamper check. "Somebody else's document" is a claim about a
+  binding, and a binding is checkable: the owner must now parse as a pack that actually
+  binds the file.
+- **`verify` called the ordinary workflow tampering.** `seed; probe; report; probe`
+  rewrites `run.json` by design — `score`'s own comment says preferring the pack "would
+  silently grade a stale record" — and the new `run-record` check reported that genuine
+  file as "altered or replaced after signing", failing verification of an intact pack at
+  exit 4. No verifier can tell a later run from an edited one: neither is anchored. The
+  check now STATES which of the two it is and names the consequence (`score` reads that
+  file in preference to the pack), and never fails on it. Because it no longer accuses,
+  it applies to every pack name — closing the hole a renamed pack had re-opened, where a
+  gutted `run.json` delivered beside one drew no line at all.
+
 - **"Every surface was live" was answered from a block the findings contradict.**
   `surface_provenance` records the surfaces a run ACCOUNTED for, not the ones its
   findings name, and three renderers read it as if the two were the same. A record

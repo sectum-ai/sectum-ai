@@ -438,12 +438,22 @@ def test_a_finding_on_an_unrecorded_surface_is_not_graded_as_the_operators() -> 
     withheld = score_run(_class2_run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}))
     assert next(c for c in withheld.classes if c.class_id == 2).verdict is ClassVerdict.PASS
 
+    assert withheld.grade is Grade.A
+
     unrecorded = score_run(_class2_run({"rag_pipeline": "LIVE"}))
     class2 = next(c for c in unrecorded.classes if c.class_id == 2)
     assert class2.verdict is ClassVerdict.NOT_COVERED, class2
     # Named, never dropped: rule 4.
     assert class2.confirmed_findings == 1
     assert class2.note is not None and "provenance does not record" in class2.note
+    # And the LETTER. Withholding a class removes it from the weighted DENOMINATOR,
+    # so withholding alone made the grade BETTER - the same record graded F with
+    # the key present as LIVE and A with the key deleted, which is exactly what
+    # the withholding was written to prevent. Rule 7 caps it at the class's band.
+    live = score_run(_class2_run({"vector_db": "LIVE", "rag_pipeline": "LIVE"}))
+    assert live.grade is Grade.F, live
+    assert unrecorded.grade is Grade.F, unrecorded
+    assert unrecorded.capped_by is Severity.CRITICAL
 
 
 def test_an_unattributable_finding_never_hides_an_attributable_one() -> None:

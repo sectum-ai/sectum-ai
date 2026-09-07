@@ -351,13 +351,16 @@ def test_verify_binds_the_manifest_on_a_bundle_too(tmp_path: Path) -> None:
     assert "--manifest <manifest.json>" in plain.output, plain.output
 
 
-def test_verify_binds_the_run_record_beside_the_pack(tmp_path: Path) -> None:
-    # `verify_bundle` has bound `run.json` since the bundle existed. The
-    # standalone path neither bound it NOR named it unclaimed, so deleting every
-    # finding from `run.json` left `verify` at exit 0 with no line about it - and
-    # `score`, which PREFERS `run.json` over the pack, then graded the emptied
-    # record A. `probe` and `report` always write that file, so this is the
-    # ordinary shipped flow, not a third-party record.
+def test_verify_states_whether_the_run_record_beside_the_pack_is_the_attested_one(
+    tmp_path: Path,
+) -> None:
+    # `verify_bundle` BINDS `run.json` because a bundle is a closed container that
+    # lists it. A directory is not, so here it is STATED and never judged: judged,
+    # it accused the ordinary `probe; report; probe` workflow - whose second run
+    # legitimately rewrites the file - of tampering. Silence was the original
+    # defect (`score` prefers `run.json`, so an emptied one graded A while `verify`
+    # said nothing); an accusation is the wrong cure, because `verify` cannot tell
+    # a later run from an edited one - neither is anchored.
     import json
 
     assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
@@ -375,16 +378,40 @@ def test_verify_binds_the_run_record_beside_the_pack(tmp_path: Path) -> None:
     emptied["findings"] = []
     run_path.write_text(json.dumps(emptied))
 
-    tampered = _runner.invoke(app, ["verify", pack, *flags])
-    assert tampered.exit_code == 4, tampered.output
-    assert "[FAIL] run-record" in tampered.output, tampered.output
+    edited = _runner.invoke(app, ["verify", pack, *flags])
+    # The PACK is intact, so verification passes - and says what it does not vouch
+    # for, naming the consequence a reader would otherwise meet only in `score`.
+    assert edited.exit_code == 0, edited.output
+    assert "is NOT the run this pack attests" in edited.output, edited.output
+    assert "`sectum-ai score` reads that file in preference to this pack" in edited.output
+    assert "[FAIL]" not in edited.output, edited.output
+
+
+def test_a_second_probe_run_is_not_called_tampering(tmp_path: Path) -> None:
+    # `seed; probe; report; probe` is the documented workflow, and the second run
+    # rewrites `run.json` by design - `score`'s own comment says preferring the
+    # pack "would silently grade a stale record". Judging that file made `verify`
+    # print "altered or replaced after signing" and exit 4 over an untampered
+    # folder: the worst false alarm a tamper-evidence product can raise.
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "altered or replaced after signing" not in result.output, result.output
+    assert "is NOT the run this pack attests" in result.output, result.output
 
 
 def test_the_erasure_pack_does_not_bind_the_probe_runs_record(tmp_path: Path) -> None:
-    # The `run.json` beside an erasure attestation is the PROBE run's; the
-    # erasure run's record lives only inside the attestation. Binding it would
-    # report a genuine file as altered - the false alarm the per-pack sibling
-    # table exists to avoid - so it is NAMED as unclaimed instead.
+    # The `run.json` beside an erasure attestation is the PROBE run's; the erasure
+    # run's record lives only inside the attestation. It is stated, not judged -
+    # binding it would report a genuine file as altered, the false alarm the
+    # per-pack sibling table exists to avoid.
     assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
     assert _runner.invoke(
@@ -399,12 +426,9 @@ def test_the_erasure_pack_does_not_bind_the_probe_runs_record(tmp_path: Path) ->
             "--allow-synthetic",
         ],
     )
-    assert "[FAIL] run-record" not in result.output, result.output
-    assert "[ok] run-record" not in result.output, result.output
-    assert (
-        "[ok] unclaimed-siblings: run.json sits beside this pack and is not bound by it"
-        in result.output
-    ), result.output
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "run.json" in result.output, result.output
 
 
 def _finding_on(surface: Surface) -> Finding:
