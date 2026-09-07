@@ -136,7 +136,7 @@ _CONTROL_TABLE: tuple[tuple[str, tuple[str, ...], str, str, tuple[str, ...]], ..
 # Subtracting the erasure surfaces was only half the rule the comment below
 # states. A live surface NO probe drove also satisfied a bare `live` test, so a
 # record whose isolation probe ran against a fake beside an untouched live
-# `semantic_cache` asserted nine frameworks and 19 OSCAL `satisfied` - while
+# `semantic_cache` asserted eight frameworks and 19 OSCAL `satisfied` - while
 # `score` refused to grade the very same record.
 _ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
     "tenant-boundary-fetch": ("vector_db", "api"),
@@ -153,6 +153,24 @@ _ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
     "ikea-extraction": ("vector_db", "api"),
     "multimodal-rag-bleed": ("vector_db", "api"),
 }
+
+
+def isolation_surfaces(run: RunResult) -> frozenset[str]:
+    """The live surfaces THIS run's isolation probes drove.
+
+    Shared by the predicate that decides whether a control is asserted at all and
+    by the "Live surfaces:" suffix that goes into the pack - they were two copies
+    of one rule, and only the predicate learned it. The suffix then named a
+    surface the predicate had refused to grant, in the signed assertion, the PDF
+    and every OSCAL control finding, with `verify` recomputing the same string.
+    """
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    drove = {
+        surface
+        for probe_id in exercised - _ERASURE_PROBE_IDS
+        for surface in _ISOLATION_PROBE_SURFACES.get(probe_id, ())
+    }
+    return (live_surfaces(run) - erasure_scanned_surfaces(run)) & frozenset(drove)
 
 
 def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = ()) -> bool:
@@ -192,12 +210,7 @@ def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = 
     # something was live. `PROBE_SURFACES` lists alternatives (a probe drives the
     # vector store OR an application API), so the union over the exercised probes
     # is the set this run can speak for.
-    drove = {
-        surface
-        for probe_id in exercised - _ERASURE_PROBE_IDS
-        for surface in _ISOLATION_PROBE_SURFACES.get(probe_id, ())
-    }
-    isolation_live = (live - erasure_scanned_surfaces(run)) & drove
+    isolation_live = live & isolation_surfaces(run)
     return bool(exercised - _ERASURE_PROBE_IDS) and bool(isolation_live)
 
 
@@ -213,11 +226,13 @@ def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...
     if row is not None and row[3] == _ERASURE:
         live = live & erasure_scanned_surfaces(run)
     if row is not None and row[3] == _ISOLATION:
-        # `_run_supports` already refuses to assert an isolation control off a
-        # surface only the erasure scan touched. The suffix that goes INTO the
-        # pack - and into the PDF, and every OSCAL control finding - has to name
-        # the same set, or the assertion cites evidence it was not granted.
-        live = live - erasure_scanned_surfaces(run)
+        # The suffix that goes INTO the pack - and into the PDF, and every OSCAL
+        # control finding - names the same set `_run_supports` granted, through
+        # the same function. It used to subtract only the erasure surfaces, so it
+        # named any live surface at all: `Live surfaces: semantic_cache, vector_db`
+        # on a run whose only probe drives neither semantic_cache nor anything but
+        # vector_db/api.
+        live = live & isolation_surfaces(run)
     return tuple(sorted(live))
 
 

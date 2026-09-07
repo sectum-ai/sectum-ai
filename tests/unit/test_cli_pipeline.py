@@ -1815,3 +1815,33 @@ def test_verify_names_the_files_beside_the_pack_it_does_not_speak_for(tmp_path: 
     # Still a pass: the pack itself is intact, and the extra file is not its
     # business to judge.
     assert result.exit_code == 0
+
+
+def test_the_documented_verify_check_count_is_what_verify_prints(tmp_path: Path) -> None:
+    # `examples/retrieval-pivot/RECORDING.md` tells the reader how many checks
+    # today's `verify` prints, to date the committed cast. That number has been
+    # wrong three times running (7, then 8, then 9), each time counted from a
+    # `Check(...)` grep rather than from a run - and `manifest-hash` needs
+    # `--manifest`, `unclaimed-siblings` needs an unbound sibling, and
+    # `independent-anchor` needs the anchored path, so none of them appears here.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    result = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    printed = [line for line in result.output.splitlines() if line.startswith(("[ok]", "[FAIL]"))]
+    documented = (
+        Path(__file__).resolve().parents[2] / "examples/retrieval-pivot/RECORDING.md"
+    ).read_text()
+    words = {8: "eight", 9: "nine", 7: "seven", 10: "ten"}
+    assert f"there are {words[len(printed)]}." in documented, (
+        f"verify prints {len(printed)} checks; RECORDING.md says otherwise: "
+        f"{[line.split(':')[0] for line in printed]}"
+    )

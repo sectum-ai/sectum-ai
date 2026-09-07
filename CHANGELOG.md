@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The "Live surfaces:" suffix named a surface the control was not granted on.**
+  The rule that an isolation control needs a surface THIS run's probes drove went
+  into the predicate and not into the suffix beside it — whose own comment says it
+  "has to name the same set, or the assertion cites evidence it was not granted".
+  A run whose only probe drives `vector_db`/`api` signed `Live surfaces:
+  semantic_cache, vector_db`, and that string rides into the PDF and every OSCAL
+  control finding, with `verify` recomputing it identically. Both now call one
+  `isolation_surfaces`.
+- **The auditor PDF understated what the attested digest binds** — naming four of
+  its six members and omitting the two anchor flags, which are the downgrade
+  guards ADR-0016 exists to establish. Four prose siblings already named five.
 - **The integration gate could not tell a healthy run from a mostly-skipped one.**
   Its guard asserts that *some* test ran, and measured, `12 passed, 39 skipped`
   and `42 passed, 9 skipped` both satisfy it at exit 0. The readiness poll covers
@@ -53,11 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   healthcheck and can still refuse the connection — wrong credentials, say --
   which skips their tests with no other signal. The step now fails when any
   backend other than the deliberately profile-gated Milvus reports unreachable.
-- **Nine compliance frameworks asserted off a live surface no probe drove.**
+- **Eight compliance frameworks asserted off a live surface no probe drove.**
   `_run_supports` tested `live` as a run-wide existential: subtracting the erasure
   surfaces left a live surface *nothing* touched still satisfying it. A record
   whose isolation probe ran against a fake `vector_db`, beside an untouched live
-  `semantic_cache`, shipped nine control mappings and 19 OSCAL `satisfied` — while
+  `semantic_cache`, shipped eight control mappings and 19 OSCAL `satisfied` — while
   `score` refused to grade the identical record. The module's own comment already
   stated the rule ("the live surface has to be one an ISOLATION probe drove") and
   only half of it was implemented; the test named for that rule exercised only the

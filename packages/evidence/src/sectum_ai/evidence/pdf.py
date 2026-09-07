@@ -243,7 +243,8 @@ _SCOPE_METHODOLOGY: tuple[str, ...] = (
 _VERIFICATION_INSTRUCTION: str = (
     "Verify this pack independently by running 'sectum-ai verify' on it. That "
     "recomputes the whole-pack attested digest - over the run record, the "
-    "manifest hash, the control mappings, and the PDF reference - and checks it "
+    "manifest hash, the control mappings, the PDF reference, and the two anchor "
+    "flags - and checks it "
     "against the timestamp token (and the Rekor inclusion proof when present). "
     "The run digest above is the run's identifier, not the value checked against "
     "the token; any edit to the attested content changes the attested digest and "

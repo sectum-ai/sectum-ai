@@ -390,7 +390,7 @@ def test_isolation_controls_need_a_surface_this_run_s_probes_drove() -> None:
     # `live` was a run-wide existential: subtracting the erasure surfaces left a
     # live surface NO probe drove still satisfying it. A record whose isolation
     # probe ran against a fake `vector_db`, beside an untouched live
-    # `semantic_cache`, asserted nine frameworks and 19 OSCAL `satisfied` - while
+    # `semantic_cache`, asserted eight frameworks and 19 OSCAL `satisfied` - while
     # `score` refused to grade the identical record ("every class that ran was
     # backed only by Sectum's built-in fakes"). The module's own comment already
     # stated this rule; only half of it was implemented.
