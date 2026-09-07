@@ -280,10 +280,15 @@ class Runner:
         value = self._cache.get(
             step.actor_tenant_id, payload_required(step, "key"), user=step.actor_user_id
         )
+        # The same Class 1 deny-semantics `_vector_fetch` records: a foreign
+        # `cache.get` that comes back empty is the ambiguous 200-empty case, not a
+        # proven deny. The identical `str | None` was thrown away here, so Class 4
+        # carried Class 1's evidence with none of its caveat.
         return Observation(
             step_id=step.step_id,
             surface=self._cache.surface,
             raw_response=value or "",
+            access_outcome=(AccessOutcome.RETURNED if value is not None else AccessOutcome.EMPTY),
         )
 
     def _model_train(self, step: ProbeStep) -> Observation:
@@ -328,10 +333,13 @@ class Runner:
             arguments,
             user=step.actor_user_id,
         )
+        # Same rule again: a foreign resource key invoked through a tool is a
+        # by-id read, and an empty result is not an enforced deny.
         return Observation(
             step_id=step.step_id,
             surface=self._mcp.surface,
             raw_response=result.output,
+            access_outcome=(AccessOutcome.RETURNED if result.output else AccessOutcome.EMPTY),
         )
 
     def _memory_write(self, step: ProbeStep) -> Observation:

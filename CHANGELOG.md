@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Class 1's 200-empty rule reached one by-id read and not its two siblings.**
+  `AccessOutcome.DENIED` is produced by no code path — the runner emits only `RETURNED`
+  or `EMPTY` — so "nothing came back" can never mean "the deny was enforced", and the
+  vector fetch says so on the line. A foreign `cache.get` and a foreign `mcp.invoke` of
+  another principal's resource key are the same by-id read, and both threw the identical
+  `str | None` away: on an isolated stack Classes 4 and 7 passed with an empty note over
+  exactly Class 1's evidence, while Class 1 carried "the probe could not establish the
+  negative". The runner now records the outcome for all three, and the finding itself
+  moved onto `DetectingProbe` so the three cannot word it differently — each probe still
+  addresses its own marker (a planted doc id, a cache key, a resource key), which is the
+  part that legitimately differs.
+
 - **A data-subject check signed `ERASED` over a surface nothing was ever found on.**
   The A3 `erasure --subject` probe shares `SurfaceErasure` with Class 11, whose `erased`
   guard keys on `markers_before > 0` and whose docstring says a surface with no baseline

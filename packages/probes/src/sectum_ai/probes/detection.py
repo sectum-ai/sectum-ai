@@ -33,7 +33,9 @@ from sectum_ai.spec import (
     FindingStatus,
     Marker,
     MarkerType,
+    Observation,
     Principal,
+    ProbeStep,
     Severity,
     SharedEntity,
     Substrate,
@@ -265,6 +267,13 @@ class DetectingProbe:
     Subclasses call ``self._providers.pipeline(substrate)`` in ``detect``.
     """
 
+    # Declared by every concrete probe (the `Probe` protocol in `base.py`); named
+    # here so the shared finding builders below can stamp them.
+    id: str
+    owasp_llm: str
+    atlas_techniques: tuple[str, ...]
+    nist_rmf: tuple[str, ...]
+
     # Secondary OWASP LLM Top 10 mapping (the spec §18: "LLM02/LLM06 secondary").
     # Every leakage probe also evidences Sensitive Information Disclosure; the
     # agent/tool probes override this to Excessive Agency (LLM06).
@@ -272,6 +281,78 @@ class DetectingProbe:
 
     def __init__(self, providers: DetectionProviders | None = None) -> None:
         self._providers = providers if providers is not None else DetectionProviders()
+
+    def _observer(self, step: ProbeStep, substrate: Substrate) -> Principal | None:
+        """The principal this step acted as, or ``None`` if the substrate has none."""
+        return next(
+            (
+                principal
+                for principal in substrate.principals()
+                if principal.tenant_id == step.actor_tenant_id
+                and principal.user_id == step.actor_user_id
+            ),
+            None,
+        )
+
+    def _empty_ambiguity_finding(
+        self,
+        step: ProbeStep,
+        observation: Observation,
+        substrate: Substrate,
+        *,
+        marker: Marker | None,
+    ) -> Finding | None:
+        """The UNVERIFIED 200-empty finding for a cross-principal by-id read.
+
+        Class 1's rule, and it belongs to every by-id read, not to one of them.
+        ``AccessOutcome.DENIED`` is produced by no code path - the runner can only
+        emit RETURNED or EMPTY - so "nothing came back" never means "the deny was
+        enforced". The vector fetch said so and its two structural siblings, a
+        foreign ``cache.get`` and a foreign ``mcp.invoke`` of another principal's
+        resource key, did not: Classes 4 and 7 carried Class 1's evidence with
+        none of its caveat, passing with an empty note.
+
+        Each probe addresses its own marker (a planted doc id, a cache key, a
+        resource key); what must not diverge is the finding, so that is here.
+        """
+        observer = self._observer(step, substrate)
+        if observer is None or marker is None or not is_cross_principal(marker, observer):
+            return None
+        user_suffix = f"-{observer.user_id.hex}" if observer.user_id is not None else ""
+        return Finding(
+            finding_id=(
+                f"finding-{self.id}-empty-{marker.marker_id}-"
+                f"{observer.tenant_id.hex}{user_suffix}-{observation.surface.value}"
+            ),
+            probe_id=self.id,
+            severity=Severity.INFO,
+            confidence=0.0,
+            status=FindingStatus.UNVERIFIED,
+            owner_tenant_id=marker.owner_tenant_id,
+            observed_in_tenant_id=observer.tenant_id,
+            owner_user_id=marker.owner_user_id,
+            observed_in_user_id=observer.user_id,
+            surface=observation.surface,
+            marker_id=marker.marker_id,
+            evidence_span=(
+                "cross-principal fetch returned 200-empty, not an explicit deny - "
+                "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
+            ),
+            owasp_llm=self.owasp_llm,
+            owasp_secondary=self.owasp_secondary,
+            atlas=self.atlas_techniques,
+            nist=self.nist_rmf,
+            remediation_pointer=(
+                "return an explicit authorization error (e.g. 403) for cross-tenant "
+                "object fetches rather than a 200 with an empty body"
+            ),
+        )
+
+    def _marker_by_id(self, substrate: Substrate, marker_id: str | None) -> Marker | None:
+        return next(
+            (m for m in substrate.manifest.markers if m.marker_id == marker_id),
+            None,
+        )
 
 
 class FakeEmbeddingProvider:

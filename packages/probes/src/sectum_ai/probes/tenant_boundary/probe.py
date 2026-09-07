@@ -10,11 +10,10 @@ from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
 from sectum_ai.spec import (
     AccessOutcome,
     Finding,
-    FindingStatus,
+    Marker,
     MarkerType,
     Observation,
     ProbeStep,
-    Severity,
     Substrate,
     Surface,
 )
@@ -86,64 +85,25 @@ class TenantBoundaryProbe(DetectingProbe):
             owasp_secondary=self.owasp_secondary,
         )
         if not findings and observation.access_outcome is AccessOutcome.EMPTY:
-            ambiguity = self._empty_ambiguity_finding(step, observation, substrate)
+            ambiguity = self._empty_ambiguity_finding(
+                step,
+                observation,
+                substrate,
+                marker=self._ambiguity_marker(step, substrate),
+            )
             if ambiguity is not None:
                 findings.append(ambiguity)
         return findings
 
-    def _empty_ambiguity_finding(
-        self, step: ProbeStep, observation: Observation, substrate: Substrate
-    ) -> Finding | None:
-        """Build the UNVERIFIED 200-empty ambiguity finding for a cross-principal fetch."""
-        observer = next(
-            (
-                principal
-                for principal in substrate.principals()
-                if principal.tenant_id == step.actor_tenant_id
-                and principal.user_id == step.actor_user_id
-            ),
-            None,
-        )
-        if observer is None:
-            return None
+    def _ambiguity_marker(self, step: ProbeStep, substrate: Substrate) -> Marker | None:
+        """This probe addresses its marker by the doc id it planted."""
         doc_id = step.payload.get("doc_id")
-        marker = next(
+        return next(
             (
                 candidate
                 for candidate in substrate.manifest.markers
                 for location in candidate.planted_locations
-                if location.doc_id == doc_id and is_cross_principal(candidate, observer)
+                if location.doc_id == doc_id
             ),
             None,
-        )
-        if marker is None:
-            return None
-        user_suffix = f"-{observer.user_id.hex}" if observer.user_id is not None else ""
-        return Finding(
-            finding_id=(
-                f"finding-{self.id}-empty-{marker.marker_id}-"
-                f"{observer.tenant_id.hex}{user_suffix}-{observation.surface.value}"
-            ),
-            probe_id=self.id,
-            severity=Severity.INFO,
-            confidence=0.0,
-            status=FindingStatus.UNVERIFIED,
-            owner_tenant_id=marker.owner_tenant_id,
-            observed_in_tenant_id=observer.tenant_id,
-            owner_user_id=marker.owner_user_id,
-            observed_in_user_id=observer.user_id,
-            surface=observation.surface,
-            marker_id=marker.marker_id,
-            evidence_span=(
-                "cross-principal fetch returned 200-empty, not an explicit deny - "
-                "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
-            ),
-            owasp_llm=self.owasp_llm,
-            owasp_secondary=self.owasp_secondary,
-            atlas=self.atlas_techniques,
-            nist=self.nist_rmf,
-            remediation_pointer=(
-                "return an explicit authorization error (e.g. 403) for cross-tenant "
-                "object fetches rather than a 200 with an empty body"
-            ),
         )
