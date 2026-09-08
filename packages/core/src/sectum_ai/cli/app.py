@@ -1791,15 +1791,6 @@ def _owned_elsewhere(pack_path: Path, name: str, slot: int, binds: _Binds) -> bo
     return False
 
 
-def _sibling_paths(pack_path: Path, slot: int) -> list[Path]:
-    """Every one of THIS pack's expected siblings that is present."""
-    return [
-        candidate
-        for name in _sibling_names(pack_path, slot)
-        if (candidate := pack_path.parent / name).exists()
-    ]
-
-
 def _unclaimed_siblings(pack_path: Path, slot: int) -> list[str]:
     """Candidate-named files beside the pack that are NOT this pack's siblings.
 
@@ -1873,35 +1864,6 @@ def _sibling_audit_pdf(pack_path: Path, pack: EvidencePack) -> tuple[bytes | Non
         return None, others
     # `verify_pack` re-hashes ONE document against `pdf_ref`; the rest are named.
     return judged[0].read_bytes(), sorted({*others, *(p.name for p in judged[1:])})
-
-
-def _sibling_intoto(pack_path: Path) -> Path | None:
-    """Return the in-toto sidecar written beside ``pack_path``, if present.
-
-    ``report``/``erasure`` write ``attestation.intoto.json`` /
-    ``erasure-attestation.intoto.json`` next to the evidence json. When present,
-    ``sectum-ai verify`` re-checks that it binds this pack's run digest; when absent,
-    verification proceeds from the json alone (the pack is self-sufficient).
-    """
-    for name in _sibling_names(pack_path, 1):
-        candidate = pack_path.parent / name
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def _sibling_dsse(pack_path: Path) -> Path | None:
-    """Return the DSSE envelope written beside ``pack_path``, if present.
-
-    ``report`` writes ``evidence.dsse.json`` next to the evidence json; when
-    present, ``sectum-ai verify`` re-checks that its in-toto statement binds this
-    pack's run digest, so a swapped envelope is caught.
-    """
-    for name in _sibling_names(pack_path, 2):
-        candidate = pack_path.parent / name
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def _echo_verdict(anchored: bool, *, what: str) -> None:

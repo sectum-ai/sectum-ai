@@ -46,6 +46,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The ATLAS release gate had no record for ten releases.** ADR-0009 makes a per-release
+  sweep a gate and says its offline tripwire "cannot judge renames or fit"; the validation
+  log nevertheless ends at 2026-07-20, with v0.7.1–v0.11.0 shipped since. The log now
+  carries a dated entry stating exactly what was verified — every id in use is pinned, and
+  every probe's `atlas_techniques` matches its own catalog page and `index.md` in both
+  directions across all 15 probes — and, explicitly, that the upstream MISP-mirror
+  comparison was **not** performed and remains a release blocker. A test runs that offline
+  half per commit, since it is the half that can drift silently between releases, and
+  `docs/RELEASING.md` now says the durable record is the log, not the PR description that
+  nothing reads back.
+- **The Class 11 model scan's "same recall test as the subject check" was false** — and
+  the two reviewers who flagged the missing `has_base_control` gate were proposing a fix
+  that loses a true positive. A3's needles are natural-language fingerprints a base model
+  may already know, so it needs an untrained-tenant control; every needle here is a hard
+  canary (`SECTUM-CANARY-` plus 26 base32 characters) that no base model produces by
+  chance. Gating would turn a shared-weights model that really did memorize the canary
+  from `RESIDUAL` into `NOT_COVERED`. The comment now states the reason, and a test fails
+  if the gate is ever added.
+
 - **The documented `user_steps_dropped` disclosure never fired for the two contracts it
   was written for.** `docs/attack-catalog/index.md` names the RAG-pipeline and
   agent-framework contracts specifically and promises three things where an adapter

@@ -890,3 +890,31 @@ def test_erasure_counts_a_marker_the_trace_backend_re_cased_as_residual() -> Non
     assert surfaces[Surface.TRACING].residual_after > 0
     assert report.coverage()[Surface.TRACING] is CoverageVerdict.RESIDUAL
     assert not report.erased
+
+
+def test_a_shared_weights_model_that_memorized_the_canary_is_still_residual() -> None:
+    # The subject check gates its model scan on `_recall.has_base_control`, and
+    # Class 11 does not - a difference two reviews read as a missing gate. It is
+    # deliberate, and adding the gate would lose a true positive: A3's needles are
+    # natural-language fingerprints a base model may already know, while every
+    # needle here is `SECTUM-CANARY-` plus 26 base32 characters, which no base
+    # model produces by chance. On SHARED_WEIGHTS `has_base_control` is False, so
+    # gating would turn a model that really did memorize the canary from RESIDUAL
+    # into NOT_COVERED.
+    from sectum_ai.probes._recall import has_base_control
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canary = next(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY
+    )
+    model = FakeModel(adapter_bleed=True, soft_delete=True)  # SHARED_WEIGHTS
+    model.train_adapter(target, [f"reference {canary} on file"])
+    assert not has_base_control(model), "the premise: no untrained tenant to control against"
+
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), model=model
+    ).run(target)
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL, report.coverage()

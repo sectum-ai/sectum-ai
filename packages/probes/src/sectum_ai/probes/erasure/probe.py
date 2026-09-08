@@ -513,9 +513,18 @@ class ErasureProbe:
         if self._model is None or not self._model_can_memorize(self._model):
             return []
         model = self._model
-        # The same recall test as the subject check: a real autoregressive LoRA
-        # continues a prompt rather than echoing it, so the whole-canary echo alone
-        # read a memorized canary as absent (NOT_COVERED, never RESIDUAL).
+        # The same recall MECHANISM as the subject check - a real autoregressive
+        # LoRA continues a prompt rather than echoing it, so the whole-canary echo
+        # alone read a memorized canary as absent (NOT_COVERED, never RESIDUAL) -
+        # but deliberately not the same GATE. The subject check also requires
+        # `_recall.has_base_control`, because its needles are natural-language
+        # fingerprints a base model may already know ("Hussein Obama" after
+        # "Barack"), and on SHARED_WEIGHTS there is no untrained tenant to tell
+        # recall from base knowledge. Every needle here is a hard canary: a
+        # `SECTUM-CANARY-` prefix and 26 base32 characters, which no base model
+        # produces by chance. Requiring the control here would drop a shared-weights
+        # model that really did memorize the canary from RESIDUAL to NOT_COVERED -
+        # losing a true positive to guard against a false one that cannot occur.
         return [marker for marker in markers if content_recalled(model, target, marker.plaintext)]
 
     def _scan_search(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:

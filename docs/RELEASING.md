@@ -135,6 +135,13 @@ gate. Run the sweep against the
 [MISP mirror](https://raw.githubusercontent.com/MISP/misp-galaxy/main/clusters/mitre-atlas-attack-pattern.json)
 and note the ATLAS revision in the release PR description.
 
+**Record it in the ADR's own validation log, not only in the PR description.**
+Ten releases (v0.7.1–v0.11.0) shipped with the gate unrecorded because the PR
+description is the only place it was written down and nothing reads it back; the
+log is the durable record, and an entry must say which half of the sweep was
+performed — the offline id/​catalog check, the upstream mirror comparison, or
+both. The offline half alone is not the gate.
+
 ### 3. Update `CHANGELOG.md`
 
 Rename the `## [Unreleased]` heading to `## [X.Y.Z]` (the version you bumped
