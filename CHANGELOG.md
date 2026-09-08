@@ -46,6 +46,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`baseline --save --compare` silently discarded a regression at exit 0.** `--save`
+  returned before `--compare` was ever read, so on a documented CI gate the flag was
+  ignored — and the run it ignored was the *regressing* one, which then overwrote the
+  baseline. The regression was neither reported nor recoverable: the reference it would
+  have failed against was gone. An ignored flag earns a warning elsewhere in the CLI;
+  this one destroys the evidence the gate exists to produce, so it now fails closed and
+  names the two-step form that does what the operator meant.
+- **The modelled embedding gradient was rendered as a measured leak rate.**
+  `RunMetrics.retrieval_pivot_rate_by_model` says the gradient is bypassed by
+  construction and that "every renderer must label this one as modelled"; `probe` does in
+  both of its renderers, and the diff text, the diff JSON and the `baseline --compare`
+  block printed it bare, one line below the measured rate, in identical formatting. It
+  also *gates*: a gradient moving on its own exits 2, a CI failure indistinguishable from
+  a measured cross-tenant leak-rate regression. The label now rides on the metric name,
+  which is the one string all three renderers share.
+- **`diff --help` listed six of the ten causes of its own exit 2.** The `baseline
+  --compare` banner records why an enumeration is the wrong shape here — it went stale
+  three times — and was rewritten as a non-enumeration; `diff`'s help, the only prose the
+  `diff` path shows, kept the closed list, so a reader hunting an unrescanned erasure
+  surface, an unremeasured side channel or a changed scenario found a list without it.
+
 - **The ATLAS release gate had no record for ten releases.** ADR-0009 makes a per-release
   sweep a gate and says its offline tripwire "cannot judge renames or fit"; the validation
   log nevertheless ends at 2026-07-20, with v0.7.1–v0.11.0 shipped since. The log now

@@ -3039,6 +3039,22 @@ def baseline(
         workdir = loaded.workdir
     run = _load_run(workdir)
     baseline_path = workdir / "baseline.json"
+    if save and compare:
+        # `--save` returned before `--compare` was ever read, so the flag was
+        # silently ignored - and the run it silently ignored was the REGRESSING
+        # one, which then overwrote the baseline at exit 0. The regression was
+        # neither reported nor recoverable: the reference it would have failed
+        # against is gone. Elsewhere an ignored flag earns a warning
+        # (`--soft-delete` with `--config`, `--scope` with `--subject`); those are
+        # harmless, and this one destroys the evidence a gate exists to produce,
+        # so it fails closed instead.
+        raise ConfigError(
+            "pass --save or --compare, not both: --save overwrites the baseline with "
+            "this run, and --compare gates on it. Together the gate never ran and the "
+            "run it would have judged became the new reference. To do both, compare "
+            "first and save only if it passes: "
+            "`sectum-ai baseline --compare && sectum-ai baseline --save`"
+        )
     if save:
         baseline_path.write_text(run.model_dump_json(indent=2))
         # `--compare` discloses a synthetic run; `--save` returned before the call
@@ -3493,11 +3509,18 @@ def diff(
 
     Compares metric deltas (as ``baseline --compare`` does) and, in addition, the
     findings themselves keyed by id - including in-place changes (status or
-    severity). Exits with code 2 when the later run regressed - any worsened
-    metric, a newly confirmed finding, a severity escalation of a finding
-    confirmed in both runs, or a probe, live surface, or user boundary the later
-    run stopped exercising - else 0, so the command can gate a CI pipeline (the
-    engineering spec, section 10).
+    severity). Exits with code 2 when the later run regressed - a metric worsened,
+    a leak was newly confirmed or escalated in severity, this run measured less
+    than the earlier one, or the scenario changed; the bracketed lines name which
+    - else 0, so the command can gate a CI pipeline (the engineering spec,
+    section 10).
+
+    Deliberately NOT an enumeration of the gate's disjuncts, for the reason the
+    `baseline --compare` banner records: an enumeration went stale three times
+    over. This one still listed six of ten, so an unrescanned erasure surface, an
+    unremeasured side channel, an unremeasured headline rate and a changed
+    scenario each gated at exit 2 with no matching cause in the only prose the
+    `diff` path shows.
     """
     if output in (OutputFormat.SARIF, OutputFormat.OSCAL):
         # SARIF and OSCAL project a single run's findings; a two-run delta has no

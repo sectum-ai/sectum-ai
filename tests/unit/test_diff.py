@@ -948,7 +948,9 @@ def test_a_changed_embedding_model_list_does_not_fail_the_gate(tmp_path: Path) -
         ],
     )
     assert cli.exit_code == 0, cli.output
-    assert "[not measured] retrieval_pivot_rate_by_model[st:old]" in cli.output, cli.output
+    assert "[not measured] retrieval_pivot_rate_by_model (modelled)[st:old]" in cli.output, (
+        cli.output
+    )
 
 
 def test_the_json_diff_carries_every_gate_reason(tmp_path: Path) -> None:
@@ -1083,3 +1085,35 @@ def test_a_changed_scenario_makes_every_metric_unmeasured(tmp_path: Path) -> Non
         ).stdout
     )
     assert {m["verdict"] for m in payload["metrics"]} == {"not measured"}, payload["metrics"]
+
+
+def test_save_and_compare_together_are_refused(tmp_path: Path) -> None:
+    # `--save` returned before `--compare` was ever read, so on a documented CI
+    # gate the flag was silently ignored - and the run it ignored was the
+    # REGRESSING one, which then overwrote the baseline at exit 0. The regression
+    # was neither reported nor recoverable: the reference it would have failed
+    # against was gone. An ignored flag earns a warning elsewhere; this one
+    # destroys the evidence the gate exists to produce, so it fails closed.
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED), metrics=RunMetrics(confirmed_findings=1)
+    )
+    later = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        _finding("b", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=2),
+    )
+    _write(tmp_path / "baseline.json", earlier)
+    _write(tmp_path / "run.json", later)
+    before = (tmp_path / "baseline.json").read_text()
+
+    refused = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save", "--compare"])
+    assert refused.exit_code == 3, refused.output
+    assert "not both" in refused.output, refused.output
+    # And it did not overwrite the reference on its way out.
+    assert (tmp_path / "baseline.json").read_text() == before
+
+    # Each flag on its own still works, and the gate still catches the regression.
+    gated = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert gated.exit_code == 2, gated.output
+    saved = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
+    assert saved.exit_code == 0, saved.output

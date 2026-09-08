@@ -206,8 +206,16 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
         ),
     ]
     deltas.extend(
+        # Labelled MODELLED in the metric NAME, because that is all three of this
+        # layer's renderers carry. `RunMetrics.retrieval_pivot_rate_by_model` says
+        # the gradient "is bypassed by construction ... every renderer must label
+        # this one as modelled", and `probe` does in both of its own; the diff text,
+        # the diff JSON and the `baseline --compare` block printed it bare, one line
+        # below the measured rate and in identical formatting. It also GATES: a
+        # gradient moving 0.1 -> 0.9 with nothing else changed exits 2, a CI failure
+        # indistinguishable from a measured cross-tenant leak-rate regression.
         _dict_deltas(
-            "retrieval_pivot_rate_by_model",
+            "retrieval_pivot_rate_by_model (modelled)",
             baseline.retrieval_pivot_rate_by_model,
             current.retrieval_pivot_rate_by_model,
         )

@@ -102,7 +102,7 @@ def test_per_model_rpr_regression_is_flagged_when_the_aggregate_is_unchanged() -
     comparison = compare_metrics(base, worse)
     assert comparison.regressed
     assert [d.name for d in comparison.deltas if d.regressed] == [
-        "retrieval_pivot_rate_by_model[mpnet]"
+        "retrieval_pivot_rate_by_model (modelled)[mpnet]"
     ]
 
 
@@ -312,3 +312,26 @@ def test_an_unmeasured_headline_rate_gates_baseline_compare(tmp_path: Path) -> N
     result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 2, result.output
     assert "[RATE NOT REMEASURED] retrieval_pivot_rate" in result.output, result.output
+
+
+def test_the_modelled_gradient_is_labelled_modelled_in_every_renderer() -> None:
+    # `RunMetrics.retrieval_pivot_rate_by_model` states the rule: the gradient
+    # builds its own shared index and "is bypassed by construction ... a reader who
+    # conflates the two reads a simulation as a leak rate, so every renderer must
+    # label this one as modelled". `probe` obeys it in both of its renderers; the
+    # diff text, the diff JSON and the `baseline --compare` block printed it bare,
+    # one line below the measured rate and in identical formatting - and it GATES,
+    # so a gradient moving on its own fails CI indistinguishably from a measured
+    # cross-tenant leak-rate regression. The label rides on the metric name, which
+    # is the one string all three renderers share.
+    comparison = compare_metrics(
+        RunMetrics(retrieval_pivot_rate_by_model={"hash-64": 0.1}),
+        RunMetrics(retrieval_pivot_rate_by_model={"hash-64": 0.9}),
+    )
+    deltas = comparison.deltas
+    gradient = [delta for delta in deltas if "hash-64" in delta.name]
+    assert gradient, [delta.name for delta in deltas]
+    assert all("(modelled)" in delta.name for delta in gradient), gradient
+    # The MEASURED rate beside it must not pick the label up.
+    measured = [delta for delta in deltas if delta.name == "retrieval_pivot_rate"]
+    assert measured and "modelled" not in measured[0].name
