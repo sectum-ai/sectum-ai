@@ -655,3 +655,56 @@ def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
     runner = Runner(substrate, vector=store, cache=_TenantOnlyCache())
     assert runner.run_per_step(_MixedProbe()) == []  # type: ignore[arg-type]
     assert runner.dropped_user_steps["mixed-adapter-probe"] == 2
+
+
+def test_the_two_no_user_contracts_drop_and_count_their_user_steps() -> None:
+    # `docs/attack-catalog/index.md` names these two contracts specifically and
+    # promises all three consequences: the steps are "DROPPED rather than failed",
+    # the run records `user_steps_dropped`, and `diff` reports `[BOUNDARY LOST]` -
+    # "a pass which says the user boundary was not tested, never that it held".
+    # Both probes filtered the user principals out at PLAN time instead, so the
+    # runner's drop path - built for exactly this, `carries_user == False` - never
+    # fired: the metric stayed `{}`, the audit PDF's clause never printed, and the
+    # diff signal was always empty. Not planning a step silently is a pass that
+    # says nothing at all.
+    from sectum_ai.adapters import FakeAgent, FakeRAGPipeline
+    from sectum_ai.probes import AgentFrameworkHijackProbe, RagPipelineBleedProbe
+    from sectum_ai.spec import (
+        Scenario,
+        SharedEntity,
+        SyntheticTenantSpec,
+        SyntheticUserSpec,
+    )
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="two-tenants-of-users",
+            seed=3,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=n),
+                    display_name=f"T{n}",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+                    ),
+                )
+                for n in (1, 2)
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    for probe, adapters in (
+        (RagPipelineBleedProbe(), {"rag": FakeRAGPipeline(shared_index=True)}),
+        (AgentFrameworkHijackProbe(), {"agent": FakeAgent(confused_deputy=True)}),
+    ):
+        runner = Runner(substrate, **adapters)
+        results = runner.run_per_step(probe)
+        assert runner.dropped_user_steps.get(probe.id, 0) > 0, probe.id
+        # The tenant-level half still runs - dropping is not the same as skipping
+        # the probe - and no user step reaches an adapter that cannot carry one,
+        # which is the false positive the plan-time filter was written to avoid.
+        assert results, probe.id
+        assert all(step.actor_user_id is None for step, _ in results), probe.id

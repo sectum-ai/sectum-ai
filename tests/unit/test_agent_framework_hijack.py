@@ -100,18 +100,29 @@ def test_probe_findings_carry_the_agent_framework_surface() -> None:
     assert all(finding.surface.value == "agent_framework" for finding in findings)
 
 
-def test_user_level_steps_are_not_planned_for_an_interface_that_carries_no_user() -> None:
-    # `AgentAdapter.run(tenant, task)` carries no user, so a user-level step ran as
-    # the tenant and was judged as the user: on a tenant-isolated agent every
+def test_user_level_steps_are_dropped_and_counted_for_an_interface_with_no_user() -> None:
+    # `AgentAdapter.run(tenant, task)` carries no user, so a user-level step would
+    # run as the tenant and be judged as the user: on a tenant-isolated agent every
     # sibling user's marker in the tenant's own answer confirmed as a CRITICAL
-    # cross-user leak - of a session that never existed. The probe plans from
-    # tenants only; the MCP variant of Class 7 (whose `call_tool` carries `user`)
-    # owns the user-scope test.
+    # cross-user leak - of a session that never existed. The probe used to avoid
+    # that by not PLANNING those steps, which also meant the runner's drop path
+    # never fired: `user_steps_dropped` stayed empty, the audit PDF's "user-level
+    # steps not run" clause never printed, and `diff` never reported
+    # `[BOUNDARY LOST]` - the three things `docs/attack-catalog/index.md` promises
+    # for exactly this contract. They are planned and dropped now, so the pass says
+    # the user boundary was not tested rather than saying nothing.
     substrate = _users_substrate()
     steps = AgentFrameworkHijackProbe().plan(substrate)
-    assert all(step.actor_user_id is None for step in steps)
-    findings = Runner(substrate, agent=_seeded_agent(substrate)).run(AgentFrameworkHijackProbe())
-    assert confirmed_findings(findings) == []
+    assert any(step.actor_user_id is not None for step in steps), steps
+
+    probe = AgentFrameworkHijackProbe()
+    runner = Runner(substrate, agent=_seeded_agent(substrate))
+    results = runner.run_per_step(probe)
+    # No user step reaches the adapter, so the false positive stays prevented...
+    assert all(step.actor_user_id is None for step, _ in results)
+    assert confirmed_findings([f for _, findings in results for f in findings]) == []
+    # ...and the run now says how many it could not test.
+    assert runner.dropped_user_steps.get(probe.id, 0) > 0
 
 
 def test_fake_agent_default_is_non_leaky() -> None:

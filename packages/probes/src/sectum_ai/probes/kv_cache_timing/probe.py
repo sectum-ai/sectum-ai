@@ -12,7 +12,7 @@ Class 11 erasure probe - it exposes its own ``run`` entry point. Per the spec's
 is *both* statistically significant (a two-sided Welch's t-test below a
 Bonferroni-corrected level - ``_ALPHA`` divided by the number of tenant-pair
 comparisons, so the family-wise false-positive rate across all pairs stays at
-``_ALPHA``) *and* practically large (Cohen's d above ``_EFFECT_THRESHOLD``), in
+``_ALPHA``) *and* practically large (Cohen's d at or above ``_EFFECT_THRESHOLD``), in
 the expected direction (the primed prompt is faster). Each finding carries the
 p-value, the corrected level, and a confidence interval on the gap so an auditor
 can judge the strength of evidence.
@@ -146,8 +146,24 @@ class KvCacheTimingReport:
 
 
 def _cohens_d(slow: list[float], fast: list[float]) -> float:
-    """Standardised mean difference (slow minus fast); 0 when the means agree."""
-    pooled_variance = (statistics.pvariance(slow) + statistics.pvariance(fast)) / 2.0
+    """Standardised mean difference (slow minus fast); 0 when the means agree.
+
+    The pooled SAMPLE standard deviation, which is what Cohen's d is defined on.
+    This used ``pvariance`` (population, divided by n) while ``_welch`` twenty
+    lines down used ``variance`` (sample, n-1) - two estimators of the same
+    quantity in one file - and the figure it produced was inflated by
+    sqrt(n/(n-1)): 11.8% at n=5, 2.15% at the default n=24. That number is
+    printed in the finding's evidence span and signed into
+    `side_channel_effect_sizes`, and it escalates severity across the
+    `_LARGE_EFFECT` boundary, so a true d of 4.95 was reported as 5.05 and the
+    finding shipped HIGH instead of MEDIUM.
+
+    One sample cannot estimate a spread, so the floor stands in - the same floor
+    `_welch` applies, and the reason `is_significant_at` also gates on `resolved`.
+    """
+    if len(slow) < 2 or len(fast) < 2:
+        return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(_VARIANCE_FLOOR)
+    pooled_variance = (statistics.variance(slow) + statistics.variance(fast)) / 2.0
     return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(
         max(pooled_variance, _VARIANCE_FLOOR)
     )
@@ -242,8 +258,9 @@ def _welch(slow: list[float], fast: list[float]) -> tuple[float, float, float]:
     for the confidence interval. A group's variance is floored at the timer's
     resolution, so a constant-latency backend yields a finite, large t rather
     than a degenerate one; only when neither group has two samples is the
-    standard error zero (an infinite t with zero df, which the callers read as
-    not significant).
+    standard error zero - which yields ``0.0`` when the means also agree and an
+    infinite t otherwise, both with zero df, and the callers read either as not
+    significant.
     """
     n_slow, n_fast = len(slow), len(fast)
     var_slow = max(statistics.variance(slow), _VARIANCE_FLOOR) if n_slow > 1 else 0.0

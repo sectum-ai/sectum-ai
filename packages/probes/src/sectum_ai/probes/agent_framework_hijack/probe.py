@@ -47,7 +47,16 @@ class AgentFrameworkHijackProbe(DetectingProbe):
         marker then confirmed as a CRITICAL cross-user leak of a session that
         never existed (ADR-0006: user-aware adapters are the next increment).
         """
-        principals = [p for p in substrate.principals() if p.user_id is None]
+        # Plans from EVERY principal, tenant- and user-level alike. Filtering the
+        # user principals out here meant the runner's drop path - built for exactly
+        # this, `carries_user == False` - never fired, so `user_steps_dropped`
+        # stayed empty, the audit PDF's "user-level steps not run" clause never
+        # printed, and `diff` never reported `[BOUNDARY LOST]`. The catalog index
+        # names these two contracts specifically and promises all three: "those
+        # steps are DROPPED rather than failed ... a pass which says the user
+        # boundary was not tested - never that it held". Silently not planning them
+        # is a pass that says nothing at all.
+        principals = substrate.principals()
         steps: list[ProbeStep] = []
         for marker in substrate.manifest.markers:
             if marker.marker_type is not MarkerType.HARD_CANARY:

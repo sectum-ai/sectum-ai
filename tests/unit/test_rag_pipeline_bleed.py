@@ -64,8 +64,9 @@ def test_a_tenant_isolated_pipeline_with_users_is_not_a_cross_user_leak() -> Non
     # `RAGPipelineAdapter.ask(tenant, query)` carries no user, so a user-level step
     # ran as the tenant and was judged as the user: on a tenant-isolated pipeline
     # every sibling user's marker in the tenant's own answer confirmed as a
-    # CRITICAL cross-user leak (12 of them on two tenants of two users). The probe
-    # plans from tenants only (ADR-0006: user-aware adapters are the next step).
+    # CRITICAL cross-user leak (12 of them on two tenants of two users). The runner
+    # drops those steps and counts them (ADR-0006/0008): a pass that says the user
+    # boundary was not tested, never that it held.
     from uuid import UUID
 
     from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
@@ -92,6 +93,14 @@ def test_a_tenant_isolated_pipeline_with_users_is_not_a_cross_user_leak() -> Non
         )
     )
     steps = RagPipelineBleedProbe().plan(substrate)
-    assert steps and all(step.actor_user_id is None for step in steps)
-    rag = _seeded_rag(substrate, shared_index=False)
-    assert confirmed_findings(Runner(substrate, rag=rag).run(RagPipelineBleedProbe())) == []
+    # Planned, then DROPPED by the runner - not silently unplanned. Unplanned, the
+    # runner's drop path never fired, so `user_steps_dropped` stayed empty and the
+    # pass said nothing about the boundary it could not test.
+    assert any(step.actor_user_id is not None for step in steps), steps
+
+    probe = RagPipelineBleedProbe()
+    runner = Runner(substrate, rag=_seeded_rag(substrate, shared_index=False))
+    results = runner.run_per_step(probe)
+    assert results and all(step.actor_user_id is None for step, _ in results)
+    assert confirmed_findings([f for _, findings in results for f in findings]) == []
+    assert runner.dropped_user_steps.get(probe.id, 0) > 0

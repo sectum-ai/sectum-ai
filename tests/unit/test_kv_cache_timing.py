@@ -3,6 +3,8 @@
 import random
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters import FakeModel
 from sectum_ai.probes import KvCacheTimingProbe, confirmed_findings
 from sectum_ai.spec import Scenario, Severity, SharedEntity, Surface, SyntheticTenantSpec
@@ -569,3 +571,26 @@ def test_each_warmed_prefix_is_measured_by_exactly_one_observer() -> None:
     assert all(len(prefix) == 20 for prefix in primed), primed
     # And the probe still measures the side channel it exists for.
     assert len(report.findings) == 12, report.findings
+
+
+def test_cohens_d_uses_the_pooled_sample_deviation() -> None:
+    # Cohen's d is defined on the pooled SAMPLE SD. This used `pvariance`
+    # (population, / n) while `_welch` in the same file used `variance` (/ n-1),
+    # so the figure was inflated by sqrt(n/(n-1)) - 2.15% at the default 24 trials
+    # and 11.8% at 5. That number is printed in the finding's evidence span and
+    # signed into `side_channel_effect_sizes`, and it crosses the `_LARGE_EFFECT`
+    # boundary, so a true 4.95 shipped as 5.05 and the finding read HIGH.
+    import statistics
+
+    from sectum_ai.probes.kv_cache_timing.probe import _cohens_d
+
+    for n in (5, 24):
+        slow = [20.0 + i for i in range(n)]
+        fast = [10.0 + i for i in range(n)]
+        pooled = ((statistics.variance(slow) + statistics.variance(fast)) / 2.0) ** 0.5
+        expected = (statistics.fmean(slow) - statistics.fmean(fast)) / pooled
+        assert _cohens_d(slow, fast) == pytest.approx(expected), n
+
+    # A single sample cannot estimate a spread; the floor stands in rather than
+    # raising, and `resolved` is what keeps such a pair out of the findings.
+    assert _cohens_d([5.0], [5.0]) == 0.0

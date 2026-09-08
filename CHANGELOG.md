@@ -46,6 +46,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The documented `user_steps_dropped` disclosure never fired for the two contracts it
+  was written for.** `docs/attack-catalog/index.md` names the RAG-pipeline and
+  agent-framework contracts specifically and promises three things where an adapter
+  cannot carry a user: the steps are "DROPPED rather than failed", the run records
+  `user_steps_dropped`, and `diff` reports `[BOUNDARY LOST]` — "a pass which says the
+  user boundary was not tested, never that it held". Both probes filtered the user
+  principals out at *plan* time instead, so the runner's drop path — built for exactly
+  this case — never ran: the metric stayed `{}`, the audit PDF's clause never printed,
+  and the diff signal was always empty. Not planning a step silently is a pass that says
+  nothing at all. They are planned and dropped now; no user step reaches an adapter that
+  cannot carry one, which is the false positive the plan-time filter existed to avoid.
+- **The reported "Cohen's d" was inflated.** `_cohens_d` used the *population* variance
+  while `_welch`, twenty lines down, used the *sample* variance — two estimators of one
+  quantity in a single file. Cohen's d is defined on the pooled sample SD, so the figure
+  was high by √(n/(n−1)): 2.15% at the default 24 trials, 11.8% at 5. It is printed in
+  the finding's evidence span, signed into `side_channel_effect_sizes`, and compared
+  against the large-effect threshold, so a true 4.95 shipped as 5.05 and read HIGH.
+- **`docs/configuration.md` documented the wrong factory contract** for
+  `openai-assistants` (the resolver requires a `(client, assistant_id)` pair and raises
+  otherwise) and for `anthropic-tooluse`. Two KV docstrings likewise described behaviour
+  the code does not have (`>=` described as "above"; a degenerate Welch case described as
+  always infinite when it returns `0.0` for equal means).
+
 - **The KV-timing probe measured one warmed prefix with every observer.** Its docstring
   states the invariant — "the owner warms one prefix per trial and each is measured
   exactly once, by one observer arm" — and explains the bug that sentence exists to
