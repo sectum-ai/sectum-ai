@@ -295,8 +295,8 @@ class KvCacheTimingProbe:
         HuggingFace adapter comply - HF's ``measure_latency_ms`` calls ``infer``).
         An adapter whose two paths use independent caches would show no signal.
 
-        The owner warms one prefix per trial and each is measured exactly once,
-        by one observer arm: on a backend whose latency call runs inference (HF),
+        The owner warms one prefix per (observer, trial) and each is measured
+        exactly once, by one observer arm: on a backend whose latency call runs inference (HF),
         the observer's own trial 0 used to warm the single shared prefix - and the
         single control prefix - for every later trial, so both arms were cache
         hits from trial 1 and a real shared cache survived only in trial 0
@@ -311,14 +311,25 @@ class KvCacheTimingProbe:
         signals: list[TimingSignal] = []
         findings: list[Finding] = []
         for owner in tenants:
-            prefixes = [
-                f"t{_key(owner)}-{trial:02d}-session {_PREFIX_FILLER}" for trial in range(_TRIALS)
-            ]
-            for prefix in prefixes:
-                self._model.infer(owner, f"{prefix} context warm-up prompt")
             for observer in tenants:
                 if observer == owner:
                     continue
+                # Unique per (owner, observer, trial) and warmed inside this loop,
+                # exactly as the control prefix below already is - and for the same
+                # reason, which was written down there and not applied here. One
+                # prefix set per OWNER was measured by every observer in turn, so on
+                # a backend whose latency call runs inference (HF: `measure_latency_ms`
+                # calls `infer`) observer 1's own measurement primed the prefix that
+                # observers 2..n then read as a hit, and the probe attributed it to
+                # the owner - a CONFIRMED, confidence-1.0 finding naming a principal
+                # the measurement never established. 6+6 hex characters keep the pair
+                # inside the leading 20 the fake and the serving doubles key on.
+                prefixes = [
+                    f"t{_key(owner)[:6]}{_key(observer)[:6]}-{trial:02d}-ses {_PREFIX_FILLER}"
+                    for trial in range(_TRIALS)
+                ]
+                for prefix in prefixes:
+                    self._model.infer(owner, f"{prefix} context warm-up prompt")
                 signals.append(self._measure(owner, observer, prefixes))
         # Bonferroni correction: a run performs one Welch's t-test per ordered
         # tenant pair, so judging each at _ALPHA would inflate the family-wise

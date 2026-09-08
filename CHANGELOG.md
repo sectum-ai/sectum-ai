@@ -46,6 +46,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The KV-timing probe measured one warmed prefix with every observer.** Its docstring
+  states the invariant — "the owner warms one prefix per trial and each is measured
+  exactly once, by one observer arm" — and explains the bug that sentence exists to
+  prevent. One prefix set was built per *owner* and handed to every observer in turn, so
+  on a backend whose latency call runs inference (HuggingFace's `measure_latency_ms`
+  calls `infer`) observer 1's own measurement primed the prefix that observers 2..n then
+  read as a hit — and the probe attributed that warmth to the **owner**, emitting a
+  `CONFIRMED`, confidence-`1.0` finding naming a principal the measurement never
+  established. The *control* prefix already carried exactly this fix, with the reason
+  written beside it; the primed prefix never got it. It is now keyed on the (owner,
+  observer, trial) triple and warmed inside the observer loop, with the pair kept inside
+  the leading 20 characters the fake and the serving doubles key on.
+
 - **Class 1's 200-empty rule reached one by-id read and not its two siblings.**
   `AccessOutcome.DENIED` is produced by no code path — the runner emits only `RETURNED`
   or `EMPTY` — so "nothing came back" can never mean "the deny was enforced", and the

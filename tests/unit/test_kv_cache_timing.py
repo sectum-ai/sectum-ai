@@ -532,3 +532,40 @@ def test_a_latency_metric_with_no_resolution_is_not_a_measurement() -> None:
     real = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
     assert all(signal.resolved for signal in real.signals)
     assert len(real.findings) == len(real.signals)
+
+
+def test_each_warmed_prefix_is_measured_by_exactly_one_observer() -> None:
+    # The docstring's own invariant: "the owner warms one prefix per (observer,
+    # trial) and each is measured exactly once, by one observer arm". One prefix
+    # set per OWNER was built and handed to every observer in turn, so on a
+    # backend whose latency call runs inference (HF's `measure_latency_ms` calls
+    # `infer`) observer 1's own measurement primed the prefix that observers 2..n
+    # then read as a hit - and the probe attributed that warmth to the OWNER,
+    # emitting a CONFIRMED, confidence-1.0 finding naming a principal the
+    # measurement never established. The CONTROL prefix already carried this fix,
+    # with the reason written beside it; the primed prefix never got it.
+    from collections import Counter
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    model = FakeModel(prefix_cache=True)
+    seen: Counter[str] = Counter()
+    measure = model.measure_latency
+
+    def spy(tenant: UUID, prompt: str) -> float:
+        seen[prompt[:20]] += 1
+        return measure(tenant, prompt)
+
+    model.measure_latency = spy  # type: ignore[method-assign]
+    report = KvCacheTimingProbe(substrate, model=model).run()
+
+    primed = {prefix for prefix in seen if prefix.startswith("t")}
+    assert primed, seen
+    assert set(Counter(seen[prefix] for prefix in primed)) == {1}, Counter(
+        seen[prefix] for prefix in primed
+    )
+    # The pair must still be identifiable inside the leading 20 characters the
+    # fake and the serving doubles key on - a longer key would silently stop the
+    # cache distinguishing trials, and the signal would vanish.
+    assert all(len(prefix) == 20 for prefix in primed), primed
+    # And the probe still measures the side channel it exists for.
+    assert len(report.findings) == 12, report.findings
