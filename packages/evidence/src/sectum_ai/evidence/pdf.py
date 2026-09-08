@@ -172,6 +172,17 @@ def confirmed_by_kind(run: RunResult) -> str:
         if run.surface_provenance
         else "; live-surface attribution not recorded"
     )
+    # "on live surfaces 0" reads as "we placed them, on a fake". An unaccounted
+    # finding was not placed at all, and the two rendered byte-identically - the
+    # same conflation `unaccounted_surfaces` exists to break one section above.
+    unplaceable = sum(
+        1 for finding in confirmed if backing_surface(finding) in unaccounted_surfaces(run)
+    )
+    if unplaceable:
+        parts += (
+            f"; {unplaceable} of them rest on a surface this run's provenance "
+            "does not record and are placed on no stack at all"
+        )
     return f"{len(confirmed)} ({parts})"
 
 

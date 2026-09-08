@@ -282,3 +282,22 @@ def test_an_unverified_residue_is_a_candidate_not_a_finding() -> None:
     text = run_to_sarif(_run(unverified))["runs"][0]["results"][0]["message"]["text"]
     assert "residual-data candidate" in text, text
     assert "residual-data finding" not in text, text
+
+
+def test_a_probe_with_only_unverified_findings_does_not_advertise_a_leak() -> None:
+    # The rule's level and security-severity have tracked status since they were
+    # written ("an unverified-only rule never renders as a high-severity GitHub
+    # alert"); its TITLE did not, so a probe that produced only candidates
+    # advertised "Cross-principal leak finding" on its GitHub rule page while
+    # every result underneath correctly read "candidate".
+    unverified = _finding("u", status=FindingStatus.UNVERIFIED)
+    rule = run_to_sarif(_run(unverified))["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["shortDescription"]["text"].startswith("Cross-principal leak candidate"), rule
+    assert rule["defaultConfiguration"]["level"] == "note"
+
+    # A CONFIRMED finding still says "finding" - including on a synthetic surface,
+    # where the level is floored but the status is not in doubt. The result's own
+    # `[synthetic surface ...]` prefix is what says whose stack it describes.
+    confirmed = run_to_sarif(_run(_finding("c")))["runs"][0]["tool"]["driver"]["rules"][0]
+    assert confirmed["shortDescription"]["text"].startswith("Cross-principal leak finding")
+    assert confirmed["defaultConfiguration"]["level"] == "note"

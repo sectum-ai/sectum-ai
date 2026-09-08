@@ -1202,6 +1202,14 @@ def _confirmed_summary(confirmed: Sequence[Finding], provenance: dict[str, str])
         suffix = ""
     elif provenance:
         suffix = f"; {live} on live surfaces"
+        # See `pdf.confirmed_by_kind`: "0 on live surfaces" reads as "placed, on a
+        # fake", and a finding on a surface the block never records was not placed
+        # at all. The two printed identically.
+        # `labels.unaccounted_surfaces`' rule, over the data this function has:
+        # its "empty block" guard is already satisfied by the branch we are in.
+        unplaceable = sum(1 for f in confirmed if backing_surface(f) not in provenance)
+        if unplaceable:
+            suffix += f"; {unplaceable} rest on a surface this run's provenance does not record"
     else:
         suffix = "; live-surface attribution not recorded"
     if set(kinds) <= {"cross-tenant leak"}:

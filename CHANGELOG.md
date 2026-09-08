@@ -46,6 +46,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An unplaceable finding was reported as one on a fake.** "on live surfaces 0" reads as
+  "we placed them, on Sectum's own store". A finding whose backing surface the provenance
+  block never records was not placed *at all* — a different claim — and the two rendered
+  byte-identically in the audit PDF's summary row and in the CLI's, the same conflation
+  the provenance paragraph one section above exists to break.
+- **A SARIF rule advertised a leak for a probe that found only candidates.** The rule's
+  `level` and `security-severity` have tracked status since they were written; its title
+  did not, so a probe producing only `UNVERIFIED` findings showed "Cross-principal leak
+  finding" on its GitHub rule page while every result underneath read "candidate". The
+  noun keys on status alone — a confirmed finding on a synthetic surface is still
+  confirmed, and the result's own `[synthetic surface …]` prefix is what says whose stack
+  it describes.
+
 - **The KV probe printed the variance floor's outputs as measurements.** A jitter-free
   backend has zero observed spread, and the 1 µs floor stands in so Welch's t is finite
   rather than degenerate — which is right. Rendering the results as observations is not:

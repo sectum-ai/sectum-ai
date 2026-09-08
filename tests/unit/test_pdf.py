@@ -504,3 +504,36 @@ def test_the_coverage_matrix_says_which_rows_describe_a_fake() -> None:
     assert (
         coverage_gloss(run, "semantic_cache", "NOT_COVERED") == "not verified by this attestation"
     )
+
+
+def test_an_unplaceable_finding_is_not_reported_as_one_on_a_fake() -> None:
+    # "on live surfaces 0" reads as "we placed them, on a fake". A finding whose
+    # backing surface the block never records was not placed at all - a different
+    # claim - and the two rendered byte-identically in the PDF summary row and in
+    # the CLI's, the same conflation `unaccounted_surfaces` exists to break in the
+    # provenance paragraph one section above.
+    from sectum_ai.cli.app import _confirmed_summary
+    from sectum_ai.evidence.pdf import confirmed_by_kind
+    from sectum_ai.spec import SurfaceProvenance
+
+    manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
+    leaks = _run_result(manifest, with_finding=True).findings
+    assert leaks, "the fixture must carry a confirmed finding on vector_db"
+    on_a_fake = {"vector_db": SurfaceProvenance.SYNTHETIC.value}
+    unplaceable = {"semantic_cache": SurfaceProvenance.LIVE.value}
+
+    fake_run = _run_result(manifest, with_finding=True).model_copy(
+        update={"surface_provenance": on_a_fake}
+    )
+    lost_run = _run_result(manifest, with_finding=True).model_copy(
+        update={"surface_provenance": unplaceable}
+    )
+
+    assert "on live surfaces 0" in confirmed_by_kind(fake_run)
+    assert "does not record" not in confirmed_by_kind(fake_run)
+    assert "does not record" in confirmed_by_kind(lost_run), confirmed_by_kind(lost_run)
+    assert confirmed_by_kind(fake_run) != confirmed_by_kind(lost_run)
+
+    # And its CLI sibling, which had the identical gap.
+    assert "does not record" not in _confirmed_summary(list(leaks), on_a_fake)
+    assert "does not record" in _confirmed_summary(list(leaks), unplaceable)

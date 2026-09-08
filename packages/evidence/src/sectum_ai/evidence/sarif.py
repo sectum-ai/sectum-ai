@@ -145,6 +145,11 @@ def _rule(
         for f in findings
         if f.status is FindingStatus.CONFIRMED and not _describes_a_fake(f, live)
     ]
+    # The NOUN keys on status alone, not on this fake-filtered list: a confirmed
+    # finding on Sectum's own fake is still confirmed (the result message already
+    # carries the `[synthetic surface ...]` prefix, and the level and bucket below
+    # are what get floored). Calling it a "candidate" would misstate the status.
+    any_confirmed = any(f.status is FindingStatus.CONFIRMED for f in findings)
     if confirmed:
         worst = max(confirmed, key=lambda f: _SEVERITY_ORDER[f.severity])
         level = _LEVEL_BY_SEVERITY[worst.severity]
@@ -160,10 +165,14 @@ def _rule(
         "id": probe_id,
         "name": probe_id.replace("-", "_"),
         "shortDescription": {
+            # The noun tracks status, like the level and the bucket two lines
+            # down. It did not: a probe that produced only UNVERIFIED candidates
+            # advertised "leak finding" on its GitHub rule page while every result
+            # under it correctly read "candidate" - the one field of the three that
+            # still asserted a confirmed leak.
             "text": (
-                f"Residual-data finding from the {probe_id} probe"
-                if probe_id in _ERASURE_PROBE_IDS
-                else f"Cross-principal leak finding from the {probe_id} probe"
+                f"{'Residual-data' if probe_id in _ERASURE_PROBE_IDS else 'Cross-principal leak'}"
+                f" {'finding' if any_confirmed else 'candidate'} from the {probe_id} probe"
             )
         },
         "helpUri": _HELP_URI,
