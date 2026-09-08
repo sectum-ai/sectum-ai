@@ -119,8 +119,9 @@ genuinely want left synthetic should simply be **omitted** — omission is
 deliberate, and the run records it as `SYNTHETIC` in its
 [surface provenance](coverage.md) either way.
 
-Two cross-cutting boolean knobs apply to every `fake` adapter (and the live ones
-that support them), beyond the per-family fields the tables below highlight:
+Two cross-cutting boolean knobs apply to most `fake` adapters (and the live ones
+that support them; the `rag` and `agent` resolvers read neither, and passing one
+there is a `ConfigError`), beyond the per-family fields the tables below highlight:
 `user_scoped: bool = false` switches isolation from tenant-level to per-user
 within a tenant (ADR-0006) — on a live adapter it is also what makes the adapter
 carry the calling user to the backend at all, so with it off the run exercises
@@ -217,7 +218,7 @@ the default. This is the field-level sibling of the unknown-family check.
 |---|---|---|
 | `fake` | `shared_index: bool = false` | `FakeRAGPipeline`. `shared_index: true` makes one retriever serve every tenant — the Class 2 retrieval-pivot leak at the RAG-pipeline end (the `rag-pipeline-bleed` probe). |
 | `http` | `url: str` *(required)*, `headers: dict[str, str] \| null = null`, `timeout: float = 30.0` | `HttpRAGPipeline` — POSTs `{tenant, query}` to the URL and parses `{answer, retrieved}`. |
-| `langchain` | `factory: str` *(required)* — `module.path:callable`, imported and called with no arguments; must return an object exposing `invoke(input) -> str \| dict` | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. |
+| `langchain` | `factory: str` *(required)* — `module.path:callable`, imported and called with no arguments; must return an object exposing `invoke(input) -> str \| dict` | `LangChainRAGPipeline` — wraps any LangChain `Runnable` (a composed LCEL chain) and invokes it with `{"tenant": str(tenant), "query": query}`; accepts a string answer, `{"answer", "retrieved"}`, or the legacy `{"result", "source_documents"}` shape. Requires the optional `rag-langchain` extra: `pip install sectum-ai-adapters[rag-langchain]`. |
 
 These kinds are wired in code: the config names a `factory` — a
 `module.path:callable` that the resolver imports and calls with no arguments —
@@ -394,7 +395,9 @@ sectum-ai probe --config sectum-ai.yaml
 ## Schema reference
 
 The schema is implemented as pydantic models in `sectum_ai.config` —
-`SectumConfig`, `ScenarioConfig`, `AdapterConfig`, `EvidenceConfig` — and the
+`SectumConfig`, `ScenarioConfig`, `AdapterConfig`, `EvidenceConfig`,
+`SecurityConfig` and `DetectionConfig` (the last two have their own sections
+above) — and the
 adapter resolver is `sectum_ai.config.build_adapters`. `AdapterConfig` accepts
 extra fields (the backend-specific `host`, `port`, `dsn_env`, leak knobs);
 the per-family `build_*` functions read and *type-check* the keys they consume.

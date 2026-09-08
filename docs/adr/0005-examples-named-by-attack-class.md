@@ -27,6 +27,11 @@ Class 11 erasure example ships as `examples/erasure-attestation/`.
 ## Consequences
 
 - Example names stay accurate regardless of what a given stack measures.
+- Two of the eighteen directories name a sweep or a target stack rather than a
+  class - `embedding-rpr-sweep/` (a metric's *name*, not a value) and
+  `open-webui-run/` (the stack it runs against); both are Class 2 and
+  `examples/README.md` says so. The rule this ADR fixes is the prohibition on
+  metric *values* in a name, which every directory respects.
 - This is a deliberate deviation from the spec's section 12 directory sketch,
   recorded here per the spec's operating rule to flag deviations (section 1.2).
 - The Retrieval-Pivot Rate is reported as a measured result inside the example

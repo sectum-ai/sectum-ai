@@ -122,7 +122,7 @@ that predated the correctness fixes those releases existed to deliver.
 `tests/unit/test_action_version.py` now fails the build if the Action default, the
 docs table, the docs pin, the README status line, the `docs/index.md` version
 line, or the `SECURITY.md` supported-minor row drifts from the package version,
-so this step cannot be silently skipped again. Its seventh test guards a
+so this step cannot be silently skipped again. Its sixth test guards a
 *different* version: `docs/data-models.md`'s `current SCHEMA_VERSION is X.Y.Z`
 line, against `sectum_ai.spec.SCHEMA_VERSION`. That moves only when the schema
 does, so update and stage that page in any release that bumps it. (The

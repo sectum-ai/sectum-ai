@@ -19,7 +19,7 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage`, `bedrock` (the four hosted opt-in live) | ✅ |
+| Embedding provider (Class 2 sweep) | not an adapter `kind:` — an `embedding_models:` entry, spelled `st:<model>` (local), `openai:<model>`, `cohere:<model>`, `voyage:<model>`, `bedrock:<model>` (the four hosted opt-in live) | ✅ (`hash-<dim>`, `fake-<name>`) |
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Application resource API (`app`) | *(live HTTP adapter not yet implemented)* | ✅ |

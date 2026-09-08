@@ -33,8 +33,25 @@ uv run pre-commit install   # enable git hooks
 | Check the coverage floors | `uv run pytest --cov=sectum_ai` first (plain `pytest` writes no coverage data), then `uv run coverage report --include="packages/<pkg>/src/*" --fail-under=85` for core, probes and evidence |
 | Run the CLI | `uv run sectum-ai --help` |
 | Check the lockfile is current | `uv lock --check` (all three CI `uv sync` steps are `--locked`, so commit `uv.lock` with any dependency change) |
-| Run the Extras API contract | The extras are **not** in the dev group, so a plain `uv run pytest` skips all 12 of these silently and the required `Extras API contract` check can be red on a locally-green tree. Install them at the locked versions first: `uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt`, then `grep -E '^(cohere\|huggingface-hub\|transformers\|peft\|openai\|anthropic\|langfuse)==' /tmp/all-reqs.txt > /tmp/extras-reqs.txt && uv pip install -r /tmp/extras-reqs.txt && uv run --no-sync pytest tests/contract/test_extra_api_surface.py`. |
+| Run the Extras API contract | The extras are **not** in the dev group, so a plain `uv run pytest` skips all 12 of these silently and the required `Extras API contract` check can be red on a locally-green tree. See [Installing the extras](#installing-the-extras) below. |
 | Run the secret scan | `gitleaks dir .` on a clean checkout ([install](https://github.com/gitleaks/gitleaks)) — **not** a substitute for the pre-commit hook, and not substituted by it: see below. Run the examples first and it reports ~60 hits in `examples/*/out/`, which `gitleaks dir` scans despite `.gitignore`; those are the substrate's own canaries, and CI is unaffected because `Secret scan` runs on a fresh checkout. |
+
+### Installing the extras
+
+Out of the table, because the alternation needs literal `|` characters: inside a
+table cell they must be escaped as `\|`, which POSIX ERE does not read as
+alternation. Copied from the raw file the pattern matched nothing, exited `0`
+through the pipe, installed nothing — and the contract tests below all skipped
+while the job passed, which is exactly the failure the CI step's own guard
+exists to catch.
+
+```sh
+uv export --all-extras --no-hashes --no-emit-project > /tmp/all-reqs.txt
+grep -E '^(cohere|huggingface-hub|transformers|peft|openai|anthropic|langfuse)==' \
+  /tmp/all-reqs.txt > /tmp/extras-reqs.txt
+uv pip install -r /tmp/extras-reqs.txt
+uv run --no-sync pytest tests/contract/test_extra_api_surface.py
+```
 
 **The secret scan is the one gate whose local and CI forms differ.** The
 pre-commit `gitleaks` hook runs `gitleaks git --pre-commit --staged`, which scans

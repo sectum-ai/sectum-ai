@@ -41,10 +41,10 @@ memory `FakeVectorStore` with `shared_index: true`:
    `run.sh` passes no `--config`, so the demo store ranks by token
    overlap — so what this walkthrough demonstrates is the *probe*, not
    an embedding inversion. Sectum says why in its own adapter contract:
-   run Class 6 against a store that matches on substrings "and a keyword
-   hit gets recorded as embedding inversion — a real finding attributed
-   to a mechanism the backend does not have". Point it at a real
-   embedding-backed store before reading the rate as inversion.
+   "Run either against a store that matches on substrings instead, and a
+   keyword hit gets recorded as embedding inversion - a real finding
+   attributed to a mechanism the backend does not have." Point it at a
+   real embedding-backed store before reading the rate as inversion.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
 4. **`sectum-ai verify`** independently re-checks the pack.
 

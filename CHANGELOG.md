@@ -46,6 +46,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`CONTRIBUTING.md`'s extras recipe matched nothing when copied.** The alternation
+  lived in a table cell, where a literal `|` must be escaped as `\|` — which POSIX ERE
+  does not read as alternation. Copied from the raw file it matched nothing, exited `0`
+  through the pipe, installed nothing, and the contract tests all skipped while the job
+  passed: verbatim the failure the CI step's own guard exists to catch. Moved into a
+  fenced block, where no escaping is needed.
+- **A dozen documentation claims the code does not back**, each verified against the
+  tool before changing: `docs/RELEASING.md` counted seven guard tests where six exist;
+  the Class 7 catalog header and index row attributed `AML.T0051.001` to both probes when
+  only `agent-tool-hijack`'s injection sub-probe declares it; `docs/configuration.md` said
+  two knobs "apply to every `fake` adapter" and contradicted itself thirteen lines later
+  (`rag` and `agent` read neither, and passing one is a `ConfigError`), listed embedding
+  providers as adapter `kind:` values under names the CLI does not accept (they are
+  `embedding_models:` entries spelled `st:`/`openai:`/…), omitted the `rag-langchain`
+  extra from the one live kind that needs it, and named four of its six config models;
+  the attack-catalog index opened on a subject/verb mismatch; the README's twelve-class
+  list ran out of the catalog order it cited, so a reader mapping it positionally read
+  Class 3 as semantic-cache contamination; `docs/adr/README.md` described a section every
+  ADR has where 0016–0022 use front-matter; ADR-0016 named v0.1.1 as the first public
+  release (it is v0.1.0; the `SCHEMA_VERSION` half was right); ADR-0005's positive half
+  did not hold for two of eighteen example directories; and the embedding-inversion
+  example's quotation of the adapter contract opened mid-clause and rendered an ASCII
+  hyphen as an em dash inside what presents as verbatim.
+
 - **`baseline --save --compare` silently discarded a regression at exit 0.** `--save`
   returned before `--compare` was ever read, so on a documented CI gate the flag was
   ignored — and the run it ignored was the *regressing* one, which then overwrote the

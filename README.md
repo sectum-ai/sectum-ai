@@ -56,11 +56,13 @@ memory, MCP tool calls, fine-tunes / adapters, eval sets, backups, search
 indexes, tracing pipelines, agent frameworks, API. Live adapters for the
 common backends.
 
-**12 attack classes** (1-11 and 13). Direct tenant-boundary fetch, organic entity-bleed RAG
-(the flagship), semantic-cache contamination, KV-cache timing side channel,
-embedding inversion, MCP confused-deputy + token passthrough, persistent memory
-contamination, LoRA cross-tenant influence, IKEA benign extraction, RAG
-poisoning, GDPR Article 17 erasure verification, multi-modal RAG entity-bleed.
+**12 attack classes** (1-11 and 13), in catalog order. Direct tenant-boundary
+fetch, organic entity-bleed RAG (the flagship), adversarial RAG poisoning,
+semantic-cache contamination, KV-cache timing side channel, embedding inversion,
+agent tool-call hijacking (MCP confused-deputy and token passthrough, plus the
+agent-framework variant), persistent memory contamination, LoRA cross-tenant
+influence, IKEA benign extraction, GDPR Article 17 erasure verification,
+multi-modal RAG entity-bleed.
 
 **Tamper-evident evidence.** Every run is canonicalized, hashed, wrapped in an
 in-toto attestation envelope, and rendered to an auditor PDF; with

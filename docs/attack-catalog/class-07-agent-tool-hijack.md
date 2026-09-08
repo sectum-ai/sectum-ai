@@ -1,6 +1,6 @@
 # Class 7 — Cross-tenant agent tool-call hijacking
 
-**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0051.001, AML.T0053 · **NIST:** MEASURE 2.7 · **Surfaces:** MCP, Agent framework · **Probe ids:** `agent-tool-hijack`, `agent-framework-hijack`
+**OWASP:** LLM08:2025 · **ATLAS:** AML.T0024, AML.T0053 (both probes); AML.T0051.001 (`agent-tool-hijack`'s injection sub-probe only — `agent-framework-hijack` does not declare it) · **NIST:** MEASURE 2.7 · **Surfaces:** MCP, Agent framework · **Probe ids:** `agent-tool-hijack`, `agent-framework-hijack`
 
 ## Goal
 
