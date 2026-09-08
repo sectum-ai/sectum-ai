@@ -85,6 +85,13 @@ class TimingSignal:
     p_value: float
     ci_low_ms: float
     ci_high_ms: float
+    # True when an arm's observed spread was below the timer's resolution and the
+    # floor stood in for it. Every number derived from that arm - d, t, p and the
+    # interval - is then a BOUND, not a measurement: a jitter-free 60ms gap
+    # produced `d=60000.0, t=207846, p=0.0, CI=[60.00, 60.00]`, and a zero-width
+    # 95% interval claims the gap is known exactly. The floor is the right way to
+    # avoid a degenerate t; printing its outputs as observations is not.
+    variance_floored: bool = False
     # False when every one of the 48 readings came back identical: the backend's
     # latency metric has no resolution here, so the pair was not measured. Without
     # it a flat metric produced d=0.0, p=1.0 - arithmetically indistinguishable
@@ -428,6 +435,12 @@ class KvCacheTimingProbe:
             ci_low_ms=round(mean_gap - margin, 2),
             ci_high_ms=round(mean_gap + margin, 2),
             resolved=len(set(primed) | set(control)) > 1,
+            variance_floored=(
+                statistics.variance(primed) < _VARIANCE_FLOOR
+                or statistics.variance(control) < _VARIANCE_FLOOR
+            )
+            if len(primed) > 1 and len(control) > 1
+            else True,
         )
 
     def _finding(self, signal: TimingSignal, alpha: float) -> Finding:
@@ -453,6 +466,13 @@ class KvCacheTimingProbe:
                 f"{int(_CI_LEVEL * 100)}% CI [{signal.ci_low_ms}, {signal.ci_high_ms}]ms); "
                 f"Welch t={signal.t_statistic}, df={signal.degrees_of_freedom}, p={p_text}, "
                 f"Cohen's d={signal.effect_size}; significant at Bonferroni alpha={alpha:.2g}"
+                + (
+                    " - an arm's spread was below the timer's resolution, so the 1 us "
+                    "variance floor stood in for it: d, t, p and the interval are BOUNDS "
+                    "(the gap is at least this distinguishable), not measurements"
+                    if signal.variance_floored
+                    else ""
+                )
             ),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,

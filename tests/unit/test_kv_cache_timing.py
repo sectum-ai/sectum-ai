@@ -594,3 +594,40 @@ def test_cohens_d_uses_the_pooled_sample_deviation() -> None:
     # A single sample cannot estimate a spread; the floor stands in rather than
     # raising, and `resolved` is what keeps such a pair out of the findings.
     assert _cohens_d([5.0], [5.0]) == 0.0
+
+
+def test_a_floored_variance_is_reported_as_a_bound_not_a_measurement() -> None:
+    # A jitter-free backend has zero observed spread, and the 1 us floor stands in
+    # for it so Welch's t is finite rather than degenerate - which is right. What
+    # was wrong is printing the floor's outputs as observations: `d=60000.0`,
+    # `t=207846`, `p=0.0` and a 95% interval of `[60.00, 60.00]`. A zero-width
+    # confidence interval claims the gap is known EXACTLY, from a spread the run
+    # never measured, in a signed evidence pack.
+    class _ConstantLatency:
+        name = "constant"
+
+        def __init__(self) -> None:
+            self.warm = False
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            self.warm = True
+            return ""
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            return 60.0 if self.warm and prompt.startswith("t") else 120.0
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    report = KvCacheTimingProbe(substrate, model=_ConstantLatency()).run()  # type: ignore[arg-type]
+
+    signal = report.signals[0]
+    assert signal.variance_floored, signal
+    assert signal.ci_low_ms == signal.ci_high_ms, signal  # the zero-width interval
+    assert report.findings, "the side channel is real and must still be reported"
+    span = report.findings[0].evidence_span
+    assert "BOUNDS" in span and "variance floor stood in" in span, span
+
+    # A backend with real jitter is unchanged: nothing was floored, so nothing is
+    # qualified, and the numbers stay measurements.
+    measured = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert not measured.signals[0].variance_floored
+    assert "BOUNDS" not in measured.findings[0].evidence_span

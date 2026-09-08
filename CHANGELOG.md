@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The KV probe printed the variance floor's outputs as measurements.** A jitter-free
+  backend has zero observed spread, and the 1 µs floor stands in so Welch's t is finite
+  rather than degenerate — which is right. Rendering the results as observations is not:
+  `d=60000.0`, `t=207846`, `p=0.0` and a 95% interval of `[60.00, 60.00]` — a zero-width
+  confidence interval claims the gap is known *exactly*, from a spread the run never
+  measured, in a signed evidence pack. The signal now carries `variance_floored` and the
+  evidence span says those four numbers are bounds, not measurements. A backend with real
+  jitter is unchanged.
+
 - **`CONTRIBUTING.md`'s extras recipe matched nothing when copied.** The alternation
   lived in a table cell, where a literal `|` must be escaped as `\|` — which POSIX ERE
   does not read as alternation. Copied from the raw file it matched nothing, exited `0`
