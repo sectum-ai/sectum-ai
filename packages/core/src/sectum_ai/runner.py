@@ -26,6 +26,7 @@ from sectum_ai.spec import (
     ProbeStep,
     Substrate,
     get_logger,
+    residual_present,
 )
 
 _log = get_logger(__name__)
@@ -98,6 +99,10 @@ class Runner:
         # Probe id -> user-level steps not run (see run_per_step); the CLI records
         # it in the signed run so a narrowed run cannot pass for a full one.
         self.dropped_user_steps: dict[str, int] = {}
+        # Probe id -> plants that did not read back (see _plant_landed). A probe
+        # whose every plant vanished asked the stack nothing, however many reads
+        # it then ran.
+        self.unconfirmed_plants: dict[str, int] = {}
 
     def preflight(self, probe: Probe) -> None:
         """Raise ``ConfigError`` if the probe's declared adapters are not configured.
@@ -151,6 +156,7 @@ class Runner:
             return []
         results: list[StepResult] = []
         dropped = 0
+        planted = unconfirmed = 0
         for planned in planned_steps:
             step = planned
             if _droppable(step):
@@ -163,7 +169,29 @@ class Runner:
                 # that leaks across TENANTS read clean with the probe recorded.
                 step = planned.model_copy(update={"actor_user_id": None})
             observation = self._execute(step)
+            if step.action in _PLANT_ACTIONS:
+                planted += 1
+                if not self._plant_landed(step):
+                    unconfirmed += 1
             results.append((step, probe.detect(step, observation, self._substrate)))
+        if planted and unconfirmed == planted:
+            # Every plant vanished, so every read below it looked for something
+            # that was never there: the probe asked the stack nothing, however
+            # many steps it ran. Same answer as the all-dropped case above - the
+            # probe leaves `probe_versions` and `score` rule 1 makes the class
+            # NOT_COVERED, rather than PASS off zero observations.
+            self.unconfirmed_plants[probe.id] = (
+                self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
+            )
+            _log.info("probe.plants_unconfirmed", probe=probe.id, plants=unconfirmed)
+            return []
+        if unconfirmed:
+            # Some landed: the probe did interrogate the stack, so it still counts
+            # - and the operator is told how much of its setup did not take.
+            self.unconfirmed_plants[probe.id] = (
+                self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
+            )
+            _log.info("probe.plants_unconfirmed", probe=probe.id, plants=unconfirmed)
         if dropped:
             self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + dropped
             _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
@@ -178,6 +206,58 @@ class Runner:
             confirmed_leaks=confirmed,
         )
         return results
+
+    def _plant_landed(self, step: ProbeStep) -> bool:
+        """Whether a plant step's write is actually readable by the principal that made it.
+
+        Classes 3, 4, 8 and 9 plant, then read the plant back across a principal
+        boundary. Nothing checked the WRITE. A store that acknowledges and drops
+        it - a zero TTL, a read-only replica, a quota - left the probe reading for
+        something that was never there: it ran, found nothing, entered
+        ``probe_versions``, and ``score`` graded the class PASS. That is the
+        vacuous pass rule 1 exists to refuse, reached from the other side. Class 11
+        does not have it, because it counts markers BEFORE acting.
+
+        Read back as the principal that planted, so this asks "did the write
+        take", never "does it cross a boundary" - the second is the probe's
+        question and is judged separately.
+
+        No retry, deliberately. Reflecting a write is the ADAPTER's contract, and
+        every store that needs help already keeps it: Pinecone and Azure AI Search
+        poll ``vector._settle``, OpenSearch indexes with ``refresh=True``, Qdrant
+        upserts with ``wait=True``, Milvus creates its collection
+        ``consistency_level="Strong"``. A backend that returns from a write it
+        cannot yet serve is an adapter bug, and ``settle`` is where it is fixed -
+        putting a retry loop here would paper over it everywhere at once.
+
+        ``model.train`` is exempt. Reading a LoRA back means asking the model to
+        regurgitate, which is probabilistic and is precisely what the probe
+        measures; a model that trained correctly and declined to echo would be
+        recorded as an unplanted probe. Training that fails raises instead
+        (``HuggingFaceLoraModel.train_adapter`` wraps it in ``AdapterError``), so
+        the silent-drop shape the other three have does not arise here.
+        """
+        tenant, user = step.actor_tenant_id, step.actor_user_id
+        try:
+            if step.action == "vector.upsert" and self._vector is not None:
+                doc_id = payload_required(step, "doc_id")
+                return self._vector.fetch(tenant, doc_id, user=user) is not None
+            if step.action == "cache.set" and self._cache is not None:
+                key = payload_required(step, "key")
+                return self._cache.get(tenant, key, user=user) is not None
+            if step.action == "memory.write" and self._memory is not None:
+                text = payload_required(step, "text")
+                return any(
+                    residual_present(text, hit)
+                    for hit in self._memory.recall(tenant, text, user=user)
+                )
+        except AdapterError as error:
+            # A backend that cannot answer "is it there?" has not confirmed the
+            # plant. Fail closed rather than abort: NOT_COVERED is the honest
+            # verdict for a class whose setup could not be established.
+            _log.info("probe.plant_unconfirmed", action=step.action, reason=str(error))
+            return False
+        return True
 
     def run(self, probe: Probe) -> list[Finding]:
         """Plan the probe, execute every step, and return all findings."""

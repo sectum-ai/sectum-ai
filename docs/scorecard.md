@@ -104,6 +104,18 @@ over-claim. Six rules prevent it:
    must never imply the stack passed a check it was never asked to perform. Untested
    classes are excluded from the grade entirely. (The scorecard analogue of the Class 11
    [coverage block](attack-catalog/class-11-erasure.md).)
+
+   "Did not run" includes **a probe whose plants never landed**. Classes 3, 4, 8 and 9
+   plant data and then read it back across a principal boundary; a store that
+   acknowledges the write and drops it — a zero TTL, a read-only replica, a quota —
+   leaves the probe reading for something that was never there. It runs, finds nothing,
+   and looks exactly like isolation working. The runner reads each plant back as the
+   principal that made it, and a probe whose *every* plant vanished leaves
+   `probe_versions`, so this rule catches it. Class 11 never had the hole, because it
+   counts markers **before** acting. (Reading a write back is the adapter's contract, so
+   there is no retry here: Pinecone and Azure AI Search poll, OpenSearch refreshes,
+   Qdrant waits, Milvus reads `Strong`. `model.train` is exempt — asking a LoRA to
+   regurgitate is probabilistic and is exactly what the probe measures.)
 2. **Untested classes lower *confidence*, not the grade.** Coverage is reported beside
    the letter and never folded into it: a run that exercised three classes and one that
    exercised eleven can both grade `A` — the confidence is what tells them apart.

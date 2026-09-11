@@ -480,7 +480,8 @@ def _score_class(
             probe_ids=entry.probe_ids,
             note=(
                 "probe did not run - no configured adapter satisfies it, it was not in "
-                "this run's suite, or the substrate left it no step to take"
+                "this run's suite, the substrate left it no step to take, or every one "
+                "of its plants was acknowledged by the backend and not served back"
             ),
         )
     if unattributed and not confirmed:

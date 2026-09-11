@@ -1134,6 +1134,7 @@ def probe(
         typer.echo(f"run recorded -> {path}")
     _warn_on_synthetic_surfaces(run.surface_provenance)
     _warn_on_dropped_user_steps(run.metrics.user_steps_dropped)
+    _warn_on_unconfirmed_plants(runner.unconfirmed_plants)
     if confirmed:
         raise typer.Exit(code=2)
 
@@ -1241,6 +1242,31 @@ def _exercised_surfaces(
     if kv_report is not None and any(signal.resolved for signal in kv_report.signals):
         exercised.add(bundle.model.surface.value)
     return exercised
+
+
+def _warn_on_unconfirmed_plants(unconfirmed: dict[str, int]) -> None:
+    """Tell the operator which probes could not read their own plant back.
+
+    A store that acknowledges a write and drops it - a zero TTL, a read-only
+    replica, a quota - leaves a planting probe reading for something that was
+    never there. It runs, finds nothing, and looks exactly like isolation
+    working. The run itself refuses the vacuous pass (the probe leaves
+    `probe_versions`, so `score` reports the class NOT_COVERED rather than PASS),
+    and this is the copy that says WHY, while there is still time to fix the
+    backend.
+    """
+    if not unconfirmed:
+        return
+    names = ", ".join(
+        f"{untrusted(probe_id)} ({count})" for probe_id, count in sorted(unconfirmed.items())
+    )
+    typer.echo(
+        f"warning: planted data could not be read back for {names}: the backend "
+        "acknowledged the write and did not serve it (a zero TTL, a read-only replica, "
+        "a quota). A probe whose every plant vanished asked the stack nothing, so its "
+        "class is NOT_COVERED rather than passed.",
+        err=True,
+    )
 
 
 def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:

@@ -46,6 +46,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A planting probe whose write the backend dropped graded `PASS`.** Classes 3, 4 and 8
+  plant data and then read it back across a principal boundary, and nothing checked the
+  *write*. A store that acknowledges it and drops it — a zero TTL, a read-only replica, a
+  quota — left the probe reading for something that was never there: it ran, found
+  nothing, entered `probe_versions`, and `score` graded the class `PASS`. That is rule 1's
+  vacuous pass reached from the other side, and Class 11 never had it because it counts
+  markers *before* acting. The runner now reads each plant back as the principal that
+  made it; a probe whose every plant vanished leaves `probe_versions`, so the class reads
+  `NOT_COVERED`, and the operator is told which backend swallowed the write.
+
+  No retry, deliberately: reflecting a write is the **adapter's** contract, and every
+  store that needs help already keeps it — Pinecone and Azure AI Search poll
+  `vector._settle`, OpenSearch indexes with `refresh=True`, Qdrant upserts with
+  `wait=True`, Milvus reads at `consistency_level="Strong"`. A backend that returns from
+  a write it cannot yet serve is an adapter bug, and `settle` is where it gets fixed;
+  a retry loop in the runner would paper over that everywhere at once.
+
+  `model.train` (Class 9) is **exempt**, and the exemption is pinned by its own test:
+  reading a LoRA back means asking the model to regurgitate, which is probabilistic and
+  is exactly what the probe measures, so a model that trained correctly and declined to
+  echo would be recorded as an unplanted probe — a false `NOT_COVERED`, the direction
+  this tool must never err in. Training that fails raises instead.
+
 - **An unplaceable finding was reported as one on a fake.** "on live surfaces 0" reads as
   "we placed them, on Sectum's own store". A finding whose backing surface the provenance
   block never records was not placed *at all* — a different claim — and the two rendered

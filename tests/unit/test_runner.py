@@ -6,6 +6,7 @@ the right payload, returns the right surface) and the negative path (no
 adapter wired → a typed ``AdapterError``).
 """
 
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
 import pytest
@@ -21,7 +22,7 @@ from sectum_ai.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
-from sectum_ai.probes import RagEntityBleedProbe
+from sectum_ai.probes import Probe, RagEntityBleedProbe
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
     AccessOutcome,
@@ -708,3 +709,100 @@ def test_the_two_no_user_contracts_drop_and_count_their_user_steps() -> None:
         # which is the false positive the plan-time filter was written to avoid.
         assert results, probe.id
         assert all(step.actor_user_id is None for step, _ in results), probe.id
+
+
+def test_a_plant_the_backend_drops_is_not_a_passing_class() -> None:
+    """The three deterministic planting probes confirm their own write.
+
+    Classes 3, 4 and 8 plant, then read the plant back across a principal
+    boundary; nothing checked the WRITE. A store that acknowledges it and drops it
+    - a zero TTL, a read-only replica, a quota - left the probe reading for
+    something that was never there: it ran, found nothing, entered
+    `probe_versions`, and `score` graded the class PASS. That is rule 1's vacuous
+    pass reached from the other side, and Class 11 never had it because it counts
+    markers BEFORE acting.
+    """
+    from sectum_ai.adapters import FakeCache, FakeMemory, FakeVectorStore
+    from sectum_ai.probes import (
+        MemoryContamProbe,
+        RagPoisoningProbe,
+        SemanticCacheProbe,
+        confirmed_findings,
+    )
+
+    class _DroppingStore(FakeVectorStore):
+        def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
+            return None
+
+    class _DroppingCache(FakeCache):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            return None
+
+    class _DroppingMemory(FakeMemory):
+        def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+            return None
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    cases: tuple[tuple[Probe, Callable[[bool], Runner]], ...] = (
+        (
+            RagPoisoningProbe(),
+            lambda drops: Runner(
+                substrate,
+                vector=(_DroppingStore if drops else FakeVectorStore)(shared_index=True),
+            ),
+        ),
+        (
+            SemanticCacheProbe(),
+            lambda drops: Runner(
+                substrate, cache=(_DroppingCache if drops else FakeCache)(tenant_scoped=False)
+            ),
+        ),
+        (
+            MemoryContamProbe(),
+            lambda drops: Runner(
+                substrate, memory=(_DroppingMemory if drops else FakeMemory)(shared_memory=True)
+            ),
+        ),
+    )
+    for probe, build in cases:
+        # The write vanishes: the probe asked the stack nothing, so it runs nothing
+        # and never reaches `probe_versions` - `score` rule 1 then reports the class
+        # NOT_COVERED instead of PASS.
+        broken = build(True)
+        assert broken.run_per_step(probe) == [], probe.id
+        assert broken.unconfirmed_plants[probe.id] == 8, probe.id
+
+        # And a backend that keeps its writes is untouched: the leak is still found
+        # and nothing is reported as unconfirmed. This is the direction that must
+        # never regress - a false "plant not confirmed" would withhold a real class.
+        intact = build(False)
+        results = intact.run_per_step(probe)
+        assert results, probe.id
+        assert confirmed_findings([f for _, fs in results for f in fs]), probe.id
+        assert probe.id not in intact.unconfirmed_plants, probe.id
+
+
+def test_a_model_plant_is_deliberately_not_read_back() -> None:
+    # `model.train` is exempt, and the exemption is the point: reading a LoRA back
+    # means asking the model to regurgitate, which is probabilistic and is exactly
+    # what the probe measures. A model that trained correctly and declined to echo
+    # would be recorded as an unplanted probe - a false NOT_COVERED, which is the
+    # direction this tool must never err in. Training that fails raises instead, so
+    # the silent-drop shape the stores have does not arise here.
+    from sectum_ai.adapters import FakeModel
+    from sectum_ai.probes import LoraCrossTenantProbe
+
+    class _ForgetfulModel(FakeModel):
+        """Trains, but never regurgitates - a plausible real LoRA."""
+
+        def train_adapter(
+            self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+        ) -> None:
+            return None
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = LoraCrossTenantProbe()
+    runner = Runner(substrate, model=_ForgetfulModel(adapter_bleed=True))
+    results = runner.run_per_step(probe)
+    assert results, "the probe still runs"
+    assert probe.id not in runner.unconfirmed_plants, runner.unconfirmed_plants
