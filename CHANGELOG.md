@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An isolation-only surface was reported as an unverified *erasure* surface.** Both
+  erasure renderers keyed on every LIVE surface, so a record whose provenance also named
+  `mcp`, `api`, `rag_pipeline` or `agent_framework` said "absence could not be established
+  on mcp" and flipped GDPR Article 17 to `not-satisfied`. No erasure probe scans `mcp`: it
+  is not an unverified erasure surface, it is not an erasure surface. Both now narrow to
+  `controls.ERASURE_SURFACES`, mirroring the probe's own plan — and a surface the scan
+  really can reach, left unscanned, still fails closed, so the narrowing cannot launder a
+  gap. A parity test pins the constant against the probe, since `evidence` sits below
+  `probes` and has to keep a copy.
+
 - **A planting probe whose write the backend dropped graded `PASS`.** Classes 3, 4 and 8
   plant data and then read it back across a principal boundary, and nothing checked the
   *write*. A store that acknowledges it and drops it — a zero TTL, a read-only replica, a

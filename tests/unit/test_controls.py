@@ -417,3 +417,79 @@ def test_the_isolation_surface_map_matches_the_scorecard_s() -> None:
         for probe_id, surfaces in PROBE_SURFACES.items()
     }
     assert mirrored == _ISOLATION_PROBE_SURFACES
+
+
+def test_the_erasure_surface_set_matches_the_probes_own_plan() -> None:
+    # `ERASURE_SURFACES` is duplicated here rather than imported, because
+    # `evidence` sits below `probes` - the same constraint `_ISOLATION_PROBE_SURFACES`
+    # lives under. A copy that drifts is worse than no copy: a surface dropped from
+    # it would stop being checked for erasure silently, and one added would be
+    # reported as an unverified erasure surface it never was.
+    from sectum_ai.adapters import (
+        FakeBackup,
+        FakeCache,
+        FakeEvalSet,
+        FakeMemory,
+        FakeModel,
+        FakeObservability,
+        FakeSearchIndex,
+        FakeVectorStore,
+    )
+    from sectum_ai.evidence.controls import ERASURE_SURFACES
+    from sectum_ai.probes import ErasureProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    report = ErasureProbe(
+        substrate,
+        vector=FakeVectorStore(),
+        observability=FakeObservability(),
+        memory=FakeMemory(),
+        cache=FakeCache(),
+        model=FakeModel(),
+        search_index=FakeSearchIndex(),
+        eval_set=FakeEvalSet(),
+        backup=FakeBackup(),
+    ).run(substrate.tenants[0].tenant_id)
+
+    scanned = {surface.surface.value for surface in report.surfaces}
+    assert scanned == ERASURE_SURFACES, scanned ^ ERASURE_SURFACES
+
+
+def test_an_isolation_only_surface_is_not_an_unverified_erasure_surface() -> None:
+    # Both erasure renderers keyed on EVERY live surface, so a record whose
+    # provenance also named an isolation-only one - `mcp`, `api`, `rag_pipeline`,
+    # `agent_framework` - said "absence could not be established on mcp" and
+    # flipped GDPR Article 17 to not-satisfied. No erasure probe scans mcp: it is
+    # not an unverified erasure surface, it is not an erasure surface.
+    from sectum_ai.evidence.controls import ERASURE, mapping_requirement
+    from sectum_ai.evidence.oscal import run_to_oscal
+
+    def erasure_state(provenance: dict[str, str]) -> tuple[str, str]:
+        run = _run(erasure=True, provenance=provenance).model_copy(
+            update={
+                "probe_versions": {"gdpr-erasure-verification": "1"},
+                "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+            }
+        )
+        finding = next(
+            f
+            for f in run_to_oscal(run)["assessment-results"]["results"][0]["findings"]
+            if "erasure" in f["title"]
+        )
+        assertion = next(
+            mapping.assertion
+            for mapping in control_mappings(run)
+            if mapping_requirement(mapping) == ERASURE
+        )
+        return finding["target"]["status"]["state"], assertion
+
+    state, assertion = erasure_state({"vector_db": "LIVE", "mcp": "LIVE"})
+    assert state == "satisfied", state
+    assert "mcp" not in assertion, assertion
+
+    # And a surface the erasure scan really can reach, left unscanned, still fails
+    # closed - the narrowing must not become a way to launder a gap.
+    state, assertion = erasure_state({"vector_db": "LIVE", "backup": "LIVE"})
+    assert state == "not-satisfied", state
+    assert "backup" in assertion, assertion

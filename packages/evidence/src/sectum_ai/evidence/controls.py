@@ -13,7 +13,13 @@ single probe emitted the same fully-satisfied 9-framework assessment as a full
 suite, which is the over-claim this product exists to refuse.
 """
 
-from sectum_ai.spec import ControlMapping, CoverageVerdict, RunResult, SurfaceProvenance
+from sectum_ai.spec import (
+    ControlMapping,
+    CoverageVerdict,
+    RunResult,
+    Surface,
+    SurfaceProvenance,
+)
 
 COVERAGE_DISCLAIMER = (
     "These control mappings assert that Sectum AI produced test-coverage "
@@ -155,6 +161,30 @@ _ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
 }
 
 
+# The surfaces a Class 11 erasure scan can reach, mirroring the probe's own plan
+# (`probes.erasure.probe.ErasureProbe.run`). Duplicated rather than imported for
+# the same reason `_ISOLATION_PROBE_SURFACES` is: `evidence` sits below `probes`.
+# `test_the_erasure_surface_set_matches_the_probes_own_plan` pins the two together.
+#
+# Without it both erasure renderers keyed on EVERY live surface, so a record whose
+# provenance also names an isolation-only surface - `mcp`, `api`, `rag_pipeline`,
+# `agent_framework` - reported "absence could not be established on mcp" and
+# flipped GDPR Article 17 to not-satisfied. No erasure probe ever scans mcp, so
+# that is not an unverified erasure surface; it is not an erasure surface.
+ERASURE_SURFACES: frozenset[str] = frozenset(
+    {
+        Surface.VECTOR_DB.value,
+        Surface.TRACING.value,
+        Surface.AGENT_MEMORY.value,
+        Surface.SEMANTIC_CACHE.value,
+        Surface.MODEL_ADAPTER.value,
+        Surface.SEARCH_INDEX.value,
+        Surface.EVAL_SET.value,
+        Surface.BACKUP.value,
+    }
+)
+
+
 def isolation_surfaces(run: RunResult) -> frozenset[str]:
     """The live surfaces THIS run's isolation probes drove.
 
@@ -289,7 +319,8 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
     # plus NOT_COVERED means scanned and unestablished.
     inconclusive = sorted(
         surface
-        for surface in live_surfaces(run)
+        # Only the surfaces an erasure scan can reach: see `ERASURE_SURFACES`.
+        for surface in live_surfaces(run) & ERASURE_SURFACES
         # `.get(surface)` returned None for a live surface absent from the block
         # entirely, so it was neither "verified" nor "could not be established" -
         # it simply vanished, while the assertion still said verified.

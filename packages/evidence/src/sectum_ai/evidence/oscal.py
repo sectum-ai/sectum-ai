@@ -52,6 +52,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sectum_ai.evidence.controls import (
     COVERAGE_DISCLAIMER,
     ERASURE,
+    ERASURE_SURFACES,
     control_mappings,
     erasure_scanned_surfaces,
     live_surfaces,
@@ -366,7 +367,13 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     coverage = (
         {
             surface: run.metrics.erasure_coverage.get(surface, CoverageVerdict.NOT_COVERED.value)
-            for surface in live
+            # Only the surfaces an erasure scan can reach. Keyed on every LIVE
+            # surface, a record whose provenance also named an isolation-only one
+            # reported "could not verify the erasure on mcp" and flipped GDPR
+            # Article 17 to not-satisfied - mcp is not an unverified erasure
+            # surface, it is not an erasure surface. `_erasure_assertion` narrows
+            # the same way, from the same constant, or the two disagree again.
+            for surface in live & ERASURE_SURFACES
         }
         if erasure_run
         else {}
