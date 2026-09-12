@@ -270,6 +270,13 @@
           "title": "Side Channel Effect Sizes",
           "type": "object"
         },
+        "unconfirmed_plants": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Unconfirmed Plants",
+          "type": "object"
+        },
         "user_steps_dropped": {
           "additionalProperties": {
             "type": "integer"

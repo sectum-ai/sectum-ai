@@ -389,6 +389,13 @@ class RunMetrics(SectumModel):
     # carry the user (``Adapter.carries_user``). Inside the canonical hash, so a
     # narrowed run cannot pass for one that exercised the user boundary.
     user_steps_dropped: dict[str, int] = Field(default_factory=dict)
+    # Probe id -> plants the backend acknowledged and did not serve back (a zero
+    # TTL, a read-only replica, a quota). Its sibling above went into the record
+    # and this stayed an in-memory attribute the CLI warned from, so the PARTIAL
+    # case - some plants landed, the probe still ran and still graded - reached the
+    # signed pack with nothing said: a class graded on half its setup read exactly
+    # like one graded on all of it. Inside the canonical hash for the same reason.
+    unconfirmed_plants: dict[str, int] = Field(default_factory=dict)
 
     @field_validator("erasure_residue", "erasure_caveats")
     @classmethod

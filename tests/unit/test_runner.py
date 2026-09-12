@@ -30,6 +30,7 @@ from sectum_ai.spec import (
     ConfigError,
     CorpusDocument,
     ProbeStep,
+    RunMetrics,
     Substrate,
     Surface,
 )
@@ -809,6 +810,14 @@ def test_a_partially_dropped_plant_still_runs_and_still_says_so() -> None:
 
     assert results, "half the plants landed, so the probe still asked the stack something"
     assert runner.unconfirmed_plants[probe.id] == 4, runner.unconfirmed_plants
+
+    # And it reaches the SIGNED record, like `user_steps_dropped` beside it. The
+    # count used to live only on this object: the CLI warned from it once and the
+    # pack said nothing, so the partial case - the probe ran, graded, and did it on
+    # less setup than it planned - was undisclosed to everyone downstream.
+    assert "unconfirmed_plants" in RunMetrics.model_fields
+    recorded = RunMetrics(unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())))
+    assert recorded.unconfirmed_plants == {probe.id: 4}
 
 
 def test_a_model_plant_is_deliberately_not_read_back() -> None:

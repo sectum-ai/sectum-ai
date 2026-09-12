@@ -1013,6 +1013,7 @@ def probe(
             retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
             per_probe_findings=_per_probe_counts(confirmed),
             user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
+            unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
             poisoning_bleed_delta=(
                 confirmed_finding_rate(poison_query_steps) if poison_query_steps else None
@@ -1091,6 +1092,7 @@ def probe(
                 else None
             ),
             "user_steps_dropped": run.metrics.user_steps_dropped,
+            "unconfirmed_plants": run.metrics.unconfirmed_plants,
             "run_path": str(path),
         }
         typer.echo(json.dumps(summary, indent=2))
@@ -1134,7 +1136,7 @@ def probe(
         typer.echo(f"run recorded -> {path}")
     _warn_on_synthetic_surfaces(run.surface_provenance)
     _warn_on_dropped_user_steps(run.metrics.user_steps_dropped)
-    _warn_on_unconfirmed_plants(runner.unconfirmed_plants)
+    _warn_on_unconfirmed_plants(run.metrics.unconfirmed_plants)
     if confirmed:
         raise typer.Exit(code=2)
 
@@ -2993,7 +2995,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     return _delta_verdict(
         delta,
         result.coverage_lost,
-        result.boundary_lost,
+        (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
         (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
         scenario_changed=result.scenario_changed,
@@ -3170,6 +3172,12 @@ def baseline(
             f"[BOUNDARY LOST] {untrusted(probe_id)}: its user-level steps were not run in "
             "this run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
+        )
+    for probe_id in result.plants_lost:
+        typer.echo(
+            f"[PLANTS LOST] {untrusted(probe_id)}: the backend acknowledged this probe's "
+            "planted data and did not serve it back in this run (a zero TTL, a read-only "
+            "replica, a quota); it graded on less setup than it planned"
         )
     for surface in result.erasure_lost:
         typer.echo(
@@ -3351,6 +3359,12 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "the later run (the adapter cannot carry the user); any resolved cross-user "
             "finding was not re-tested"
         )
+    for probe_id in result.plants_lost:
+        typer.echo(
+            f"[PLANTS LOST] {untrusted(probe_id)}: the backend acknowledged this probe's "
+            "planted data and did not serve it back in the later run (a zero TTL, a "
+            "read-only replica, a quota); it graded on less setup than it planned"
+        )
     for surface in result.erasure_lost:
         typer.echo(
             f"[ERASURE NOT RESCANNED] {untrusted(surface)}: the earlier run scanned it to a "
@@ -3413,6 +3427,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "coverage_lost": list(result.coverage_lost),
         "scope_lost": list(result.scope_lost),
         "boundary_lost": list(result.boundary_lost),
+        "plants_lost": list(result.plants_lost),
         "erasure_lost": list(result.erasure_lost),
         "side_channel_lost": list(result.side_channel_lost),
         # The seventh gate reason. It reached both TEXT renderers and not this

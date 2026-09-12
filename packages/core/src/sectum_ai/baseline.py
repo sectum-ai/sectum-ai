@@ -351,6 +351,10 @@ class RunDiff:
     # cannot carry the user) where the earlier run did. Twelve resolved
     # cross-user leaks used to read as a fix.
     boundary_lost: tuple[str, ...] = ()
+    #: Probe ids whose plants the backend began swallowing between the two runs.
+    #: `boundary_lost`'s shape exactly: the probe still runs and still grades, on
+    #: less setup than it planned, and nothing else in the diff moves.
+    plants_lost: tuple[str, ...] = ()
     # Surfaces the earlier run scanned to a definite erasure verdict that the
     # later run did not (out of scope, or scanned but its absence never
     # established). Not a leak - but the later run measured no residue there, so
@@ -402,6 +406,7 @@ class RunDiff:
             or bool(self.coverage_lost)
             or bool(self.scope_lost)
             or bool(self.boundary_lost)
+            or bool(self.plants_lost)
             or bool(self.erasure_lost)
             or bool(self.side_channel_lost)
             or bool(self.metrics.headline_unmeasured)
@@ -479,6 +484,13 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
                 probe_id
                 for probe_id, count in later.metrics.user_steps_dropped.items()
                 if count and not earlier.metrics.user_steps_dropped.get(probe_id)
+            )
+        ),
+        plants_lost=tuple(
+            sorted(
+                probe_id
+                for probe_id, count in later.metrics.unconfirmed_plants.items()
+                if count and not earlier.metrics.unconfirmed_plants.get(probe_id)
             )
         ),
         erasure_lost=_erasure_lost(earlier, later),

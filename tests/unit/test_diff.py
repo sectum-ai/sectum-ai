@@ -457,6 +457,30 @@ def test_a_probe_that_stopped_running_user_steps_is_a_regression(tmp_path: Path)
     assert "[BOUNDARY LOST] agent-tool-hijack" in cli.output
 
 
+def test_a_probe_that_stopped_landing_its_plants_is_a_regression(tmp_path: Path) -> None:
+    # `user_steps_dropped`'s sibling, and for eleven cycles it was the one left
+    # out: the count lived on the runner object, the CLI warned from it, and the
+    # SIGNED record said nothing - so a class graded on half its setup read
+    # exactly like one graded on all of it, and `diff` could not see the day the
+    # backend started swallowing them.
+    earlier = _run()
+    later = _run(metrics=RunMetrics(unconfirmed_plants={"rag-poisoning": 4}))
+    result = diff_runs(earlier, later)
+    assert result.plants_lost == ("rag-poisoning",)
+    assert result.regressed
+    assert diff_runs(later, later).plants_lost == ()
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2
+    assert "[PLANTS LOST] rag-poisoning" in cli.output
+
+
 def test_a_scenario_change_is_flagged_and_gates(tmp_path: Path) -> None:
     # Finding ids embed markers and principals, so across a re-seed every finding
     # "resolves": a later run with no users read every cross-user leak as fixed

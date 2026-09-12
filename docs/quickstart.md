@@ -73,7 +73,9 @@ result — confirmed leaks (`sectum-ai probe`), a regression (`sectum-ai diff` /
 `baseline --compare` — including a live surface that fell back to the built-in fake
 between the two runs, reported as `[SCOPE LOST]`, and a probe whose user-level steps
 the later run did not run because its adapter cannot carry a user, reported as
-`[BOUNDARY LOST]`, a probe the earlier run exercised and this one did not,
+`[BOUNDARY LOST]`, a probe whose planted data the later run's backend acknowledged
+and did not serve back, reported as `[PLANTS LOST]`, a probe the earlier run
+exercised and this one did not,
 reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
 residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, a tenant
 pair whose Class 5 timing effect size the earlier run measured and this one did not,
@@ -241,7 +243,8 @@ counts, the run's
 `surface_provenance` with `confirmed_on_live_surfaces` (the confirmed findings
 that describe your stack rather than a built-in fake), `user_steps_dropped`
 (probes whose user-level steps were not run because the adapter cannot carry a
-user), and a `run_path` pointer to the full `run.json` on disk. Errors still print
+user), `unconfirmed_plants` (probes whose planted data the backend acknowledged
+and did not serve back), and a `run_path` pointer to the full `run.json` on disk. Errors still print
 to stderr and exit codes are unchanged.
 
 The Retrieval-Pivot Rate is reported with a **95% Wilson confidence interval**

@@ -206,6 +206,16 @@ def probes_exercised(run: RunResult) -> str:
     dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
     if dropped:
         text += f"; user-level steps not run (tenant-level steps only) for: {', '.join(dropped)}"
+    # The sibling disclosure. A probe some of whose plants the backend swallowed
+    # still ran and still graded, on less setup than it planned - and the pack said
+    # so nowhere, so a class graded on half its setup read exactly like one graded
+    # on all of it.
+    unconfirmed = sorted(p for p, n in run.metrics.unconfirmed_plants.items() if n)
+    if unconfirmed:
+        text += (
+            "; planted data could not be read back (the backend acknowledged the write "
+            f"and did not serve it) for: {', '.join(unconfirmed)}"
+        )
     return text
 
 

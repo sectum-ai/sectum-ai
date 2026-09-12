@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bb77ccea5102499d2e3be2ccab9f70af5470a3400fad878e0b6ad94b8c7eb253",
     "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-    "started_at": "2026-09-07T23:34:54.223690+00:00",
-    "finished_at": "2026-09-07T23:34:54.229225+00:00",
+    "started_at": "2026-09-12T02:15:04.332029+00:00",
+    "finished_at": "2026-09-12T02:15:04.334618+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -431,15 +431,16 @@
       "poisoning_bleed_delta": null,
       "inversion_reconstruction_rate": null,
       "extraction_efficiency": null,
-      "user_steps_dropped": {}
+      "user_steps_dropped": {},
+      "unconfirmed_plants": {}
     },
     "schema_version": "0.7.0"
   },
   "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-  "tsa_token": "{\"digest\":\"260dd213dd47ac19109c6af7a2caa06072525b665bdb4a02328dae4de084a067\",\"timestamped_at\":\"2026-09-07T23:34:54.252054+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"78e8b6e7e34beb243fdd89011c4ed3576c90f209853116c200cb45f8803473f2\",\"timestamped_at\":\"2026-09-12T02:15:04.356884+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [],
-  "pdf_ref": "e7b94a562bbac3259d902803e01f3025ae1cb17f4e1f294db40150536e2207ce",
+  "pdf_ref": "a7cae760df65895f8a45ef7dd0b8f98919d3b02c97a79f57dca51049074707e3",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.7.0"

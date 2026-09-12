@@ -23,10 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
-  user-level steps the runner did not run because the adapter cannot carry a user
-  identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
-  longer accepted by `verify` (the usual minor-bump rule); regenerate them.
+- **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something
+  a run did *less* of than it planned, both inside the canonical hash.
+  `user_steps_dropped` (probe id → count) records the user-level steps the runner
+  did not run because the adapter cannot carry a user identity to its backend.
+  `unconfirmed_plants` (probe id → count) records the plants the backend
+  acknowledged and did not serve back. Packs stamped 0.6.x are no longer accepted
+  by `verify` (the usual minor-bump rule); regenerate them.
 - **Scorecard methodology `1.3`.** What counts as evidence is part of the
   methodology, not only the weights: `1.2` graded a class on findings whose
   backing surface was the built-in fake, `1.3` withholds them. A run that graded
@@ -45,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **A probe that lost only *some* of its plants disclosed it nowhere.** The runner
+  counts the writes a backend acknowledged and did not serve back, and a probe whose
+  every plant vanished is already refused a vacuous pass. The PARTIAL case — some
+  landed, so the probe did interrogate the stack and stays graded — reached the signed
+  pack with nothing said, because the count lived on the runner object and only the CLI
+  warning read it. A class graded on half its setup was indistinguishable from one
+  graded on all of it, which is the over-claim the plant check exists to prevent. It is
+  `RunMetrics.unconfirmed_plants` now, beside `user_steps_dropped`, whose treatment it
+  should have had from the start: inside the canonical hash, printed on the audit PDF's
+  probes line, carried in the JSON summary, warned from the record rather than from
+  memory, and gated by `diff` as `[PLANTS LOST]` — with the metric lines of an affected
+  probe reading `not measured` instead of `[ok] 1 -> 0`, exactly as a lost user boundary
+  does. No version bump: 0.7.0 has not shipped, so the field joins it.
 
 - **The erasure-surface set was two copies, and its two sibling metric blocks were
   unvalidated.** Which surfaces a Class 11 scan can reach was listed in `probes` and

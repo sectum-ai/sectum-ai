@@ -224,6 +224,8 @@ class off zero observations), records the count in the signed run
 (`user_steps_dropped`),
 and warns; the run claims the tenant boundary alone there, and `diff` /
 `baseline --compare` flag a run that stopped running them as `[BOUNDARY LOST]`.
+A planting probe records the sibling disclosure, `unconfirmed_plants`: the writes
+the backend acknowledged and did not serve back, flagged as `[PLANTS LOST]`.
 Run as the tenant and judged as the user, such a step confirmed cross-user leaks of
 a session that never existed. The built-in fakes carry the user wherever their
 family contract does (vector, app, cache, model, MCP, memory) — the fake *is* the

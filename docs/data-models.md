@@ -21,8 +21,8 @@ without running Sectum.
 | `ProbeStep` | One planned action: `step_id`, `probe_id`, `actor_tenant_id`, `actor_user_id?`, `action`, `payload`. |
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
-| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface `erasure_coverage` block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes, `user_steps_dropped`, and the Class 3/6/10 rates. |
-| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped`). |
+| `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface `erasure_coverage` block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes, `user_steps_dropped`, `unconfirmed_plants`, and the Class 3/6/10 rates. |
+| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped` and `unconfirmed_plants`). |
 | `EvidencePack` | The attested bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, the `anchored_in_log` / `anchored_with_timestamp` downgrade guards, and `schema_version`. |
 | `ControlMapping` | A pack-level framework mapping (framework, control ids, an assertion ending in the live surfaces it rests on) — see the [compliance mappings](compliance-mappings.md). |
 | `ClassScore` | One attack class's line in an isolation scorecard: `class_id`, `name`, `verdict` (`PASS`/`FAIL`/`NOT_COVERED`), weight `severity` band, `probe_ids`, `confirmed_findings`, `headline?`, `note?`. |
@@ -31,11 +31,18 @@ without running Sectum.
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, `EvidencePack`, and
 `IsolationScore` each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
 schema it does not understand. The current `SCHEMA_VERSION` is **0.7.0** — it
-added `user_steps_dropped` to `RunMetrics` (probe id → the user-level steps the
+added two disclosure blocks to `RunMetrics`, each recording something a run did
+*less* of than it planned, so that neither is distinguishable only from outside
+the signed record. `user_steps_dropped` (probe id → the user-level steps the
 runner did not run because the adapter cannot carry a user identity to its
-backend), so a run that quietly stopped exercising the user boundary is
-distinguishable, inside the signed record, from one that exercised it and found it
-clean; `diff` and `baseline --compare` report the difference as `[BOUNDARY LOST]`.
+backend) makes a run that quietly stopped exercising the user boundary
+distinguishable from one that exercised it and found it clean; `diff` and
+`baseline --compare` report the difference as `[BOUNDARY LOST]`.
+`unconfirmed_plants` (probe id → the plants the backend acknowledged and did not
+serve back — a zero TTL, a read-only replica, a quota) does the same for a
+*planting* probe: a probe whose every plant vanished asked the stack nothing and
+its class is `NOT_COVERED`, while one that lost only some still runs and still
+grades, on less setup than it planned. `diff` reports that as `[PLANTS LOST]`.
 The prior **0.6.0** added `surface_provenance` to `RunResult` — a per-surface record of whether each
 adapter family the run exercised was a live backend or Sectum's built-in
 in-memory fake. Sectum ships a fake for every family and resolves an omitted (or
