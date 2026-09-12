@@ -104,9 +104,13 @@ def test_a_manifest_declares_the_capability_that_decides_whether_the_probe_runs(
     for cls in gated:
         expected = [c.value for c in cast(Any, cls).requires_any_capability]
         assert load_probe_manifest(cls).get("requires_any_capability") == expected, cls
-    # A probe with no gate must not grow an empty key.
-    ungated = next(cls for cls in _PROBES if not getattr(cls, "requires_any_capability", ()))
-    assert "requires_any_capability" not in load_probe_manifest(ungated), ungated
+    # EVERY probe with no gate, not the first one found: `next(...)` checked one of
+    # twelve, so a spurious key on any other manifest passed the whole suite - and
+    # such a key tells a catalog consumer that e.g. Class 1 is gated on semantic
+    # retrieval, which no live store declares, i.e. "NOT_COVERED on your stack".
+    for cls in _PROBES:
+        if not getattr(cls, "requires_any_capability", ()):
+            assert "requires_any_capability" not in load_probe_manifest(cls), cls
 
 
 def test_every_workflow_probe_has_pinned_surface_and_adapter_expectations() -> None:

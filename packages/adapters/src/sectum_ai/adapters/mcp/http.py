@@ -18,6 +18,7 @@ Requires the ``mcp`` optional dependency: ``pip install sectum-ai-adapters[mcp]`
 import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from urllib.parse import urlparse
 from uuid import UUID
 
 from mcp import ClientSession
@@ -46,6 +47,12 @@ class HttpMCPClient(MCPAdapter):
         tenant_argument: str | None = None,
         user_argument: str | None = None,
     ) -> None:
+        # The third HTTP adapter, and the one that took any string: `file:///...`,
+        # `ftp://...` and a bare word were all accepted, to fail later inside the
+        # transport as an opaque error rather than at the point the operator made
+        # the typo. Both siblings refuse at construction.
+        if urlparse(url).scheme not in ("http", "https"):
+            raise AdapterError(f"url must be an http(s) URL: {url!r}")
         super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
         # A generic MCP call carries no user identity; the probes' user-level
         # steps used to run as the tenant and be judged as the user. Only with a

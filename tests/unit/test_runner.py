@@ -22,7 +22,7 @@ from sectum_ai.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
-from sectum_ai.probes import Probe, RagEntityBleedProbe
+from sectum_ai.probes import Probe, RagEntityBleedProbe, confirmed_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
     AccessOutcome,
@@ -781,6 +781,36 @@ def test_a_plant_the_backend_drops_is_not_a_passing_class() -> None:
         assert results, probe.id
         assert confirmed_findings([f for _, fs in results for f in fs]), probe.id
         assert probe.id not in intact.unconfirmed_plants, probe.id
+
+
+def test_a_leak_the_probe_actually_saw_is_never_deleted_for_want_of_its_own_plant() -> None:
+    # The all-plants-unconfirmed branch returns [] on the reasoning that "every read
+    # below it looked for something that was never there". That is false when the
+    # reads surface the CORPUS markers `seed` planted rather than the probe's own
+    # plant - so a backend with no by-id lookup (where `_plant_landed` fails closed)
+    # or one that drops only the probe's later writes had 24 confirmed CRITICAL
+    # cross-tenant findings deleted from the record, the class read NOT_COVERED, and
+    # the operator was told the backend "acknowledged the write and did not serve
+    # it" - which in the first case is false: it served it fine.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes import RagPoisoningProbe
+
+    class _NoByIdLookup(FakeVectorStore):
+        """Writes land and queries work; only the by-id read is unavailable."""
+
+        def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> None:
+            raise AdapterError("this backend exposes no by-id lookup")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = RagPoisoningProbe()
+    runner = Runner(substrate, vector=_NoByIdLookup(shared_index=True))
+    results = runner.run_per_step(probe)
+    confirmed = confirmed_findings([f for _, findings in results for f in findings])
+
+    assert results, "the probe's reads ran and saw the corpus; the steps must survive"
+    assert confirmed, "a confirmed cross-tenant leak must never be deleted"
+    # It is still disclosed that the setup could not be confirmed.
+    assert runner.unconfirmed_plants[probe.id] > 0, runner.unconfirmed_plants
 
 
 def test_a_partially_dropped_plant_still_runs_and_still_says_so() -> None:

@@ -111,6 +111,17 @@ def test_http_mcp_raises_on_a_failed_tool_call(patched: None) -> None:
         _client().invoke(_TENANT, "nonexistent", {})
 
 
+def test_the_mcp_url_must_be_http_like_its_two_siblings() -> None:
+    # The third HTTP adapter, and the one that took any string: `file:///...`,
+    # `ftp://...` and a bare word were all accepted, to fail later inside the
+    # transport as an opaque error rather than at the point the operator made the
+    # typo. `HttpAgent` and `HttpRagPipeline` both refuse at construction.
+    for url in ("file:///etc/passwd", "ftp://host/x", "not-a-url"):
+        with pytest.raises(AdapterError, match="http"):
+            HttpMCPClient(url)
+    assert HttpMCPClient("https://mcp.example.com/mcp") is not None
+
+
 def test_a_transport_failure_is_an_adapter_error_not_a_raw_sdk_exception() -> None:
     # Only the TOOL-level `isError` became an AdapterError; a refused connection, a
     # TLS error or a malformed frame came out as whatever the MCP SDK raised. That

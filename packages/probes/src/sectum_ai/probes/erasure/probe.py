@@ -141,16 +141,19 @@ class SurfaceErasure:
             return "ATTESTABLE WITH CAVEAT"
         if self.residual_after > 0:
             return "RESIDUAL DATA"
+        # FIRST of the three "nothing was found" branches. A scan that could not run
+        # reports zero markers by arithmetic, not by looking, and both branches below
+        # are positive claims that it looked: "NO BASELINE" is defined as "the scan
+        # looked and found none", and "ABSENCE CHECKED" says the same for a post-hoc
+        # check. Ordering this third let an unverifiable A3 surface read ABSENCE
+        # CHECKED; ordering it second left the same hole for `baseline_observed`.
+        if self.unverifiable_after:
+            return "NOT VERIFIED"
         if not self.baseline_observed:
             # Nothing was established to be there, so nothing can be attested
             # gone. Distinct from NO BASELINE, which means the scan looked and
             # found none: here the scan ran only AFTER the controller's deletion.
             return "ABSENCE CHECKED"
-        # Tested BEFORE the marker count. A scan that could not run reports zero
-        # markers by arithmetic, not by looking, so it read "NO BASELINE" - which
-        # this method's own neighbour defines as "the scan looked and found none".
-        if self.unverifiable_after:
-            return "NOT VERIFIED"
         if self.markers_before == 0:
             return "NO BASELINE"
         return "ERASED"

@@ -136,14 +136,27 @@ class S3Backup(BackupAdapter):
         )
 
     def search(self, tenant: UUID, query: str) -> list[str]:
+        # The pre- AND post-erasure scan. A raw client failure here - a listing the
+        # role cannot make, a denied object - is not this contract's error type, so
+        # `_erase_surface`'s `except AdapterError` does not contain it and one
+        # unreadable bucket aborts the whole Article 17 run. The delete path was
+        # translated first; this is its sibling, and it is the one Class 11 calls
+        # twice per surface.
         query_tokens = _tokens(query)
         hits: list[str] = []
-        for key, version_id in self._objects(tenant):
-            body = self._client.get_object(
-                Bucket=self._bucket,
-                Key=key,
-                **({"VersionId": version_id} if version_id is not None else {}),
-            )["Body"].read()
+        try:
+            objects = self._objects(tenant)
+        except Exception as error:
+            raise AdapterError(f"S3 scan could not list the tenant's objects: {error}") from error
+        for key, version_id in objects:
+            try:
+                body = self._client.get_object(
+                    Bucket=self._bucket,
+                    Key=key,
+                    **({"VersionId": version_id} if version_id is not None else {}),
+                )["Body"].read()
+            except Exception as error:
+                raise AdapterError(f"S3 scan could not read {key!r}: {error}") from error
             # tolerate a non-text object under the prefix rather than crashing the scan
             text = body.decode("utf-8", errors="replace")
             if query_tokens & _tokens(text):

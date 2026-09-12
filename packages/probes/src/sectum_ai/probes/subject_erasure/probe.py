@@ -181,24 +181,46 @@ class SubjectErasureProbe:
         self._search_index = search_index
 
     @contextmanager
-    def _contained(self, surface: Surface, unverifiable: dict[Surface, int]) -> Iterator[None]:
-        """Keep one adapter's failure to its own surface, as Class 11's helper does.
+    def _contained(
+        self,
+        surface: Surface,
+        surfaces: list[SurfaceErasure],
+        manifest: SubjectManifest,
+    ) -> Iterator[None]:
+        """Keep one adapter's failure to its own surface, the way Class 11 does.
 
         `_listing._refuse_capped` was written FOR this path - "the A3 subject check
         reads `fetch_trace(...) is None` as 'the trace is gone'" - so an
         ``AdapterError`` here is expected, and nothing caught it: one unreadable
-        trace backend aborted the whole A3 run and every other surface's verdict was
-        lost with it. Class 11's `_erase_surface` contains the same failure around
-        both scans and the delete; this is that rule, for its sibling probe.
+        trace backend aborted the whole run and every other surface's verdict went
+        with it.
 
-        The surface leaves `surfaces` entirely and is counted unverifiable, so the
-        report reads NOT_COVERED there rather than ERASED - a scan that could not run
-        established nothing.
+        It records a ``SurfaceErasure`` carrying the backend's OWN words, exactly as
+        `_erase_surface` does. The first version of this guard wrote to
+        ``ErasureReport.unverifiable`` instead and dropped the surface from the
+        report, which was worse than the abort in three ways: that channel's only
+        other producers are phrase-level fingerprint shortfalls, so the CLI printed
+        a FABRICATED cause ("N supplied fingerprint(s) could not be checked ...
+        trailing part too short") for a by-id surface carrying no fingerprints; the
+        adapter's real reason reached nothing but a log line; and a scan that had
+        already OBSERVED residual records before failing lost them, so a run with
+        two confirmed residuals reported NO RESIDUAL FOUND at exit 0.
         """
         try:
             yield
         except AdapterError as error:
-            unverifiable[surface] = max(unverifiable.get(surface, 0), 1)
+            at_stake = len(manifest.records.get(surface, ())) + len(
+                manifest.fingerprints.get(surface, ())
+            )
+            surfaces.append(
+                SurfaceErasure(
+                    surface=surface,
+                    markers_before=0,
+                    residual_after=0,
+                    unverifiable_after=max(at_stake, 1),
+                    unverifiable_reason=str(error),
+                )
+            )
             _log.info(
                 "subject_erasure.surface_unverifiable",
                 surface=surface.value,
@@ -220,7 +242,7 @@ class SubjectErasureProbe:
 
         vector = self._vector
         if vector is not None:
-            with self._contained(Surface.VECTOR_DB, unverifiable):
+            with self._contained(Surface.VECTOR_DB, surfaces, manifest):
                 # Dedupe per surface so the count is distinct and a repeat cannot emit
                 # two findings with the same finding_id.
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.VECTOR_DB, ())))
@@ -257,7 +279,7 @@ class SubjectErasureProbe:
 
         cache = self._cache
         if cache is not None:
-            with self._contained(Surface.SEMANTIC_CACHE, unverifiable):
+            with self._contained(Surface.SEMANTIC_CACHE, surfaces, manifest):
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.SEMANTIC_CACHE, ())))
                 if ids:
                     present = [rid for rid in ids if cache.get(target, rid) is not None]
@@ -271,7 +293,7 @@ class SubjectErasureProbe:
 
         observability = self._observability
         if observability is not None:
-            with self._contained(Surface.TRACING, unverifiable):
+            with self._contained(Surface.TRACING, surfaces, manifest):
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.TRACING, ())))
                 if ids:
                     try:
@@ -293,7 +315,7 @@ class SubjectErasureProbe:
 
         model = self._model
         if model is not None:
-            with self._contained(Surface.MODEL_ADAPTER, unverifiable):
+            with self._contained(Surface.MODEL_ADAPTER, surfaces, manifest):
                 # The model surface is fingerprint-only: there is no "fetch a memorized
                 # fact by id" primitive, so a subject's model residual is caught by
                 # probing inference with the subject's content. Only a trainable model
@@ -338,7 +360,7 @@ class SubjectErasureProbe:
 
         memory = self._memory
         if memory is not None:
-            with self._contained(Surface.AGENT_MEMORY, unverifiable):
+            with self._contained(Surface.AGENT_MEMORY, surfaces, manifest):
                 # Fingerprint-only, like the vector store: the agent-memory store has no
                 # stable by-id primitive, so a subject's residual is caught by recalling
                 # the subject's content and checking the returned entries still carry it.
@@ -362,7 +384,7 @@ class SubjectErasureProbe:
 
         search_index = self._search_index
         if search_index is not None:
-            with self._contained(Surface.SEARCH_INDEX, unverifiable):
+            with self._contained(Surface.SEARCH_INDEX, surfaces, manifest):
                 # Fingerprint-only: the derived full-text index is searched for the
                 # subject's content, and a hit whose text still carries the phrase is
                 # residual in the tenth hiding place a by-id check cannot see into.

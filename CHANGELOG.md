@@ -51,6 +51,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A live `rag`, `mcp` or `agent` backend was graded `PASS` on a check it could not
+  have answered.** Those three slots carry a canary Sectum *puts there*, and their
+  adapter protocols expose only `ask` / `invoke` / `run` — no write primitive — so the
+  seeding is guarded by `isinstance(..., Fake…)` and a live backend never receives the
+  marker. The probes ran anyway: planned, queried, found nothing (there was nothing to
+  find), entered `probe_versions` and graded. Pointing Sectum at a live pipeline produced
+  `Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)` under "scope: your configured stack
+  (every recorded surface live)" — a well-powered answer to a question that could never
+  have had one, which is the exact shape `docs/scorecard.md` names as the dangerous case
+  and rests on a guard to prevent; that guard asks whether *any* marker is foreign to
+  anybody, which the substrate always satisfies while one class sits starved. The
+  question is now asked of the backend rather than assumed: after seeding, a same-tenant
+  read decides it. A live pipeline reading the store this command just seeded still runs
+  — skipping it blindly would have lost a real finding — while one that cannot see the
+  canary is skipped with the reason stated and its class reads `NOT_COVERED`.
+
+- **The runner deleted confirmed cross-tenant leaks it had already observed.** When
+  every plant read back unconfirmed, the probe's whole result list was dropped on the
+  reasoning that "every read below it looked for something that was never there". That
+  is false when those reads surface the *corpus* markers `seed` planted: a backend with
+  no by-id lookup (where the plant check fails closed) or one that takes the bulk load
+  and drops the probe's own writes produced 24 confirmed CRITICAL findings and recorded
+  none of them — and told the operator the backend "acknowledged the write and did not
+  serve it", which in the first case is false. A leak the probe saw is never suppressed
+  for want of its own setup.
+
+- **The A3 containment fabricated a cause and discarded the backend's own.** The guard
+  added last cycle claimed to behave "as Class 11 does" and did not: Class 11 records a
+  `SurfaceErasure` carrying the adapter's reason, while this dropped the surface from the
+  report and wrote to a channel whose only other producers are phrase-level fingerprint
+  shortfalls — so the CLI printed "N supplied fingerprint(s) could not be checked
+  (trailing part too short…)" for a by-id surface carrying no fingerprints, the real
+  reason reached nothing but a log line, and the run exited 0. It records what Class 11
+  records now. `SurfaceErasure.verdict` also tests the unverifiable case first: a scan
+  that could not run reports zero markers by arithmetic, and both branches below it are
+  positive claims that it looked.
+
+- **`verify` swung from a false clean to a false alarm; it now says the third thing.**
+  Printing `[ok]` let an unanchored decoy excuse a tampered PDF at exit 0; failing the
+  run accused an untampered folder, since `report --tsa` beside `erasure` puts an
+  anchored pack next to a genuine unanchored one as a matter of course. The honest answer
+  is neither: `[INDETERMINATE] unexcused-siblings` and `VERIFICATION INDETERMINATE` at
+  exit 3 — "the run could not be completed", the code an erasure whose absence could not
+  be established already uses.
+
+- **Smaller corrections to this cycle's own work.** `UnicodeDecodeError` is a *sibling*
+  of `JSONDecodeError`, not a subclass, so the non-UTF-8 body the last entry claimed to
+  have fixed still escaped — the broad wrap starts after the decode. The backup adapters'
+  `search` — the path Class 11 calls twice per surface — let raw client failures escape
+  where `delete` had just been translated. `docs/coverage.md` gained a "Classes 6 and 13
+  do not run against any live vector store" gap while its own table and worked example
+  still said Class 6 runs on "any live vector backend". And the manifest parity test
+  checked the ungated direction for one probe of twelve where it claimed both directions.
+
 - **The manifests omitted the field that decides whether a probe runs at all.**
   `requires_any_capability` is what gates Classes 6, 9 and 13 — without it the CLI skips
   the probe and the class scores `NOT_COVERED` — and it appeared in no `probe.yaml`. A

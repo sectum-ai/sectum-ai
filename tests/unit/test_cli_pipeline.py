@@ -3,6 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -1952,6 +1953,114 @@ def test_a_forged_owner_does_not_excuse_a_tampered_document(tmp_path: Path) -> N
     assert "[FAIL] audit-pdf" in result.output, result.output
 
 
+def _bundle_with_rag(rag: Any) -> Any:
+    """An `AdapterBundle` whose rag slot is the adapter under test."""
+    from sectum_ai.adapters import (
+        FakeAgent,
+        FakeCache,
+        FakeMCP,
+        FakeMemory,
+        FakeModel,
+        FakeObservability,
+        FakeVectorStore,
+    )
+    from sectum_ai.config import AdapterBundle
+
+    return AdapterBundle(
+        vector=FakeVectorStore(),
+        cache=FakeCache(),
+        model=FakeModel(),
+        mcp=FakeMCP(),
+        memory=FakeMemory(),
+        rag=rag,
+        observability=FakeObservability(),
+        agent=FakeAgent(),
+    )
+
+
+def test_a_live_backend_sectum_cannot_seed_is_not_graded_as_passing(tmp_path: Path) -> None:
+    # Three slots carry a canary Sectum PUTS THERE, and their adapter protocols
+    # expose only `ask`/`invoke`/`run` - no write primitive - so the seeding is
+    # guarded by `isinstance(..., Fake...)` and a live backend never receives the
+    # marker. The probes ran anyway: planned, queried, found nothing (there was
+    # nothing to find), entered `probe_versions` and graded PASS. Pointing Sectum
+    # at a live pipeline produced `Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)`
+    # - a well-powered answer to a question that could never have had one, which
+    # `docs/scorecard.md` names as the dangerous shape this guard must prevent.
+    from sectum_ai.adapters import FakeRAGPipeline
+    from sectum_ai.cli.app import _skip_unseedable
+    from sectum_ai.probes import RagPipelineBleedProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = (RagPipelineBleedProbe(),)
+
+    class _Unseedable(FakeRAGPipeline):
+        """A live pipeline that does not read the store this command seeded."""
+
+        synthetic = False
+
+    class _ReadsTheSeededStore(FakeRAGPipeline):
+        """A live pipeline that DOES - the common case, and a true positive."""
+
+        synthetic = False
+
+        def ask(self, tenant: UUID, query: str) -> Any:
+            answer = super().ask(tenant, query)
+            return answer.model_copy(update={"answer": f"retrieved: {query}"})
+
+    starved, skipped = _skip_unseedable(suite, _bundle_with_rag(_Unseedable()), substrate)
+    assert starved == (), skipped
+    assert skipped and "cannot reach the configured rag backend" in skipped[0][1], skipped
+
+    # The backend is ASKED rather than assumed, so a pipeline reading the seeded
+    # store still runs: skipping it would lose a real finding.
+    runnable, none_skipped = _skip_unseedable(
+        suite, _bundle_with_rag(_ReadsTheSeededStore()), substrate
+    )
+    assert len(runnable) == 1, none_skipped
+    assert none_skipped == []
+    # And the built-in fake, which the command does seed, is untouched.
+    kept, _ = _skip_unseedable(suite, _bundle_with_rag(FakeRAGPipeline()), substrate)
+    assert len(kept) == 1
+
+    # End to end, because the guard is only worth what the command does with it.
+    module = tmp_path / "unseedable_rag.py"
+    module.write_text(
+        "class _Chain:\n"
+        "    def invoke(self, payload):\n"
+        '        return {"answer": "", "context": []}\n\n'
+        "def make_chain():\n"
+        "    return _Chain()\n"
+    )
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text(
+        "adapters:\n  rag:\n    kind: langchain\n    factory: unseedable_rag:make_chain\n"
+    )
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+        probed = _runner.invoke(
+            app,
+            [
+                "probe",
+                "--workdir",
+                str(tmp_path),
+                "--config",
+                str(config),
+                "--probe",
+                "rag-pipeline-bleed",
+            ],
+        )
+    finally:
+        monkeypatch.undo()
+    assert "skipping rag-pipeline-bleed" in probed.output, probed.output
+    assert "NOT_COVERED rather than passed" in probed.output, probed.output
+    # Nothing is attested: the only selected probe could not be run.
+    assert not (tmp_path / "run.json").exists(), "a starved run must not be recorded"
+
+
 def test_an_under_anchored_claimant_is_not_an_accusation(tmp_path: Path) -> None:
     # The ownership rule may DECLINE a claim - an unanchored claimant cannot excuse
     # an anchored pack's sibling - but declining is not tampering, and reporting it
@@ -1988,6 +2097,28 @@ def test_an_under_anchored_claimant_is_not_an_accusation(tmp_path: Path) -> None
         )
         is _Claim.UNDER_ANCHORED
     ), "a real claim this verification cannot accept is neither owned nor unowned"
+
+    # The under-anchored case end to end: not verified, not accused, exit 3 - the
+    # code an erasure whose absence could not be established already uses. `[ok]`
+    # let an unanchored decoy excuse a tampered PDF at exit 0; `[FAIL]` accused this
+    # untampered folder. Neither is what this verification knows.
+    # Setting the anchor flag by hand would break the pack's own digest and fail it
+    # for a different reason, so the branch is driven through the real CLI tail with
+    # the claim forced - which is what a genuinely anchored pack produces here.
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "sectum_ai.cli.app._owned_elsewhere",
+        lambda *_args, **_kwargs: _Claim.UNDER_ANCHORED,
+    )
+    try:
+        third = _verify(delivered / "handed-over.json")
+    finally:
+        monkeypatch.undo()
+    assert third.exit_code == 3, third.output
+    assert "[INDETERMINATE] unexcused-siblings" in third.output, third.output
+    assert "VERIFICATION INDETERMINATE" in third.output, third.output
+    assert "VERIFICATION FAILED" not in third.output, third.output
+    assert "INTEGRITY OK" not in third.output and "VERIFIED" not in third.output, third.output
 
     # And a file no present pack claims is still judged, so the guard still bites.
     lone = tmp_path / "lone"

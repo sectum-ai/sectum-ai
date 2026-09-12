@@ -79,6 +79,19 @@ def test_one_unreadable_surface_does_not_cost_the_others_their_verdicts() -> Non
     assert report.coverage()[Surface.TRACING] is CoverageVerdict.NOT_COVERED
     assert not report.erased
 
+    # It is recorded the way Class 11 records the same failure: a SurfaceErasure
+    # carrying the BACKEND'S OWN words. The first version of this guard dropped the
+    # surface and wrote to `ErasureReport.unverifiable`, whose only other producers
+    # are phrase-level fingerprint shortfalls - so the CLI printed a fabricated
+    # cause ("N supplied fingerprint(s) ... trailing part too short") for a by-id
+    # surface carrying no fingerprints, and the adapter's real reason reached
+    # nothing but a log line.
+    tracing = surfaces[Surface.TRACING]
+    assert tracing.unverifiable_after >= 1, tracing
+    assert "page cap" in (tracing.unverifiable_reason or ""), tracing.unverifiable_reason
+    assert tracing.verdict == "NOT VERIFIED", tracing.verdict
+    assert report.unverifiable == {}, report.unverifiable
+
 
 def test_subject_erasure_is_residual_when_a_record_remains() -> None:
     store, tenant, present = _populated_store()

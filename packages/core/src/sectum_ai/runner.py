@@ -174,12 +174,24 @@ class Runner:
                 if not self._plant_landed(step):
                     unconfirmed += 1
             results.append((step, probe.detect(step, observation, self._substrate)))
-        if planted and unconfirmed == planted:
-            # Every plant vanished, so every read below it looked for something
-            # that was never there: the probe asked the stack nothing, however
-            # many steps it ran. Same answer as the all-dropped case above - the
-            # probe leaves `probe_versions` and `score` rule 1 makes the class
-            # NOT_COVERED, rather than PASS off zero observations.
+        observed = any(confirmed_findings(findings) for _, findings in results)
+        if planted and unconfirmed == planted and not observed:
+            # Every plant vanished AND the probe saw nothing, so every read below
+            # it looked for something that was never there: it asked the stack
+            # nothing, however many steps it ran. Same answer as the all-dropped
+            # case above - the probe leaves `probe_versions` and `score` rule 1
+            # makes the class NOT_COVERED, rather than PASS off zero observations.
+            #
+            # `not observed` is load-bearing. Without it this branch deleted
+            # CONFIRMED cross-tenant leaks the probe had actually surfaced: the
+            # reads here also return the CORPUS markers `seed` planted, so a
+            # backend that takes the bulk load and drops the probe's own writes -
+            # a quota, an eviction - or one that simply has no by-id lookup, so
+            # `_plant_landed` fails closed, produced 24 confirmed CRITICAL
+            # findings and recorded none of them. The class then read NOT_COVERED
+            # and the operator was told "the backend acknowledged the write and
+            # did not serve it", which in the second case is false: it served it.
+            # A leak the probe SAW is never suppressed for want of its own setup.
             self.unconfirmed_plants[probe.id] = (
                 self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
             )

@@ -52,7 +52,7 @@ point: it is rejected at config load, since v0.10.0.)
 | Adversarial RAG poisoning (3) | vector store | any live vector backend |
 | Semantic-cache contamination (4) | cache | Redis |
 | KV-cache timing side channel (5) | model | a self-hosted model (vLLM/TGI/HF) — real signal needs a GPU |
-| Embedding inversion (6) | vector store | any live vector backend |
+| Embedding inversion (6) | vector store | the built-in fake only — every live backend the CLI builds declares no semantic retrieval, so this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
 | Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
 | Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / a generic `http` agent endpoint |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
@@ -66,10 +66,12 @@ point: it is rejected at config load, since v0.10.0.)
 
 A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis** with
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
-agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
+agents — runs Classes **1, 2, 3, 4, 7, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
 and **Class 9** (once a per-tenant-LoRA model is configured — the example's serving-only
-vLLM covers Class 5 but not Class 9). Every one of the erasure scan's **eight wired
+vLLM covers Class 5 but not Class 9). **Class 6 is not in that list**: pgvector, like
+every live vector backend, declares no semantic retrieval, so it reads `NOT_COVERED`
+for the same kind of reason the vLLM does for Class 9. Every one of the erasure scan's **eight wired
 surfaces** now has a live backend too — the search index (**OpenSearch**), the eval set
 (**LangSmith Datasets**), and the backup store (**S3**, with **GCS** as a second backend)
 were the last three fake-only surfaces. (The remaining hiding place — third-party

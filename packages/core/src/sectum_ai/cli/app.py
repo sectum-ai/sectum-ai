@@ -132,6 +132,7 @@ from sectum_ai.runner import (
 from sectum_ai.score import PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
+    AdapterError,
     ClassVerdict,
     ConfigError,
     EvidenceError,
@@ -149,6 +150,7 @@ from sectum_ai.spec import (
     SurfaceProvenance,
     canonical_hash,
     configure_logging,
+    residual_present,
     sha256_hex,
     untrusted,
     wilson_interval,
@@ -209,6 +211,72 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
         IkeaExtractionProbe(providers),
         RagPoisoningProbe(providers),
     )
+
+
+def _skip_unseedable(
+    suite: tuple[Probe, ...], bundle: AdapterBundle, substrate: Substrate
+) -> tuple[tuple[Probe, ...], list[tuple[str, str]]]:
+    """Drop probes whose canary this stack has no way to receive.
+
+    Three slots carry a canary that Sectum PUTS THERE: the MCP server's resource,
+    the agent's lookup target, and the RAG pipeline's index. Their adapter
+    protocols expose only ``invoke`` / ``run`` / ``ask`` - no write primitive - so
+    the seeding below is guarded by ``isinstance(..., Fake...)`` and a live backend
+    is never given the marker. The probes ran anyway: they planned, queried, found
+    nothing (there was nothing to find), entered ``probe_versions`` and graded
+    **PASS**, so pointing Sectum at a live pipeline produced
+    ``Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)`` - a well-powered answer to a
+    question that could never have had one. ``docs/scorecard.md`` names that exact
+    shape as the dangerous one and rests on this guard to prevent it; the guard it
+    had asks whether ANY marker is foreign to somebody, which the substrate always
+    satisfies while one class sits starved.
+
+    The RAG case is not hypothetical in the other direction either: a live pipeline
+    that reads the vector store this command just seeded CAN see the canary, and
+    skipping it would lose a true positive. So the question is asked of the backend
+    rather than assumed - a same-tenant read for a marker the seeding placed. What
+    comes back decides it, which is `_plant_landed`'s rule one layer out.
+
+    Returns the runnable probes and ``(probe id, reason)`` for those dropped.
+    """
+    canary = next(
+        (m for m in substrate.manifest.markers if m.marker_type is MarkerType.HARD_CANARY),
+        None,
+    )
+    reachable: dict[str, bool] = {}
+    if canary is not None:
+        rag = bundle.rag
+        if rag is not None and not rag.synthetic:
+            try:
+                answer = rag.ask(canary.owner_tenant_id, canary.plaintext)
+                reachable["rag"] = residual_present(canary.plaintext, answer.answer) or any(
+                    residual_present(canary.plaintext, hit.content) for hit in answer.retrieved
+                )
+            except AdapterError:
+                reachable["rag"] = False
+        # An MCP resource key and an agent lookup target are ids Sectum invents, so
+        # a live backend cannot already hold one - there is nothing to ask.
+        if bundle.mcp is not None and not bundle.mcp.synthetic:
+            reachable["mcp"] = False
+        if bundle.agent is not None and not bundle.agent.synthetic:
+            reachable["agent"] = False
+
+    runnable: list[Probe] = []
+    skipped: list[tuple[str, str]] = []
+    for probe in suite:
+        starved = [slot for slot in probe.requires_adapters if reachable.get(slot, True) is False]
+        if starved:
+            skipped.append(
+                (
+                    probe.id,
+                    f"its canary cannot reach the configured {', '.join(starved)} backend "
+                    "(Sectum seeds that slot only for its own in-memory fake, and the "
+                    "adapter protocol has no write primitive)",
+                )
+            )
+        else:
+            runnable.append(probe)
+    return tuple(runnable), skipped
 
 
 def _skip_inapplicable(
@@ -865,6 +933,16 @@ def probe(
         for tenant in substrate.tenants:
             documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
             bundle.rag.index(tenant.tenant_id, documents)
+    # AFTER the seeding, not before: the check asks the backend whether the canary
+    # reached it, and asking first answers for an index that has not been written
+    # yet - which would skip a pipeline the command does seed.
+    suite, starved_probes = _skip_unseedable(suite, bundle, substrate)
+    for starved_id, reason in starved_probes:
+        typer.echo(
+            f"skipping {starved_id}: {reason}, so this class is reported NOT_COVERED "
+            "rather than passed",
+            err=True,
+        )
     runner = Runner(
         substrate,
         vector=vector,
@@ -2164,6 +2242,7 @@ def verify(
         tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
         rekor_keyring=_rekor_keyring_override(rekor_key),
     )
+    indeterminate = False
     pdf_bytes, other_pdfs, unexcused = _sibling_audit_pdf(pack, evidence, roots)
     unclaimed = sorted(
         {name for slot in (0, 1, 2, 3) for name in _unclaimed_siblings(pack, slot)}
@@ -2263,24 +2342,40 @@ def verify(
         # `--tsa`/`--rekor` flag at all, so `report --tsa` beside `erasure` produces
         # exactly this pairing as a matter of course.
         #
-        # It FAILS all the same. Not judging a file and CERTIFYING it are different
-        # things, and the first draft of this branch printed `[ok]`: the candidate
-        # left `judged`, so nothing re-hashed it, and the run then passed at exit 0
-        # under "VERIFIED (independently anchored)" - an unanchored decoy needing no
-        # key could excuse a tampered audit PDF, or a gutted `run.json` that `score`
-        # prefers over the pack. Refusing to accuse is not the same as vouching.
-        passed = False
+        # Neither `[ok]` nor `[FAIL]`, because this is neither. The first draft
+        # printed `[ok]`: the candidate left `judged`, so nothing re-hashed it and
+        # the run passed at exit 0 under "VERIFIED (independently anchored)" - an
+        # unanchored decoy needing no key could excuse a tampered audit PDF, or a
+        # gutted `run.json` that `score` prefers over the pack. The second draft
+        # failed the run instead, which accused an untampered folder: `report --tsa`
+        # beside `erasure` puts an anchored pack next to a genuine unanchored one,
+        # and a pack delivered without its own PDF into that folder is ordinary.
+        #
+        # Refusing to accuse is not the same as vouching, and the honest answer is
+        # the third one: this verification could not establish the file either way.
+        # It exits 3 - "the run could not be completed", the code an erasure whose
+        # absence could not be established already uses - so a gate does not read it
+        # as verified and no one reads it as tampering.
+        indeterminate = True
         typer.echo(
-            f"[FAIL] unexcused-siblings: {', '.join(untrusted(n) for n in unexcused)} "
-            "sit(s) beside this pack and is bound by another pack here whose own "
-            "verification is not independently anchored, so this anchored verification "
-            "cannot speak for it either way. Nothing here is called altered; this "
-            "verification declines to certify a folder it could not judge. Verify that "
+            f"[INDETERMINATE] unexcused-siblings: "
+            f"{', '.join(untrusted(n) for n in unexcused)} sit(s) beside this pack and "
+            "is bound by another pack here whose own verification is not independently "
+            "anchored, so this anchored verification cannot speak for it either way. "
+            "Nothing here is called altered, and nothing here is certified: verify that "
             "pack on its own terms, or re-create it anchored"
         )
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)
+    if indeterminate:
+        typer.echo(
+            "VERIFICATION INDETERMINATE: every check this pack could answer passed, and "
+            "a file beside it is claimed by a pack this verification cannot accept - so "
+            "the folder is neither verified nor shown to be altered.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
     _echo_verdict(result.anchored, what="evidence pack")
     if ground_truth is None:
         typer.echo(

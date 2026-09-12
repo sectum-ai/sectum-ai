@@ -57,7 +57,15 @@ class HttpRAGPipeline(RAGPipelineAdapter):
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = json.loads(response.read())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        # `UnicodeDecodeError` is a sibling of `JSONDecodeError`, not a subclass,
+        # so a non-UTF-8 body escaped this tuple - and the broad wrap added for
+        # exactly that case starts AFTER this block, so it never caught it either.
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ) as error:
             raise AdapterError(f"RAG HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"RAG response must be a JSON object, got {type(body).__name__}")
