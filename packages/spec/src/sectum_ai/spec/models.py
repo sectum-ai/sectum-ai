@@ -376,6 +376,15 @@ class RunMetrics(SectumModel):
     # not erasure runs (the other probe classes leave it untouched).
     erasure_coverage: dict[str, str] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
+    # The tenant pairs above whose numbers are BOUNDS, not measurements: an arm's
+    # spread fell below the timer's resolution and the 1 us variance floor stood in
+    # for it, so d, t and p say "at least this distinguishable". The finding's
+    # evidence span has carried that qualifier since the floor was introduced and
+    # the metric did not, so `d=146.7` entered the signed record - and `baseline`'s
+    # and `diff`'s metric lines - as a measurement. Unresolved pairs are excluded
+    # from the map entirely (a 0.0 by arithmetic is not a measurement); a floored
+    # one is real evidence of a real side channel, so it is labelled, not dropped.
+    side_channel_variance_floored: tuple[str, ...] = ()
     # Headline rates for Class 3 (poisoning), Class 6 (inversion), and Class 10
     # (extraction), each in [0, 1]: the fraction of that probe's benign query
     # steps that surfaced a confirmed foreign canary. ``None`` when the probe did

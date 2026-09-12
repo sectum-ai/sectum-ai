@@ -145,11 +145,25 @@ class KvCacheTimingReport:
         `probe_versions` and the exercised-surface set are gated the same way.
         """
         # Full hex so two tenant pairs cannot collide onto one map key.
-        return {
-            f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}": signal.effect_size
-            for signal in self.signals
-            if signal.resolved
-        }
+        return {_pair_key(signal): signal.effect_size for signal in self.signals if signal.resolved}
+
+    @property
+    def variance_floored_pairs(self) -> tuple[str, ...]:
+        """Keys of :attr:`effect_sizes` whose numbers are bounds, not measurements.
+
+        The same qualifier `_finding` puts in the evidence span. It belongs on the
+        METRIC too: `side_channel_effect_sizes` is what `score` reads for Class 5's
+        headline and what `baseline`/`diff` compare between runs, and a floored
+        d=146.7 there compared against a later measured d=5.2 reads as an enormous
+        improvement in a number that was never a measurement.
+        """
+        return tuple(
+            sorted(_pair_key(s) for s in self.signals if s.resolved and s.variance_floored)
+        )
+
+
+def _pair_key(signal: TimingSignal) -> str:
+    return f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}"
 
 
 def _cohens_d(slow: list[float], fast: list[float]) -> float:

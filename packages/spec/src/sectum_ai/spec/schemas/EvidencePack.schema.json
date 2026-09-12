@@ -298,6 +298,14 @@
           "title": "Side Channel Effect Sizes",
           "type": "object"
         },
+        "side_channel_variance_floored": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Side Channel Variance Floored",
+          "type": "array"
+        },
         "unconfirmed_plants": {
           "additionalProperties": {
             "type": "integer"

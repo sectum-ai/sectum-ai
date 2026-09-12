@@ -1015,6 +1015,9 @@ def probe(
             user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
             unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())),
             side_channel_effect_sizes=kv_report.effect_sizes if kv_report is not None else {},
+            side_channel_variance_floored=(
+                kv_report.variance_floored_pairs if kv_report is not None else ()
+            ),
             poisoning_bleed_delta=(
                 confirmed_finding_rate(poison_query_steps) if poison_query_steps else None
             ),
@@ -2987,7 +2990,10 @@ def _delta_range(delta: MetricDelta) -> str:
     not_measured = "(not measured)"
     before = not_measured if delta.baseline_absent else f"{delta.baseline:g}"
     after = not_measured if delta.current_absent else f"{delta.current:g}"
-    return f"{before} -> {after}"
+    # A floored arm makes the pair a bound rather than a measurement, and the
+    # difference between two bounds is not a difference in the side channel.
+    bound = " (bounds, not measurements: an arm's spread was below the timer's resolution)"
+    return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
@@ -3416,6 +3422,10 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
                 # a bare 0 and a consumer read it as a clean earlier run.
                 "baseline_measured": not delta.baseline_absent,
                 "current_measured": not delta.current_absent,
+                # A Class 5 pair whose arm had less spread than the timer resolves:
+                # d, t and p are bounds. The text renderer says so on the line; the
+                # JSON stated the number bare and a dashboard read it as measured.
+                "bounded": delta.bounded,
                 "regressed": delta.regressed,
                 "informational": delta.informational,
                 # The load-bearing qualifier: the text renderer refuses to print

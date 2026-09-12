@@ -7,7 +7,7 @@ confirmed findings after an embedding-model or prompt change (the engineering
 spec, sections 10 and 14).
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from sectum_ai.spec import (
@@ -52,6 +52,14 @@ class MetricDelta:
     # This is a rendering fix, not a gate change.
     baseline_absent: bool = False
     current_absent: bool = False
+    # Either side's number is a BOUND, not a measurement: a Class 5 effect size
+    # whose control or primed arm had less spread than the timer can resolve, so
+    # the 1 us floor stood in for it. The finding's evidence span has said so since
+    # the floor existed; the metric line said `[ok] 146.7 -> 5.2` and read as an
+    # enormous improvement in a number that was never measured. Rendering only,
+    # like the two flags above: a bound becoming a measurement is a better timer,
+    # not a product regression.
+    bounded: bool = False
 
     @property
     def regressed(self) -> bool:
@@ -99,6 +107,7 @@ def _dict_deltas(
     *,
     informational: bool = False,
     absent_when_clean: bool = False,
+    bounded_keys: Collection[str] = (),
 ) -> list[MetricDelta]:
     """A MetricDelta per key across both mappings; a key absent on a side is 0.0.
 
@@ -128,6 +137,7 @@ def _dict_deltas(
             # flag exists to remove, one column to the right.
             baseline_absent=not absent_when_clean and key not in baseline,
             current_absent=not absent_when_clean and key not in current,
+            bounded=key in bounded_keys,
         )
         for key in sorted(set(baseline) | set(current))
     ]
@@ -236,6 +246,11 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             "side_channel_effect_sizes",
             baseline.side_channel_effect_sizes,
             current.side_channel_effect_sizes,
+            # Either run's floor makes the PAIR incomparable, so both sides count.
+            bounded_keys={
+                *baseline.side_channel_variance_floored,
+                *current.side_channel_variance_floored,
+            },
         )
     )
     deltas.extend(

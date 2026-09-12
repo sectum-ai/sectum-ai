@@ -657,3 +657,11 @@ def test_a_floored_variance_is_reported_as_a_bound_not_a_measurement() -> None:
     assert one_armed.signals[0].variance_floored, one_armed.signals[0]
     assert one_armed.findings, "the side channel is real and must still be reported"
     assert "BOUNDS" in one_armed.findings[0].evidence_span
+    # And the METRIC says it too. The evidence span carried the qualifier and
+    # `side_channel_effect_sizes` - what `score` reads for Class 5 and what
+    # `baseline`/`diff` compare - carried the same number bare, so d=146.7 entered
+    # the signed record as a measurement. Labelled, not dropped: an unresolved pair
+    # is 0.0 by arithmetic and stays out, while this is real evidence of a real
+    # side channel, bounded below.
+    assert set(one_armed.variance_floored_pairs) == set(one_armed.effect_sizes)
+    assert not measured.variance_floored_pairs, measured.variance_floored_pairs

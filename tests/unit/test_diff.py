@@ -481,6 +481,43 @@ def test_a_probe_that_stopped_landing_its_plants_is_a_regression(tmp_path: Path)
     assert "[PLANTS LOST] rag-poisoning" in cli.output
 
 
+def test_a_floored_effect_size_is_compared_as_a_bound(tmp_path: Path) -> None:
+    # The finding's evidence span has carried "BOUNDS ... not measurements" since
+    # the 1 us variance floor existed; the METRIC carried the same number bare. So
+    # `side_channel_effect_sizes` - what `score` reads for Class 5 and what these
+    # lines compare - shipped a floored d=146.7 as a measurement, and a later
+    # genuinely measured 5.2 read as an enormous improvement.
+    pair = "aa->bb"
+    earlier = _run(
+        metrics=RunMetrics(
+            side_channel_effect_sizes={pair: 146.7},
+            side_channel_variance_floored=(pair,),
+        )
+    )
+    later = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 5.2}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "bounds, not measurements" in cli.output, cli.output
+
+    # Two measured runs say nothing of the sort.
+    measured = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 146.7}))
+    plain = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e2.json", measured)),
+            str(_write(tmp_path / "l2.json", later)),
+        ],
+    )
+    assert "bounds, not measurements" not in plain.output, plain.output
+
+
 def test_a_scenario_change_is_flagged_and_gates(tmp_path: Path) -> None:
     # Finding ids embed markers and principals, so across a re-seed every finding
     # "resolves": a later run with no users read every cross-user leak as fixed

@@ -28,8 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `user_steps_dropped` (probe id → count) records the user-level steps the runner
   did not run because the adapter cannot carry a user identity to its backend.
   `unconfirmed_plants` (probe id → count) records the plants the backend
-  acknowledged and did not serve back. Packs stamped 0.6.x are no longer accepted
-  by `verify` (the usual minor-bump rule); regenerate them.
+  acknowledged and did not serve back. A third, `side_channel_variance_floored`,
+  names the Class 5 tenant pairs whose effect sizes are bounds rather than
+  measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
+  minor-bump rule); regenerate them.
 - **Scorecard methodology `1.3`.** What counts as evidence is part of the
   methodology, not only the weights: `1.2` graded a class on findings whose
   backing surface was the built-in fake, `1.3` withholds them. A run that graded
@@ -48,6 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **A floored effect size entered the signed record as a measurement.** When an arm's
+  spread falls below the timer's resolution the 1 µs variance floor stands in for it, so
+  Cohen's d, t and p become *bounds* — "at least this distinguishable". The finding's
+  evidence span has said so since the floor existed; `side_channel_effect_sizes` carried
+  the same number bare. That map is what `score` reads for Class 5's headline and what
+  `baseline --compare` and `diff` compare between runs, so a floored `d=146.7` against a
+  later genuinely measured `d=5.2` printed as an enormous improvement in a quantity that
+  was never measured. `RunMetrics.side_channel_variance_floored` now names those pairs,
+  and the metric line and the `diff` JSON both say "bounds, not measurements". Labelled
+  rather than dropped, unlike an *unresolved* pair: a 0.0 by arithmetic is not evidence,
+  while a bounded d is real evidence of a real side channel.
 
 - **A probe that lost only *some* of its plants disclosed it nowhere.** The runner
   counts the writes a backend acknowledged and did not serve back, and a probe whose
