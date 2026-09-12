@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An MCP transport failure was not an adapter error.** Both MCP members translated
+  only the tool-level `isError`; a refused connection, a TLS error or a malformed frame
+  came out as whatever the SDK raised — an `ExceptionGroup`, in practice — which is not
+  the adapter contract's type, so it escaped the runner's handling of an adapter failure
+  and took the whole run with it. Every agent adapter wraps instead; these two now do,
+  naming the endpoint.
+
 - **A truncated agent answer was returned as the agent's answer.** The Anthropic
   tool-use loop exited on "no more tool-use blocks" and never read `stop_reason`, so a
   run that hit `max_tokens` handed back a cut-off response — the 200-empty shape one

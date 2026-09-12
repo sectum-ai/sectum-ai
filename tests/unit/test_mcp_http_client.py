@@ -111,6 +111,22 @@ def test_http_mcp_raises_on_a_failed_tool_call(patched: None) -> None:
         _client().invoke(_TENANT, "nonexistent", {})
 
 
+def test_a_transport_failure_is_an_adapter_error_not_a_raw_sdk_exception() -> None:
+    # Only the TOOL-level `isError` became an AdapterError; a refused connection, a
+    # TLS error or a malformed frame came out as whatever the MCP SDK raised. That
+    # is not this contract's error type, so it escapes the runner's handling of an
+    # adapter failure and takes the whole run with it - where every agent adapter
+    # wraps instead. No stub here: the URL is unroutable, so the real transport
+    # fails the way it would in the field.
+    client = HttpMCPClient("http://127.0.0.1:1/mcp", timeout=0.2)
+    # The message names the endpoint, which is the one thing an operator needs from
+    # it - a brace literal that never interpolated said "{self._url}".
+    with pytest.raises(AdapterError, match=r"127\.0\.0\.1:1/mcp failed"):
+        client.list_tools()
+    with pytest.raises(AdapterError, match=r"127\.0\.0\.1:1/mcp failed"):
+        client.invoke(_TENANT, "lookup", {})
+
+
 def test_http_mcp_forwards_the_user_only_when_configured(patched: None) -> None:
     # `invoke(..., user=)` was accepted and dropped, so a probe's user-level step
     # reached the server as the tenant and was judged as the user. The adapter
