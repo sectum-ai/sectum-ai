@@ -69,8 +69,21 @@ class HttpRAGPipeline(RAGPipelineAdapter):
                 raise AdapterError(
                     f"RAG pipeline at {self._url} returned an error: {str(body[key])[:200]}"
                 )
-        retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
-        return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
+        # Any failure SHAPING the response is an adapter failure too, not a crash.
+        # The catch above named three transport errors, so a 200 whose body is
+        # well-formed JSON of the wrong shape - `"tool_calls": null`, a non-UTF-8
+        # body - escaped as a bare `TypeError`/`UnicodeDecodeError`, which is not
+        # this contract's error type and so escapes the runner's handling of it. Six
+        # sibling RAG adapters wrap broadly for exactly that reason.
+        try:
+            retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
+            return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
+        except AdapterError:
+            raise
+        except Exception as error:
+            raise AdapterError(
+                f"RAG endpoint at {self._url} returned a body this adapter cannot read: {error}"
+            ) from error
 
     @staticmethod
     def _hit(tenant: UUID, item: object) -> VectorHit:

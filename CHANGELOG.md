@@ -51,6 +51,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The HTTP agent and RAG adapters crashed where their six siblings raise an adapter
+  error.** The catch named three *transport* failures, so a `200` carrying well-formed
+  JSON of the wrong shape — `"tool_calls": null`, a non-UTF-8 body — escaped as a bare
+  `TypeError` or `UnicodeDecodeError`. That is not the adapter contract's error type, so
+  it escapes the runner's handling of an adapter failure and takes the whole run with
+  it. Both now wrap the shaping step, as every other agent adapter does.
+
+- **A3's shipped manifest declared three of the six surfaces it scans.** The generator
+  sourced the by-id set alone, while the probe also fingerprint-scans the model adapter,
+  agent memory and the search index and emits HIGH findings on them — so a catalog
+  consumer reading `probe.yaml` concluded those were out of scope while a residual there
+  is reported. Both halves are sourced now, and the parity test asserts against the same
+  union rather than the generator's own table.
+
 - **The grade cap exempted findings the verdict had never withheld.** Rule 5 is
   deliberately switched off on a run with nothing live, so the demo still grades — the
   verdict gets a scope-adjusted set and the cap was handed the raw one. In that scope

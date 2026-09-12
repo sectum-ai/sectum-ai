@@ -15,7 +15,12 @@ from typing import Any, cast
 import pytest
 
 import sectum_ai.probes as probes
-from sectum_ai.probes import ERASURE_SURFACES, SUBJECT_VERIFIABLE_SURFACES, load_probe_manifest
+from sectum_ai.probes import (
+    ERASURE_SURFACES,
+    SUBJECT_FINGERPRINT_SURFACES,
+    SUBJECT_VERIFIABLE_SURFACES,
+    load_probe_manifest,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,7 +35,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW_SURFACES: dict[str, list[str]] = {
     "kv-cache-timing": ["kv_cache"],
     "gdpr-erasure-verification": [surface.value for surface in ERASURE_SURFACES],
-    "gdpr-subject-erasure-verification": [surface.value for surface in SUBJECT_VERIFIABLE_SURFACES],
+    # BOTH halves of what A3 scans. The by-id set alone declared three of the six
+    # surfaces the probe reads and emits HIGH findings on, so a catalog consumer
+    # reading `probe.yaml` concluded the model adapter, agent memory and search
+    # index were out of scope while a residual on any of them is reported.
+    "gdpr-subject-erasure-verification": sorted(
+        {surface.value for surface in (*SUBJECT_VERIFIABLE_SURFACES, *SUBJECT_FINGERPRINT_SURFACES)}
+    ),
 }
 _WORKFLOW_REQUIRES: dict[str, list[str]] = {
     "kv-cache-timing": ["model"],
