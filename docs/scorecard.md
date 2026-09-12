@@ -95,10 +95,10 @@ check the pack's signature: run [`sectum-ai verify`](evidence-chain.md) for that
 stamped on every scorecard, so a recompute uses the same rules and lands on the same
 letter.
 
-## The six honesty rules
+## The seven honesty rules
 
 This page exists because a single letter is the easiest place in the product to
-over-claim. Six rules prevent it:
+over-claim. Seven rules prevent it:
 
 1. **A class that did not run can only ever be `NOT_COVERED` — never `PASS`.** A grade
    must never imply the stack passed a check it was never asked to perform. Untested
@@ -157,6 +157,15 @@ over-claim. Six rules prevent it:
    claim as finding nothing in it, and a `NOT_COVERED` beside a `0` reads as the
    second. A record carrying no provenance block at all (one produced before v0.9.0)
    is exempt: its absence is not evidence of a mismatch.
+7. **Withholding a class must not flatter the letter.** Rules 5 and 6 keep findings out
+   of the grade — and a `NOT_COVERED` class leaves the weighted *denominator*, so
+   withholding alone made the letter BETTER. The same record graded `F` with a
+   provenance key present and `A` with that key deleted, which is exactly what the
+   withholding exists to prevent. So rule 6's unplaceable class **caps the letter at its
+   own band**, the mechanism rule 3 uses for a failing class and for the same reason: a
+   confirmed finding nobody can place is not assurance. Rule 5's synthetic-backed
+   classes are deliberately exempt — there the record positively states the surface was
+   Sectum's own fake, which is not evidence against the operator in either direction.
 
 ### What a `PASS` line can still tell you
 

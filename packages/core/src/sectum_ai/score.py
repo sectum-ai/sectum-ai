@@ -6,7 +6,7 @@ attack catalog into one letter plus a per-class breakdown, from a signed
 run rather than trusting the grade. The published methodology (``docs/scorecard.md``)
 pins the weights, thresholds, and caps that :data:`METHODOLOGY_VERSION` stamps.
 
-Six rules keep the letter honest (the same anti-over-claim discipline as the Class 11
+Seven rules keep the letter honest (the same anti-over-claim discipline as the Class 11
 coverage block):
 
 1. **A class that did not run can only ever be NOT_COVERED - never PASS.** A grade must
@@ -47,6 +47,13 @@ coverage block):
    the scorecard cannot identify, so it fails closed, exactly as rule 1 does for a class
    that never ran. A record with no provenance at all (one predating the block) is
    exempt: absence of the block is not evidence of a mismatch.
+7. **Withholding a class must not flatter the letter.** A NOT_COVERED class leaves the
+   weighted DENOMINATOR, so rules 5 and 6 made the grade BETTER on their own: the same
+   record graded F with a provenance key present and A with it deleted. Rule 6's
+   unplaceable class therefore caps the letter at its own band, rule 3's mechanism for
+   the same reason - a confirmed finding nobody can place is not assurance. Rule 5's
+   synthetic-backed classes are exempt: the record positively states the surface was
+   Sectum's own fake.
 
 Class 11 (GDPR Article 17 erasure) is deliberately out of scope here: it is a control
 check with its own attestation (``sectum-ai erasure``), not an adversarial isolation

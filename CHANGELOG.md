@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The seventh honesty rule was cited five times and never stated.** `v1.4` added the
+  rule that a withheld class caps the letter at its own band, and both the published
+  methodology and `score`'s own module docstring still enumerated six and titled the
+  section "The six honesty rules" — while five sentences elsewhere on the page referred
+  the reader to "rule 7". The list now has seven items, so a recompute by hand follows
+  the same rules the code applies.
+
 - **Live vector stores declared a semantic ranking they do not have.** There is no
   config path from `AdapterConfig` to a real embedding model for a vector store, so
   every live kind the resolver builds is backed by `_hashing_embed` — a token
