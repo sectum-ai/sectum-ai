@@ -295,8 +295,10 @@ def test_subject_erasure_model_fingerprint_erased_when_forgotten() -> None:
         subject_ref="u-m2", records={}, fingerprints={Surface.MODEL_ADAPTER: (phrase,)}
     )
     report = SubjectErasureProbe(model=model).verify(tenant, manifest)
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
-    assert report.erased
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion, so nothing establishes the content was ever in the model.
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
 
 
 def test_subject_erasure_model_serving_only_is_not_covered() -> None:
@@ -369,7 +371,7 @@ def test_subject_erasure_model_fingerprint_clean_when_not_regurgitated() -> None
             fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
 
 
 def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only() -> None:
@@ -385,7 +387,7 @@ def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only()
             subject_ref="u-m6", records={}, fingerprints={Surface.MODEL_ADAPTER: ("ZX90210QQ",)}
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
 
 
 _MEMORY_PHRASE = "Maria Chen lives at 12 Elm Street"
@@ -690,7 +692,7 @@ def test_an_echoing_base_model_is_not_residual_memorization() -> None:
             fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
     # ... while a genuine per-tenant echo (the base answers nothing) still counts.
     model, tenant, phrase = _model_with_memorized_phrase()
     assert SubjectErasureProbe._content_recalled(model, tenant, phrase)
@@ -873,3 +875,41 @@ def test_the_cli_never_signs_a_subject_check_as_a_verified_erasure(tmp_path: Pat
     assert "ERASED" not in set(metrics["erasure_coverage"].values()), metrics
     # And no residue COUNT for a surface nothing was established to be on.
     assert metrics["erasure_residue"] == {}, metrics
+
+
+def test_no_subject_surface_ever_claims_an_observed_baseline() -> None:
+    """Every surface this probe reports, not three of the four.
+
+    `baseline_observed=False` was added to three of the four `SurfaceErasure`
+    constructions and to the `_surface` helper, and the MODEL_ADAPTER branch kept
+    the default `True` - so the exact output the fix removed ("1 markers before,
+    0 after -> ERASED", "ERASURE VERIFIED", a signed `erasure_coverage` of ERASED
+    with a residue count of 0) still shipped for that one surface, and four tests
+    pinned it. This probe runs AFTER the controller's deletion, so it can never
+    observe a baseline on ANY surface; asserting that over the whole report is the
+    rule, where asserting it per surface is how one got missed.
+    """
+    from sectum_ai.adapters import FakeModel
+
+    tenant = UUID(int=77)
+    store, cache = FakeVectorStore(), FakeCache()
+    memory, search = FakeMemory(), FakeSearchIndex()
+    manifest = SubjectManifest(
+        subject_ref="dsr-every-surface",
+        records={Surface.VECTOR_DB: ("r-1",), Surface.SEMANTIC_CACHE: ("k-1",)},
+        fingerprints={
+            Surface.VECTOR_DB: ("Jane Q Doe of 12 Elm Street",),
+            Surface.AGENT_MEMORY: ("Jane Q Doe of 12 Elm Street",),
+            Surface.SEARCH_INDEX: ("Jane Q Doe of 12 Elm Street",),
+            Surface.MODEL_ADAPTER: ("Jane Q Doe of 12 Elm Street",),
+        },
+    )
+    report = SubjectErasureProbe(
+        vector=store, cache=cache, memory=memory, search_index=search, model=FakeModel()
+    ).verify(tenant, manifest)
+
+    assert report.surfaces, "the fixture must produce surfaces to check"
+    claiming = [s.surface.value for s in report.surfaces if s.baseline_observed]
+    assert not claiming, f"A3 surfaces claiming an observed baseline: {claiming}"
+    # And none of them can therefore be attested ERASED.
+    assert CoverageVerdict.ERASED not in set(report.coverage().values())

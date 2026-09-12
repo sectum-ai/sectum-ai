@@ -286,6 +286,7 @@ class SubjectErasureProbe:
                             surface=Surface.MODEL_ADAPTER,
                             markers_before=len(phrases),
                             residual_after=len(recalled),
+                            baseline_observed=False,
                         )
                     )
                 findings.extend(

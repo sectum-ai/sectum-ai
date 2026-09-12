@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The A3 model-adapter surface attested `ERASED` without ever observing a
+  baseline.** Four of the five `SurfaceErasure` sites recorded
+  `baseline_observed=False` when the marker was never seen before the delete; the
+  model-adapter one did not, so a run where the fingerprint never planted printed
+  `1 markers before, 0 after -> ERASED` and `ERASURE VERIFIED` at exit 0, with
+  `erasure_coverage: {'model_adapter': 'ERASED'}` signed into the pack. Nothing was
+  erased — nothing was there. It now reads `1 checked, 0 still present -> ABSENCE
+  CHECKED` / `NO RESIDUAL FOUND` and the surface is `NOT_COVERED`. The new test
+  asserts over the whole report rather than one surface, so the next site added
+  cannot repeat it.
+
 - **Class 9's LoRA leak was manufactured by Sectum and signed as LIVE.** The
   HuggingFace adapter's `adapter_bleed` knob does not make a model bleed: `infer`
   runs one correctly-isolated completion per scope and `" ".join`s them, so the
