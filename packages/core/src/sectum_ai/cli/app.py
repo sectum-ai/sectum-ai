@@ -1854,10 +1854,15 @@ def _claimed_siblings(
         }
     )
     judged = bound or [c for c in present if claims.get(c.name) is _Claim.UNOWNED]
+    unexcused = sorted(n for n, claim in claims.items() if claim is _Claim.UNDER_ANCHORED)
     return _Siblings(
         judged=judged,
-        named=sorted(c.name for c in present if c not in judged),
-        unexcused=sorted(n for n, claim in claims.items() if claim is _Claim.UNDER_ANCHORED),
+        # An unexcused file is CLAIMED - by a pack this verification cannot accept -
+        # so listing it as "not bound by it ... belongs to its own pack, or to
+        # nothing" beside its own `unexcused` line said two different things about
+        # one file.
+        named=sorted(c.name for c in present if c not in judged and c.name not in unexcused),
+        unexcused=unexcused,
     )
 
 

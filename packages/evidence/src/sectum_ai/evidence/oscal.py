@@ -248,11 +248,14 @@ def _finding(
             " The user boundary was not exercised on every probe: user-level steps "
             "were not run where the adapter cannot carry a user identity, so this "
             "states the tenant boundary."
-            if run.metrics.user_steps_dropped
+            # On the VALUES, like `pdf.probes_exercised` (`if n`) and `_score_class`
+            # (`sum(...)`): a record carrying `{"rag-poisoning": 0}` is a record that
+            # dropped nothing, and dict truthiness said otherwise.
+            if any(run.metrics.user_steps_dropped.values())
             else "",
             " Some planted data never came back from the backend, so part of this "
             "was graded on setup that did not land."
-            if run.metrics.unconfirmed_plants
+            if any(run.metrics.unconfirmed_plants.values())
             else "",
         )
     )
@@ -510,12 +513,19 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     )
 
     if not live:
+        # `unplaced` belongs here too. "The observations describe that synthetic
+        # stack, not any production system" is an over-claim about a finding resting
+        # on a surface the block never recorded: the record says nothing about that
+        # surface, so those observations may well describe the operator's live one.
+        # Both sibling renderers already narrow this branch - `pdf.provenance_statement`
+        # and `verify`'s run-scope both append the same trailer - and this is the copy
+        # a GRC platform reads.
         result_description = (
             "Sectum AI ran its probes against its own built-in synthetic stack only "
             "(or recorded no surface provenance): no surface in this run is known to "
             "be a live, configured backend, so no control objective was assessed and "
             "no control finding is stated. The observations describe that synthetic "
-            "stack, not any production system."
+            "stack, not any production system." + unplaced
         )
     else:
         # COMPOSED, not first-match - the lesson `_erasure_assertion` learned one

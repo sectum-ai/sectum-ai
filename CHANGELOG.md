@@ -51,6 +51,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The grade cap exempted findings the verdict had never withheld.** Rule 5 is
+  deliberately switched off on a run with nothing live, so the demo still grades — the
+  verdict gets a scope-adjusted set and the cap was handed the raw one. In that scope
+  the inversion came straight back: the same record graded `F` with a provenance key
+  present and `A` with it deleted. Both now read the same set.
+
+- **Four more places where one renderer said less than the record holds.** OSCAL's
+  unplaceable disclosure reached only the live branch, so a synthetic-only run carrying
+  a confirmed finding on an unrecorded surface asserted "the observations describe that
+  synthetic stack" about evidence the record places nowhere — both sibling renderers
+  already narrow that sentence. `verify` listed an unexcused file as *unclaimed* as
+  well, saying two different things about one file. OSCAL's user-boundary qualifier
+  fired on a dict of zeroes where the PDF and the scorecard both correctly stay silent.
+  And the published recipe named two of the three paths to `NOT_COVERED`.
+
+- **A knob the Redis cache cannot honour was accepted and dropped.** `FakeCache` and
+  the Redis *memory* adapter both implement `soft_delete`; the Redis cache does not, so
+  an operator validating that Sectum catches cache residue got a clean run from a
+  setting that never took effect. Refused now, like mem0's `user_scoped` — the
+  resolver's one precedent for exactly this.
+
+- **Smaller corrections.** A Class 11 surface whose pre-scan *raised* reported
+  `NO BASELINE`, which the neighbouring branch defines as "the scan looked and found
+  none"; the unverifiable case is tested first now. `providers.py` claimed the LLM judge
+  is never primed while `detection.py` states the opposite and builds the semantic
+  tier's false-positive control on it being primed — the judge does see the marker
+  plaintext, and the module now says so. Milvus was missing from three enumerations of
+  "every live vector store the CLI builds".
+
 - **A `verify` that declined to judge a file also declined to fail.** The previous
   entry's fix for the false accusation moved an unacceptable ownership claim out of the
   judged set and printed it as `[ok]`, so nothing re-hashed the file and the run passed

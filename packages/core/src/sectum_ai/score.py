@@ -714,7 +714,12 @@ def score_run(run: RunResult) -> IsolationScore:
     # same reason: a confirmed finding nobody can place is not assurance.
     # Rule 5's synthetic-backed classes are deliberately NOT here: there the
     # record positively states the surface was Sectum's own fake, and a leak on a
-    # fake is not the operator's fault in either direction.
+    # fake is not the operator's fault in either direction. `withhold`, not the raw
+    # `synthetic` set - they differ on a run with nothing live, where rule 5 is
+    # switched off so the demo still grades. Handing the cap the raw set exempted
+    # findings rule 5 never withheld, and the inversion came straight back in that
+    # scope: the same record graded F with a provenance key present and A with it
+    # deleted. One set for the verdict and the cap, or they disagree again.
     #
     # Keyed on the VERDICT the scorer actually reached, not on a second predicate
     # shaped differently. It used to ask `_unattributed_in_class`, which decides per
@@ -729,7 +734,7 @@ def score_run(run: RunResult) -> IsolationScore:
     unplaceable_bands: list[Severity] = [
         entry.severity
         for entry, klass in zip(CATALOG, classes, strict=True)
-        if klass.verdict is ClassVerdict.NOT_COVERED and _uncapped_confirmed(run, entry, synthetic)
+        if klass.verdict is ClassVerdict.NOT_COVERED and _uncapped_confirmed(run, entry, withhold)
     ]
     capping: list[Severity] = [c.severity for c in failed] + unplaceable_bands
     capped_by = max(capping, key=_SEVERITY_ORDER.index) if capping else None

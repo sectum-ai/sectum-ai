@@ -51,7 +51,7 @@ memory `FakeVectorStore` with `shared_index: true`:
    for a vector store (`embedding_model` configures the *detection*
    pipeline), so every live kind is hashing-embedder backed and declares
    no semantic retrieval — against Qdrant, pgvector, Weaviate, Chroma,
-   OpenSearch, Pinecone or Azure AI Search this class reports
+   Milvus, OpenSearch, Pinecone or Azure AI Search this class reports
    `NOT_COVERED`, which is the honest verdict for a check that cannot be
    performed. Reading a real inversion rate needs a real embedder in the
    vector slot, which today means constructing the adapter through the

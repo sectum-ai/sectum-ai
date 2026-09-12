@@ -99,7 +99,7 @@ scanning adapter yet, so it is out of scope, not fake; see the
   `sectum-ai.yaml` to a real embedding model for a vector store (`embedding_model`
   configures the *detection* pipeline), so every live kind the CLI builds is backed by a
   bag-of-tokens hashing embedder and declares the capability absent. Against Qdrant,
-  pgvector, Weaviate, Chroma, OpenSearch, Pinecone and Azure AI Search these classes
+  pgvector, Weaviate, Chroma, Milvus, OpenSearch, Pinecone and Azure AI Search these classes
   therefore read `NOT_COVERED` — the honest verdict for a check that cannot be
   performed, and the same shape as the erasure-fingerprint gap above. The built-in fake
   still runs them, which is what the walkthroughs demonstrate and what they say they

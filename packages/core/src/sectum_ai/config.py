@@ -739,6 +739,17 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "redis":
+        if _bool(extras, "soft_delete", False):
+            # Accepted and dropped: `FakeCache` and the Redis MEMORY adapter both
+            # honour this knob, so an operator validating that Sectum catches cache
+            # residue got a clean run from a setting that never took effect. The
+            # resolver has one precedent for a knob a kind cannot honour - mem0 and
+            # `user_scoped`, below - and this is the same situation.
+            raise ConfigError(
+                "cache kind 'redis' does not support soft_delete - RedisCache deletes "
+                "the key outright, so the knob would model residue the backend cannot "
+                "produce; use kind 'fake' to exercise that path"
+            )
         with _optional_extra("redis"):
             from sectum_ai.adapters.cache.redis import RedisCache
 

@@ -146,10 +146,13 @@ class SurfaceErasure:
             # gone. Distinct from NO BASELINE, which means the scan looked and
             # found none: here the scan ran only AFTER the controller's deletion.
             return "ABSENCE CHECKED"
-        if self.markers_before == 0:
-            return "NO BASELINE"
+        # Tested BEFORE the marker count. A scan that could not run reports zero
+        # markers by arithmetic, not by looking, so it read "NO BASELINE" - which
+        # this method's own neighbour defines as "the scan looked and found none".
         if self.unverifiable_after:
             return "NOT VERIFIED"
+        if self.markers_before == 0:
+            return "NO BASELINE"
         return "ERASED"
 
     @property

@@ -35,7 +35,8 @@ builds** declares it too: there is no config path from `sectum-ai.yaml` to a rea
 embedding model for a vector store (`embedding_model` configures the *detection*
 pipeline), so each live kind is backed by a bag-of-tokens hashing embedder where synonyms
 score 0.000 — which is exactly the substring-matching backend this rule exists for. So
-against Qdrant, pgvector, Weaviate, Chroma, OpenSearch, Pinecone or Azure AI Search,
+against Qdrant, pgvector, Weaviate, Chroma, Milvus, OpenSearch, Pinecone or Azure AI
+Search,
 Class 6 reports `NOT_COVERED`. Only the built-in fake, whose numbers the examples label
 as the demo exercising the probe, runs it. Wiring a real embedder into the vector slot is
 what would change that; the SDK can already do it by constructing the adapter directly.
