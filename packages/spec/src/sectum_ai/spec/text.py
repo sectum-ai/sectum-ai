@@ -154,9 +154,16 @@ def residual_present(needle: str, haystack: str) -> bool:
     An empty ``needle`` is never present: an empty-plaintext marker would otherwise
     substring-match every observation and confirm a leak on all of them.
     """
-    if not needle:
+    # Guarded on the NORMALIZED needle, not the raw one: a marker whose plaintext
+    # is only zero-width characters is truthy raw and normalizes to empty, so the
+    # substring arm became `"" in anything` and confirmed a leak on every
+    # observation. The detector carried its own `if needle and ...` guard against
+    # exactly that and the shared predicate did not, so wiring the detector here
+    # is what surfaced it - the erasure scan had been exposed all along.
+    wanted_text = normalize_for_match(needle)
+    if not wanted_text:
         return False
-    if normalize_for_match(needle) in normalize_for_match(haystack):
+    if wanted_text in normalize_for_match(haystack):
         return True
     wanted = tokenize(needle)
     if wanted and ordered_within_span(tokenize(haystack), wanted, max_interposed=0):

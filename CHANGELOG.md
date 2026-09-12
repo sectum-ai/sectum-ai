@@ -46,6 +46,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The detector and the erasure scan answered the same question with different
+  bytes.** All three detection tiers re-spelled the residue arms inline instead of
+  calling `residual_present`, so a rendering one accepted the other rejected: the
+  scan reported a surface clean while the detector confirmed a finding on the same
+  text. Every tier now calls the shared predicate, and a new invariant runs both
+  paths across five renderings of one marker and requires the same verdict.
+
+- **A marker of only zero-width characters confirmed a leak on every
+  observation.** `residual_present` guarded the RAW needle, and a plaintext of
+  `\u200b\u200b` is truthy raw and normalizes to empty — so the substring arm
+  evaluated `"" in anything` and returned `True` for any text at all. The detector
+  carried its own `if needle and ...` against exactly this and the shared predicate
+  did not; the guard now runs on the normalized needle, where the emptiness
+  actually is.
+
 - **The A3 model-adapter surface attested `ERASED` without ever observing a
   baseline.** Four of the five `SurfaceErasure` sites recorded
   `baseline_observed=False` when the marker was never seen before the delete; the

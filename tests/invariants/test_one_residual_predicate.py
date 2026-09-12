@@ -105,11 +105,17 @@ def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None
     # String methods that do not change WHAT is being looked for, only its form -
     # `marker.plaintext.lower() in body` is the residue question wearing a hat.
     transparent = {"lower", "upper", "casefold", "strip", "lstrip", "rstrip"}
-    # Membership tests that are NOT the residue question: the right-hand side is
-    # already normalized by the shared normalizer, so the comparison IS the shared
-    # predicate spelled out. Named by VARIABLE, not by file: excluding a whole file
-    # would be the same hole this test exists to close, one level up.
-    normalized = {"haystack", "shaped"}
+    # Membership tests that are NOT the residue question. `shaped` is the secret
+    # tier's CREDENTIAL-SHAPE branch - a match against tokens a regex extracted,
+    # a different question from "is this marker here".
+    #
+    # `haystack` used to be exempt too, on the reasoning that a normalized
+    # right-hand side means "the comparison IS the shared predicate spelled out".
+    # That held while the predicate had two arms and stopped holding the moment it
+    # grew a third: the exemption is what let all three detection tiers keep their
+    # own copy, so a canary wrapped inside its opaque body was RESIDUAL to the
+    # erasure scan and absent to the detector. Spelled out is not shared.
+    normalized = {"shaped"}
 
     def _needle_name(node: ast.expr) -> str:
         """The identifier a marker-ish operand is spelled with.
@@ -243,3 +249,59 @@ def test_a_needle_with_no_opaque_token_keeps_the_two_arm_behaviour() -> None:
     assert not residual_present("Barack Hussein Obama", "row BarackHusseinObama end")
     assert not residual_present("912-34-5678", "ssn 912345678 end")
     assert not residual_present("ZephyrK3F7A", "codename Zephyr K3F7A end")
+
+
+def test_the_detector_and_the_erasure_scan_answer_with_the_same_bytes() -> None:
+    """Not "the predicate is shared" - "the detector CALLS it", asserted by calling both.
+
+    The test above is named for the detector's question and never invokes the
+    detector, so when a third arm was added to `residual_present` (the projection,
+    for a canary split inside its opaque body) the erasure scan got it and all
+    three detection tiers - which spelled the two arms out inline - did not. A
+    trace holding a log-wrapped foreign canary was RESIDUAL to the erasure scan and
+    a clean PASS to the detector, over the same bytes, which is the one thing the
+    shared predicate exists to prevent.
+    """
+    import logging
+
+    from sectum_ai.probes.detection import DetectionProviders
+    from sectum_ai.spec import MarkerType, Surface
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    logging.disable(logging.CRITICAL)
+    try:
+        substrate = build_substrate(default_scenario(seed=2026))
+        pipeline = DetectionProviders().pipeline(substrate)
+        marker = next(
+            m for m in substrate.manifest.markers if m.marker_type is MarkerType.HARD_CANARY
+        )
+        observer = next(
+            t.tenant_id for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id
+        )
+        canary = marker.plaintext
+        body = canary.index(canary.split("-")[-1])
+
+        renderings = {
+            "verbatim": f"trace: {canary} end",
+            "wrapped inside the opaque body": (
+                f"trace: {canary[: body + 10]}\n    {canary[body + 10 :]} end"
+            ),
+            "hyphens rendered as spaces": f"trace: {canary.replace('-', ' ')} end",
+            "a different canary": "trace: SECTUM-CANARY-AAAABBBBCCCCDDDDEEEEFFFFGG end",
+            "unrelated": "trace: nothing of interest here",
+        }
+        for label, text in renderings.items():
+            detected = bool(
+                pipeline.detect(
+                    observer,
+                    text,
+                    Surface.TRACING,
+                    probe_id="parity",
+                    owasp_llm="",
+                    atlas=(),
+                    nist=(),
+                )
+            )
+            assert detected == residual_present(canary, text), label
+    finally:
+        logging.disable(logging.NOTSET)
