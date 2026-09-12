@@ -92,6 +92,17 @@ def _manifest(cls: type) -> dict[str, Any]:
             list(getattr(cls, "requires_adapters", _WORKFLOW_REQUIRES.get(cls.id, [])))
         ),
     }
+    # The CAPABILITY a probe needs its adapter to declare, which decides whether it
+    # runs at all: without it Classes 6, 9 and 13 are skipped and score NOT_COVERED.
+    # It was in no manifest, so a catalog consumer reading `probe.yaml` saw only
+    # `requires_adapters` - satisfied by any vector store - and concluded those
+    # classes were covered on a stack where the CLI silently skips them.
+    capabilities = [
+        getattr(capability, "value", capability)
+        for capability in getattr(cls, "requires_any_capability", ())
+    ]
+    if capabilities:
+        manifest["requires_any_capability"] = capabilities
     if cls.id in _EXAMPLE:
         manifest["example"] = _EXAMPLE[cls.id]
     return manifest

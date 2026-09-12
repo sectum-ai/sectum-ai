@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The manifests omitted the field that decides whether a probe runs at all.**
+  `requires_any_capability` is what gates Classes 6, 9 and 13 — without it the CLI skips
+  the probe and the class scores `NOT_COVERED` — and it appeared in no `probe.yaml`. A
+  catalog consumer therefore read `requires_adapters`, which any vector store satisfies,
+  and concluded those classes were covered on a stack where they never run. The three
+  gated probes now declare it, and the parity test pins both directions.
+
 - **An MCP transport failure was not an adapter error.** Both MCP members translated
   only the tool-level `isError`; a refused connection, a TLS error or a malformed frame
   came out as whatever the SDK raised — an `ExceptionGroup`, in practice — which is not

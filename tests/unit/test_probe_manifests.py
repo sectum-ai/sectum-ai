@@ -93,6 +93,22 @@ def test_probe_manifest_mirrors_class_attributes(cls: type) -> None:
         assert manifest["requires_adapters"] == _WORKFLOW_REQUIRES[probe.id]
 
 
+def test_a_manifest_declares_the_capability_that_decides_whether_the_probe_runs() -> None:
+    # `requires_any_capability` is what actually gates Classes 6, 9 and 13: without
+    # it the CLI skips the probe and the class scores NOT_COVERED. It appeared in no
+    # manifest, so a catalog consumer read `requires_adapters` - satisfied by any
+    # vector store - and concluded those classes were covered on a stack where they
+    # never run.
+    gated = [cls for cls in _PROBES if getattr(cls, "requires_any_capability", ())]
+    assert gated, "the introspection broke - three probes declare a capability gate"
+    for cls in gated:
+        expected = [c.value for c in cast(Any, cls).requires_any_capability]
+        assert load_probe_manifest(cls).get("requires_any_capability") == expected, cls
+    # A probe with no gate must not grow an empty key.
+    ungated = next(cls for cls in _PROBES if not getattr(cls, "requires_any_capability", ()))
+    assert "requires_any_capability" not in load_probe_manifest(ungated), ungated
+
+
 def test_every_workflow_probe_has_pinned_surface_and_adapter_expectations() -> None:
     # A workflow probe added without an entry above would otherwise re-open the hole by
     # KeyError rather than by a silent skip; name the requirement explicitly instead.
