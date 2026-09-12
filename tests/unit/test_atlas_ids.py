@@ -97,8 +97,14 @@ def test_every_atlas_id_a_probe_declares_is_published_on_its_class_page() -> Non
     }
     assert declared, "no probes discovered - the introspection broke"
 
+    # A page TALKS about a probe in its prose; a markdown link target that happens
+    # to contain the probe id (`class-06-embedding-inversion.md`) is navigation, not
+    # a claim about technique mapping - and reading one as the other demanded Class
+    # 6's `AML.T0024.001` be published on Class 13's page, where it would be false.
+    # Link TEXT is prose and stays.
+    prose = {page: re.sub(r"\]\([^)]*\)", "]", text) for page, text in pages.items()}
     for probe_id, ids in declared.items():
-        for page, text in pages.items():
+        for page, text in prose.items():
             if not re.search(rf"\b{re.escape(probe_id)}\b", text):
                 continue
             missing = [atlas for atlas in ids if atlas not in text]
