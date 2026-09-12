@@ -26,6 +26,9 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.probes._recall import FINGERPRINT_QUERY_K, content_recalled
 from sectum_ai.spec import (
+    ERASURE_SURFACES as _ERASURE_SURFACES,
+)
+from sectum_ai.spec import (
     AdapterError,
     CoverageVerdict,
     ErasureUnsupported,
@@ -46,16 +49,10 @@ from sectum_ai.spec import (
 # NOT_COVERED rather than silently absent (the anti-over-claim guarantee). The
 # vector store leads because it is always present; the rest follow the run plan's
 # order so the coverage matrix reads in a stable, documented sequence.
-ERASURE_SURFACES: tuple[Surface, ...] = (
-    Surface.VECTOR_DB,
-    Surface.TRACING,
-    Surface.AGENT_MEMORY,
-    Surface.SEMANTIC_CACHE,
-    Surface.MODEL_ADAPTER,
-    Surface.SEARCH_INDEX,
-    Surface.EVAL_SET,
-    Surface.BACKUP,
-)
+# Canonical in `spec`, which both this package and `evidence` can import; kept
+# re-exported here because `sectum_ai.probes.ERASURE_SURFACES` is the public name
+# the CLI and the docs use.
+ERASURE_SURFACES = _ERASURE_SURFACES
 
 # One surface's pre/post scan (target + markers -> the markers still present)
 # and its erasure callable, threaded through the uniform _erase_surface helper.

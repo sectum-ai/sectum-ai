@@ -299,10 +299,13 @@ def test_a_caveat_surface_is_not_folded_into_a_verified_claim() -> None:
     # ATTESTABLE_WITH_CAVEAT means the backend exposes no per-tenant erasure API,
     # so its data is presumed RETAINED - and it was named in the "Live surfaces"
     # list of an assertion that said erasure was verified.
+    # `tracing` rather than `prompt_logs`: the fixture named a surface no erasure
+    # scan reaches, so it asserted on a record the product cannot produce. The
+    # coverage-key validator is what surfaced it.
     mixed = _erasure_run(
-        {"vector_db": "ERASED", "prompt_logs": "ATTESTABLE_WITH_CAVEAT"},
+        {"vector_db": "ERASED", "tracing": "ATTESTABLE_WITH_CAVEAT"},
         erasure_residue={"vector_db": 0},
-        erasure_caveats={"prompt_logs": 4},
+        erasure_caveats={"tracing": 4},
     )
     for assertion in _deletion_assertions(mixed):
         assert "verified" not in assertion, assertion
@@ -420,11 +423,11 @@ def test_the_isolation_surface_map_matches_the_scorecard_s() -> None:
 
 
 def test_the_erasure_surface_set_matches_the_probes_own_plan() -> None:
-    # `ERASURE_SURFACES` is duplicated here rather than imported, because
-    # `evidence` sits below `probes` - the same constraint `_ISOLATION_PROBE_SURFACES`
-    # lives under. A copy that drifts is worse than no copy: a surface dropped from
-    # it would stop being checked for erasure silently, and one added would be
-    # reported as an unverified erasure surface it never was.
+    # `ERASURE_SURFACES` is canonical in `spec` and derived everywhere else, so
+    # this no longer checks one copy against another - it checks the CONSTANT
+    # against the probe's real behaviour, which no import can guarantee. A surface
+    # dropped from it would stop being checked for erasure silently, and one added
+    # would be reported as an unverified erasure surface it never was.
     from sectum_ai.adapters import (
         FakeBackup,
         FakeCache,

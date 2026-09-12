@@ -229,14 +229,28 @@ def test_an_erasure_coverage_key_or_verdict_that_is_not_a_member_is_refused() ->
     # caveats" matrix. A record could name a surface that does not exist and give
     # it a verdict that is not one - "FULLY ERASED" - and the pack still verified
     # clean with the invention drawn into the artifact an auditor receives.
-    with pytest.raises(ValidationError, match="erasure_coverage keys must be surfaces"):
+    with pytest.raises(ValidationError, match="erasure_coverage keys must be erasure surfaces"):
         RunMetrics(erasure_coverage={"vector_db (verified 2026-05-18)": "ERASED"})
     with pytest.raises(ValidationError, match="erasure_coverage values must be one of"):
         RunMetrics(erasure_coverage={"vector_db": "FULLY ERASED"})
-    # The legitimate shape still parses.
+    # An ERASURE surface, not any surface. No erasure probe scans `mcp`, and the
+    # consumers then disagreed about a key naming one: the renderers narrow to
+    # `ERASURE_SURFACES` and read it as "not an erasure surface", while
+    # `erasure_scanned_surfaces` does not - so `isolation_surfaces` SUBTRACTED the
+    # invented key and dropped a live surface the isolation probes really drove
+    # from the pack's own "Live surfaces:" line.
+    with pytest.raises(ValidationError, match="erasure_coverage keys must be erasure surfaces"):
+        RunMetrics(erasure_coverage={"mcp": "ERASED"})
+    # And its two siblings, written by the same scan over the same eight surfaces,
+    # validated nothing at all. The PDF prints all three into one matrix.
+    for field in ("erasure_residue", "erasure_caveats"):
+        with pytest.raises(ValidationError, match=f"{field} keys must be erasure surfaces"):
+            RunMetrics(**{field: {"mcp": 1}})
+    # The legitimate shapes still parse.
     assert RunMetrics(erasure_coverage={"vector_db": "ERASED"}).erasure_coverage == {
         "vector_db": "ERASED"
     }
+    assert RunMetrics(erasure_residue={"tracing": 4}).erasure_residue == {"tracing": 4}
 
 
 def test_rule_6_counts_the_findings_it_declines_to_grade() -> None:

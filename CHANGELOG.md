@@ -46,6 +46,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The erasure-surface set was two copies, and its two sibling metric blocks were
+  unvalidated.** Which surfaces a Class 11 scan can reach was listed in `probes` and
+  transcribed into `evidence`, held together by a parity test — and a copy kept honest
+  by a test is still a copy. It is canonical in `spec` now, below both, with each end
+  deriving from it; the parity test stays, because it pins the constant against what
+  the probe actually scans, which no import can guarantee. That single set makes the
+  record checkable at the point where it enters: `erasure_coverage` keys must be
+  *erasure* surfaces, not merely surfaces. A key naming `mcp` had consumers disagreeing
+  — the renderers narrow to the erasure set and read it as "not an erasure surface",
+  `erasure_scanned_surfaces` does not, so `isolation_surfaces` subtracted the invented
+  key and dropped a live surface the isolation probes really drove from the pack's own
+  "Live surfaces:" line. `erasure_residue` and `erasure_caveats`, written by the same
+  scan over the same eight surfaces and printed into the same PDF matrix, validated
+  nothing at all; they do now. The first thing the new rule caught was a test fixture
+  asserting on `prompt_logs`, a surface no erasure scan reaches.
+
 - **The fourth by-id read passed in silence.** Class 1's 200-empty rule reached the
   vector fetch, the cache get and the MCP invoke; `agent.run` plans
   `lookup <marker_id>` across a principal boundary, which is the same read, and graded

@@ -14,10 +14,12 @@ suite, which is the over-claim this product exists to refuse.
 """
 
 from sectum_ai.spec import (
+    ERASURE_SURFACES as _SPEC_ERASURE_SURFACES,
+)
+from sectum_ai.spec import (
     ControlMapping,
     CoverageVerdict,
     RunResult,
-    Surface,
     SurfaceProvenance,
 )
 
@@ -171,18 +173,9 @@ _ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
 # `agent_framework` - reported "absence could not be established on mcp" and
 # flipped GDPR Article 17 to not-satisfied. No erasure probe ever scans mcp, so
 # that is not an unverified erasure surface; it is not an erasure surface.
-ERASURE_SURFACES: frozenset[str] = frozenset(
-    {
-        Surface.VECTOR_DB.value,
-        Surface.TRACING.value,
-        Surface.AGENT_MEMORY.value,
-        Surface.SEMANTIC_CACHE.value,
-        Surface.MODEL_ADAPTER.value,
-        Surface.SEARCH_INDEX.value,
-        Surface.EVAL_SET.value,
-        Surface.BACKUP.value,
-    }
-)
+# Derived from `spec`, not transcribed: both ends can import it there, and a copy
+# kept honest by a parity test is still a copy.
+ERASURE_SURFACES: frozenset[str] = frozenset(surface.value for surface in _SPEC_ERASURE_SURFACES)
 
 
 def isolation_surfaces(run: RunResult) -> frozenset[str]:

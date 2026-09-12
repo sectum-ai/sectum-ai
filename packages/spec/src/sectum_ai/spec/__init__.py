@@ -2,6 +2,7 @@
 
 from sectum_ai.spec._logging import configure_logging, get_logger, redact_sensitive
 from sectum_ai.spec.enums import (
+    ERASURE_SURFACES,
     AccessOutcome,
     ClassVerdict,
     Confidence,
@@ -58,6 +59,7 @@ from sectum_ai.spec.text import (
 )
 
 __all__ = [
+    "ERASURE_SURFACES",
     "SCHEMA_VERSION",
     "AccessOutcome",
     "AdapterError",

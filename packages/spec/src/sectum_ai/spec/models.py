@@ -9,9 +9,17 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    ValidationInfo,
+    field_validator,
+)
 
 from sectum_ai.spec.enums import (
+    ERASURE_SURFACES,
     AccessOutcome,
     ClassVerdict,
     Confidence,
@@ -323,6 +331,9 @@ class Finding(SectumModel):
 # --- Run results and evidence -----------------------------------------------
 
 
+_ERASURE_SURFACE_VALUES = {surface.value for surface in ERASURE_SURFACES}
+
+
 class RunMetrics(SectumModel):
     """Aggregate metrics for a run (the engineering spec, section 9)."""
 
@@ -379,6 +390,26 @@ class RunMetrics(SectumModel):
     # narrowed run cannot pass for one that exercised the user boundary.
     user_steps_dropped: dict[str, int] = Field(default_factory=dict)
 
+    @field_validator("erasure_residue", "erasure_caveats")
+    @classmethod
+    def _erasure_count_keys_are_erasure_surfaces(
+        cls, value: dict[str, int], info: ValidationInfo
+    ) -> dict[str, int]:
+        # The two siblings of `erasure_coverage`, written by the same scan over the
+        # same eight surfaces, and neither validated its keys at all - the recurring
+        # shape here is a rule applied to one member of a family and not the rest.
+        # The audit PDF prints all three into one "Coverage & caveats" matrix, so an
+        # invented key in either of these lands in the artifact beside the coverage
+        # verdicts that are checked.
+        bad = sorted(key for key in value if key not in _ERASURE_SURFACE_VALUES)
+        if bad:
+            raise ValueError(
+                f"{info.field_name} keys must be erasure surfaces "
+                f"({sorted(_ERASURE_SURFACE_VALUES)}); "
+                f"not so for: {', '.join(repr(key) for key in bad)}"
+            )
+        return value
+
     @field_validator("erasure_coverage")
     @classmethod
     def _coverage_keys_and_verdicts_are_members(cls, value: dict[str, str]) -> dict[str, str]:
@@ -387,12 +418,21 @@ class RunMetrics(SectumModel):
         # "Coverage & caveats" matrix. A record could name a surface that does not
         # exist and give it a verdict that is not one - "FULLY ERASED" - and the
         # pack verified clean with the invention drawn into the artifact.
-        surfaces = {member.value for member in Surface}
+        # ERASURE surfaces, not any surface. No erasure probe scans `mcp`, `api`,
+        # `rag_pipeline` or `agent_framework`, and `ErasureReport.coverage()` writes
+        # a verdict for exactly the eight it can reach - so a ninth key can only
+        # arrive by hand. Consumers then disagreed about it: the renderers narrow to
+        # `ERASURE_SURFACES` and read it as "not an erasure surface", while
+        # `erasure_scanned_surfaces` does not, so `isolation_surfaces` SUBTRACTED
+        # the invented key and dropped a live surface the isolation probes had
+        # really driven from the pack's own "Live surfaces:" line. Narrowing each
+        # consumer would be four more places to keep in step; the record is one.
+        surfaces = _ERASURE_SURFACE_VALUES
         verdicts = {member.value for member in CoverageVerdict}
         bad_keys = sorted(key for key in value if key not in surfaces)
         if bad_keys:
             raise ValueError(
-                f"erasure_coverage keys must be surfaces ({sorted(surfaces)}); "
+                f"erasure_coverage keys must be erasure surfaces ({sorted(surfaces)}); "
                 f"not so for: {', '.join(repr(key) for key in bad_keys)}"
             )
         bad_values = sorted(key for key, verdict in value.items() if verdict not in verdicts)
