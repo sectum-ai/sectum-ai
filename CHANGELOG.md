@@ -51,6 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **One surface's failed purge aborted the whole Article 17 attestation.**
+  `_erase_surface` catches `AdapterError` around *both* scans — an inconclusive listing
+  on one surface must not cost the other seven their verdicts — and caught nothing
+  around the `delete` call between them. So an S3 bulk delete reporting per-key
+  failures, or a denied object, ended the erasure run with no attestation at all
+  instead of one surface unestablished. It is contained now, and a surface whose purge
+  errored can never read `ERASED` whatever the post-scan happens to see: an erase that
+  did not complete establishes no absence. Two adapter-side siblings of the same rule
+  came with it. The OTel post-delete re-scan accepted a page the backend itself flagged
+  as *partial* as proof the spans were gone — the one thing that module exists to
+  refuse, and where its sibling refuses for a weaker consequence (a lost residual
+  finding, versus a signed `ERASED`). And `GCSBackup.delete` let its client's exception
+  escape untranslated — not the adapter contract's type, so it slipped past the new
+  containment too — after stopping the loop at the first failure, leaving later objects
+  neither deleted nor named. It now attempts every object and reports them all, as the
+  S3 sibling's `Errors` list does.
+
 - **A floored effect size entered the signed record as a measurement.** When an arm's
   spread falls below the timer's resolution the 1 µs variance floor stands in for it, so
   Cohen's d, t and p become *bounds* — "at least this distinguishable". The finding's

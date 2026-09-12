@@ -396,10 +396,25 @@ class ErasureProbe:
                 [],
             )
         supported = True
+        purge_failed: str | None = None
         try:
             delete(target)
         except ErasureUnsupported:
             supported = False
+        except AdapterError as error:
+            # The DELETE failed - not "no erasure API" (that is ErasureUnsupported
+            # above) but a purge that was attempted and did not complete: an S3
+            # bulk delete reporting per-key failures, a denied key, a retained
+            # version. Nothing caught it, so ONE surface's failed purge aborted the
+            # whole Article 17 run and every other surface's verdict was lost - the
+            # same defect the two scans around it were fixed for, left on the call
+            # between them.
+            #
+            # Contained here, and the surface can never read ERASED: a purge that
+            # errored leaves absence unestablished whatever the post-scan happens to
+            # see. The post-scan still runs, because markers it DOES see are the
+            # more specific evidence and become residual findings.
+            purge_failed = str(error)
         self._inconclusive.pop(surface, None)
         try:
             residual = scan(target, markers)
@@ -428,7 +443,13 @@ class ErasureProbe:
             markers_before=len(before),
             residual_after=len(residual),
             erasure_supported=supported,
-            unverifiable_after=self._inconclusive.get(surface, 0),
+            # A failed purge makes every marker that was there unestablished, even
+            # the ones this scan cannot see: the erase did not complete, so nothing
+            # here can attest their absence.
+            unverifiable_after=(
+                max(len(before), 1) if purge_failed else self._inconclusive.get(surface, 0)
+            ),
+            unverifiable_reason=purge_failed,
         )
         if supported:
             surface_findings = [

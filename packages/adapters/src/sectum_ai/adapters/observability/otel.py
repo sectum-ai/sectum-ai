@@ -264,6 +264,14 @@ class _HttpOtelTraceStore:
                         "tenant's spans remain: it exposes no programmatic delete, so "
                         "erasure is attestable-with-caveat"
                     ) from error
+                # A MISS on a partial page, which is the one thing this module says
+                # must never be read as absence - and `search_traces` refuses for a
+                # weaker consequence. There a partial page loses a residual finding;
+                # here it records the surface ERASED, in a signed Article 17
+                # attestation, off a page that never claimed to show everything. The
+                # branch above needs no guard: spans SEEN are spans remaining,
+                # whatever lies past the cut.
+                _refuse_truncated(remaining, "OTel post-delete re-scan")
                 return
             # 405 (Method Not Allowed) / 501 (Not Implemented) mean the store
             # exposes no programmatic delete - the same "no per-tenant erasure

@@ -23,7 +23,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -152,6 +152,24 @@ class GCSBackup(BackupAdapter):
                 "is presumed retained until it ages out"
             )
         # GCS deletes are per-object (no bulk delete_objects call, so no 1000-key cap
-        # to batch around, unlike the S3 sibling).
+        # to batch around, unlike the S3 sibling). That difference cost this adapter
+        # the sibling's partial-purge guard twice over: a failing `blob.delete()`
+        # raised the CLIENT's exception, which is not the adapter contract's error
+        # type and so escaped the erasure probe's per-surface containment and
+        # aborted the whole Article 17 run - and it stopped the loop at the first
+        # failure, leaving the later objects neither deleted nor named. Every object
+        # is attempted, and the error names them all, exactly as the S3 sibling's
+        # `Errors` list does.
+        failed: list[str] = []
         for blob in self._blobs(tenant):
-            blob.delete()
+            try:
+                blob.delete()
+            except Exception as error:  # any client failure is a failed purge
+                failed.append(f"{getattr(blob, 'name', '?')} ({type(error).__name__})")
+        if failed:
+            raise AdapterError(
+                f"GCS purge left {len(failed)} object(s) in place ({', '.join(failed[:5])}"
+                f"{', ...' if len(failed) > 5 else ''}); a retention-locked / bucket-lock "
+                "bucket has no per-tenant purge - configure `no_erasure: true` so the "
+                "surface is attestable-with-caveat"
+            )

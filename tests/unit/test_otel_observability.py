@@ -264,6 +264,36 @@ def test_http_purge_404_with_spans_remaining_is_a_caveat(
         _http_store().purge(_TENANT_A.hex)
 
 
+def test_http_purge_404_does_not_read_a_partial_page_as_a_purge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The one thing this module says must never be read as absence: a MISS on a
+    # page the backend itself flagged as partial. `search_traces` refuses it, where
+    # the cost is a lost residual finding; the post-delete re-scan did not, where
+    # the cost is recording the surface ERASED in a signed Article 17 attestation.
+    def _urlopen(request: Any, timeout: float | None = None) -> Any:
+        if request.get_method() == "DELETE":
+            _raise_http_error(404)()
+
+        class _Response:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {"resourceSpans": [{"scopeSpans": [{"spans": []}]}], "truncated": True}
+                ).encode("utf-8")
+
+            def __enter__(self) -> Any:
+                return self
+
+            def __exit__(self, *exc: object) -> None:
+                return None
+
+        return _Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+    with pytest.raises(AdapterError, match="partial page"):
+        _http_store().purge(_TENANT_A.hex)
+
+
 def test_an_error_envelope_is_not_an_empty_tenant() -> None:
     # A 200 without resourceSpans (an error body) read as "no traces".
     class _ErrorStore(_FakeOtelStore):

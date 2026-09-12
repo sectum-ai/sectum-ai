@@ -16,7 +16,7 @@ import pytest
 
 from sectum_ai.adapters.backup.gcs import GCSBackup
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _BUCKET = "sectum-backups"
 _PREFIX = "sectum-ai-backup"
@@ -146,6 +146,38 @@ def test_gcs_backup_delete_purges_a_tenants_objects() -> None:
     assert adapter.search(_TENANT_A, "SECTUM-CANARY-DEL") == []
     # another tenant's snapshot is untouched
     assert adapter.search(_TENANT_B, "SECTUM-CANARY-KEEP")
+
+
+def test_a_purge_that_cannot_remove_every_object_says_so_in_the_contracts_error() -> None:
+    # The S3 sibling reads its bulk delete's `Errors` list and raises `AdapterError`.
+    # GCS deletes per object, and a failing one raised the CLIENT's exception - not
+    # the adapter contract's type, so it escaped the erasure probe's per-surface
+    # containment and aborted the whole Article 17 run - after stopping the loop, so
+    # the objects behind the failure were neither deleted nor named.
+    client = _FakeGCS()
+    adapter = _backup(client)
+    for index in range(4):
+        adapter.add(_TENANT_A, f"SECTUM-CANARY-{index}")
+
+    locked = {f"{_PREFIX}/{_TENANT_A.hex}/"}
+    original = _FakeBlob.delete
+
+    def _delete(self: _FakeBlob) -> None:
+        # Every object but the last is retained: a bucket-lock hold.
+        if self.name != sorted(client._store)[-1]:
+            raise RuntimeError("retention hold")
+        original(self)
+
+    _FakeBlob.delete = _delete  # type: ignore[method-assign]
+    try:
+        with pytest.raises(AdapterError, match="GCS purge left 3 object"):
+            adapter.delete(_TENANT_A)
+    finally:
+        _FakeBlob.delete = original  # type: ignore[method-assign]
+    assert locked  # the prefix is what was attempted
+    # The one deletable object WAS deleted: the loop ran to the end rather than
+    # stopping at the first failure, so the error can name every object left.
+    assert len(client._store) == 3
 
 
 def test_gcs_backup_delete_removes_every_object_under_the_prefix() -> None:

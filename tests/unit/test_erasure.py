@@ -14,7 +14,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.adapters.base import ObservabilityAdapter, VectorHit
 from sectum_ai.probes import ERASURE_SURFACES, ErasureProbe
-from sectum_ai.spec import CoverageVerdict, MarkerType, Substrate, Surface
+from sectum_ai.spec import AdapterError, CoverageVerdict, MarkerType, Substrate, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -82,6 +82,30 @@ def _seeded_eval(substrate: Substrate, *, soft_delete: bool) -> FakeEvalSet:
         if marker.marker_type is MarkerType.HARD_CANARY:
             eval_set.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
     return eval_set
+
+
+def test_one_surfaces_failed_purge_does_not_abort_the_whole_attestation() -> None:
+    # `_erase_surface` catches AdapterError around BOTH scans - one inconclusive
+    # scan must not cost the other seven surfaces their verdicts - and caught
+    # nothing around the delete between them. So an S3 bulk delete reporting
+    # per-key failures, or a denied GCS object, aborted the entire Article 17 run:
+    # no attestation at all, rather than one surface unestablished.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.manifest.markers[0].owner_tenant_id
+
+    class _FailingPurge(FakeBackup):
+        def delete(self, tenant: UUID) -> None:
+            raise AdapterError("S3 purge left 3 object(s) in place (AccessDenied)")
+
+    report = ErasureProbe(substrate, vector=FakeVectorStore(), backup=_FailingPurge()).run(target)
+    coverage = report.coverage()
+    assert len(coverage) == 8, coverage
+    # And the surface can never read ERASED off a purge that did not complete,
+    # whatever the post-scan happens to see.
+    assert coverage[Surface.BACKUP] is CoverageVerdict.NOT_COVERED, coverage
+    backup = next(s for s in report.surfaces if s.surface is Surface.BACKUP)
+    assert not backup.erased
+    assert backup.unverifiable_reason is not None and "AccessDenied" in backup.unverifiable_reason
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
