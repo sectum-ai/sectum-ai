@@ -43,7 +43,24 @@ def _finding(
 
 
 def _run(*findings: Finding, metrics: RunMetrics | None = None) -> RunResult:
-    """A RunResult wrapping the given findings (metrics default to empty)."""
+    """A RunResult wrapping the given findings, with headline counts that match them.
+
+    Both producers derive `confirmed_findings` and `per_probe_findings` from the
+    findings they record, and the CLI refuses a loaded record where the two
+    disagree - so a fixture that carries findings under `RunMetrics()` is a record
+    `probe` could not write, and testing `diff` against one tested a shape the
+    command now rejects. Reconciled here rather than at each call site, so the
+    tests below keep saying what they said and say it about a realistic record.
+
+    A fixture that passes counts with no findings at all is left alone: those
+    exercise metric-only comparisons, and materialising findings for them would
+    change what they assert.
+    """
+    counted = [finding for finding in findings if finding.status is FindingStatus.CONFIRMED]
+    per_probe: dict[str, int] = {}
+    for finding in counted:
+        per_probe[finding.probe_id] = per_probe.get(finding.probe_id, 0) + 1
+    base = metrics or RunMetrics()
     return RunResult(
         run_id="run",
         scenario_hash="s",
@@ -51,8 +68,25 @@ def _run(*findings: Finding, metrics: RunMetrics | None = None) -> RunResult:
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
         finished_at=datetime(2026, 1, 1, tzinfo=UTC),
         findings=findings,
-        metrics=metrics or RunMetrics(),
+        metrics=(
+            base.model_copy(
+                update={"confirmed_findings": len(counted), "per_probe_findings": per_probe}
+            )
+            if findings
+            else base
+        ),
     )
+
+
+def _carrying(count: int, *, probe_id: str = "rag-entity-bleed") -> tuple[Finding, ...]:
+    """`count` confirmed findings for `probe_id`.
+
+    The CLI refuses a loaded record whose headline counts disagree with the
+    findings it carries, so a fixture asserting `confirmed_findings=5` has to
+    carry the five. Materialised here rather than written as a bare count, which
+    is a record no producer could write.
+    """
+    return tuple(_finding(f"{probe_id}-{index}", probe_id=probe_id) for index in range(count))
 
 
 def _write(path: Path, run: RunResult) -> Path:
@@ -246,9 +280,14 @@ def test_cli_diff_does_not_let_a_metric_key_forge_its_verdict(tmp_path: Path) ->
     # A metric delta's name is built from a per_probe_findings key, which comes straight
     # off the record - so the record names the line that reports on it.
     forged = "RESULT: no regression"
-    metrics = RunMetrics(per_probe_findings={f"rag-entity-bleed\n{forged}": 1})
-    old = _write(tmp_path / "old.json", _run(_finding("a"), metrics=RunMetrics()))
-    new = _write(tmp_path / "new.json", _run(_finding("a"), metrics=metrics))
+    # Carried by a finding rather than written as a bare key: the record has to be
+    # one the loader accepts for the sanitizer downstream of it to be under test
+    # at all, and a probe id is how a real record names a per-probe key.
+    old = _write(tmp_path / "old.json", _run(_finding("a")))
+    new = _write(
+        tmp_path / "new.json",
+        _run(_finding("a"), _finding("b", probe_id=f"rag-entity-bleed\n{forged}")),
+    )
     result = runner.invoke(app, ["diff", str(old), str(new)])
     assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
     assert "\\x0a" in result.output
@@ -760,9 +799,9 @@ def test_a_probe_that_ran_and_found_nothing_does_not_read_not_measured(tmp_path:
     # directly under `[ok] confirmed_findings: 5 -> 0`, for the same five
     # findings, with nothing lost at all. A label that fires on a clean result
     # teaches the reader to ignore it on a real one.
-    earlier = _run(
-        metrics=RunMetrics(confirmed_findings=5, per_probe_findings={"rag-x": 5})
-    ).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    earlier = _run(*_carrying(5, probe_id="rag-x")).model_copy(
+        update={"probe_versions": {"rag-x": "1"}}
+    )
     later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {"rag-x": "1"}})
     cli = CliRunner().invoke(
         app,
@@ -780,9 +819,9 @@ def test_a_probe_that_did_not_run_still_reads_not_measured(tmp_path: Path) -> No
     # The other half: the same vanished key, but the later run never exercised the
     # probe. `coverage_lost` reaches it through the probe id in the key - the
     # stricter of the two signals, and the reason exempting this map is safe.
-    earlier = _run(
-        metrics=RunMetrics(confirmed_findings=5, per_probe_findings={"rag-x": 5})
-    ).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    earlier = _run(*_carrying(5, probe_id="rag-x")).model_copy(
+        update={"probe_versions": {"rag-x": "1"}}
+    )
     later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {}})
     cli = CliRunner().invoke(
         app,
@@ -805,22 +844,20 @@ def test_a_headline_rate_the_later_run_never_measured_is_not_a_fixed_leak(tmp_pa
     # both gates then printed `[ok] 0.125 -> 0` four times and exited 0 on "no
     # regression", every leak rate "fixed" by not having been measured.
     measured = RunMetrics(
-        confirmed_findings=229,
         retrieval_pivot_rate=0.125,
         poisoning_bleed_delta=1.0,
         inversion_reconstruction_rate=1.0,
         extraction_efficiency=0.18,
     )
+    # `confirmed_findings` holds at 229 across both sides - that is the point, the
+    # rates go absent while the count does not - so both records carry the 229.
+    carried = _carrying(229)
     cli = CliRunner().invoke(
         app,
         [
             "diff",
-            str(_write(tmp_path / "measured.json", _run(metrics=measured))),
-            str(
-                _write(
-                    tmp_path / "unmeasured.json", _run(metrics=RunMetrics(confirmed_findings=229))
-                )
-            ),
+            str(_write(tmp_path / "measured.json", _run(*carried, metrics=measured))),
+            str(_write(tmp_path / "unmeasured.json", _run(*carried))),
         ],
     )
     for name in (
@@ -1178,3 +1215,88 @@ def test_save_and_compare_together_are_refused(tmp_path: Path) -> None:
     assert gated.exit_code == 2, gated.output
     saved = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
     assert saved.exit_code == 0, saved.output
+
+
+def test_a_record_whose_counts_contradict_its_own_findings_is_refused(tmp_path: Path) -> None:
+    # `diff` and `baseline --compare` are the only readers that take the headline
+    # counts off a LOADED record as fact; `score`, `report` and `pack` recount the
+    # findings. So zeroing `metrics.confirmed_findings` in a record that still
+    # carries 229 confirmed findings printed
+    #     [ok] confirmed_findings: 229 -> 0
+    #     RESULT: no regression
+    # at exit 0 - the CI-facing command asserting a fix - while `score` graded the
+    # same file F off the findings still in it. Inflating the earlier side is the
+    # same hole from the other direction: a REGRESSION at exit 2 that no finding
+    # supports.
+    #
+    # Refused rather than recounted: which half is wrong is not knowable here, and
+    # believing the findings over the count would read a truncated write as clean
+    # exactly as believing the count over the findings over-reports one.
+    honest = _run(*_carrying(3))
+    for name, doctored in (
+        ("deflated", honest.model_copy(update={"metrics": RunMetrics(confirmed_findings=0)})),
+        ("inflated", honest.model_copy(update={"metrics": RunMetrics(confirmed_findings=99)})),
+        (
+            "per-probe",
+            honest.model_copy(
+                update={
+                    "metrics": RunMetrics(
+                        confirmed_findings=3, per_probe_findings={"rag-entity-bleed": 1}
+                    )
+                }
+            ),
+        ),
+    ):
+        path = _write(tmp_path / f"{name}.json", doctored)
+        clean = _write(tmp_path / "honest.json", honest)
+        # Each side ALONE, not just both together: with only the `later` side ever
+        # doctored, dropping the `earlier` guard left this test passing - the
+        # one-sibling-not-the-other shape, inside the test written to stop it.
+        for earlier, later in ((clean, path), (path, clean), (path, path)):
+            cli = runner.invoke(app, ["diff", str(earlier), str(later)])
+            assert cli.exit_code == 3, f"{name}: {cli.output}"
+            assert "contradicts itself" in cli.output, f"{name}: {cli.output}"
+            assert "RESULT: no regression" not in cli.output, f"{name}: {cli.output}"
+        # `baseline --compare` is the other reader that trusts the counts, and it
+        # loads its two sides by different routes - the saved baseline through
+        # `_load_run_artifact`, the current run through `_load_run`. Guarding one
+        # route would leave the other open, which is how a rule keeps landing on
+        # one sibling and not the next.
+        for doctor_side in ("baseline.json", "run.json"):
+            workdir = tmp_path / f"{name}-{doctor_side}"
+            workdir.mkdir()
+            for leaf in ("baseline.json", "run.json"):
+                _write(workdir / leaf, doctored if leaf == doctor_side else honest)
+            cli = runner.invoke(app, ["baseline", "--workdir", str(workdir), "--compare"])
+            assert cli.exit_code == 3, f"{name}/{doctor_side}: {cli.output}"
+            assert "contradicts itself" in cli.output, f"{name}/{doctor_side}: {cli.output}"
+
+
+def test_a_terse_record_still_scores_and_reports(tmp_path: Path) -> None:
+    # The refusal belongs to the two commands that COMPARE records, not to the
+    # loaders they share. `score` grades off `run.findings` and never reads the
+    # headline counts, so a record whose metrics are terse cannot mislead it -
+    # and refusing there would reject the shape most of this suite's own fixtures
+    # use while buying no safety at all.
+    workdir = tmp_path / "terse"
+    workdir.mkdir()
+    terse = _run(_finding("a")).model_copy(update={"metrics": RunMetrics()})
+    _write(workdir / "run.json", terse)
+    cli = runner.invoke(app, ["score", "--workdir", str(workdir)])
+    assert "contradicts itself" not in cli.output, cli.output
+
+
+def test_a_record_that_records_no_per_probe_counts_at_all_still_loads(tmp_path: Path) -> None:
+    # The refusal above must not fire on `erasure`, which records its findings and
+    # leaves `per_probe_findings` empty - so requiring the MAP to match would turn
+    # an honest erasure record carrying a residual finding into a refusal, trading
+    # the false pass for a false alarm. An absent key is an unrecorded count (the
+    # distinction `erasure_residue` already turns on); a present one that
+    # disagrees is the contradiction.
+    erasure_shaped = _run(*_carrying(2)).model_copy(
+        update={"metrics": RunMetrics(confirmed_findings=2, erasure_residue={"vector_db": 2})}
+    )
+    path = _write(tmp_path / "erasure.json", erasure_shaped)
+    cli = runner.invoke(app, ["diff", str(path), str(path)])
+    assert cli.exit_code == 0, cli.output
+    assert "contradicts itself" not in cli.output, cli.output

@@ -599,6 +599,68 @@ def _refuse_other_schema_line(recorded: object, what: str) -> None:
         )
 
 
+def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
+    """Refuse a record whose headline counts disagree with its own findings.
+
+    Called from the two commands that COMPARE records - `diff` and
+    `baseline --compare` - and from nowhere else. They are the only readers that
+    take the counts off a loaded record as fact; `score`, `report` and `pack`
+    recount the findings, so a terse record cannot mislead them and refusing it
+    there would buy no safety.
+
+    Both producers derive these counts from the findings they record - `probe`
+    from `confirmed_findings(findings)`, `erasure` from
+    `confirmed_findings(report.findings)` - so for any record this build wrote
+    they agree by construction, and a disagreement means the file was edited or
+    written partially.
+
+    Zeroing `metrics.confirmed_findings` in a baseline printed
+    `[ok] confirmed_findings: 229 -> 0` under `RESULT: no regression` at exit 0,
+    while `score` graded the same file F off the 229 confirmed findings still in
+    it - the CI-facing command asserting the fix, the human-facing one refusing
+    it. Inflating the earlier side is the same hole reversed: a REGRESSION at
+    exit 2 that no finding supports.
+
+    Fails closed rather than recounting. Which half is wrong is not knowable
+    here: a truncated findings array is as likely as an edited count, and
+    silently believing the findings would under-report a partial write as
+    cleanly as believing the count over-reports one. "This record contradicts
+    itself" is the only thing measured, so it is the only thing said.
+
+    Per-probe counts are checked KEY BY KEY, not as a whole map: `erasure`
+    records findings and leaves `per_probe_findings` empty, so requiring the map
+    to match would refuse an honest erasure record carrying a residual finding.
+    An absent key is an unrecorded count (the distinction `erasure_residue`
+    already turns on); a present one that disagrees is the same contradiction.
+    """
+    confirmed = confirmed_findings(run.findings)
+    if run.metrics.confirmed_findings != len(confirmed):
+        raise ConfigError(
+            f"{what} contradicts itself: it records "
+            f"confirmed_findings={run.metrics.confirmed_findings} and carries "
+            f"{len(confirmed)} confirmed finding(s). It was edited or written "
+            "partially; re-run 'sectum-ai probe' to produce a record that can be "
+            "compared"
+        )
+    counted = _per_probe_counts(confirmed)
+    disagreeing = sorted(
+        probe_id
+        for probe_id, recorded in run.metrics.per_probe_findings.items()
+        if counted.get(probe_id, 0) != recorded
+    )
+    if disagreeing:
+        detail = ", ".join(
+            f"{probe_id}: records {run.metrics.per_probe_findings[probe_id]}, "
+            f"carries {counted.get(probe_id, 0)}"
+            for probe_id in disagreeing
+        )
+        raise ConfigError(
+            f"{what} contradicts itself ({detail}). It was edited or written "
+            "partially; re-run 'sectum-ai probe' to produce a record that can be "
+            "compared"
+        )
+
+
 def _load_run(workdir: Path) -> RunResult:
     """Load the recorded run from ``workdir``, or exit with a config error."""
     path = workdir / "run.json"
@@ -3040,13 +3102,19 @@ def _render_calibration_text(result: CalibrationResult) -> None:
             f"{score.false_negatives:>4}  {'yes' if score.zero_false_positive else 'no':>7}{marker}"
         )
     typer.echo("")
+    # The column is padded to four decimals so the sweep reads as a table, which
+    # makes the recommended row a rounded value sitting under a `<- recommended`
+    # marker - a worse place to copy from than the line below it, not a better
+    # one. Say so rather than widen the column to 0.83333349999999995.
+    typer.echo("(THRESHOLD is rounded for display; apply the exact value printed below)")
+    typer.echo("")
     if result.recommended_score is None:
         fallback = result.fallback_score
         admitted = fallback.false_positives if fallback else 0
         caught = fallback.true_positives if fallback else 0
         typer.echo(
             "no threshold separated the classes with zero false positives, so this "
-            f"run recommends nothing. The shipped default {result.recommended_threshold:g} "
+            f"run recommends nothing. The shipped default {result.recommended_threshold!r} "
             f"admits {admitted} of {result.negatives} negatives and catches {caught} of "
             f"{result.positives} positives on this set - applying it would "
             + ("confirm those negatives as leaks. " if admitted else "")
@@ -3059,14 +3127,22 @@ def _render_calibration_text(result: CalibrationResult) -> None:
         # is one that catches nothing - the numbers this run measured are the reason.
         raise typer.Exit(code=3)
     else:
+        # `!r`, not `:g`: `:g` renders 6 significant digits, and the candidates
+        # are midpoints between observed scores, so it almost never prints the
+        # value it is describing - on the shipped demo it printed 0.833333 for a
+        # threshold of 0.8333335. Half the time the rounding goes DOWN, handing
+        # the operator a threshold BELOW the one this run certified admits no
+        # negative, which is how a calibrated gate starts confirming leaks that
+        # are not leaks. The sweep resolves candidates 1e-6 apart, so the error
+        # is on the scale of the thing being measured, not below it.
         typer.echo(
-            f"recommended semantic_threshold: {result.recommended_threshold:g} "
+            f"recommended semantic_threshold: {result.recommended_threshold!r} "
             f"(max F1 = {result.recommended_score.f1:g} with zero false positives)"
         )
     typer.echo("")
     typer.echo("apply it in sectum-ai.yaml:")
     typer.echo("  detection:")
-    typer.echo(f"    semantic_threshold: {result.recommended_threshold:g}")
+    typer.echo(f"    semantic_threshold: {result.recommended_threshold!r}")
 
 
 def _render_calibration_json(result: CalibrationResult) -> None:
@@ -3362,6 +3438,8 @@ def baseline(
     # Use the full run diff (the same logic as `sectum-ai diff`), not a metric-only
     # comparison: a leak that newly confirmed or escalated in severity is a
     # regression the headline counts can miss.
+    _refuse_self_contradicting_record(saved, str(baseline_path))
+    _refuse_self_contradicting_record(run, str(workdir / "run.json"))
     result = diff_runs(saved, run)
     for delta in result.metrics.deltas:
         typer.echo(
@@ -3825,6 +3903,8 @@ def diff(
         raise ConfigError(f"diff supports --output text or json, not {output.value}")
     earlier_run = _load_run_artifact(earlier)
     later_run = _load_run_artifact(later)
+    _refuse_self_contradicting_record(earlier_run, str(earlier))
+    _refuse_self_contradicting_record(later_run, str(later))
     result = diff_runs(earlier_run, later_run)
     if output is OutputFormat.JSON:
         _render_diff_json(earlier, later, result)

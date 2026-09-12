@@ -51,6 +51,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A record whose headline counts contradict its own findings is no longer
+  compared.** `diff` and `baseline --compare` are the only readers that take
+  `confirmed_findings` / `per_probe_findings` off a *loaded* record as fact;
+  `score`, `report` and `pack` recount the findings. So zeroing the counts in a
+  baseline printed `[ok] confirmed_findings: 229 -> 0` under `RESULT: no
+  regression` at exit `0` — the CI-facing command asserting a fix — while `score`
+  graded the same file `F` off the 229 confirmed findings still in it. Inflating
+  the other side is the same hole reversed: a `REGRESSED` at exit `2` no finding
+  supports. Both producers derive the counts from the findings they record, so a
+  disagreement means the file was edited or written partially; it is now refused
+  at exit `3` rather than recounted, because which half is wrong is not knowable
+  from the file. Checked on all four sides (both records of `diff`, and the saved
+  baseline and current run of `baseline --compare`, which load by different
+  routes). Per-probe counts are compared key by key, so `erasure` — which records
+  findings and leaves `per_probe_findings` empty — is not turned into a false
+  alarm.
+- **`calibrate` hands over the threshold it certified.** The text renderer printed
+  it with `:g` (6 significant digits) while the candidates are midpoints between
+  observed scores, so it almost never rendered the value it was describing: the
+  shipped demo certified `0.8333335` and printed `semantic_threshold: 0.833333`
+  under the heading "apply it in sectum-ai.yaml". Half of those roundings go
+  *down*, and a threshold below the certified one admits scores the run proved
+  were negatives — a calibrated gate that starts confirming leaks that are not
+  leaks. The sweep resolves candidates `1e-6` apart, so the error is half the
+  resolution of the measurement. The recommendation line, the paste block and the
+  fallback now print the exact value; the padded sweep table says it is rounded.
+
+
 - **A live `rag`, `mcp` or `agent` backend was graded `PASS` on a check it could not
   have answered.** Those three slots carry a canary Sectum *puts there*, and their
   adapter protocols expose only `ask` / `invoke` / `run` — no write primitive — so the

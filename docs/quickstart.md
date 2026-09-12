@@ -86,13 +86,26 @@ scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
 `[SCENARIO CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
-check the run record *inside* a pack), or residual / attestable-with-caveat data on an erased surface
+check the run record *inside* a pack, and so is one whose headline counts
+contradict the findings it carries, see below), or residual / attestable-with-caveat data on an erased surface
 (`sectum-ai erasure`, where data is presumed retained); `3` the run could not be
 completed or graded — a config or adapter error, a `probe` run in which nothing
 interrogated the stack, a `report` on a run that names no probe (or one recorded
 against a since re-seeded substrate), an erasure run whose absence could not be
-established (`ERASURE INCONCLUSIVE`), or a record `score` refuses to grade;
-`4` evidence verification failure.
+established (`ERASURE INCONCLUSIVE`), a pack whose every answerable check passed
+while a sibling document it could not excuse remains (`VERIFICATION
+INDETERMINATE` — neither verified nor shown altered), a record `diff` or
+`baseline --compare` cannot compare because its own `confirmed_findings` /
+`per_probe_findings` disagree with the findings it carries, or a record `score`
+refuses to grade; `4` evidence verification failure.
+
+Both producers derive those counts from the findings they record, so a
+disagreement means the file was edited or written partially. It is refused rather
+than recounted: which half is wrong is not knowable from the file, and believing
+the findings over the count would read a truncated write as clean exactly as
+believing the count over the findings turned 229 confirmed leaks into
+`[ok] confirmed_findings: 229 -> 0` under `RESULT: no regression`. `score`,
+`report` and `pack` read `findings` directly and are unaffected.
 
 `0` means "nothing this command gates on", not "no leaks": the reporting commands do
 not gate, so `sectum-ai score` exits `0` whatever the letter — a grade of `F` on a run

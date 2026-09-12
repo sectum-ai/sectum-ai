@@ -139,7 +139,9 @@ container, and calling another pack's genuine document altered is the worst fals
 alarm this tool can raise. And a file whose claim is real but which this
 verification cannot accept — an unanchored pack cannot excuse an anchored one's
 sibling, and `erasure` writes no anchored pack at all — is listed under
-`unexcused-siblings`, which says exactly that and nothing about tampering. On a **run-pack bundle** (a `.zip`) it *is* a closed
+`unexcused-siblings`, which says exactly that and nothing about tampering — the
+pack ends `VERIFICATION INDETERMINATE` at exit `3`, neither verified nor shown
+altered, rather than borrowing either of the other two verdicts. On a **run-pack bundle** (a `.zip`) it *is* a closed
 container: one `member:<name>` line per listed member comes first and the pack's
 own checks follow, each PDF and sidecar line naming the member it re-checked
 (`audit-pdf:audit-pack.pdf`, `in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)

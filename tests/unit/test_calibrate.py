@@ -427,3 +427,52 @@ def test_a_fallback_that_catches_nothing_is_refused_too() -> None:
     with CliRunner().isolation(), pytest.raises(typer.Exit) as refusal:
         _render_calibration_text(result)
     assert refusal.value.exit_code == 3
+
+
+def test_the_threshold_the_text_output_hands_over_is_the_one_it_certified() -> None:
+    # The candidates are midpoints between observed scores, so `:g`'s 6
+    # significant digits almost never render the value being described: the
+    # shipped demo certified 0.8333335 and printed `semantic_threshold: 0.833333`
+    # in the block whose own heading is "apply it in sectum-ai.yaml". Half of
+    # those roundings go DOWN, and a threshold below the certified one admits
+    # scores this run proved were negatives - a calibrated gate that starts
+    # confirming leaks that are not leaks, which is the failure mode the zero-FP
+    # constraint exists to rule out. The sweep resolves candidates 1e-6 apart, so
+    # a 5e-7 error is half the resolution of the measurement, not noise under it.
+    #
+    # Round-tripped, not compared to a literal: the point is that what a reader
+    # pastes parses back to what was certified, on whatever value this seed picks.
+    import json
+
+    text = _runner.invoke(app, ["calibrate", "--embedder", "fake", "--seed", "7"])
+    emitted = _runner.invoke(
+        app, ["calibrate", "--embedder", "fake", "--seed", "7", "--output", "json"]
+    )
+    assert text.exit_code == 0, text.output
+    certified = json.loads(emitted.stdout)["recommended_threshold"]
+    assert certified is not None
+
+    pasted = [
+        line.split(":", 1)[1].strip()
+        for line in text.output.splitlines()
+        if line.strip().startswith("semantic_threshold:")
+        or line.strip().startswith("recommended semantic_threshold:")
+    ]
+    assert len(pasted) == 2, text.output
+    for rendered in pasted:
+        value = float(rendered.split(" ", 1)[0])
+        assert value == certified, f"{rendered!r} is not the certified {certified!r}"
+        # Not merely close: BELOW is the direction that admits a negative, and a
+        # tolerance-based check would pass the exact defect this pins.
+        assert not value < certified, rendered
+
+
+def test_the_rounded_sweep_table_says_it_is_rounded() -> None:
+    # The table pads THRESHOLD to four decimals so the sweep lines up, which puts
+    # a rounded number under a `<- recommended` marker - the same value-below-the-
+    # certified-one defect, in the place a reader's eye lands first. Widening the
+    # column to 0.83333349999999995 would wreck the table, so it says so instead.
+    result = _runner.invoke(app, ["calibrate", "--embedder", "fake", "--seed", "7"])
+    assert result.exit_code == 0, result.output
+    assert "<- recommended" in result.output, result.output
+    assert "rounded for display" in result.output, result.output

@@ -302,8 +302,22 @@ def test_baseline_compare_does_not_let_a_record_forge_its_verdict(tmp_path: Path
     (tmp_path / "baseline.json").write_text(clean.model_dump_json())
     forged = "no regression against the baseline"
     leaked = run.findings[0].model_copy(update={"finding_id": f"f00d\n{forged}"})
+    # The counts travel with the findings: `baseline --compare` refuses a record
+    # whose own `confirmed_findings` contradicts what it carries, so keeping the
+    # real run's 229 beside a single planted finding would be refused before the
+    # sanitizer under test here ever ran.
     (tmp_path / "run.json").write_text(
-        run.model_copy(update={"findings": (leaked,)}).model_dump_json()
+        run.model_copy(
+            update={
+                "findings": (leaked,),
+                "metrics": run.metrics.model_copy(
+                    update={
+                        "confirmed_findings": 1,
+                        "per_probe_findings": {leaked.probe_id: 1},
+                    }
+                ),
+            }
+        ).model_dump_json()
     )
     result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 2
@@ -1485,6 +1499,25 @@ def test_report_refuses_a_run_recorded_against_a_reseeded_substrate(tmp_path: Pa
 
 
 def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str, object]) -> None:
+    # `per_probe_findings` is derived from the findings a producer recorded, and
+    # the comparing commands refuse a record where the two disagree - so the
+    # findings the counts claim are materialised here rather than left implicit.
+    per_probe = metrics.get("per_probe_findings") or {}
+    assert isinstance(per_probe, dict)
+    findings = [
+        {
+            "finding_id": f"{probe_id}-{index}",
+            "probe_id": probe_id,
+            "severity": "high",
+            "confidence": 1.0,
+            "status": "confirmed",
+            "owner_tenant_id": str(UUID(int=1)),
+            "observed_in_tenant_id": str(UUID(int=2)),
+            "surface": "vector_db",
+        }
+        for probe_id, count in per_probe.items()
+        for index in range(int(count))
+    ]
     path.write_text(
         json.dumps(
             {
@@ -1494,7 +1527,8 @@ def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str,
                 "started_at": "2026-01-01T00:00:00+00:00",
                 "finished_at": "2026-01-01T00:00:00+00:00",
                 "probe_versions": probe_versions,
-                "metrics": metrics,
+                "findings": findings,
+                "metrics": {**metrics, "confirmed_findings": len(findings)},
                 # A record without a stamp is refused: the field defaults to the
                 # current version, so "missing" cannot read as "current".
                 "schema_version": SCHEMA_VERSION,
