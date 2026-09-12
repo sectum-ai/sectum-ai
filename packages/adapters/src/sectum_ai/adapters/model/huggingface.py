@@ -100,6 +100,19 @@ class HuggingFaceLoraModel(ModelAdapter):
         super().__init__(name, frozenset(capabilities))
         self._backend = backend
         self._adapter_bleed = adapter_bleed
+        # `adapter_bleed` does NOT make a real model bleed. `infer` below runs one
+        # correctly-isolated completion per scope and joins them, so the
+        # cross-tenant content is manufactured HERE - the model produced none. A
+        # verdict from it therefore says nothing about the operator's model, which
+        # is exactly what `synthetic` records (see `Adapter.synthetic`): without
+        # this, CRITICAL Class 9 findings Sectum fabricated entered the signed pack
+        # tagged `model_adapter: LIVE`, indistinguishable from real weight bleed.
+        #
+        # Not the same as the Redis knobs: `tenant_scoped=False` really drops the
+        # tenant from the Redis key and `shared_memory=True` really reads one
+        # shared space, so their leaks are genuine leaks of a genuinely shared
+        # resource - a misconfiguration the operator could actually have.
+        self.synthetic = adapter_bleed
         self._user_scoped = user_scoped
         # Without a user scope nothing user-specific reaches the backend: a call
         # made as a user is the tenant's call, so user-level steps are not run.

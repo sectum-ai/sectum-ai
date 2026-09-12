@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Class 9's LoRA leak was manufactured by Sectum and signed as LIVE.** The
+  HuggingFace adapter's `adapter_bleed` knob does not make a model bleed: `infer`
+  runs one correctly-isolated completion per scope and `" ".join`s them, so the
+  cross-tenant content in the answer is fabricated by the harness and the weights
+  produced none of it. The adapter did not set `synthetic`, so CRITICAL
+  cross-tenant findings Sectum wrote itself entered the signed pack tagged
+  `model_adapter: LIVE`, counted in "confirmed on live surfaces" and graded against
+  the operator's model. It is `synthetic` now, like the fakes. The Redis knobs are
+  deliberately not: `tenant_scoped=False` really does drop the tenant from the key,
+  so that leak is a real leak of a genuinely shared resource.
+
 - **An isolation-only surface was reported as an unverified *erasure* surface.** Both
   erasure renderers keyed on every LIVE surface, so a record whose provenance also named
   `mcp`, `api`, `rag_pipeline` or `agent_framework` said "absence could not be established
