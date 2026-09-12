@@ -3,10 +3,12 @@
 from uuid import UUID
 
 from sectum_ai.adapters import FakeAgent
+from sectum_ai.adapters.base import AgentAdapter, AgentResult, Capability
 from sectum_ai.probes import AgentFrameworkHijackProbe, confirmed_findings
 from sectum_ai.probes.detection import dedupe_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
+    AccessOutcome,
     FindingStatus,
     MarkerType,
     Scenario,
@@ -87,11 +89,66 @@ def test_a_clean_agent_run_says_what_it_did_not_establish() -> None:
     assert "narrates a refusal" in findings[0].evidence_span, findings[0].evidence_span
     assert "200-empty" not in findings[0].evidence_span, findings[0].evidence_span
 
-    # And it stays silent where the leak is proven - a caveat beside a confirmed
-    # finding would say the probe could not establish what it just established.
+    # It stays silent for a PAIR whose leak is proven - a caveat beside that pair's
+    # confirmed finding would say the probe could not establish what it just
+    # established. The probe plans two steps per pair, so the run is caveat-free only
+    # when every step leaks: under `confused_deputy` both the direct and the
+    # token-bearing lookup resolve cross-tenant.
     leaky = Runner(substrate, agent=_seeded_agent(substrate, confused_deputy=True))
     confirmed = dedupe_findings([f for _, per_step in leaky.run_per_step(probe) for f in per_step])
     assert {f.status for f in confirmed} == {FindingStatus.CONFIRMED}, confirmed
+
+    # `tool_call_passthrough` alone is the Asana-class flaw where only the
+    # token-bearing step leaks, so a pair yields BOTH a confirmed finding and the
+    # caveat for its scoped step - the same shape the sibling `agent-tool-hijack`
+    # already produces. It moves no verdict: the class still FAILS on the confirmed
+    # finding, and an unverified one never flips a class.
+    passthrough = Runner(substrate, agent=_seeded_agent(substrate, tool_call_passthrough=True))
+    mixed = dedupe_findings(
+        [f for _, per_step in passthrough.run_per_step(probe) for f in per_step]
+    )
+    assert {f.status for f in mixed} == {FindingStatus.CONFIRMED, FindingStatus.UNVERIFIED}, mixed
+    assert confirmed_findings(mixed), "the leak is still reported"
+
+
+def test_the_caveat_does_not_say_the_agent_answered_when_it_returned_nothing() -> None:
+    # The caveat exists because "a caveat that misstates what was observed is the
+    # over-claim it exists to prevent" - and its wording was unconditional, so it
+    # asserted "the agent answered" over a response the very same Observation
+    # records as EMPTY. Both adapters that produce an empty output are wired into
+    # the CLI: LangGraph returns "" when a graph hits its recursion limit mid
+    # tool-loop, and the HTTP agent returns "" for any 200 whose body carries no
+    # `output` key. `FakeAgent` pads a miss into "tool returned: ", so no fixture
+    # built on it can reach this.
+    class _SilentAgent(AgentAdapter):
+        def __init__(self) -> None:
+            super().__init__(
+                "silent", frozenset({Capability.TOOL_INVOCATION, Capability.TENANT_SCOPED_TOOLS})
+            )
+
+        def run(self, tenant: UUID, task: str) -> AgentResult:
+            return AgentResult(output="", tool_calls=())
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = AgentFrameworkHijackProbe()
+    runner = Runner(substrate, agent=_SilentAgent())
+    results = runner.run_per_step(probe)
+    findings = dedupe_findings([f for _, per_step in results for f in per_step])
+
+    assert findings, "a silent agent must not pass in silence either"
+    span = findings[0].evidence_span
+    assert "returned no output at all" in span, span
+    assert "the agent answered" not in span, span
+    # The observation and the sentence beside it have to agree.
+    step = results[0][0]
+    assert runner._execute(step).access_outcome is AccessOutcome.EMPTY
+
+    # And an agent that DOES answer still gets the wording that describes that.
+    answering = Runner(substrate, agent=_seeded_agent(substrate))
+    answered = dedupe_findings(
+        [f for _, per_step in answering.run_per_step(probe) for f in per_step]
+    )
+    assert "the agent answered" in answered[0].evidence_span, answered[0].evidence_span
 
 
 def test_confused_deputy_agent_leaks_across_tenants() -> None:

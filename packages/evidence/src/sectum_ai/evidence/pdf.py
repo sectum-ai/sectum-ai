@@ -484,7 +484,16 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
     rate = rate_from_counts(
         metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
     )
-    # The record contradicts its own counts, so there is nothing here to state.
+    # The record contradicts its own counts. There IS something to state: `score`
+    # refuses to grade such a record outright, while returning None here omitted the
+    # row - byte-identical to a run that took no Class-2 step at all, so the
+    # auditor's PDF hid a corrupt record behind the same silence as an honest one.
+    if metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+        return (
+            f"not stated: this record reports {metrics.retrieval_pivot_k} of "
+            f"{metrics.retrieval_pivot_n} retrieval pivots, which is impossible, so "
+            "neither its counts nor the rate it asserts can be believed"
+        )
     if rate is None:
         return None
     if metrics.retrieval_pivot_n > 0:

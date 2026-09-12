@@ -9,12 +9,12 @@ import functools
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NamedTuple
 from uuid import UUID
 
 import typer
@@ -1773,9 +1773,50 @@ def _sibling_names(pack_path: Path, slot: int) -> tuple[str, ...]:
 _Binds = Callable[[Path, EvidencePack], bool]
 
 
+class _Claim(StrEnum):
+    """Whether another present pack's claim on a candidate file can be accepted.
+
+    Three-valued because two outcomes were not enough: a claim that is REAL but
+    that this verification cannot accept is neither "somebody else's file" nor
+    "tampered", and collapsing it into the second accused an untampered document.
+    """
+
+    OWNED = "owned"
+    UNDER_ANCHORED = "under-anchored"
+    UNOWNED = "unowned"
+
+
+class _TrustRoots(NamedTuple):
+    """The operator's own verification roots, as `verify` was given them."""
+
+    tsa_certificate: bytes | None = None
+    tsa_root: bytes | None = None
+    rekor_keyring: Mapping[str, bytes] | None = None
+
+
+_NO_ROOTS = _TrustRoots()
+
+
+class _Siblings(NamedTuple):
+    """Candidate files split by what this pack can say about each.
+
+    ``judged`` are checked against this pack; ``named`` are stated and not judged;
+    ``unexcused`` are owned by a present pack whose claim this verification cannot
+    accept - stated as that, never as tampering.
+    """
+
+    judged: list[Path]
+    named: list[str]
+    unexcused: list[str]
+
+
 def _claimed_siblings(
-    pack_path: Path, slot: int, pack: EvidencePack, binds: _Binds
-) -> tuple[list[Path], list[str]]:
+    pack_path: Path,
+    slot: int,
+    pack: EvidencePack,
+    binds: _Binds,
+    roots: _TrustRoots = _NO_ROOTS,
+) -> _Siblings:
     """Split the slot's existing candidates into the ones to judge and the ones to name.
 
     A pack whose filename is not in ``_PACK_SIBLINGS`` has every candidate name in
@@ -1805,15 +1846,29 @@ def _claimed_siblings(
     # reported as a mismatch, with VERIFICATION FAILED over an untampered folder.
     # A candidate no present pack claims is still judged, so a tampered sidecar
     # remains a failure rather than quietly becoming somebody else's file.
-    judged = bound or [
-        c for c in present if not _owned_elsewhere(pack_path, c.name, slot, pack, binds)
-    ]
-    return judged, sorted(c.name for c in present if c not in judged)
+    claims = (
+        {}
+        if bound
+        else {
+            c.name: _owned_elsewhere(pack_path, c.name, slot, pack, binds, roots) for c in present
+        }
+    )
+    judged = bound or [c for c in present if claims.get(c.name) is _Claim.UNOWNED]
+    return _Siblings(
+        judged=judged,
+        named=sorted(c.name for c in present if c not in judged),
+        unexcused=sorted(n for n, claim in claims.items() if claim is _Claim.UNDER_ANCHORED),
+    )
 
 
 def _owned_elsewhere(
-    pack_path: Path, name: str, slot: int, pack: EvidencePack, binds: _Binds
-) -> bool:
+    pack_path: Path,
+    name: str,
+    slot: int,
+    pack: EvidencePack,
+    binds: _Binds,
+    roots: _TrustRoots,
+) -> _Claim:
     """True when ``name`` is another PRESENT pack's sibling and that pack *earns* the claim.
 
     Excluding a file from judgment on somebody else's say-so is the one move here
@@ -1847,13 +1902,29 @@ def _owned_elsewhere(
             continue
         if not binds(pack_path.parent / name, other):
             continue
-        claimant = verify_pack(other)
+        # Verified the way the CLI verifies the pack under test. Bare
+        # `verify_pack(other)` ignored the operator's own trust roots, so pinning a
+        # customer TSA or a private Rekor with `--tsa-cert` / `--rekor-key` made
+        # their GENUINE claimant fail to verify - and the document it owns was then
+        # reported "altered or replaced after signing" over an untampered folder.
+        claimant = verify_pack(
+            other,
+            tsa_certificate=roots.tsa_certificate,
+            tsa_root=roots.tsa_root,
+            rekor_keyring=roots.rekor_keyring,
+        )
         if not claimant.passed:
             continue
         if (pack.anchored_in_log or pack.anchored_with_timestamp) and not claimant.anchored:
-            continue
-        return True
-    return False
+            # The claim is real and this verification cannot accept it: an
+            # unanchored claimant cannot excuse an anchored pack's sibling. That is
+            # NOT tampering, and saying so was a false alarm of the worst kind -
+            # `erasure` has no `--tsa`/`--rekor` flag at all, so `report --tsa` plus
+            # `erasure` in one workdir produces an anchored pack beside a genuine
+            # unanchored one as a matter of course.
+            return _Claim.UNDER_ANCHORED
+        return _Claim.OWNED
+    return _Claim.UNOWNED
 
 
 def _unclaimed_siblings(pack_path: Path, slot: int) -> list[str]:
@@ -1906,7 +1977,9 @@ def _binds_run_record(path: Path, pack: EvidencePack) -> bool:
         return False
 
 
-def _sibling_audit_pdf(pack_path: Path, pack: EvidencePack) -> tuple[bytes | None, list[str]]:
+def _sibling_audit_pdf(
+    pack_path: Path, pack: EvidencePack, roots: _TrustRoots = _NO_ROOTS
+) -> tuple[bytes | None, list[str], list[str]]:
     """The audit PDF beside ``pack_path`` that this pack binds, and the ones it does not.
 
     The ``report`` and ``erasure`` commands write the audit PDF next to the
@@ -1924,11 +1997,15 @@ def _sibling_audit_pdf(pack_path: Path, pack: EvidencePack) -> tuple[bytes | Non
     Falling back to the first when none matches keeps a single tampered PDF a
     FAIL instead of quietly becoming an unclaimed sibling.
     """
-    judged, others = _claimed_siblings(pack_path, 0, pack, _binds_pdf)
-    if not judged:
-        return None, others
+    siblings = _claimed_siblings(pack_path, 0, pack, _binds_pdf, roots)
+    if not siblings.judged:
+        return None, siblings.named, siblings.unexcused
     # `verify_pack` re-hashes ONE document against `pdf_ref`; the rest are named.
-    return judged[0].read_bytes(), sorted({*others, *(p.name for p in judged[1:])})
+    return (
+        siblings.judged[0].read_bytes(),
+        sorted({*siblings.named, *(p.name for p in siblings.judged[1:])}),
+        siblings.unexcused,
+    )
 
 
 def _echo_verdict(anchored: bool, *, what: str) -> None:
@@ -2077,7 +2154,12 @@ def verify(
     # Re-hash the audit PDF if it sits beside the pack (report/erasure write
     # audit-pack.pdf / erasure-attestation.pdf next to the json); its hash is
     # bound into the attested digest, so a swapped PDF fails verification.
-    pdf_bytes, other_pdfs = _sibling_audit_pdf(pack, evidence)
+    roots = _TrustRoots(
+        tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
+        tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
+        rekor_keyring=_rekor_keyring_override(rekor_key),
+    )
+    pdf_bytes, other_pdfs, unexcused = _sibling_audit_pdf(pack, evidence, roots)
     unclaimed = sorted(
         {name for slot in (0, 1, 2, 3) for name in _unclaimed_siblings(pack, slot)}
         | set(other_pdfs)
@@ -2085,9 +2167,9 @@ def verify(
     result = verify_pack(
         evidence,
         manifest=ground_truth,
-        tsa_certificate=tsa_cert.read_bytes() if tsa_cert is not None else None,
-        tsa_root=tsa_root.read_bytes() if tsa_root is not None else None,
-        rekor_keyring=_rekor_keyring_override(rekor_key),
+        tsa_certificate=roots.tsa_certificate,
+        tsa_root=roots.tsa_root,
+        rekor_keyring=roots.rekor_keyring,
         pdf_bytes=pdf_bytes,
         require_anchored=not allow_unanchored,
         require_live=not allow_synthetic,
@@ -2108,8 +2190,10 @@ def verify(
     # is anchored. Silence was the original defect (`score` prefers `run.json`, so
     # an emptied one graded A while `verify` said nothing), and an accusation is
     # the wrong cure. Both outcomes name the consequence instead.
-    run_paths, other_runs = _claimed_siblings(pack, 3, evidence, _binds_run_record)
-    unclaimed = sorted(set(unclaimed) | set(other_runs))
+    _siblings = _claimed_siblings(pack, 3, evidence, _binds_run_record, roots)
+    run_paths = _siblings.judged
+    unclaimed = sorted(set(unclaimed) | set(_siblings.named))
+    unexcused = sorted(set(unexcused) | set(_siblings.unexcused))
     for run_path in run_paths:
         if _binds_run_record(run_path, evidence):
             typer.echo(f"[ok] run-record: {untrusted(run_path.name)} matches the attested run")
@@ -2121,8 +2205,10 @@ def verify(
                 "pack, so point `score` at the pack to be sure what you are grading"
             )
 
-    intoto_paths, other_intoto = _claimed_siblings(pack, 1, evidence, _binds_in_toto)
-    unclaimed = sorted(set(unclaimed) | set(other_intoto))
+    _siblings = _claimed_siblings(pack, 1, evidence, _binds_in_toto, roots)
+    intoto_paths = _siblings.judged
+    unclaimed = sorted(set(unclaimed) | set(_siblings.named))
+    unexcused = sorted(set(unexcused) | set(_siblings.unexcused))
     for index, intoto_path in enumerate(intoto_paths):
         label = "in-toto-attestation" if index == 0 else f"in-toto-attestation:{intoto_path.name}"
         try:
@@ -2134,8 +2220,10 @@ def verify(
 
     # Re-verify the DSSE envelope sidecar if report wrote one: its in-toto
     # statement must still bind this pack's run digest (a swapped envelope fails).
-    dsse_paths, other_dsse = _claimed_siblings(pack, 2, evidence, _binds_dsse)
-    unclaimed = sorted(set(unclaimed) | set(other_dsse))
+    _siblings = _claimed_siblings(pack, 2, evidence, _binds_dsse, roots)
+    dsse_paths = _siblings.judged
+    unclaimed = sorted(set(unclaimed) | set(_siblings.named))
+    unexcused = sorted(set(unexcused) | set(_siblings.unexcused))
     for index, dsse_path in enumerate(dsse_paths):
         label = "dsse-envelope" if index == 0 else f"dsse-envelope:{dsse_path.name}"
         try:
@@ -2162,6 +2250,19 @@ def verify(
                 "by it, so this verification says nothing about them; each belongs to its "
                 "own pack, or to nothing"
             )
+    if unexcused:
+        # A REAL claim this verification cannot accept - an unanchored pack cannot
+        # excuse an anchored one's sibling - which is neither "somebody else's file"
+        # nor tampering. Collapsing it into the second reported "altered or replaced
+        # after signing" over an untampered folder, and `erasure` carries no
+        # `--tsa`/`--rekor` flag at all, so `report --tsa` beside `erasure` produces
+        # exactly this pairing as a matter of course.
+        typer.echo(
+            f"[ok] unexcused-siblings: {', '.join(untrusted(n) for n in unexcused)} "
+            "sit(s) beside this pack and is bound by another pack here whose own "
+            "verification is not independently anchored, so this anchored verification "
+            "cannot speak for it either way; verify that pack on its own terms"
+        )
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)
         raise typer.Exit(code=4)

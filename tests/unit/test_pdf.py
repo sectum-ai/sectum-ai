@@ -318,6 +318,29 @@ def test_a_live_erasure_surface_the_block_never_mentions_is_still_a_row() -> Non
     assert "mcp" not in rows, rows
 
 
+def test_an_impossible_pivot_count_is_stated_not_silently_omitted() -> None:
+    # `score` refuses to grade a record whose counts contradict themselves; the PDF
+    # omitted the row, which is byte-identical to a run that took no Class-2 step at
+    # all - so the auditor's document hid a corrupt record behind the same silence
+    # as an honest one.
+    manifest = _manifest_only()
+    moment = datetime(2026, 5, 18, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="scenario-hash",
+        manifest_hash=canonical_hash(manifest),
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(retrieval_pivot_k=60, retrieval_pivot_n=48),
+    )
+    row = _retrieval_pivot_summary(run)
+    assert row is not None
+    assert "60 of 48" in row and "impossible" in row, row
+    # A run that simply took no Class-2 step still omits the row.
+    silent = run.model_copy(update={"metrics": RunMetrics()})
+    assert _retrieval_pivot_summary(silent) is None
+
+
 def test_coverage_rows_empty_for_a_non_erasure_run() -> None:
     # A run with no erasure_coverage metric (any non-erasure probe) yields no
     # rows, so the Coverage & caveats section is omitted entirely.
@@ -409,11 +432,19 @@ def test_the_pdf_recomputes_the_rate_from_the_counts_it_was_given() -> None:
     )
     assert bare == "12.5%"
 
-    # Counts that contradict themselves state nothing.
-    assert (
-        _retrieval_pivot_summary(_rpr_run(RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=99)))
-        is None
+    # Counts that contradict themselves state the contradiction. Omitting the row
+    # was byte-identical to a run that took no Class-2 step, so the auditor's
+    # document hid a corrupt record behind an honest record's silence - and `score`
+    # refuses to grade the same record outright. This repo has settled that trade
+    # before, one module over: "Silence was the original defect ... and an
+    # accusation is the wrong cure. Both outcomes name the consequence instead."
+    incoherent = _retrieval_pivot_summary(
+        _rpr_run(RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=99))
     )
+    assert incoherent is not None
+    assert "99 of 10" in incoherent and "impossible" in incoherent, incoherent
+    # It must not print a rate, which is the thing that cannot be believed.
+    assert "%" not in incoherent, incoherent
 
 
 def test_both_pdf_engines_state_the_same_summary_facts() -> None:

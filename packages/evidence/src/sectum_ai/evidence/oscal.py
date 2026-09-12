@@ -435,7 +435,14 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         and backing_surface(finding) in unaccounted_surfaces(run)
     ]
     unplaceable_isolation = any(is_cross_principal(f) for f in unplaceable)
-    unplaceable_erasure = any(not is_cross_principal(f) for f in unplaceable)
+    # Narrowed to the surfaces an erasure scan can reach, the way `coverage` and
+    # `controls._erasure_assertion` both are: routing by principals alone withheld
+    # GDPR Article 17 and CCPA 1798.105 over a residue finding on `mcp`, which no
+    # erasure probe scans - and said they "would otherwise have read satisfied on
+    # that evidence", which they would not.
+    unplaceable_erasure = any(
+        not is_cross_principal(f) and backing_surface(f) in ERASURE_SURFACES for f in unplaceable
+    )
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
@@ -474,13 +481,24 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     observation_uuids=observation_uuids,
                 )
             )
+    # The surfaces of the UNPLACEABLE findings, not `unaccounted_surfaces`, which is
+    # status-blind: prefixing its list with "Confirmed" changed the claim's truth
+    # conditions, and the sentence named surfaces carrying only unverified
+    # candidates. The two sibling renderers say the true, neutral thing ("findings
+    # also rest on ..."); this one asserts more than they do, so it must count less.
+    unplaced_surfaces = sorted({backing_surface(finding) for finding in unplaceable})
     unplaced = (
         " Confirmed findings in this run rest on "
-        f"{', '.join(unaccounted_surfaces(run))}, which its provenance block never "
+        f"{', '.join(unplaced_surfaces)}, which its provenance block never "
         "recorded: whether those were live backends or Sectum's built-in fakes cannot "
-        "be established from this pack, so no verdict is stated for the control(s) that "
-        f"would otherwise have read satisfied on that evidence: {', '.join(withheld_controls)}."
-        if withheld_controls
+        "be established from this pack."
+        + (
+            " No verdict is stated for the control(s) that would otherwise have read "
+            f"satisfied on that evidence: {', '.join(withheld_controls)}."
+            if withheld_controls
+            else ""
+        )
+        if unplaceable
         else ""
     )
     synthetic = sorted(set(run.surface_provenance) - live)
@@ -521,10 +539,23 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     else "No marker remained on any live surface scanned."
                 )
             )
+        exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
         if has_confirmed_leak:
             parts.append(
                 isolation_lead + "At least one manifest-grounded cross-principal leak was "
                 "confirmed on a live surface; see the observations and findings."
+            )
+        elif not exercised:
+            # Nothing ran, so "provisioned tenants and ran probes ... no leakage was
+            # confirmed" described a scan that never happened - an ABSENT result read
+            # as a clean one. SARIF refuses the same record with
+            # `sectum.no-probe-executed` and the PDF prints "none recorded"; `probe`
+            # and `report` both decline to write such a run at all, so this is
+            # reachable through the library only, which is exactly who needs telling.
+            parts.append(
+                "No Sectum AI probe executed in this run, so no isolation objective "
+                "was assessed. An empty finding list here is an ABSENT scan, not a "
+                "clean one."
             )
         elif not erasure_run:
             # An erasure run did not test isolation, so it says nothing either way.
@@ -543,13 +574,21 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         # OSCAL requires reviewed-controls on every result: the controls this
         # assessment spoke to (the union of the framework control ids from
         # control_mappings, deduped in stable order).
+        # `findings` is optional in OSCAL AR 1.1.2 and `minItems: 1` when present;
+        # a `control-selection` has no required properties and its
+        # `include-controls` is `minItems: 1` too. Emitting `[]` for either made the
+        # document schema-INVALID, so a GRC platform that validates on ingest
+        # rejected exactly the pack whose disclosure it needed to read. Omit rather
+        # than empty.
         "reviewed-controls": {
             "control-selections": [
                 {"include-controls": [{"control-id": cid} for cid in reviewed_control_ids]}
+                if reviewed_control_ids
+                else {}
             ]
         },
         "observations": observations,
-        "findings": findings,
+        **({"findings": findings} if findings else {}),
     }
 
     document_uuid: UUID = uuid5(_UUID_NS, run.run_id)

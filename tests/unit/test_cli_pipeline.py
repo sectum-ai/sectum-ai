@@ -1952,6 +1952,53 @@ def test_a_forged_owner_does_not_excuse_a_tampered_document(tmp_path: Path) -> N
     assert "[FAIL] audit-pdf" in result.output, result.output
 
 
+def test_an_under_anchored_claimant_is_not_an_accusation(tmp_path: Path) -> None:
+    # The ownership rule may DECLINE a claim - an unanchored claimant cannot excuse
+    # an anchored pack's sibling - but declining is not tampering, and reporting it
+    # as "altered or replaced after signing" is the worst false alarm this product
+    # can raise. It is not exotic either: `erasure` has no `--tsa`/`--rekor` flag at
+    # all, so `report --tsa` beside `erasure` in one workdir produces an anchored
+    # pack next to a genuine unanchored one as a matter of course.
+    from sectum_ai.cli.app import _NO_ROOTS, _binds_pdf, _Claim, _owned_elsewhere
+    from sectum_ai.spec import EvidencePack
+
+    _full_workdir(tmp_path)
+    delivered = tmp_path / "deliver"
+    delivered.mkdir()
+    # The erasure pack, delivered without its own PDF, beside the probe run's
+    # genuine pack and genuine PDF.
+    (delivered / "handed-over.json").write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    (delivered / "evidence.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "audit-pack.pdf").write_bytes((tmp_path / "audit-pack.pdf").read_bytes())
+    pack = EvidencePack.model_validate_json((delivered / "handed-over.json").read_bytes())
+
+    claim = _owned_elsewhere(
+        delivered / "handed-over.json", "audit-pack.pdf", 0, pack, _binds_pdf, _NO_ROOTS
+    )
+    assert claim is _Claim.OWNED, claim
+    result = _verify(delivered / "handed-over.json")
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+    # The same untampered folder, with only the pack under verification anchored.
+    anchored = pack.model_copy(update={"anchored_with_timestamp": True})
+    assert (
+        _owned_elsewhere(
+            delivered / "handed-over.json", "audit-pack.pdf", 0, anchored, _binds_pdf, _NO_ROOTS
+        )
+        is _Claim.UNDER_ANCHORED
+    ), "a real claim this verification cannot accept is neither owned nor unowned"
+
+    # And a file no present pack claims is still judged, so the guard still bites.
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    (lone / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (lone / "audit-pack.pdf").write_bytes(b"not the signed pdf")
+    failed = _verify(lone / "mypack.json")
+    assert failed.exit_code == 4, failed.output
+    assert "[FAIL] audit-pdf" in failed.output, failed.output
+
+
 def test_a_renamed_pack_states_the_run_record_delivered_with_it(tmp_path: Path) -> None:
     # Exempting `run.json` on an unrecognised filename re-opened the hole the check
     # was written to close: a pack delivered under another name, next to a gutted

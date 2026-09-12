@@ -49,9 +49,11 @@ from sectum_ai.spec import (
 # NOT_COVERED rather than silently absent (the anti-over-claim guarantee). The
 # vector store leads because it is always present; the rest follow the run plan's
 # order so the coverage matrix reads in a stable, documented sequence.
-# Canonical in `spec`, which both this package and `evidence` can import; kept
-# re-exported here because `sectum_ai.probes.ERASURE_SURFACES` is the public name
-# the CLI and the docs use.
+# Canonical in `spec`, which both this package and `evidence` import; re-exported
+# here because `sectum_ai.probes.ERASURE_SURFACES` is the public name the CLI and
+# the docs use. The scan plan below is written out separately, so the parity test
+# checks this constant against what the probe really does rather than against
+# itself.
 ERASURE_SURFACES = _ERASURE_SURFACES
 
 # One surface's pre/post scan (target + markers -> the markers still present)

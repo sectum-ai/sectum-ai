@@ -205,7 +205,9 @@ def test_a_synthetic_only_run_states_no_control_finding() -> None:
     for provenance in ({"vector_db": "SYNTHETIC"}, {}):
         run = _run().model_copy(update={"surface_provenance": provenance})
         result = run_to_oscal(run)["assessment-results"]["results"][0]
-        assert result["findings"] == [], provenance
+        # Omitted, not empty: `findings` is `minItems: 1` when present in OSCAL AR
+        # 1.1.2, so `[]` made the document schema-invalid.
+        assert "findings" not in result, provenance
         assert "no control objective was assessed" in result["description"]
     live = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
     assert run_to_oscal(live)["assessment-results"]["results"][0]["findings"]
@@ -239,7 +241,7 @@ def test_an_unplaceable_leak_earns_no_satisfied_control() -> None:
     unrecorded = _finding("f").model_copy(update={"surface": Surface.AGENT_MEMORY})
     run = _run(unrecorded).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
     result = run_to_oscal(run)["assessment-results"]["results"][0]
-    assert result["findings"] == [], result["findings"]
+    assert "findings" not in result, result
     assert "never recorded" in result["description"], result["description"]
     assert "CC6.1" in result["description"], result["description"]
 
@@ -251,6 +253,66 @@ def test_an_unplaceable_leak_earns_no_satisfied_control() -> None:
         for f in run_to_oscal(placed)["assessment-results"]["results"][0]["findings"]
     }
     assert states == {"not-satisfied"}, states
+
+
+def test_the_withheld_document_stays_schema_valid_and_says_only_what_it_measured() -> None:
+    # Four things the withholding got wrong, all in the disclosure a GRC platform
+    # reads. OSCAL AR 1.1.2 makes `findings` optional but `minItems: 1` when
+    # present, and the same for `include-controls`, so emitting `[]` for either made
+    # the document schema-INVALID - the platform rejects exactly the pack whose
+    # disclosure it needed.
+    unplaceable = _finding("f").model_copy(update={"surface": Surface.AGENT_MEMORY})
+    candidate = _finding("g").model_copy(
+        update={"surface": Surface.SEARCH_INDEX, "status": FindingStatus.UNVERIFIED}
+    )
+    run = _run(unplaceable, candidate).model_copy(
+        update={"surface_provenance": {"vector_db": "LIVE"}}
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert "findings" not in result, "an empty findings array is schema-invalid"
+    assert result["reviewed-controls"]["control-selections"] == [{}], result["reviewed-controls"]
+
+    # And the sentence asserts CONFIRMED findings, so it must name only the surfaces
+    # that carry one: `unaccounted_surfaces` is status-blind, and prefixing its list
+    # with "Confirmed" changed the claim's truth conditions.
+    description = result["description"]
+    assert "agent_memory" in description, description
+    assert "search_index" not in description, description
+
+
+def test_an_unplaceable_leak_is_disclosed_even_when_no_control_is_withheld() -> None:
+    # The disclosure was gated on a control having been withheld, so it vanished
+    # exactly when nothing was: an erasure run carrying a confirmed cross-tenant
+    # leak on an unrecorded surface said nothing at all. The `satisfied` states are
+    # right there - a cross-principal leak is not erasure evidence - the silence was
+    # not. And an erasure control must not be withheld over a surface no erasure
+    # scan reaches, which is the narrowing `coverage` already applies.
+    leak = _finding("f").model_copy(update={"surface": Surface.MCP})
+    run = _run(leak).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert "never recorded" in result["description"], result["description"]
+    assert "mcp" in result["description"], result["description"]
+    # It must not claim a control was withheld when none was.
+    assert "no verdict is stated" not in result["description"].lower(), result["description"]
+
+
+def test_a_run_in_which_nothing_executed_is_not_narrated_as_a_clean_scan() -> None:
+    # "provisioned tenants ... and ran benign and adversarial probes ... No
+    # cross-principal leakage was confirmed" over a run in which nothing ran: an
+    # ABSENT scan rendered as a clean one. SARIF refuses the same record with
+    # `sectum.no-probe-executed` and the PDF prints "none recorded".
+    empty = _run().model_copy(
+        update={"probe_versions": {}, "findings": (), "surface_provenance": {"vector_db": "LIVE"}}
+    )
+    description = run_to_oscal(empty)["assessment-results"]["results"][0]["description"]
+    assert "No Sectum AI probe executed" in description, description
+    assert "ABSENT scan, not a clean one" in description, description
+    assert "No cross-principal leakage was confirmed" not in description, description
 
 
 def test_a_control_verdict_says_which_boundary_the_run_actually_exercised() -> None:

@@ -163,18 +163,18 @@ _ISOLATION_PROBE_SURFACES: dict[str, tuple[str, ...]] = {
 }
 
 
-# The surfaces a Class 11 erasure scan can reach, mirroring the probe's own plan
-# (`probes.erasure.probe.ErasureProbe.run`). Duplicated rather than imported for
-# the same reason `_ISOLATION_PROBE_SURFACES` is: `evidence` sits below `probes`.
-# `test_the_erasure_surface_set_matches_the_probes_own_plan` pins the two together.
+# The surfaces a Class 11 erasure scan can reach, derived from the canonical set in
+# `spec` - which `evidence` and `probes` can both import, so this is no longer the
+# copy the text below used to describe. `test_the_erasure_surface_set_matches_the_
+# probes_own_plan` still pins it, against what `ErasureProbe` really scans (the
+# probe builds its plan from its own hardcoded list, so the assertion is not a
+# tautology and the check reaches the probes side transitively).
 #
 # Without it both erasure renderers keyed on EVERY live surface, so a record whose
 # provenance also names an isolation-only surface - `mcp`, `api`, `rag_pipeline`,
 # `agent_framework` - reported "absence could not be established on mcp" and
 # flipped GDPR Article 17 to not-satisfied. No erasure probe ever scans mcp, so
 # that is not an unverified erasure surface; it is not an erasure surface.
-# Derived from `spec`, not transcribed: both ends can import it there, and a copy
-# kept honest by a parity test is still a copy.
 ERASURE_SURFACES: frozenset[str] = frozenset(surface.value for surface in _SPEC_ERASURE_SURFACES)
 
 

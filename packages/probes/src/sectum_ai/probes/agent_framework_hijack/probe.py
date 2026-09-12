@@ -129,10 +129,24 @@ class AgentFrameworkHijackProbe(DetectingProbe):
                 observation,
                 substrate,
                 marker=self._marker_by_id(substrate, self._looked_up(step)),
+                # Branched on what was actually observed. The unconditional wording
+                # asserted "the agent answered" over an EMPTY response - the very
+                # observation recorded beside it - so the sentence written to keep
+                # this caveat honest was the one making a false statement. Both
+                # adapters that can produce it are wired into the CLI: LangGraph
+                # returns "" when a graph hits its recursion limit mid tool-loop,
+                # and the HTTP agent returns "" for any 200 whose body carries no
+                # `output` key. `FakeAgent` pads a miss into "tool returned: ", so
+                # only a real backend reaches this.
                 evidence=(
                     "the agent answered and surfaced no foreign canary - an agent "
                     "framework narrates a refusal, a miss and a tool error the same "
                     "way, so nothing here establishes that the boundary was enforced"
+                    if observation.raw_response
+                    else "the agent returned no output at all for this lookup, which "
+                    "is not a deny: a framework that errors, stops at a step limit or "
+                    "answers with an empty body is indistinguishable here from one "
+                    "that refused"
                 ),
                 remediation=(
                     "scope the agent's tool calls to the calling principal and make a "

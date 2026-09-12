@@ -51,6 +51,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Class 7 caveat said "the agent answered" over a response the same observation
+  records as empty.** Its wording was taken from the caller precisely so it would
+  describe what was observed — and then written unconditionally, so the sentence added to
+  keep the caveat honest was the one making a false statement. Two adapters wired into
+  the CLI produce an empty output: LangGraph returns `""` when a graph hits its recursion
+  limit mid tool-loop, and the HTTP agent returns `""` for any `200` whose body carries
+  no `output` key. The wording now branches on the response, so an agent that produced
+  nothing is described as having produced nothing. `FakeAgent` pads a miss into
+  `tool returned: `, so no fixture built on it could reach this — only a real backend.
+
+- **`verify` accused two genuine, untampered documents.** The ownership rule's new
+  claimant checks turned two ordinary situations into `[FAIL] audit-pdf: altered or
+  replaced after signing`, which is the worst false alarm a tamper-evidence product can
+  raise. Declining a claim is not an accusation, and both paths now say what is
+  actually true. First, the anchor-strength rule: `erasure` carries no `--tsa`/`--rekor`
+  flag at all, so `report --tsa` beside `erasure` in one workdir produces an anchored
+  pack next to a genuine unanchored one as a matter of course — and that genuine
+  claimant was rejected, then its document judged against the wrong pack. A real claim
+  this verification cannot accept is a third outcome, reported as `unexcused-siblings`.
+  Second, the operator's own trust roots: `verify` passed `--tsa-cert`, `--tsa-root` and
+  `--rekor-key` to the pack under test but not to the claimant, so pinning a customer
+  TSA or a private Rekor instance made your own genuine sibling fail to verify and its
+  document be reported as tampered. Both verifications now take the same roots, built
+  once so they cannot drift apart again.
+
+- **The withheld OSCAL document was not schema-valid, so the disclosure never
+  arrived.** `findings` is optional in OSCAL AR 1.1.2 and `minItems: 1` when present,
+  and `include-controls` likewise; withholding every control emitted `[]` for both, so a
+  GRC platform that validates on ingest rejected exactly the pack whose disclosure it
+  needed to read. Both are now omitted rather than empty. Three more corrections to that
+  disclosure: it asserted "Confirmed findings rest on …" over a status-blind surface
+  list, naming surfaces that carry only unverified candidates; it was gated on a control
+  having been withheld, so it went silent precisely when none was (an erasure run
+  carrying an unplaceable cross-tenant leak said nothing at all); and an erasure control
+  could be withheld over a finding on a surface no erasure scan reaches, which is the
+  narrowing the coverage block already applies.
+
 - **The scorecard said "probe did not run" over a record holding that probe's
   findings.** "Did this probe run?" is answered by any finding; `score` asked the
   confirmed-only set, which answers a different question — "did this probe prove a
@@ -180,8 +217,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would have left the caveat silent on every live agent, the case it exists for. The
   finding stays shared on `DetectingProbe`, now with class-accurate wording, because a
   caveat that misstates what was observed is the over-claim it exists to prevent. A
-  clean scoped agent run yields 24 informational findings where it used to say nothing;
-  a leaking one yields 24 confirmed and no caveat.
+  clean scoped agent run yields 24 informational findings where it used to say nothing.
+  The caveat is silent for any *pair* whose leak is proven, so a run is caveat-free when
+  every step leaks (the confused-deputy flaw); under token passthrough alone, where only
+  the token-bearing step of each pair leaks, a pair carries both its confirmed finding
+  and the caveat for its scoped step — the same shape the sibling `agent-tool-hijack`
+  already produces, and it moves no verdict.
 
 - **The OSCAL export read `satisfied` over a confirmed critical leak.** Its control
   verdicts came from findings whose surface the provenance block records as LIVE, and
@@ -207,11 +248,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   TAMPERED PDF, save it under the owner's filename. No key, one edited field, and
   `verify` went from exit 4 with `[FAIL] audit-pdf: altered or replaced after signing`
   to exit 0 and `INTEGRITY OK`. Excluding a file is the one move here that can hide a
-  tamper, so it now costs what it should: the claimant must **verify** — the digest it
-  attests has to cover the `pdf_ref` it claims with — and must be anchored at least as
-  strongly as the pack it would excuse, so nothing weaker than a verified independent
-  anchor can excuse an anchored pack. A rejected claimant does not silence the check;
-  the file drops back into the judged set and the tamper is reported.
+  tamper, so it now costs more: the claimant must **verify** — the digest it attests has
+  to cover the `pdf_ref` it claims with — and must be anchored at least as strongly as
+  the pack it would excuse, so nothing weaker than a verified independent anchor can
+  excuse an *anchored* pack. Against an unanchored pack a decoy rebuilt from scratch
+  with a local-dev token still verifies and still excuses, which is what that
+  verification says of itself: "NOT independent tamper evidence". A claimant that does
+  not bind, or does not verify, no longer excuses anything — the file drops back into
+  the judged set and the tamper is reported — while a claim that is real but
+  under-anchored is reported as exactly that, never as tampering.
 
 - **The seventh honesty rule was cited five times and never stated.** `v1.4` added the
   rule that a withheld class caps the letter at its own band, and both the published
