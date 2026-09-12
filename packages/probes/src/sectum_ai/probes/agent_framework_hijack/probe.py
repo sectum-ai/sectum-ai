@@ -95,7 +95,7 @@ class AgentFrameworkHijackProbe(DetectingProbe):
     ) -> list[Finding]:
         """Scan the agent's final output for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
-        return pipeline.detect(
+        findings = pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
@@ -106,3 +106,47 @@ class AgentFrameworkHijackProbe(DetectingProbe):
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
         )
+        # Class 1's 200-empty rule, and the fourth by-id read had none of it:
+        # `lookup <marker_id>` across a principal boundary is a by-id read, and
+        # this class passed with no note over exactly Class 1's evidence.
+        #
+        # Unconditional here, where the three siblings gate on
+        # `AccessOutcome.EMPTY`. For them a RETURNED-but-clean read is real
+        # evidence - the backend handed back a DIFFERENT object, so it resolved
+        # the id in the caller's own scope. An agent framework answers in prose
+        # whichever way its tool went (Sectum's own fake pads a miss into "tool
+        # returned: "; LangGraph, CrewAI and the Assistants API all narrate a
+        # refusal), so there is no reading of the output that establishes a deny.
+        # Gating on the outcome would have left the caveat silent on every live
+        # agent - the case it exists for.
+        #
+        # The pair of steps per (marker, observer) collapses to one finding:
+        # `_empty_ambiguity_finding` keys its id on the marker, the observer and
+        # the surface, not on the step.
+        if not findings:
+            ambiguity = self._empty_ambiguity_finding(
+                step,
+                observation,
+                substrate,
+                marker=self._marker_by_id(substrate, self._looked_up(step)),
+                evidence=(
+                    "the agent answered and surfaced no foreign canary - an agent "
+                    "framework narrates a refusal, a miss and a tool error the same "
+                    "way, so nothing here establishes that the boundary was enforced"
+                ),
+                remediation=(
+                    "scope the agent's tool calls to the calling principal and make a "
+                    "cross-principal lookup fail explicitly, so a refusal is "
+                    "distinguishable from an empty result in the agent's output"
+                ),
+            )
+            if ambiguity is not None:
+                findings.append(ambiguity)
+        return findings
+
+    @staticmethod
+    def _looked_up(step: ProbeStep) -> str | None:
+        """The marker id in a planned ``lookup <marker_id>[ token=...]`` task."""
+        task = str(step.payload.get("task", ""))
+        parts = task.split()
+        return parts[1] if len(parts) > 1 and parts[0] == "lookup" else None

@@ -61,6 +61,18 @@ A foreign canary in a tool result (MCP variant) or in the agent's final
 output (agent-framework variant) means the deputy lost the caller's tenant
 scope before reaching the resource.
 
+**What a clean result does *not* say.** Both probes ask for another principal's
+resource by id, so [Class 1](class-01-tenant-boundary.md)'s 200-empty rule applies
+to both: no canary coming back is not proof the boundary was enforced, and each
+clean cross-principal step carries an informational `unverified` finding saying so
+(it never flips the class — that is the false-positive control the detector rests
+on). The two differ in how the ambiguity arises. The MCP probe flags it when the
+tool result is *empty*, because a tool that hands back a different object did
+resolve the id in the caller's own scope. The agent-framework probe flags every
+clean step unconditionally: a framework narrates a refusal, a miss and a tool
+error the same way, so no output it can produce distinguishes an enforced deny
+from a decline.
+
 ## Status
 
 Implemented across two probes. The MCP probe (`agent-tool-hijack`) now ships

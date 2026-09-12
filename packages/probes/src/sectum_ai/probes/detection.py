@@ -259,6 +259,16 @@ class DetectionProviders:
         return DetectionPipeline(substrate, self.embedder, self.judge, self.semantic_threshold)
 
 
+_EMPTY_EVIDENCE = (
+    "cross-principal fetch returned 200-empty, not an explicit deny - "
+    "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
+)
+_EMPTY_REMEDIATION = (
+    "return an explicit authorization error (e.g. 403) for cross-tenant "
+    "object fetches rather than a 200 with an empty body"
+)
+
+
 class DetectingProbe:
     """Base for probes that run the detection pipeline.
 
@@ -302,6 +312,8 @@ class DetectingProbe:
         substrate: Substrate,
         *,
         marker: Marker | None,
+        evidence: str = _EMPTY_EVIDENCE,
+        remediation: str = _EMPTY_REMEDIATION,
     ) -> Finding | None:
         """The UNVERIFIED 200-empty finding for a cross-principal by-id read.
 
@@ -315,6 +327,12 @@ class DetectingProbe:
 
         Each probe addresses its own marker (a planted doc id, a cache key, a
         resource key); what must not diverge is the finding, so that is here.
+
+        ``evidence``/``remediation`` default to the 200-empty wording the three
+        by-id reads share. Class 7's agent-framework probe overrides them because
+        its read is ambiguous for a DIFFERENT reason - the framework answers in
+        prose either way, so nothing was 200-empty - and a caveat that misstates
+        what was observed is the over-claim it exists to prevent.
         """
         observer = self._observer(step, substrate)
         if observer is None or marker is None or not is_cross_principal(marker, observer):
@@ -335,18 +353,12 @@ class DetectingProbe:
             observed_in_user_id=observer.user_id,
             surface=observation.surface,
             marker_id=marker.marker_id,
-            evidence_span=(
-                "cross-principal fetch returned 200-empty, not an explicit deny - "
-                "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
-            ),
+            evidence_span=evidence,
             owasp_llm=self.owasp_llm,
             owasp_secondary=self.owasp_secondary,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
-            remediation_pointer=(
-                "return an explicit authorization error (e.g. 403) for cross-tenant "
-                "object fetches rather than a 200 with an empty body"
-            ),
+            remediation_pointer=remediation,
         )
 
     def _marker_by_id(self, substrate: Substrate, marker_id: str | None) -> Marker | None:

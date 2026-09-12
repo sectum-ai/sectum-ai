@@ -106,6 +106,12 @@ def test_every_by_id_read_flags_the_200_empty_ambiguity() -> None:
         "tenant-boundary-fetch",
         "semantic-cache-contamination",
         "agent-tool-hijack",
+        # The fourth by-id read. `lookup <marker_id>` across a principal boundary
+        # is one, and this class passed with no note over exactly Class 1's
+        # evidence. Its caveat is unconditional rather than gated on
+        # `AccessOutcome.EMPTY`: an agent framework answers in prose whichever way
+        # its tool went, so no output establishes a deny.
+        "agent-framework-hijack",
     }, caveated
     # Informational only: an unverified finding must never flip a class - that is
     # the false-positive control the whole detector rests on.

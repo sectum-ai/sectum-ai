@@ -4,10 +4,13 @@ from uuid import UUID
 
 from sectum_ai.adapters import FakeAgent
 from sectum_ai.probes import AgentFrameworkHijackProbe, confirmed_findings
+from sectum_ai.probes.detection import dedupe_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
+    FindingStatus,
     MarkerType,
     Scenario,
+    Severity,
     SharedEntity,
     Substrate,
     SyntheticTenantSpec,
@@ -59,6 +62,36 @@ def _users_substrate() -> Substrate:
         shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
     )
     return build_substrate(scenario)
+
+
+def test_a_clean_agent_run_says_what_it_did_not_establish() -> None:
+    # The fourth by-id read: `lookup <marker_id>` across a principal boundary is
+    # one, and this class graded a bare PASS over exactly Class 1's evidence.
+    #
+    # Unconditional, unlike the three siblings' `AccessOutcome.EMPTY` gate. For
+    # them a RETURNED-but-clean read is real evidence - the backend handed back a
+    # DIFFERENT object, so it resolved the id in the caller's own scope. An agent
+    # narrates a refusal, a miss and a tool error identically, so gating on the
+    # outcome would have kept the caveat silent on every live agent framework -
+    # the case it exists for. FakeAgent pads a miss into "tool returned: ", which
+    # is itself a 200 with an empty body.
+    substrate = build_substrate(default_scenario(seed=2026))
+    runner = Runner(substrate, agent=_seeded_agent(substrate))
+    probe = AgentFrameworkHijackProbe()
+    findings = dedupe_findings([f for _, per_step in runner.run_per_step(probe) for f in per_step])
+
+    assert findings, "a scoped agent must not pass in silence"
+    assert {f.status for f in findings} == {FindingStatus.UNVERIFIED}, findings
+    assert all(f.severity is Severity.INFO for f in findings), findings
+    # The wording has to match what was observed: nothing was 200-empty here.
+    assert "narrates a refusal" in findings[0].evidence_span, findings[0].evidence_span
+    assert "200-empty" not in findings[0].evidence_span, findings[0].evidence_span
+
+    # And it stays silent where the leak is proven - a caveat beside a confirmed
+    # finding would say the probe could not establish what it just established.
+    leaky = Runner(substrate, agent=_seeded_agent(substrate, confused_deputy=True))
+    confirmed = dedupe_findings([f for _, per_step in leaky.run_per_step(probe) for f in per_step])
+    assert {f.status for f in confirmed} == {FindingStatus.CONFIRMED}, confirmed
 
 
 def test_confused_deputy_agent_leaks_across_tenants() -> None:

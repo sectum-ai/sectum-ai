@@ -46,6 +46,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The fourth by-id read passed in silence.** Class 1's 200-empty rule reached the
+  vector fetch, the cache get and the MCP invoke; `agent.run` plans
+  `lookup <marker_id>` across a principal boundary, which is the same read, and graded
+  a bare PASS over exactly Class 1's evidence. The caveat there is **unconditional**
+  rather than gated on `AccessOutcome.EMPTY` like its three siblings: for them a
+  returned-but-clean read is real evidence — the backend handed back a *different*
+  object, so it resolved the id in the caller's own scope — whereas an agent framework
+  narrates a refusal, a miss and a tool error identically, and Sectum's own fake pads a
+  miss into `tool returned: `, itself a 200 with an empty body. Gating on the outcome
+  would have left the caveat silent on every live agent, the case it exists for. The
+  finding stays shared on `DetectingProbe`, now with class-accurate wording, because a
+  caveat that misstates what was observed is the over-claim it exists to prevent. A
+  clean scoped agent run yields 24 informational findings where it used to say nothing;
+  a leaking one yields 24 confirmed and no caveat.
+
 - **The OSCAL export read `satisfied` over a confirmed critical leak.** Its control
   verdicts came from findings whose surface the provenance block records as LIVE, and
   the `synthetic` exclusion covered the ones it records as a fake — so a confirmed

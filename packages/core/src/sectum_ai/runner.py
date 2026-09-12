@@ -468,10 +468,16 @@ class Runner:
         if self._agent is None:
             raise AdapterError("an agent.run step needs an agent adapter")
         result = self._agent.run(step.actor_tenant_id, payload_required(step, "task"))
+        # Recorded like the three siblings, but the probe does NOT gate its
+        # 200-empty caveat on it: an agent framework answers in prose whether or
+        # not its tool resolved anything, so `RETURNED` here means "the agent
+        # said something", never "it surfaced an object". See
+        # `AgentFrameworkHijackProbe.detect`.
         return Observation(
             step_id=step.step_id,
             surface=self._agent.surface,
             raw_response=result.output,
+            access_outcome=(AccessOutcome.RETURNED if result.output else AccessOutcome.EMPTY),
         )
 
 
