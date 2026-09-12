@@ -352,6 +352,27 @@ def _scope_of(run: RunResult) -> tuple[ScoreScope, frozenset[str]]:
     return scope, synthetic
 
 
+def _uncapped_confirmed(run: RunResult, entry: _CatalogClass, synthetic: frozenset[str]) -> bool:
+    """Does this withheld class hold a confirmed finding that must still cap the letter?
+
+    Every confirmed finding in a class the scorer declined to grade counts - EXCEPT
+    one the record positively states rests on Sectum's own fake. That is rule 5's
+    exemption and the only one: "this describes our fake" is a statement about the
+    finding, and absence of a statement is not one.
+
+    A run recording no provenance at all is exempt whole: it has its own UNRECORDED
+    scope and grades deliberately, the same carve-out `_unattributed_in_class` makes.
+    """
+    if not run.surface_provenance:
+        return False
+    return any(
+        finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) not in synthetic
+        for finding in run.findings
+    )
+
+
 def _unattributed_in_class(run: RunResult, entry: _CatalogClass) -> int:
     """Confirmed findings in ``entry`` resting on a surface the provenance never records.
 
@@ -541,6 +562,8 @@ def _score_class(
     # leak manifests solely at the pipeline surface (it would read 0%)", and that
     # understated rate is what the line prints.
     missing = tuple(sorted(set(entry.probe_ids) - set(ran)))
+    user_dropped = sum(run.metrics.user_steps_dropped.get(probe_id, 0) for probe_id in ran)
+    unlanded = sum(run.metrics.unconfirmed_plants.get(probe_id, 0) for probe_id in ran)
     notes = [
         f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
         "that fake, not your stack"
@@ -562,6 +585,20 @@ def _score_class(
         f"graded on {len(ran)} of {len(entry.probe_ids)} probes for this class; "
         f"{', '.join(missing)} did not run"
         if missing
+        else "",
+        # The two record-level disclosures of a run that did LESS than it planned.
+        # Both were carried by the audit PDF alone, so a PASS line - the thing a
+        # reader acts on - was identical whether the user boundary had been tested
+        # or never exercised, and whether the probe's setup landed or half vanished.
+        # This list exists because "a PASS is never silent about what it could not
+        # establish"; these are two more things it could not.
+        f"graded on the tenant boundary only: {user_dropped} user-level step(s) were "
+        "not run, because the adapter cannot carry a user identity to its backend"
+        if user_dropped and not confirmed
+        else "",
+        f"{unlanded} planted write(s) never came back from the backend, so this class "
+        "was graded on less setup than it planned"
+        if unlanded and not confirmed
         else "",
     ]
     return ClassScore(
@@ -665,8 +702,21 @@ def score_run(run: RunResult) -> IsolationScore:
     # Rule 5's synthetic-backed classes are deliberately NOT here: there the
     # record positively states the surface was Sectum's own fake, and a leak on a
     # fake is not the operator's fault in either direction.
+    #
+    # Keyed on the VERDICT the scorer actually reached, not on a second predicate
+    # shaped differently. It used to ask `_unattributed_in_class`, which decides per
+    # FINDING (is this finding's surface recorded?), while rules 5 and 6 decide per
+    # class SLOT (`PROBE_SURFACES[probe] & exercised`). Where the two disagreed the
+    # class was withheld and nothing capped: a class whose slot the catalog cannot
+    # place, holding 24 confirmed CRITICAL findings on a surface the block records
+    # LIVE, graded A - while the byte-identical record with those findings on an
+    # UNRECORDED surface graded F. Moving a confirmed critical leak onto a surface
+    # the record positively calls live IMPROVED the letter, which is the same
+    # inversion rule 7 was written to stop, through a different door.
     unplaceable_bands: list[Severity] = [
-        entry.severity for entry in CATALOG if _unattributed_in_class(run, entry)
+        entry.severity
+        for entry, klass in zip(CATALOG, classes, strict=True)
+        if klass.verdict is ClassVerdict.NOT_COVERED and _uncapped_confirmed(run, entry, synthetic)
     ]
     capping: list[Severity] = [c.severity for c in failed] + unplaceable_bands
     capped_by = max(capping, key=_SEVERITY_ORDER.index) if capping else None

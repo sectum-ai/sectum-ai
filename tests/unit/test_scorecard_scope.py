@@ -55,6 +55,28 @@ def _run(provenance: dict[str, str], *, findings: tuple[Finding, ...] = ()) -> R
     )
 
 
+#: The surface each probe's findings actually carry, as the probes emit them. The
+#: fixture stamped `vector_db` on every finding whatever the probe, so a test about
+#: "a leak on the fake semantic cache" built a record saying the leak was observed
+#: on a LIVE vector store - and rule 5's exemption was being asserted over a
+#: finding the record places on the operator's own stack. A fixture that cannot
+#: occur tests a rule that does not exist.
+_PROBE_FINDING_SURFACE: dict[str, Surface] = {
+    "tenant-boundary-fetch": Surface.VECTOR_DB,
+    "rag-entity-bleed": Surface.VECTOR_DB,
+    "rag-pipeline-bleed": Surface.RAG_PIPELINE,
+    "rag-poisoning": Surface.VECTOR_DB,
+    "semantic-cache-contamination": Surface.SEMANTIC_CACHE,
+    "kv-cache-timing": Surface.KV_CACHE,
+    "embedding-inversion": Surface.VECTOR_DB,
+    "agent-tool-hijack": Surface.MCP,
+    "agent-framework-hijack": Surface.AGENT_FRAMEWORK,
+    "memory-contamination": Surface.AGENT_MEMORY,
+    "lora-cross-tenant": Surface.MODEL_ADAPTER,
+    "ikea-extraction": Surface.VECTOR_DB,
+}
+
+
 def _finding(probe_id: str) -> Finding:
     return Finding(
         finding_id=f"f-{probe_id}",
@@ -64,7 +86,7 @@ def _finding(probe_id: str) -> Finding:
         status=FindingStatus.CONFIRMED,
         owner_tenant_id=uuid4(),
         observed_in_tenant_id=uuid4(),
-        surface=Surface.VECTOR_DB,
+        surface=_PROBE_FINDING_SURFACE[probe_id],
     )
 
 
@@ -148,6 +170,73 @@ def test_a_leak_found_against_a_fake_does_not_fail_the_operator_s_grade() -> Non
     cache = next(c for c in card.classes if c.class_id == 4)
     assert cache.verdict is ClassVerdict.NOT_COVERED
     assert card.grade is Grade.A  # uncapped: no LIVE-backed class failed
+
+
+def test_a_withheld_class_caps_on_the_finding_the_record_places_on_a_live_surface() -> None:
+    # Rule 7 caps the letter at a withheld class's band because "this is not
+    # evidence about your stack" must not also say "and therefore you passed". The
+    # cap asked a DIFFERENT question from the verdict: rules 5 and 6 decide per
+    # class SLOT (`PROBE_SURFACES[probe] & exercised`), the cap asked per FINDING
+    # (is this finding's surface recorded?). Where they disagreed the class was
+    # withheld and nothing capped.
+    #
+    # So a class whose slot the run cannot place, holding a confirmed CRITICAL the
+    # record says was observed on a LIVE surface, graded A - while the same finding
+    # on an UNRECORDED surface graded F. Moving a confirmed critical leak onto a
+    # surface the record positively calls live IMPROVED the letter: rule 7's own
+    # inversion, through a different door.
+    leak = _finding("memory-contamination").model_copy(update={"surface": Surface.TRACING})
+    card = score_run(_run({"vector_db": "LIVE", "tracing": "LIVE"}, findings=(leak,)))
+    memory = next(c for c in card.classes if c.class_id == 8)
+    assert memory.verdict is ClassVerdict.NOT_COVERED
+    assert memory.confirmed_findings == 1
+    assert card.capped_by is Severity.CRITICAL, card
+    assert card.grade is Grade.F, card
+
+    # Rule 5's door, same shape: the slot is positively SYNTHETIC, so the class is
+    # withheld - but the record says nothing of the kind about `tracing`, where it
+    # places the finding. The exemption is for a leak the record calls Sectum's own.
+    mixed = score_run(
+        _run(
+            {"vector_db": "LIVE", "tracing": "LIVE", "agent_memory": "SYNTHETIC"},
+            findings=(leak,),
+        )
+    )
+    assert mixed.capped_by is Severity.CRITICAL, mixed
+    assert mixed.grade is Grade.F, mixed
+
+
+def test_a_pass_says_when_the_run_did_less_than_it_planned() -> None:
+    # "A PASS is never silent about what it could not establish" - and two record
+    # blocks that say a run did LESS than it planned were carried by the audit PDF
+    # alone. So a PASS line, which is what a reader acts on, was identical whether
+    # the user boundary had been tested or never exercised, and whether the probe's
+    # plants landed or half of them vanished into the backend.
+    provenance = _all(SurfaceProvenance.LIVE)
+    narrowed = _run(provenance).model_copy(
+        update={
+            "metrics": RunMetrics(
+                user_steps_dropped={"semantic-cache-contamination": 12},
+                unconfirmed_plants={"rag-poisoning": 4},
+            )
+        }
+    )
+    by_id = {c.class_id: c for c in score_run(narrowed).classes}
+    assert by_id[4].verdict is ClassVerdict.PASS
+    assert "tenant boundary only" in (by_id[4].note or ""), by_id[4].note
+    assert "12 user-level step" in (by_id[4].note or ""), by_id[4].note
+    assert by_id[3].verdict is ClassVerdict.PASS
+    assert "never came back from the backend" in (by_id[3].note or ""), by_id[3].note
+
+    # A class the run did not narrow says nothing, or the note teaches nothing.
+    assert by_id[1].note is None, by_id[1].note
+    # And neither note attaches to a FAIL: the failure is the headline there.
+    leaked = _run(provenance, findings=(_finding("semantic-cache-contamination"),)).model_copy(
+        update={"metrics": RunMetrics(user_steps_dropped={"semantic-cache-contamination": 12})}
+    )
+    failed = next(c for c in score_run(leaked).classes if c.class_id == 4)
+    assert failed.verdict is ClassVerdict.FAIL
+    assert "tenant boundary only" not in (failed.note or "")
 
 
 def test_findings_against_a_fake_are_still_counted_and_named() -> None:

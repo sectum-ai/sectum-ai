@@ -236,6 +236,26 @@ def _finding(
     Returns:
         An OSCAL finding object as a JSON-serialisable ``dict``.
     """
+    # "Cross-principal" spans the USER boundary as well as the tenant one, and a run
+    # whose adapter cannot carry a user identity never exercised the user half - the
+    # attack catalog says so in as many words: "a pass which says the user boundary
+    # was not tested - never that it held." The audit PDF was the only renderer that
+    # read `user_steps_dropped`, so this control verdict asserted the whole of what
+    # the run had tested half of. Same for a plant the backend swallowed: the class
+    # was graded on setup that never landed.
+    narrowed = "".join(
+        (
+            " The user boundary was not exercised on every probe: user-level steps "
+            "were not run where the adapter cannot carry a user identity, so this "
+            "states the tenant boundary."
+            if run.metrics.user_steps_dropped
+            else "",
+            " Some planted data never came back from the backend, so part of this "
+            "was graded on setup that did not land."
+            if run.metrics.unconfirmed_plants
+            else "",
+        )
+    )
     if mapping_requirement(mapping) == ERASURE:
         objective = "erasure verification"
         failed = has_residual
@@ -261,7 +281,7 @@ def _finding(
             "for this run."
             if failed
             else "Sectum AI tested tenant isolation across the live configured AI "
-            "surfaces and confirmed no cross-principal leakage for this run."
+            "surfaces and confirmed no cross-principal leakage for this run." + narrowed
         )
     state = _STATE_NOT_SATISFIED if failed else _STATE_SATISFIED
     return {

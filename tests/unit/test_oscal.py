@@ -253,6 +253,37 @@ def test_an_unplaceable_leak_earns_no_satisfied_control() -> None:
     assert states == {"not-satisfied"}, states
 
 
+def test_a_control_verdict_says_which_boundary_the_run_actually_exercised() -> None:
+    # "Cross-principal" spans the USER boundary as well as the tenant one, and the
+    # catalog is explicit that a run whose adapter cannot carry a user identity
+    # yields "a pass which says the user boundary was not tested - never that it
+    # held." The audit PDF was the only renderer reading `user_steps_dropped`, so
+    # this control verdict - what a GRC platform files - asserted the whole of what
+    # the run had tested half of.
+    run = _run().model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(
+                user_steps_dropped={"tenant-boundary-fetch": 12},
+                unconfirmed_plants={"rag-poisoning": 4},
+            ),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    isolation = next(f for f in result["findings"] if "isolation" in f["title"])
+    verdict = isolation["target"]["description"]
+    assert "states the tenant boundary" in verdict, verdict
+    assert "did not land" in verdict, verdict
+    # A run that narrowed nothing says neither.
+    plain = run_to_oscal(_run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}}))
+    plain_verdict = next(
+        f
+        for f in plain["assessment-results"]["results"][0]["findings"]
+        if "isolation" in f["title"]
+    )["target"]["description"]
+    assert "states the tenant boundary" not in plain_verdict, plain_verdict
+
+
 def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
     # A live erasure run with residual markers said "confirmed at least one
     # manifest-grounded cross-tenant leak; the tested isolation objective is not

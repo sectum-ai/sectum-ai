@@ -283,7 +283,9 @@ def test_audit_pack_includes_the_retrieval_pivot_rate(tmp_path: Path) -> None:
 # --- Coverage & caveats matrix (erasure attestations) ------------------------
 
 
-def _erasure_pack(coverage: dict[str, str]) -> EvidencePack:
+def _erasure_pack(
+    coverage: dict[str, str], provenance: dict[str, str] | None = None
+) -> EvidencePack:
     manifest = GroundTruthManifest(manifest_id="m-1", scenario_hash="scenario-hash", markers=())
     moment = datetime(2026, 5, 18, tzinfo=UTC)
     run = RunResult(
@@ -292,9 +294,28 @@ def _erasure_pack(coverage: dict[str, str]) -> EvidencePack:
         manifest_hash=canonical_hash(manifest),
         started_at=moment,
         finished_at=moment,
+        surface_provenance=provenance or {},
         metrics=RunMetrics(erasure_coverage=coverage),
     )
     return build_evidence_pack(run, manifest, control_mappings=control_mappings())
+
+
+def test_a_live_erasure_surface_the_block_never_mentions_is_still_a_row() -> None:
+    # Both siblings default a missing surface to NOT_COVERED - `oscal`, and
+    # `controls._erasure_assertion`, whose comment records the same defect: "it was
+    # neither verified nor unestablished - it simply vanished." This matrix is the
+    # DPO-facing one, and it was the copy that still vanished it: the row
+    # disappeared while the control assertion said absence could not be established
+    # on that very surface.
+    pack = _erasure_pack(
+        {"vector_db": CoverageVerdict.ERASED.value},
+        provenance={"vector_db": "LIVE", "semantic_cache": "LIVE", "mcp": "LIVE"},
+    )
+    rows = dict(_coverage_rows(pack.run_result))
+    assert rows["semantic_cache"] == CoverageVerdict.NOT_COVERED.value, rows
+    # An isolation-only live surface is not an erasure surface at all, so it gets no
+    # row - the narrowing `ERASURE_SURFACES` exists for.
+    assert "mcp" not in rows, rows
 
 
 def test_coverage_rows_empty_for_a_non_erasure_run() -> None:

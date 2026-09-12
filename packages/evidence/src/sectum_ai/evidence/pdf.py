@@ -18,9 +18,14 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
-from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, COVERAGE_DISCLAIMER
+from sectum_ai.evidence.controls import (
+    _ERASURE_PROBE_IDS,
+    COVERAGE_DISCLAIMER,
+    live_surfaces,
+)
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
+    ERASURE_SURFACES,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
@@ -33,21 +38,11 @@ from sectum_ai.spec import (
     wilson_interval,
 )
 
-# Canonical erasure-surface order for the coverage matrix, kept here (rather than
-# importing from sectum_ai.probes) because the evidence package sits below probes
-# in the acyclic package graph (ADR-0004) and must not depend on it. It mirrors
-# ``sectum_ai.probes.ERASURE_SURFACES``; the erasure run writes a verdict for each
-# of these into ``RunMetrics.erasure_coverage``.
-_ERASURE_SURFACE_ORDER: tuple[str, ...] = (
-    "vector_db",
-    "tracing",
-    "agent_memory",
-    "semantic_cache",
-    "model_adapter",
-    "search_index",
-    "eval_set",
-    "backup",
-)
+# The coverage matrix's row order, derived from the canonical set rather than
+# transcribed. This was a third copy, kept here because `evidence` sits below
+# `probes` in the acyclic package graph (ADR-0004) - which stopped being a reason
+# once the set moved to `spec`, below both.
+_ERASURE_SURFACE_ORDER: tuple[str, ...] = tuple(surface.value for surface in ERASURE_SURFACES)
 
 # A short, DPO-facing gloss for each coverage verdict rendered in the matrix.
 _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
@@ -227,13 +222,25 @@ def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:
     extra surface key (forward-compatibility) is appended in sorted order so the
     matrix is total and deterministic. Returns ``[]`` for a non-erasure run, so
     the section is omitted entirely.
+
+    A LIVE erasure surface the block never mentions is rendered NOT_COVERED rather
+    than omitted. Both siblings already default it that way - ``oscal`` and
+    ``controls._erasure_assertion``, whose comment records the same defect: "it was
+    neither verified nor unestablished - it simply vanished." This matrix is the
+    DPO-facing one, promising coverage "surface by surface", and it was the copy
+    that still vanished it: the row disappeared while the control assertion two
+    pages on said absence could not be established there.
     """
     coverage = run.metrics.erasure_coverage
     if not coverage:
         return []
-    ordered = [s for s in _ERASURE_SURFACE_ORDER if s in coverage]
-    extra = sorted(s for s in coverage if s not in _ERASURE_SURFACE_ORDER)
-    return [(surface, coverage[surface]) for surface in (*ordered, *extra)]
+    rows = set(coverage) | (live_surfaces(run) & frozenset(_ERASURE_SURFACE_ORDER))
+    ordered = [s for s in _ERASURE_SURFACE_ORDER if s in rows]
+    extra = sorted(s for s in rows if s not in _ERASURE_SURFACE_ORDER)
+    return [
+        (surface, coverage.get(surface, CoverageVerdict.NOT_COVERED.value))
+        for surface in (*ordered, *extra)
+    ]
 
 
 class PdfEngine(StrEnum):

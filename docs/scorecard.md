@@ -169,7 +169,7 @@ over-claim. Seven rules prevent it:
 
 ### What a `PASS` line can still tell you
 
-A `PASS` is never silent about what it could not establish. Five notes attach to
+A `PASS` is never silent about what it could not establish. Seven notes attach to
 one:
 
 - **findings withheld** — confirmed findings on a surface backed by the built-in
@@ -193,6 +193,15 @@ one:
   one probe and this run exercised some of them. Classes 2 and 7 are the multi-probe
   classes; for Class 2 the omission also moves the number, because counting the
   vector probe without the pipeline probe understates the Retrieval-Pivot Rate.
+- **graded on the tenant boundary only** — the run did not execute this class's
+  user-level steps, because the adapter cannot carry a user identity to its backend
+  (`RunMetrics.user_steps_dropped`). "Cross-principal" spans both boundaries, so a
+  pass that exercised one of them has to say which. See
+  [the user boundary](attack-catalog/index.md#the-user-boundary).
+- **plants that never landed** — the backend acknowledged some of this class's
+  planted writes and did not serve them back (`RunMetrics.unconfirmed_plants`), so
+  the class was graded on less setup than it planned. A probe whose *every* plant
+  vanished is `NOT_COVERED` under rule 1 instead; this note is the partial case.
 
 ## The catalog and its weights
 

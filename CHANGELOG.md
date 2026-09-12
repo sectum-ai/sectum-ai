@@ -51,6 +51,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Moving a confirmed critical leak onto a LIVE surface improved the grade from `F`
+  to `A`.** Rule 7 caps the letter at a withheld class's band so that "this is not
+  evidence about your stack" cannot also mean "and therefore you passed" — but the cap
+  asked a different question from the verdict. Rules 5 and 6 decide per class *slot*
+  (`PROBE_SURFACES[probe] & exercised`); the cap asked per *finding* (is this finding's
+  surface recorded?). Where the two disagreed the class was withheld and nothing capped:
+  a class whose slot the run cannot place, holding 24 confirmed CRITICAL cross-tenant
+  findings the record says were observed on a LIVE surface, graded `A` — while the
+  byte-identical record with those findings on an *unrecorded* surface graded `F`. The
+  cap now keys on the verdict the scorer actually reached: every withheld class holding
+  a confirmed finding caps, unless the record positively states that finding's surface
+  was Sectum's own fake, which is rule 5's exemption and the only one.
+
+- **The audit PDF's coverage matrix silently dropped a live erasure surface.** A
+  surface the block never mentions defaults to `NOT_COVERED` in OSCAL and in the control
+  assertion — `controls._erasure_assertion`'s own comment records why: "it was neither
+  verified nor unestablished, it simply vanished". The DPO-facing matrix, whose caveat
+  promises coverage "surface by surface", was the copy that still vanished it: the row
+  disappeared while the assertion two pages later said absence could not be established
+  on that very surface. It is total over live erasure surfaces now, and the module's
+  third copy of the erasure-surface list is derived from the canonical one rather than
+  transcribed.
+
+- **A `PASS` did not say the run had tested only half the boundary.** `user_steps_dropped`
+  and `unconfirmed_plants` record that a run did *less* than it planned, and the audit PDF
+  was the only renderer that read either. So a scorecard `PASS` line was identical whether
+  the user boundary had been exercised or never run, and OSCAL filed "confirmed no
+  cross-principal leakage" — a claim that spans the user boundary — over a run that never
+  crossed it. Both now carry the qualifier: two more of the scorecard's `PASS` notes (now
+  seven), and a sentence on the OSCAL control verdict naming which boundary was exercised
+  and whether the setup landed.
+
 - **Three docs pages claimed coverage the code had just withdrawn.** Class 6's "Runs
   when" said the probe runs against "every vector store Sectum ships" — true until live
   stores stopped declaring `semantic_retrieval`, and now the opposite of true: Class 6
