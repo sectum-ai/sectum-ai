@@ -373,6 +373,11 @@ def _uncapped_confirmed(run: RunResult, entry: _CatalogClass, synthetic: frozens
     )
 
 
+def _probe_ids_with_findings(run: RunResult) -> set[str]:
+    """Every probe this record carries a finding from, whatever the finding's status."""
+    return {finding.probe_id for finding in run.findings}
+
+
 def _unattributed_in_class(run: RunResult, entry: _CatalogClass) -> int:
     """Confirmed findings in ``entry`` resting on a surface the provenance never records.
 
@@ -403,10 +408,18 @@ def _score_class(
     synthetic: frozenset[str],
     exercised: frozenset[str],
 ) -> ClassScore:
+    # "Did this probe run?" - which ANY finding answers, not only a confirmed one.
+    # `proven` is confirmed-only because it answers a different question ("did this
+    # probe prove a leak?"), and `baseline._exercised_probes` states the distinction
+    # in as many words. Using it here made the scorecard assert "probe did not run"
+    # over a record holding 24 of that probe's unverified candidates - which the
+    # audit PDF listed as exercised on the same run - and drop the class from
+    # coverage entirely. An unverified candidate is exactly the evidence a class
+    # PASSES with a caveat on, not evidence that nothing happened.
     ran = [
         probe_id
         for probe_id in entry.probe_ids
-        if probe_id in run.probe_versions or probe_id in proven
+        if probe_id in run.probe_versions or probe_id in _probe_ids_with_findings(run)
     ]
     accepted = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
     # What actually backed this class in THIS run: the acceptable surfaces the run

@@ -51,6 +51,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The scorecard said "probe did not run" over a record holding that probe's
+  findings.** "Did this probe run?" is answered by any finding; `score` asked the
+  confirmed-only set, which answers a different question — "did this probe prove a
+  leak?" — as `baseline._exercised_probes` states in as many words while taking the
+  broader one. So a record carrying 24 unverified candidates from a probe, listed as
+  exercised by the audit PDF on the same run, had the scorecard assert the probe never
+  ran and drop the class from coverage entirely. An unverified candidate is exactly the
+  evidence a class passes *with a caveat* on, which is the note it now carries. The
+  published recipe's step 1 is corrected with it.
+
 - **Moving a confirmed critical leak onto a LIVE surface improved the grade from `F`
   to `A`.** Rule 7 caps the letter at a withheld class's band so that "this is not
   evidence about your stack" cannot also mean "and therefore you passed" — but the cap

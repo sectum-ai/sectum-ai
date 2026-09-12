@@ -239,14 +239,17 @@ folding it in would conflate two different claims. Class 12 is the
 ## How the letter is computed
 
 1. **Per class** — a class is a *candidate* for grading when at least one of its probes
-   appears in the run's `probe_versions`, **or** produced a confirmed finding (a finding
-   is itself proof its probe ran — rule 4). A candidate is still `NOT_COVERED` if rule 5
-   (every backing surface was the built-in fake), rule 6 (the backing surface cannot be
-   attributed to a class) or rule 7 (its only confirmed findings rest on a surface the
-   provenance does not record) applies — all three decline to grade a class that *did*
-   run. Rule 7 alone also **caps** the letter at that class's band: declining to grade
-   a class removes it from the weighted denominator, so withholding on its own would
-   make the grade better, which is the opposite of what withholding means. A class
+   appears in the run's `probe_versions`, **or** produced a finding of any status (a
+   finding is itself proof its probe ran — rule 4; an unverified candidate answers "did
+   this probe run?" exactly as well as a confirmed one, and is the evidence a class
+   passes *with a caveat* on). A candidate is still `NOT_COVERED` if rule 5 (every
+   backing surface was the built-in fake) or rule 6 (the backing surface cannot be
+   attributed to a class) applies — both decline to grade a class that *did* run.
+   Rule 7 then **caps** the letter at the band of every class withheld this way that
+   still holds a confirmed finding, unless the record positively states that finding's
+   surface was the built-in fake: declining to grade a class removes it from the
+   weighted denominator, so withholding on its own would make the grade better, which
+   is the opposite of what withholding means. A class
    that survives both is `FAIL` when a confirmed finding rests on a **live** backing
    surface, else `PASS`: on a mixed run the findings on a synthetic surface are withheld
    from the letter, so a class can pass while its line names the findings withheld

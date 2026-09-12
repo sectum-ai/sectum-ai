@@ -206,6 +206,34 @@ def test_a_withheld_class_caps_on_the_finding_the_record_places_on_a_live_surfac
     assert mixed.grade is Grade.F, mixed
 
 
+def test_a_probe_whose_candidates_are_in_the_record_did_run() -> None:
+    # "Did this probe run?" is answered by ANY finding; `score` asked the
+    # confirmed-only set, which answers "did it prove a leak?".
+    # `baseline._exercised_probes` states the distinction in as many words and takes
+    # the broader one. So a record holding 24 unverified candidates from a probe -
+    # which the audit PDF lists as exercised on the same run - had the scorecard
+    # assert "probe did not run", and the class left coverage entirely.
+    candidate = _finding("semantic-cache-contamination").model_copy(
+        update={"status": FindingStatus.UNVERIFIED, "severity": Severity.INFO}
+    )
+    # Only `tenant-boundary-fetch` is version-stamped, so the cache class's whole
+    # claim to have run is the candidate the record carries.
+    run = _run(_all(SurfaceProvenance.LIVE), findings=(candidate,)).model_copy(
+        update={"probe_versions": {"tenant-boundary-fetch": "1.0"}}
+    )
+    classes = {c.class_id: c for c in score_run(run).classes}
+    cache = classes[4]
+    assert cache.verdict is ClassVerdict.PASS, cache
+    assert "unverified finding(s) here" in (cache.note or ""), cache.note
+    assert "probe did not run" not in (cache.note or ""), cache.note
+
+    # A class with neither a version entry nor a finding still says it did not run,
+    # so the broader predicate has not turned the note off for everyone.
+    silent = classes[8]
+    assert silent.verdict is ClassVerdict.NOT_COVERED, silent
+    assert "probe did not run" in (silent.note or ""), silent.note
+
+
 def test_a_pass_says_when_the_run_did_less_than_it_planned() -> None:
     # "A PASS is never silent about what it could not establish" - and two record
     # blocks that say a run did LESS than it planned were carried by the audit PDF
