@@ -51,6 +51,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Three docs pages claimed coverage the code had just withdrawn.** Class 6's "Runs
+  when" said the probe runs against "every vector store Sectum ships" — true until live
+  stores stopped declaring `semantic_retrieval`, and now the opposite of true: Class 6
+  and Class 13 report `NOT_COVERED` against Qdrant, pgvector, Weaviate, Chroma,
+  OpenSearch, Pinecone and Azure AI Search, and only the built-in fake runs them. Both
+  class pages and `configuration.md` say so, with the reason (no config path reaches a
+  real embedding model for a vector store). Separately, the adapter table described
+  `adapter_bleed` as merging every tenant's LoRA into every inference; it does not — each
+  completion is correctly scoped and the harness joins them — so the entry now says it
+  *models* the condition and that findings under it are marked `synthetic`. The same
+  correction went into the code comment that had been asserting the merge.
+
 - **One surface's failed purge aborted the whole Article 17 attestation.**
   `_erase_surface` catches `AdapterError` around *both* scans — an inconclusive listing
   on one surface must not cost the other seven their verdicts — and caught nothing

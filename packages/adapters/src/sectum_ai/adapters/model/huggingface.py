@@ -175,10 +175,14 @@ class HuggingFaceLoraModel(ModelAdapter):
         scope = _scope_for(tenant, user, user_scoped=self._user_scoped)
         try:
             if self._adapter_bleed:
-                # The weight-bleed condition Class 9 catches: every tenant's
-                # LoRA is merged into the call regardless of who asked. The
-                # backend's `list_scopes` returns the live set so an empty
-                # adapter store still works (falls back to base inference).
+                # MODELS the weight-bleed condition Class 9 catches; it does not
+                # reproduce it. Each completion below is correctly scoped and the
+                # join is what puts another tenant's text in the answer, so the
+                # leak is this harness's, not the weights' - which is why the
+                # adapter sets `synthetic = adapter_bleed` and the findings never
+                # count as evidence about the operator's model. The backend's
+                # `list_scopes` returns the live set so an empty adapter store
+                # still works (falls back to base inference).
                 completion_parts = [
                     self._backend.infer(scope_id, prompt)
                     for scope_id in self._backend.list_scopes()

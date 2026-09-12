@@ -92,7 +92,10 @@ declares no semantic retrieval, so **Class 6 (embedding inversion) is skipped**
 -- an application's search is not an embedding space, and a substring hit reported
 as *Invert ML Model* would attribute a real result to a mechanism that is not
 there. It reports `NOT_COVERED`, never `PASS` ([scorecard](scorecard.md), rules 5
-and 6). Class 13 is unaffected because it is not in the CLI's probe suite under
+and 6). The live vector stores declare it absent for the same reason: there is no
+config path to a real embedding model for a vector store, so each is backed by a
+hashing embedder that ranks lexically — see
+[Class 6](attack-catalog/class-06-embedding-inversion.md#runs-when). Class 13 is unaffected because it is not in the CLI's probe suite under
 any configuration; it runs from the SDK (`examples/multimodal-rag-bleed`).
 
 Why this exists: a stack whose vector store, cache, memory, and agent framework are
@@ -170,7 +173,7 @@ the default. This is the field-level sibling of the unknown-family check.
 | `kind` | Fields | Notes |
 |---|---|---|
 | `fake` | `adapter_bleed: bool = false`, `prefix_cache: bool = false` | In-memory model. `adapter_bleed` reproduces Class 9; `prefix_cache` reproduces Class 5. |
-| `huggingface` | `base_model_id: str` *(required)*, `adapters_dir: str` *(required)*, `adapter_bleed: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false`, `lora_rank: int = 8`, `lora_alpha: int = 16`, `train_epochs: int = 1`, `device_map: str = "auto"` | `HuggingFaceLoraModel` — a HuggingFace causal LM with per-tenant PEFT LoRA adapters managed on disk. The `adapter_bleed` knob merges every tenant's LoRA into every inference (Class 9). Requires the optional `huggingface` extra: `pip install sectum-ai-adapters[huggingface]`. |
+| `huggingface` | `base_model_id: str` *(required)*, `adapters_dir: str` *(required)*, `adapter_bleed: bool = false`, `user_scoped: bool = false`, `soft_delete: bool = false`, `lora_rank: int = 8`, `lora_alpha: int = 16`, `train_epochs: int = 1`, `device_map: str = "auto"` | `HuggingFaceLoraModel` — a HuggingFace causal LM with per-tenant PEFT LoRA adapters managed on disk. The `adapter_bleed` knob **models** the Class 9 weight-bleed condition rather than reproducing it: each completion is still correctly scoped and the adapter joins them, so the cross-tenant text in the answer comes from this harness and not from the weights. Findings produced under it are therefore marked `synthetic` — they are counted and named, never counted as confirmed *on a live surface*, and never graded against your model. Requires the optional `huggingface` extra: `pip install sectum-ai-adapters[huggingface]`. |
 | `vllm` | `base_url: str` *(required)*, `model: str` *(required)*, `api_key` / `api_key_env` *(optional; defaults to a placeholder)*, `timeout: float = 30.0`, `max_tokens: int = 16` | `VLLMModel` — a **serving-only** vLLM server reached over its OpenAI-compatible API. It runs inference and measures time-to-first-token (Class 5 KV-cache timing) but trains no per-tenant adapter, so `sectum-ai probe` **skips Class 9** for it and the model surface of a Class 11 erasure reads `NOT_COVERED`. Requires the optional `vllm` extra: `pip install sectum-ai-adapters[vllm]`. |
 | `tgi` | `base_url: str` *(required)*, `api_key` / `api_key_env` *(optional)*, `timeout: float = 30.0`, `max_tokens: int = 16` | `TGIModel` — a **serving-only** HuggingFace Text Generation Inference server, reached over its native text-generation API (TGI serves one model per endpoint, so there is no `model` field). Same Class-5-only / Class-9-skipped / Class-11-`NOT_COVERED` behavior as `vllm`. Requires the optional `tgi` extra: `pip install sectum-ai-adapters[tgi]`. |
 

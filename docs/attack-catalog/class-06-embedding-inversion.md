@@ -23,12 +23,22 @@ per-tenant store returns nothing for a foreign fragment.
 ## Runs when
 
 The probe only runs against a vector-slot adapter that reports the `semantic_retrieval`
-capability — every vector store Sectum ships. A backend that matches on substrings can
-return a whole document for a fragment query with no embedding involved, and that
-keyword hit would be recorded here as `AML.T0024.001 Invert ML Model`, a real result
-attributed to a mechanism the backend does not have. The `app` family (an application's
-own resource API filling the vector slot) declares no semantic retrieval, so against it
-this probe is **skipped** and the class scores `NOT_COVERED`, never `PASS`.
+capability. A backend that matches on substrings can return a whole document for a
+fragment query with no embedding involved, and that keyword hit would be recorded here
+as `AML.T0024.001 Invert ML Model`, a real result attributed to a mechanism the backend
+does not have. Wherever the capability is absent this probe is **skipped** and the class
+scores `NOT_COVERED`, never `PASS`.
+
+Two things declare it absent. The `app` family (an application's own resource API filling
+the vector slot) is not an embedding space at all. And **every live vector store the CLI
+builds** declares it too: there is no config path from `sectum-ai.yaml` to a real
+embedding model for a vector store (`embedding_model` configures the *detection*
+pipeline), so each live kind is backed by a bag-of-tokens hashing embedder where synonyms
+score 0.000 — which is exactly the substring-matching backend this rule exists for. So
+against Qdrant, pgvector, Weaviate, Chroma, OpenSearch, Pinecone or Azure AI Search,
+Class 6 reports `NOT_COVERED`. Only the built-in fake, whose numbers the examples label
+as the demo exercising the probe, runs it. Wiring a real embedder into the vector slot is
+what would change that; the SDK can already do it by constructing the adapter directly.
 
 The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
 for when this class is tested cross-user and when those steps are dropped.
