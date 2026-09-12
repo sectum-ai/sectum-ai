@@ -216,7 +216,12 @@ one OSCAL *finding* per mapped framework control (SOC 2, ISO 27001, GDPR, …) w
 otherwise `satisfied`; an erasure control (GDPR Art. 17, CCPA §1798.105, titled
 "erasure verification") is `not-satisfied` when a live surface kept a residual
 marker after the erasure. A finding from a surface that ran against the built-in
-fake moves no control (the result names those surfaces as excluded), an
+fake moves no control (the result names those surfaces as excluded), a confirmed
+finding on a surface the provenance block never recorded *withholds* the control
+it would otherwise have earned a `satisfied` from — nobody can say whether that
+surface was live, so no verdict is stated and the result names the withheld
+controls, while a control already failing on placeable evidence keeps its
+`not-satisfied` — an
 unverified candidate is recorded as evidence but never on its own flips a control
 to failed, and the coverage disclaimer (these mappings are test-coverage
 assertions, not legal certification) rides in the metadata remarks. A run with no

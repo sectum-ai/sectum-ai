@@ -229,6 +229,30 @@ def test_a_confirmed_leak_on_a_fake_surface_moves_no_control() -> None:
     assert {f["target"]["status"]["state"] for f in moved["findings"]} == {"not-satisfied"}
 
 
+def test_an_unplaceable_leak_earns_no_satisfied_control() -> None:
+    # `attested` keeps LIVE-surface findings and the `synthetic` exclusion covers
+    # the recorded fakes; a confirmed finding on a surface the block never recorded
+    # was in neither set and simply vanished. Every control read `satisfied` over a
+    # confirmed cross-tenant leak - while the audit PDF named it, `verify`'s
+    # run-scope gate flagged it and `score` graded F. A GRC platform reads
+    # `status.state`, so this was the export that mattered.
+    unrecorded = _finding("f").model_copy(update={"surface": Surface.AGENT_MEMORY})
+    run = _run(unrecorded).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert result["findings"] == [], result["findings"]
+    assert "never recorded" in result["description"], result["description"]
+    assert "CC6.1" in result["description"], result["description"]
+
+    # Neither does it erase a fail: the same leak on the RECORDED live surface
+    # still flips the controls, and withholding must not launder that away.
+    placed = _run(_finding("f")).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    states = {
+        f["target"]["status"]["state"]
+        for f in run_to_oscal(placed)["assessment-results"]["results"][0]["findings"]
+    }
+    assert states == {"not-satisfied"}, states
+
+
 def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
     # A live erasure run with residual markers said "confirmed at least one
     # manifest-grounded cross-tenant leak; the tested isolation objective is not

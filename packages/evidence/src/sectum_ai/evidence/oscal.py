@@ -58,7 +58,12 @@ from sectum_ai.evidence.controls import (
     live_surfaces,
     mapping_requirement,
 )
-from sectum_ai.evidence.labels import backing_surface, is_cross_principal, leak_label
+from sectum_ai.evidence.labels import (
+    backing_surface,
+    is_cross_principal,
+    leak_label,
+    unaccounted_surfaces,
+)
 from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus, SurfaceProvenance
 
 if TYPE_CHECKING:
@@ -388,6 +393,29 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     )
     has_confirmed_leak = any(is_cross_principal(f) for f in attested)
     has_residual = bool(residual_surfaces)
+    # `attested` keeps findings whose surface the block records as LIVE, and the
+    # `synthetic` exclusion below covers the ones it records as a fake. A confirmed
+    # finding on a surface the block never recorded AT ALL is in neither set, so it
+    # simply vanished: ninety confirmed cross-tenant leaks on an unrecorded surface
+    # left all twenty controls reading `satisfied`, while the audit PDF named them
+    # ("placed on no stack at all"), `verify`'s run-scope gate flagged them and
+    # `score` graded F and capped at critical (rule 7). A GRC platform reads
+    # `status.state`, so this export was the one that mattered and the one that lied.
+    #
+    # It is NOT rule 5's case: there the record positively states the surface was
+    # Sectum's own fake, which is not evidence against the operator. Here it states
+    # nothing, so the leak may well be on their stack - and `not-satisfied` would
+    # assert a failure this run cannot place either. So the control is not asserted
+    # at all, the same refusal the synthetic-only run makes below and the scorecard's
+    # rule 1: never imply a stack passed a check nobody can say it was given.
+    unplaceable = [
+        finding
+        for finding in run.findings
+        if finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) in unaccounted_surfaces(run)
+    ]
+    unplaceable_isolation = any(is_cross_principal(f) for f in unplaceable)
+    unplaceable_erasure = any(not is_cross_principal(f) for f in unplaceable)
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
@@ -399,7 +427,19 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # a production result a demo run cannot support. The observations still ship
     # (they are what the run saw); the control findings do not - and
     # `control_mappings` returns none for such a run.
+    withheld_controls: list[str] = []
     for mapping in control_mappings(run):
+        erasure_control = mapping_requirement(mapping) == ERASURE
+        # Only a verdict that would read `satisfied` is withheld. A control already
+        # failing on placeable evidence keeps its `not-satisfied`: an unplaceable
+        # finding must never earn a pass, and must never erase a fail either.
+        if (unplaceable_erasure if erasure_control else unplaceable_isolation) and not (
+            has_residual if erasure_control else has_confirmed_leak
+        ):
+            withheld_controls.extend(
+                cid for cid in mapping.control_ids if cid not in withheld_controls
+            )
+            continue
         for control_id in mapping.control_ids:
             if control_id not in reviewed_control_ids:
                 reviewed_control_ids.append(control_id)
@@ -414,6 +454,15 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     observation_uuids=observation_uuids,
                 )
             )
+    unplaced = (
+        " Confirmed findings in this run rest on "
+        f"{', '.join(unaccounted_surfaces(run))}, which its provenance block never "
+        "recorded: whether those were live backends or Sectum's built-in fakes cannot "
+        "be established from this pack, so no verdict is stated for the control(s) that "
+        f"would otherwise have read satisfied on that evidence: {', '.join(withheld_controls)}."
+        if withheld_controls
+        else ""
+    )
     synthetic = sorted(set(run.surface_provenance) - live)
     excluded = (
         " Surfaces that ran against the built-in fake and are excluded from every "
@@ -463,7 +512,7 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                 isolation_lead + "No cross-principal leakage was confirmed on the live "
                 "surfaces tested."
             )
-        result_description = " ".join(parts) + excluded
+        result_description = " ".join(parts) + excluded + unplaced
 
     result: dict[str, Any] = {
         "uuid": _uuid(run.run_id, "result"),

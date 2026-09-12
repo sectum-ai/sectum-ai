@@ -46,6 +46,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The OSCAL export read `satisfied` over a confirmed critical leak.** Its control
+  verdicts came from findings whose surface the provenance block records as LIVE, and
+  the `synthetic` exclusion covered the ones it records as a fake — so a confirmed
+  finding on a surface the block never recorded at all fell in neither set and simply
+  vanished. A run whose only confirmed findings were 90 cross-tenant leaks on an
+  unrecorded surface exported all twenty controls as `satisfied`, while the audit PDF
+  named them ("placed on no stack at all"), `verify`'s run-scope gate flagged them and
+  `score` graded `F` capped at critical. A GRC platform reads `status.state`, so the
+  machine-readable export was the one that mattered and the one that lied. This is not
+  the built-in-fake case, where the record positively states the surface was Sectum's
+  own: here it states nothing, so the leak may well be on the operator's stack — and
+  `not-satisfied` would assert a failure the run cannot place either. So the control is
+  not asserted at all, as it already is for a synthetic-only run, and the result names
+  every withheld control. A control already failing on placeable evidence keeps its
+  `not-satisfied`: an unplaceable finding must never earn a pass, and never erase a fail.
+
 - **A forged ownership claim excused a tampered audit PDF.** `verify` excludes a
   candidate sibling from judgment when another pack in the folder declares and binds
   it — the rule that stops a genuine erasure PDF being reported as a renamed probe
