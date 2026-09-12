@@ -13,9 +13,9 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum_ai.adapters.base import Capability, ModelAdapter
+from sectum_ai.adapters.base import Capability, ModelAdapter, TraceHit
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
-from sectum_ai.spec import CoverageVerdict, Surface
+from sectum_ai.spec import AdapterError, CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -49,6 +49,35 @@ def test_a_clean_subject_check_establishes_absence_and_never_attests_erasure() -
     assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
     assert not report.erased
     assert report.findings == ()
+
+
+def test_one_unreadable_surface_does_not_cost_the_others_their_verdicts() -> None:
+    # `_refuse_capped` was written FOR this path - "the A3 subject check reads
+    # `fetch_trace(...) is None` as 'the trace is gone'" - so an AdapterError here
+    # is expected, and nothing caught it: one trace backend that could not answer
+    # aborted the whole A3 run and every other surface's verdict went with it. The
+    # Class 11 sibling contains the same failure around both scans and the delete.
+    class _CappedTraces(FakeObservability):
+        def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+            raise AdapterError("Phoenix listed 1000 traces, its page cap, without this id")
+
+    store, tenant, present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-3",
+        records={Surface.VECTOR_DB: (present,), Surface.TRACING: ("trace-1",)},
+    )
+    report = SubjectErasureProbe(vector=store, observability=_CappedTraces()).verify(
+        tenant, manifest
+    )
+
+    # The vector surface still reports what it actually found - a residual record.
+    surfaces = {s.surface: s for s in report.surfaces}
+    assert surfaces[Surface.VECTOR_DB].residual_after == 1, surfaces[Surface.VECTOR_DB]
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    assert report.findings, "the residual must still be itemized"
+    # And the surface that could not answer is NOT_COVERED, never ERASED.
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
 
 
 def test_subject_erasure_is_residual_when_a_record_remains() -> None:

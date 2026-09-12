@@ -51,6 +51,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A `verify` that declined to judge a file also declined to fail.** The previous
+  entry's fix for the false accusation moved an unacceptable ownership claim out of the
+  judged set and printed it as `[ok]`, so nothing re-hashed the file and the run passed
+  at exit 0 under `VERIFIED (independently anchored)` — an unanchored decoy needing no
+  key could excuse a tampered audit PDF, or a gutted `run.json` that `score` reads in
+  preference to the pack. Refusing to accuse is not the same as vouching: the line is a
+  `[FAIL]` now, saying nothing is called altered and that this verification declines to
+  certify a folder it could not judge.
+
+- **A GCS backup bucket whose versioning was turned off was attested `ERASED` over
+  retained data.** The adapter listed every generation only while `versioning_enabled`
+  was true. GCS has no "suspended" state — turning Object Versioning off flips that flag
+  to `False` while every noncurrent generation stays restorable until a lifecycle rule
+  removes it — so the scan saw none of them, the purge removed none of them, and the
+  signed Article 17 attestation said the surface was erased. The S3 sibling counts a
+  bucket as versioned when its status is `Enabled` **or** `Suspended`, for exactly this
+  reason. The listing is unconditional now; on a bucket that was never versioned it is
+  the same set. The test fake had encoded the wrong semantics too — an unversioned
+  delete cleared *every* generation — which is why no existing test could see this.
+
+- **Two more siblings of this cycle's own repairs.** `S3Backup.delete` let the boto3
+  client's exception escape, so a denied bucket aborted the whole erasure run rather
+  than marking one surface unestablished — the defect the GCS sibling's comment
+  describes, in the adapter it was written next to. And the A3 subject-erasure probe had
+  no per-surface containment at all, though `_refuse_capped` was written for that path:
+  one trace backend that could not answer cost every other surface its verdict. Both now
+  behave as Class 11 does.
+
 - **The Class 7 caveat said "the agent answered" over a response the same observation
   records as empty.** Its wording was taken from the caller precisely so it would
   describe what was observed — and then written unconditionally, so the sentence added to

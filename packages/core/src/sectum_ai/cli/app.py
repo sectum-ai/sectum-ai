@@ -2257,11 +2257,21 @@ def verify(
         # after signing" over an untampered folder, and `erasure` carries no
         # `--tsa`/`--rekor` flag at all, so `report --tsa` beside `erasure` produces
         # exactly this pairing as a matter of course.
+        #
+        # It FAILS all the same. Not judging a file and CERTIFYING it are different
+        # things, and the first draft of this branch printed `[ok]`: the candidate
+        # left `judged`, so nothing re-hashed it, and the run then passed at exit 0
+        # under "VERIFIED (independently anchored)" - an unanchored decoy needing no
+        # key could excuse a tampered audit PDF, or a gutted `run.json` that `score`
+        # prefers over the pack. Refusing to accuse is not the same as vouching.
+        passed = False
         typer.echo(
-            f"[ok] unexcused-siblings: {', '.join(untrusted(n) for n in unexcused)} "
+            f"[FAIL] unexcused-siblings: {', '.join(untrusted(n) for n in unexcused)} "
             "sit(s) beside this pack and is bound by another pack here whose own "
             "verification is not independently anchored, so this anchored verification "
-            "cannot speak for it either way; verify that pack on its own terms"
+            "cannot speak for it either way. Nothing here is called altered; this "
+            "verification declines to certify a folder it could not judge. Verify that "
+            "pack on its own terms, or re-create it anchored"
         )
     if not passed:
         typer.echo("VERIFICATION FAILED", err=True)

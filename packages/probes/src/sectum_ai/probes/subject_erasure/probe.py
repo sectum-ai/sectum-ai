@@ -36,7 +36,8 @@ surface was not (or could not be) checked - never a vacuous ``ERASED``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -57,13 +58,17 @@ from sectum_ai.probes._recall import (
 )
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import (
+    AdapterError,
     Finding,
     FindingStatus,
     Severity,
     Surface,
+    get_logger,
     residual_present,
     sha256_hex,
 )
+
+_log = get_logger(__name__)
 
 # The erasure surfaces with a by-id existence primitive in the adapter SDK today.
 # A subject's ids on any other surface cannot be checked by id yet, so they read
@@ -175,6 +180,31 @@ class SubjectErasureProbe:
         self._memory = memory
         self._search_index = search_index
 
+    @contextmanager
+    def _contained(self, surface: Surface, unverifiable: dict[Surface, int]) -> Iterator[None]:
+        """Keep one adapter's failure to its own surface, as Class 11's helper does.
+
+        `_listing._refuse_capped` was written FOR this path - "the A3 subject check
+        reads `fetch_trace(...) is None` as 'the trace is gone'" - so an
+        ``AdapterError`` here is expected, and nothing caught it: one unreadable
+        trace backend aborted the whole A3 run and every other surface's verdict was
+        lost with it. Class 11's `_erase_surface` contains the same failure around
+        both scans and the delete; this is that rule, for its sibling probe.
+
+        The surface leaves `surfaces` entirely and is counted unverifiable, so the
+        report reads NOT_COVERED there rather than ERASED - a scan that could not run
+        established nothing.
+        """
+        try:
+            yield
+        except AdapterError as error:
+            unverifiable[surface] = max(unverifiable.get(surface, 0), 1)
+            _log.info(
+                "subject_erasure.surface_unverifiable",
+                surface=surface.value,
+                reason=str(error),
+            )
+
     def verify(self, target: UUID, manifest: SubjectManifest) -> ErasureReport:
         """Check the subject's ids and content are gone; return an erasure report.
 
@@ -190,153 +220,171 @@ class SubjectErasureProbe:
 
         vector = self._vector
         if vector is not None:
-            # Dedupe per surface so the count is distinct and a repeat cannot emit
-            # two findings with the same finding_id.
-            ids = tuple(dict.fromkeys(manifest.records.get(Surface.VECTOR_DB, ())))
-            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.VECTOR_DB, ())))
-            if ids or phrases:
-                present = [rid for rid in ids if vector.fetch(target, rid) is not None]
-                verdicts = {p: self._content_surfaces(vector, target, p) for p in phrases}
-                surfacing = [p for p, v in verdicts.items() if v]
-                inconclusive = sum(1 for v in verdicts.values() if v is None)
-                if inconclusive:
-                    unverifiable[Surface.VECTOR_DB] = inconclusive
-                # By-id and content residual both count against the vector surface:
-                # it is ERASED only when no id remains AND no content still surfaces -
-                # and never while a phrase could not be checked.
-                if present or surfacing or not inconclusive:
-                    surfaces.append(
-                        SurfaceErasure(
-                            surface=Surface.VECTOR_DB,
-                            markers_before=len(ids) + len(phrases),
-                            residual_after=len(present) + len(surfacing),
-                            baseline_observed=False,
+            with self._contained(Surface.VECTOR_DB, unverifiable):
+                # Dedupe per surface so the count is distinct and a repeat cannot emit
+                # two findings with the same finding_id.
+                ids = tuple(dict.fromkeys(manifest.records.get(Surface.VECTOR_DB, ())))
+                phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.VECTOR_DB, ())))
+                if ids or phrases:
+                    present = [rid for rid in ids if vector.fetch(target, rid) is not None]
+                    verdicts = {p: self._content_surfaces(vector, target, p) for p in phrases}
+                    surfacing = [p for p, v in verdicts.items() if v]
+                    inconclusive = sum(1 for v in verdicts.values() if v is None)
+                    if inconclusive:
+                        unverifiable[Surface.VECTOR_DB] = inconclusive
+                    # By-id and content residual both count against the vector surface:
+                    # it is ERASED only when no id remains AND no content still surfaces -
+                    # and never while a phrase could not be checked.
+                    if present or surfacing or not inconclusive:
+                        surfaces.append(
+                            SurfaceErasure(
+                                surface=Surface.VECTOR_DB,
+                                markers_before=len(ids) + len(phrases),
+                                residual_after=len(present) + len(surfacing),
+                                baseline_observed=False,
+                            )
                         )
+                    findings.extend(
+                        self._residual_finding(target, Surface.VECTOR_DB, manifest.subject_ref, rid)
+                        for rid in present
                     )
-                findings.extend(
-                    self._residual_finding(target, Surface.VECTOR_DB, manifest.subject_ref, rid)
-                    for rid in present
-                )
-                findings.extend(
-                    self._fingerprint_finding(target, Surface.VECTOR_DB, manifest.subject_ref, p)
-                    for p in surfacing
-                )
+                    findings.extend(
+                        self._fingerprint_finding(
+                            target, Surface.VECTOR_DB, manifest.subject_ref, p
+                        )
+                        for p in surfacing
+                    )
 
         cache = self._cache
         if cache is not None:
-            ids = tuple(dict.fromkeys(manifest.records.get(Surface.SEMANTIC_CACHE, ())))
-            if ids:
-                present = [rid for rid in ids if cache.get(target, rid) is not None]
-                surfaces.append(self._surface(Surface.SEMANTIC_CACHE, ids, present))
-                findings.extend(
-                    self._residual_finding(
-                        target, Surface.SEMANTIC_CACHE, manifest.subject_ref, rid
+            with self._contained(Surface.SEMANTIC_CACHE, unverifiable):
+                ids = tuple(dict.fromkeys(manifest.records.get(Surface.SEMANTIC_CACHE, ())))
+                if ids:
+                    present = [rid for rid in ids if cache.get(target, rid) is not None]
+                    surfaces.append(self._surface(Surface.SEMANTIC_CACHE, ids, present))
+                    findings.extend(
+                        self._residual_finding(
+                            target, Surface.SEMANTIC_CACHE, manifest.subject_ref, rid
+                        )
+                        for rid in present
                     )
-                    for rid in present
-                )
 
         observability = self._observability
         if observability is not None:
-            ids = tuple(dict.fromkeys(manifest.records.get(Surface.TRACING, ())))
-            if ids:
-                try:
-                    present = [
-                        tid for tid in ids if observability.fetch_trace(target, tid) is not None
-                    ]
-                except NotImplementedError:
-                    # The adapter has no by-id trace fetch: leave the surface unscanned
-                    # so the coverage block reads NOT_COVERED, never a false ERASED.
-                    pass
-                else:
-                    surfaces.append(self._surface(Surface.TRACING, ids, present))
-                    findings.extend(
-                        self._residual_finding(target, Surface.TRACING, manifest.subject_ref, tid)
-                        for tid in present
-                    )
+            with self._contained(Surface.TRACING, unverifiable):
+                ids = tuple(dict.fromkeys(manifest.records.get(Surface.TRACING, ())))
+                if ids:
+                    try:
+                        present = [
+                            tid for tid in ids if observability.fetch_trace(target, tid) is not None
+                        ]
+                    except NotImplementedError:
+                        # The adapter has no by-id trace fetch: leave the surface unscanned
+                        # so the coverage block reads NOT_COVERED, never a false ERASED.
+                        pass
+                    else:
+                        surfaces.append(self._surface(Surface.TRACING, ids, present))
+                        findings.extend(
+                            self._residual_finding(
+                                target, Surface.TRACING, manifest.subject_ref, tid
+                            )
+                            for tid in present
+                        )
 
         model = self._model
         if model is not None:
-            # The model surface is fingerprint-only: there is no "fetch a memorized
-            # fact by id" primitive, so a subject's model residual is caught by
-            # probing inference with the subject's content. Only a trainable model
-            # (per-tenant adapter or shared weights) can memorize it; a serving-only
-            # endpoint trained nothing, so the surface is left unscanned and reads
-            # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
-            # canary model scan.
-            supplied = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ())))
-            phrases = (
-                tuple(p for p in supplied if continuation_split(p) is not None)
-                if has_base_control(model)
-                # Without a base-knowledge control every phrase is unverifiable:
-                # see `_recall.has_base_control`.
-                else ()
-            )
-            if len(phrases) < len(supplied):
-                # A fingerprint the continuation check cannot verify (a bare
-                # two-word name; a prefix with no control form). It is counted, the
-                # verifiable phrases are still scanned, and the surface can read
-                # RESIDUAL (something recalled) or NOT_COVERED - never ERASED "for
-                # the subject" on the phrases that survived.
-                unverifiable[Surface.MODEL_ADAPTER] = len(supplied) - len(phrases)
-            if phrases and self._model_can_memorize(model):
-                recalled = [p for p in phrases if self._content_recalled(model, target, p)]
-                if recalled or Surface.MODEL_ADAPTER not in unverifiable:
-                    surfaces.append(
-                        SurfaceErasure(
-                            surface=Surface.MODEL_ADAPTER,
-                            markers_before=len(phrases),
-                            residual_after=len(recalled),
-                            baseline_observed=False,
-                        )
-                    )
-                findings.extend(
-                    self._fingerprint_finding(
-                        target, Surface.MODEL_ADAPTER, manifest.subject_ref, p
-                    )
-                    for p in recalled
+            with self._contained(Surface.MODEL_ADAPTER, unverifiable):
+                # The model surface is fingerprint-only: there is no "fetch a memorized
+                # fact by id" primitive, so a subject's model residual is caught by
+                # probing inference with the subject's content. Only a trainable model
+                # (per-tenant adapter or shared weights) can memorize it; a serving-only
+                # endpoint trained nothing, so the surface is left unscanned and reads
+                # NOT_COVERED - never a vacuous ERASED, the same gate as the Class 11
+                # canary model scan.
+                supplied = tuple(
+                    dict.fromkeys(manifest.fingerprints.get(Surface.MODEL_ADAPTER, ()))
                 )
+                phrases = (
+                    tuple(p for p in supplied if continuation_split(p) is not None)
+                    if has_base_control(model)
+                    # Without a base-knowledge control every phrase is unverifiable:
+                    # see `_recall.has_base_control`.
+                    else ()
+                )
+                if len(phrases) < len(supplied):
+                    # A fingerprint the continuation check cannot verify (a bare
+                    # two-word name; a prefix with no control form). It is counted, the
+                    # verifiable phrases are still scanned, and the surface can read
+                    # RESIDUAL (something recalled) or NOT_COVERED - never ERASED "for
+                    # the subject" on the phrases that survived.
+                    unverifiable[Surface.MODEL_ADAPTER] = len(supplied) - len(phrases)
+                if phrases and self._model_can_memorize(model):
+                    recalled = [p for p in phrases if self._content_recalled(model, target, p)]
+                    if recalled or Surface.MODEL_ADAPTER not in unverifiable:
+                        surfaces.append(
+                            SurfaceErasure(
+                                surface=Surface.MODEL_ADAPTER,
+                                markers_before=len(phrases),
+                                residual_after=len(recalled),
+                                baseline_observed=False,
+                            )
+                        )
+                    findings.extend(
+                        self._fingerprint_finding(
+                            target, Surface.MODEL_ADAPTER, manifest.subject_ref, p
+                        )
+                        for p in recalled
+                    )
 
         memory = self._memory
         if memory is not None:
-            # Fingerprint-only, like the vector store: the agent-memory store has no
-            # stable by-id primitive, so a subject's residual is caught by recalling
-            # the subject's content and checking the returned entries still carry it.
-            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.AGENT_MEMORY, ())))
-            if phrases:
-                surfacing = [p for p in phrases if self._content_in_memory(memory, target, p)]
-                surfaces.append(
-                    SurfaceErasure(
-                        surface=Surface.AGENT_MEMORY,
-                        markers_before=len(phrases),
-                        residual_after=len(surfacing),
-                        baseline_observed=False,
+            with self._contained(Surface.AGENT_MEMORY, unverifiable):
+                # Fingerprint-only, like the vector store: the agent-memory store has no
+                # stable by-id primitive, so a subject's residual is caught by recalling
+                # the subject's content and checking the returned entries still carry it.
+                phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.AGENT_MEMORY, ())))
+                if phrases:
+                    surfacing = [p for p in phrases if self._content_in_memory(memory, target, p)]
+                    surfaces.append(
+                        SurfaceErasure(
+                            surface=Surface.AGENT_MEMORY,
+                            markers_before=len(phrases),
+                            residual_after=len(surfacing),
+                            baseline_observed=False,
+                        )
                     )
-                )
-                findings.extend(
-                    self._fingerprint_finding(target, Surface.AGENT_MEMORY, manifest.subject_ref, p)
-                    for p in surfacing
-                )
+                    findings.extend(
+                        self._fingerprint_finding(
+                            target, Surface.AGENT_MEMORY, manifest.subject_ref, p
+                        )
+                        for p in surfacing
+                    )
 
         search_index = self._search_index
         if search_index is not None:
-            # Fingerprint-only: the derived full-text index is searched for the
-            # subject's content, and a hit whose text still carries the phrase is
-            # residual in the tenth hiding place a by-id check cannot see into.
-            phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.SEARCH_INDEX, ())))
-            if phrases:
-                surfacing = [p for p in phrases if self._content_in_search(search_index, target, p)]
-                surfaces.append(
-                    SurfaceErasure(
-                        surface=Surface.SEARCH_INDEX,
-                        markers_before=len(phrases),
-                        residual_after=len(surfacing),
-                        baseline_observed=False,
+            with self._contained(Surface.SEARCH_INDEX, unverifiable):
+                # Fingerprint-only: the derived full-text index is searched for the
+                # subject's content, and a hit whose text still carries the phrase is
+                # residual in the tenth hiding place a by-id check cannot see into.
+                phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.SEARCH_INDEX, ())))
+                if phrases:
+                    surfacing = [
+                        p for p in phrases if self._content_in_search(search_index, target, p)
+                    ]
+                    surfaces.append(
+                        SurfaceErasure(
+                            surface=Surface.SEARCH_INDEX,
+                            markers_before=len(phrases),
+                            residual_after=len(surfacing),
+                            baseline_observed=False,
+                        )
                     )
-                )
-                findings.extend(
-                    self._fingerprint_finding(target, Surface.SEARCH_INDEX, manifest.subject_ref, p)
-                    for p in surfacing
-                )
+                    findings.extend(
+                        self._fingerprint_finding(
+                            target, Surface.SEARCH_INDEX, manifest.subject_ref, p
+                        )
+                        for p in surfacing
+                    )
 
         return ErasureReport(
             target_tenant=target,

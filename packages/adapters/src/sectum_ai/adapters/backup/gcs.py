@@ -95,9 +95,6 @@ class GCSBackup(BackupAdapter):
             self._bucket_meta = self._client.get_bucket(self._bucket)
         return self._bucket_meta
 
-    def _is_versioned(self) -> bool:
-        return bool(getattr(self._meta(), "versioning_enabled", False))
-
     def _soft_delete_retention_s(self) -> int:
         # Buckets created since 2024 default to a 7-day soft-delete policy: a
         # deleted object is restorable for that window, which a listing without
@@ -110,10 +107,19 @@ class GCSBackup(BackupAdapter):
         # list every generation so the scan sees what is retained and the purge
         # removes each one (a blob listed with `versions=True` carries its
         # generation, which its `delete()` then targets).
-        prefix = self._tenant_prefix(tenant)
-        if self._is_versioned():
-            return list(self._client.list_blobs(self._bucket, prefix=prefix, versions=True))
-        return list(self._client.list_blobs(self._bucket, prefix=prefix))
+        #
+        # UNCONDITIONALLY, where this used to ask `versioning_enabled` first. The
+        # S3 sibling counts a bucket as versioned when the status is "Enabled" OR
+        # "Suspended", because suspending does not delete the generations already
+        # written; GCS has no suspended state to read - turning Object Versioning
+        # off flips the flag to False while every noncurrent generation stays
+        # restorable. The scan then saw none of them, the purge removed none of
+        # them, and the surface was signed `ERASED` over retained data. On a bucket
+        # that was never versioned each object has exactly one generation, so this
+        # listing is the same set the conditional produced.
+        return list(
+            self._client.list_blobs(self._bucket, prefix=self._tenant_prefix(tenant), versions=True)
+        )
 
     def add(self, tenant: UUID, text: str) -> None:
         # Name the object by a content hash so re-adding the same snapshot is idempotent

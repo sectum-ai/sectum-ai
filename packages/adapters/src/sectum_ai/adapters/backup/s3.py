@@ -162,18 +162,33 @@ class S3Backup(BackupAdapter):
         # residue Class 11 erasure verification is built to catch.
         if self._soft_delete:
             return
-        objects = self._objects(tenant)
+        # The client's own exception is not the adapter contract's error type, so it
+        # escaped the erasure probe's per-surface containment and aborted the whole
+        # Article 17 run - every other surface's verdict lost to one denied bucket.
+        # Only the per-key `Errors` list below was ever translated; the GCS sibling
+        # wraps its client failures and says so in its own comment.
+        try:
+            objects = self._objects(tenant)
+        except Exception as error:
+            raise AdapterError(f"S3 purge could not list the tenant's objects: {error}") from error
         for start in range(0, len(objects), _DELETE_BATCH):
             batch = objects[start : start + _DELETE_BATCH]
-            response = self._client.delete_objects(
-                Bucket=self._bucket,
-                Delete={
-                    "Objects": [
-                        {"Key": key, **({"VersionId": vid} if vid is not None else {})}
-                        for key, vid in batch
-                    ]
-                },
-            )
+            try:
+                response = self._client.delete_objects(
+                    Bucket=self._bucket,
+                    Delete={
+                        "Objects": [
+                            {"Key": key, **({"VersionId": vid} if vid is not None else {})}
+                            for key, vid in batch
+                        ]
+                    },
+                )
+            except Exception as error:
+                raise AdapterError(
+                    f"S3 purge failed on {len(batch)} object(s): {error}; an object-lock / "
+                    "WORM bucket has no per-tenant purge - configure `no_erasure: true` so "
+                    "the surface is attestable-with-caveat"
+                ) from error
             # A per-key failure (a retained version under Object Lock, a denied
             # key) is not a purge; silently continuing let the re-scan decide,
             # and on a versioned bucket the re-scan could not see the version.

@@ -50,8 +50,15 @@ class _FakeBlob:
         elif self._client.versioning_enabled:
             # Object versioning: the current generation becomes noncurrent.
             pass
-        else:
-            generations.clear()
+        elif generations:
+            # Versioning OFF deletes the LIVE generation and nothing else. This
+            # branch used to `clear()` every generation, which is what a bucket that
+            # never had versioning looks like - and it made the two indistinguishable,
+            # so a bucket whose versioning was turned off, whose noncurrent
+            # generations Google retains until a lifecycle rule removes them, was
+            # modelled as if the purge had reached them. The adapter was signing
+            # `backup: ERASED` over exactly that data, and this fake could not say so.
+            generations.pop(max(generations), None)
         self._client._store.pop(self.name, None)
         if not generations:
             self._client._generations.pop(self.name, None)
@@ -146,6 +153,33 @@ def test_gcs_backup_delete_purges_a_tenants_objects() -> None:
     assert adapter.search(_TENANT_A, "SECTUM-CANARY-DEL") == []
     # another tenant's snapshot is untouched
     assert adapter.search(_TENANT_B, "SECTUM-CANARY-KEEP")
+
+
+def test_a_bucket_whose_versioning_was_turned_off_still_shows_its_retained_generations() -> None:
+    # The S3 sibling counts a bucket as versioned when its status is "Enabled" OR
+    # "Suspended", because suspending does not delete the generations already
+    # written. GCS has no suspended state: turning Object Versioning off flips
+    # `versioning_enabled` to False while every noncurrent generation stays
+    # restorable - so the scan saw none of them, the purge removed none of them,
+    # and the surface was signed ERASED over retained data.
+    client = _FakeGCS(versioned=True)
+    _backup(client).add(_TENANT_A, "SECTUM-CANARY-RETAINED")
+    _backup(client).add(_TENANT_A, "SECTUM-CANARY-RETAINED")  # a second nightly snapshot
+    # The operator turns Object Versioning off. Sectum then runs against the bucket
+    # as it finds it - a FRESH adapter, which is the only way the live path ever
+    # reads this flag - while both generations stay restorable.
+    client.versioning_enabled = False
+    adapter = _backup(client)
+
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-RETAINED"), "the baseline must be visible"
+    adapter.delete(_TENANT_A)
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-RETAINED") == []
+    retained = [
+        key
+        for key, generations in client._generations.items()
+        if key.startswith(f"{_PREFIX}/{_TENANT_A.hex}/") and generations
+    ]
+    assert retained == [], f"generations left in the bucket after an attested purge: {retained}"
 
 
 def test_a_purge_that_cannot_remove_every_object_says_so_in_the_contracts_error() -> None:
