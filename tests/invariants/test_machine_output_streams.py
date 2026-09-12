@@ -43,7 +43,14 @@ def test_every_cli_warning_is_written_to_stderr() -> None:
         ):
             continue
         text = ast.get_source_segment(source, node) or ""
-        if "warning:" in text and not any(keyword.arg == "err" for keyword in node.keywords):
+        if "warning:" not in text:
+            continue
+        # The VALUE, not the presence: `err=False` and `err=<a variable>` both
+        # carry the keyword and both write to stdout, so testing `any(k.arg ==
+        # "err")` accepted the two shapes that reinstate the defect. This
+        # docstring promises a warning added tomorrow cannot - so it has to.
+        err = next((keyword for keyword in node.keywords if keyword.arg == "err"), None)
+        if not (err and isinstance(err.value, ast.Constant) and err.value.value is True):
             offenders.append(f"{_SOURCE.name}:{node.lineno}")
     assert not offenders, f"warning(s) written to stdout: {offenders}"
 

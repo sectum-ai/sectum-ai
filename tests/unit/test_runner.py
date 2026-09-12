@@ -782,6 +782,35 @@ def test_a_plant_the_backend_drops_is_not_a_passing_class() -> None:
         assert probe.id not in intact.unconfirmed_plants, probe.id
 
 
+def test_a_partially_dropped_plant_still_runs_and_still_says_so() -> None:
+    # The PARTIAL branch: some plants landed, so the probe did interrogate the
+    # stack and stays graded - but the operator has to be told how much of its
+    # setup did not take. The all-drop and all-land cases above leave this branch
+    # unreached, so deleting it entirely kept them green.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes import RagPoisoningProbe
+
+    class _HalfDroppingStore(FakeVectorStore):
+        """Acknowledges every write and keeps every other one."""
+
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__(**kwargs)  # type: ignore[arg-type]
+            self._seen = 0
+
+        def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
+            self._seen += 1
+            if self._seen % 2:
+                super().upsert(tenant, documents)
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = RagPoisoningProbe()
+    runner = Runner(substrate, vector=_HalfDroppingStore(shared_index=True))
+    results = runner.run_per_step(probe)
+
+    assert results, "half the plants landed, so the probe still asked the stack something"
+    assert runner.unconfirmed_plants[probe.id] == 4, runner.unconfirmed_plants
+
+
 def test_a_model_plant_is_deliberately_not_read_back() -> None:
     # `model.train` is exempt, and the exemption is the point: reading a LoRA back
     # means asking the model to regurgitate, which is probabilistic and is exactly

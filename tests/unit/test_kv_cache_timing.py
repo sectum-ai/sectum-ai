@@ -631,3 +631,29 @@ def test_a_floored_variance_is_reported_as_a_bound_not_a_measurement() -> None:
     measured = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
     assert not measured.signals[0].variance_floored
     assert "BOUNDS" not in measured.findings[0].evidence_span
+
+    # ONE arm floored is still floored. Both fixtures above move both arms
+    # together, so a check on the primed arm alone agreed with them - and a
+    # control arm whose spread the floor invented would have shipped d, t and p
+    # as measurements.
+    class _ConstantControl:
+        name = "constant-control"
+
+        def __init__(self) -> None:
+            self.warm = False
+            self.n = 0
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            self.warm = True
+            return ""
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            if not (self.warm and prompt.startswith("t")):
+                return 120.0  # the control arm: no spread at all
+            self.n += 1
+            return 60.0 + (self.n % 4) * 0.5  # the primed arm jitters
+
+    one_armed = KvCacheTimingProbe(substrate, model=_ConstantControl()).run()  # type: ignore[arg-type]
+    assert one_armed.signals[0].variance_floored, one_armed.signals[0]
+    assert one_armed.findings, "the side channel is real and must still be reported"
+    assert "BOUNDS" in one_armed.findings[0].evidence_span
