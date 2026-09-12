@@ -121,7 +121,11 @@ class LiveAssistantsClient:
             status = getattr(run, "status", None)
             if status == "completed":
                 break
-            if status in ("failed", "cancelled", "expired"):
+            # `incomplete` is terminal too - it is how the Assistants API reports a
+            # run truncated by its token budget. Left out, the loop treated it as
+            # "still working" and spun to the timeout, and the run's partial answer
+            # was never read as the truncation it is.
+            if status in ("failed", "cancelled", "expired", "incomplete"):
                 raise AdapterError(
                     f"openai assistants run terminated in {status!r}: "
                     f"{getattr(run, 'last_error', None)}"

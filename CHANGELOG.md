@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A truncated agent answer was returned as the agent's answer.** The Anthropic
+  tool-use loop exited on "no more tool-use blocks" and never read `stop_reason`, so a
+  run that hit `max_tokens` handed back a cut-off response — the 200-empty shape one
+  layer up, because the probe then scans a partial answer, finds no canary, and a leak
+  the full answer would have carried reads as a clean pass. It refuses now. Its
+  Assistants sibling was missing `incomplete` from its terminal set, which is how that
+  API reports the same truncation, so the loop treated it as still-working and spun to
+  the timeout.
+
 - **The HTTP agent and RAG adapters crashed where their six siblings raise an adapter
   error.** The catch named three *transport* failures, so a `200` carrying well-formed
   JSON of the wrong shape — `"tool_calls": null`, a non-UTF-8 body — escaped as a bare

@@ -132,6 +132,38 @@ def test_anthropic_tooluse_returns_empty_output_when_script_misses() -> None:
     assert result.tool_calls == ()
 
 
+def test_a_truncated_anthropic_answer_is_not_the_agents_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The loop exited on "no more tool_use blocks" and returned the text, never
+    # reading `stop_reason`. A `max_tokens` stop returns a TRUNCATED answer, and
+    # handing that back as the agent's response is the 200-empty shape one layer up:
+    # the probe scans a partial response, finds no canary, and a leak the full
+    # answer would have carried reads as a clean pass. The Assistants sibling
+    # already refuses its terminal statuses.
+    import sys
+    import types
+
+    from sectum_ai.adapters.agent._anthropic_tooluse_live import LiveAnthropicClient
+
+    truncated = types.SimpleNamespace(
+        stop_reason="max_tokens",
+        content=[types.SimpleNamespace(type="text", text="the answer was cut off mid-")],
+    )
+
+    class _Messages:
+        def create(self, **_: object) -> object:
+            return truncated
+
+    stub = types.ModuleType("anthropic")
+    stub.Anthropic = lambda **_: types.SimpleNamespace(messages=_Messages())  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "anthropic", stub)
+
+    client = LiveAnthropicClient(api_key="k", model="m", tools=[], max_tokens=16, system="s")
+    with pytest.raises(AdapterError, match="truncated"):
+        client.run_turn([{"role": "user", "content": "lookup x"}])
+
+
 def test_anthropic_tooluse_wraps_run_turn_failures_in_adapter_error() -> None:
     client = _FakeAnthropicClient(raise_on_turn=RuntimeError("rate limited"))
     agent = AnthropicToolUseAgent(client)

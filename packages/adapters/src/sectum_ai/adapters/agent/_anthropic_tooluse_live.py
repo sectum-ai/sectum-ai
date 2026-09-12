@@ -108,6 +108,19 @@ class LiveAnthropicClient:
             ]
             if not tool_uses:
                 # No more tool calls; collect the final assistant text and stop.
+                #
+                # Unless the model stopped because it ran out of budget. A
+                # `max_tokens` stop returns a TRUNCATED answer, and returning it as
+                # the agent's final answer is the 200-empty shape one layer up: the
+                # probe scans a partial response, finds no canary, and a leak the
+                # full answer would have carried reads as a clean pass. The
+                # Assistants sibling already refuses its terminal failure statuses.
+                if getattr(response, "stop_reason", None) == "max_tokens":
+                    raise AdapterError(
+                        "anthropic tool-use run hit max_tokens, so its answer is "
+                        "truncated and cannot be read as the agent's response; raise "
+                        "`max_tokens` for this adapter"
+                    )
                 final_text = _collect_text(content_blocks)
                 return final_text, tuple(tool_names)
 
