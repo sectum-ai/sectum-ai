@@ -124,8 +124,11 @@ never judged: `probe; report; probe` legitimately rewrites that file, and no
 verifier can tell a later run from an edited one, since neither is anchored.
 Which neighbouring files a pack claims is decided by content — exactly one binds
 this pack's run digest — and, when none does, by whether another pack sitting in
-the same folder *binds* the file (its mere presence under the right name is not
-enough: that let a decoy excuse a tampered document). Everything else is listed
+the same folder claims it *and earns the claim*: that pack must bind the file, must
+itself verify, and must be anchored at least as strongly as the pack it would
+excuse. Excusing a file is the one move here that can hide a tamper, so a cheap
+claim is not accepted — presence under the right name, or a hand-edited `pdf_ref`,
+each let a decoy excuse a tampered document. Everything else is listed
 under `unclaimed-siblings` rather than judged, because a folder is not a closed
 container and calling another pack's genuine document altered is the worst false
 alarm this tool can raise. A candidate no present pack binds is still judged, so

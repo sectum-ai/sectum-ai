@@ -1800,18 +1800,38 @@ def _claimed_siblings(
     # reported as a mismatch, with VERIFICATION FAILED over an untampered folder.
     # A candidate no present pack claims is still judged, so a tampered sidecar
     # remains a failure rather than quietly becoming somebody else's file.
-    judged = bound or [c for c in present if not _owned_elsewhere(pack_path, c.name, slot, binds)]
+    judged = bound or [
+        c for c in present if not _owned_elsewhere(pack_path, c.name, slot, pack, binds)
+    ]
     return judged, sorted(c.name for c in present if c not in judged)
 
 
-def _owned_elsewhere(pack_path: Path, name: str, slot: int, binds: _Binds) -> bool:
-    """True when ``name`` is another PRESENT pack's sibling *and that pack binds it*.
+def _owned_elsewhere(
+    pack_path: Path, name: str, slot: int, pack: EvidencePack, binds: _Binds
+) -> bool:
+    """True when ``name`` is another PRESENT pack's sibling and that pack *earns* the claim.
 
-    ``.exists()`` alone was the whole test, so any file named `evidence.json` -
-    sixteen bytes of garbage will do - turned a `[FAIL] audit-pdf: altered or
-    replaced after signing` on a renamed pack into `[ok]` at exit 0. "Somebody
-    else's document" is a claim about a binding, and a binding is checkable: the
-    owner has to parse as a pack that actually binds this file.
+    Excluding a file from judgment on somebody else's say-so is the one move here
+    that can HIDE a tamper, so the say-so has to cost something.
+
+    ``.exists()`` alone was the whole test first: any file named `evidence.json` -
+    sixteen bytes of garbage - turned a `[FAIL] audit-pdf: altered or replaced
+    after signing` into `[ok]`. Requiring the owner to parse and to bind the file
+    closed that, and left a one-field forgery: copy the pack under verification,
+    set `pdf_ref` to the hash of the TAMPERED pdf, save it under the owner's name.
+    No key needed, and `verify` went from exit 4 and "altered or replaced after
+    signing" to exit 0 and INTEGRITY OK.
+
+    So the owner must also VERIFY - the digest it attests has to cover the
+    `pdf_ref` it is claiming with - and it must be anchored at least as strongly
+    as the pack it would excuse. An unanchored pack's verification is not tamper
+    evidence in the first place (its token is reproducible by anyone, as the
+    verdict says), so an unanchored claimant is proportionate there; against an
+    anchored pack nothing less than a verified independent anchor will do, and
+    that is not forgeable without the anchor.
+
+    A rejected claimant is not silently ignored: the file drops back into the
+    judged set, so the tamper is reported rather than excused.
     """
     for owner, siblings in _PACK_SIBLINGS.items():
         if owner == pack_path.name or siblings[slot] != name:
@@ -1820,8 +1840,14 @@ def _owned_elsewhere(pack_path: Path, name: str, slot: int, binds: _Binds) -> bo
             other = EvidencePack.model_validate_json((pack_path.parent / owner).read_bytes())
         except (OSError, ValueError):
             continue
-        if binds(pack_path.parent / name, other):
-            return True
+        if not binds(pack_path.parent / name, other):
+            continue
+        claimant = verify_pack(other)
+        if not claimant.passed:
+            continue
+        if (pack.anchored_in_log or pack.anchored_with_timestamp) and not claimant.anchored:
+            continue
+        return True
     return False
 
 

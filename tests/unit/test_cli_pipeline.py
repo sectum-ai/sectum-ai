@@ -1,5 +1,6 @@
 """Tests for the ``sectum`` evidence-pipeline CLI commands."""
 
+import hashlib
 import json
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -1920,6 +1921,35 @@ def test_a_renamed_pack_alone_with_a_tampered_sidecar_still_fails(tmp_path: Path
     result = _verify(delivered / "mypack.json")
     assert result.exit_code == 4, result.output
     assert "[FAIL] dsse-envelope" in result.output, result.output
+
+
+def test_a_forged_owner_does_not_excuse_a_tampered_document(tmp_path: Path) -> None:
+    # The guard on "somebody else's file" is only as strong as what the claim
+    # costs. Requiring the claimant to PARSE and to BIND the file left a one-field
+    # forgery: copy the pack under verification, point `pdf_ref` at the tampered
+    # pdf, save it under the owner's name. No key needed - and `verify` went from
+    # exit 4 with "altered or replaced after signing" to exit 0 and INTEGRITY OK.
+    # The claimant now has to verify, so the digest it attests must cover the
+    # `pdf_ref` it claims with.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "forged"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    pdf = delivered / "audit-pack.pdf"
+    pdf.write_bytes((tmp_path / "audit-pack.pdf").read_bytes() + b"TAMPERED")
+
+    without_decoy = _verify(delivered / "mypack.json")
+    assert without_decoy.exit_code == 4, without_decoy.output
+    assert "[FAIL] audit-pdf" in without_decoy.output, without_decoy.output
+
+    decoy = json.loads((tmp_path / "evidence.json").read_text())
+    decoy["pdf_ref"] = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    (delivered / "evidence.json").write_text(json.dumps(decoy))
+
+    result = _verify(delivered / "mypack.json")
+    assert result.exit_code == 4, result.output
+    assert "[FAIL] audit-pdf" in result.output, result.output
 
 
 def test_a_renamed_pack_states_the_run_record_delivered_with_it(tmp_path: Path) -> None:

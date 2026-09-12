@@ -46,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A forged ownership claim excused a tampered audit PDF.** `verify` excludes a
+  candidate sibling from judgment when another pack in the folder declares and binds
+  it — the rule that stops a genuine erasure PDF being reported as a renamed probe
+  pack's tampered one. The claimant had only to parse and to bind, so the claim cost
+  nothing to forge: copy the pack under verification, set `pdf_ref` to the hash of the
+  TAMPERED PDF, save it under the owner's filename. No key, one edited field, and
+  `verify` went from exit 4 with `[FAIL] audit-pdf: altered or replaced after signing`
+  to exit 0 and `INTEGRITY OK`. Excluding a file is the one move here that can hide a
+  tamper, so it now costs what it should: the claimant must **verify** — the digest it
+  attests has to cover the `pdf_ref` it claims with — and must be anchored at least as
+  strongly as the pack it would excuse, so nothing weaker than a verified independent
+  anchor can excuse an anchored pack. A rejected claimant does not silence the check;
+  the file drops back into the judged set and the tamper is reported.
+
 - **The seventh honesty rule was cited five times and never stated.** `v1.4` added the
   rule that a withheld class caps the letter at its own band, and both the published
   methodology and `score`'s own module docstring still enumerated six and titled the
