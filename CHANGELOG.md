@@ -61,7 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `adapter_bleed` as merging every tenant's LoRA into every inference; it does not — each
   completion is correctly scoped and the harness joins them — so the entry now says it
   *models* the condition and that findings under it are marked `synthetic`. The same
-  correction went into the code comment that had been asserting the merge.
+  correction went into the code comment that had been asserting the merge. Two example
+  walkthroughs carried the same two claims and are corrected with them: Class 6's told
+  the reader to "point it at a real embedding-backed store before reading the rate as
+  inversion" — which the CLI cannot do, and which now reports `NOT_COVERED` — and Class
+  9's called `adapter_bleed` the way to "reproduce the leak condition".
 
 - **One surface's failed purge aborted the whole Article 17 attestation.**
   `_erase_surface` catches `AdapterError` around *both* scans — an inconclusive listing

@@ -74,7 +74,7 @@ adapters:
     kind: huggingface
     base_model_id: TinyLlama/TinyLlama-1.1B-Chat-v1.0
     adapters_dir: ./.sectum-ai/lora-adapters
-    # adapter_bleed: true   # uncomment to reproduce the leak condition
+    # adapter_bleed: true   # uncomment to MODEL the leak condition (see below)
     lora_rank: 8
     lora_alpha: 16
     train_epochs: 1
@@ -91,6 +91,15 @@ sectum-ai probe --probe lora-cross-tenant --config sectum-ai.yaml --workdir out
 A real base model on CPU runs slowly (TinyLlama-1.1B takes ~30s per
 inference). For a meaningful production probe, point `device_map` at a
 GPU and bump `train_epochs` so the canary actually memorises.
+
+**`adapter_bleed` models the condition; it does not reproduce it.** With
+the knob on, the adapter runs one correctly-scoped completion per tenant
+and joins them, so the cross-tenant text in the answer is written by the
+harness and the weights produced none of it. Findings from such a run are
+therefore marked `synthetic`: counted and named, never counted as
+confirmed *on a live surface*, and never graded against your model. Leave
+it off to probe the real thing — a genuine weight bleed then shows up on
+its own, and the leak is the model's.
 
 ## What the report tells you
 
