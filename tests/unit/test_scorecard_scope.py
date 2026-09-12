@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import app
+from sectum_ai.evidence.labels import backing_surface, unaccounted_surfaces
 from sectum_ai.score import CATALOG, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     ClassVerdict,
@@ -208,6 +209,26 @@ def test_a_mixed_backed_class_grades_the_live_surface_only() -> None:
         _run({"vector_db": "SYNTHETIC", "rag_pipeline": "LIVE"}, findings=(live_leak,))
     )
     assert next(c for c in failed.classes if c.class_id == 2).verdict is ClassVerdict.FAIL
+
+
+def test_a_kv_cache_finding_is_placed_on_the_adapter_that_produced_it() -> None:
+    # Class 5's findings carry `Surface.KV_CACHE`, and no adapter family speaks for
+    # a kv_cache: the MODEL adapter is what produced the timing, so that is the
+    # provenance key its verdict rests on. `backing_surface` is the one place that
+    # says so and nothing tested it by name, while four rules key on it - and since
+    # a finding whose backing surface the block never records is now withheld from
+    # the letter AND from the OSCAL controls, losing this mapping would turn every
+    # Class 5 finding into an unplaceable one.
+    timing = _finding("kv-cache-timing").model_copy(update={"surface": Surface.KV_CACHE})
+    assert backing_surface(timing) == Surface.MODEL_ADAPTER.value
+
+    # Behaviourally: a run recording the model adapter LIVE places it, and
+    # `unaccounted_surfaces` is empty - the two facts the rules actually read.
+    placed = _run({Surface.MODEL_ADAPTER.value: "LIVE"}, findings=(timing,))
+    assert unaccounted_surfaces(placed) == ()
+    # Recording `kv_cache` instead does NOT place it: the key is the adapter's.
+    misrecorded = _run({Surface.KV_CACHE.value: "LIVE"}, findings=(timing,))
+    assert unaccounted_surfaces(misrecorded) == (Surface.MODEL_ADAPTER.value,)
 
 
 def test_a_provenance_key_that_is_not_a_surface_is_refused() -> None:
