@@ -115,8 +115,8 @@ evidence pack without trusting Sectum AI. (See [ADR-0016](adr/0016-anchor-the-wh
 `sectum-ai verify` prints one line per check. On a **pack**: `schema-version`,
 `timestamp-token`, `manifest-consistency`, `control-mappings`, `run-scope` and
 `audit-pdf`, plus `manifest-hash`, `rekor-inclusion`, `independent-anchor`,
-`run-record`, `in-toto-attestation`, `dsse-envelope` and `unclaimed-siblings`
-when the flags, the pack or its siblings call for them. `run-record` states whether
+`run-record`, `in-toto-attestation`, `dsse-envelope`, `unclaimed-siblings` and
+`unexcused-siblings` when the flags, the pack or its siblings call for them. `run-record` states whether
 the `run.json` beside the pack is the record the pack attests — `probe` and
 `report` write both, and `score` reads `run.json` in preference to the pack, so
 one that is a *different* run is graded instead of this one. It is stated and
@@ -125,14 +125,21 @@ verifier can tell a later run from an edited one, since neither is anchored.
 Which neighbouring files a pack claims is decided by content — exactly one binds
 this pack's run digest — and, when none does, by whether another pack sitting in
 the same folder claims it *and earns the claim*: that pack must bind the file, must
-itself verify, and must be anchored at least as strongly as the pack it would
+itself verify (with the same `--tsa-cert` / `--tsa-root` / `--rekor-key` roots you
+gave this command), and must be anchored at least as strongly as the pack it would
 excuse. Excusing a file is the one move here that can hide a tamper, so a cheap
 claim is not accepted — presence under the right name, or a hand-edited `pdf_ref`,
-each let a decoy excuse a tampered document. Everything else is listed
-under `unclaimed-siblings` rather than judged, because a folder is not a closed
-container and calling another pack's genuine document altered is the worst false
-alarm this tool can raise. A candidate no present pack binds is still judged, so
-a tampered sidecar delivered on its own remains a failure. On a **run-pack bundle** (a `.zip`) it *is* a closed
+each let a decoy excuse a tampered document.
+
+Declining a claim is not an accusation, and the three outcomes are reported as
+three different things. A file no present pack binds is **judged**, so a tampered
+sidecar delivered on its own remains a failure. A file this pack does not bind and
+another does is listed under `unclaimed-siblings` — a folder is not a closed
+container, and calling another pack's genuine document altered is the worst false
+alarm this tool can raise. And a file whose claim is real but which this
+verification cannot accept — an unanchored pack cannot excuse an anchored one's
+sibling, and `erasure` writes no anchored pack at all — is listed under
+`unexcused-siblings`, which says exactly that and nothing about tampering. On a **run-pack bundle** (a `.zip`) it *is* a closed
 container: one `member:<name>` line per listed member comes first and the pack's
 own checks follow, each PDF and sidecar line naming the member it re-checked
 (`audit-pdf:audit-pack.pdf`, `in-toto-attestation:attestation.intoto.json`). A run-pack (`sectum-ai pack`)
