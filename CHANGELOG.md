@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Live vector stores declared a semantic ranking they do not have.** There is no
+  config path from `AdapterConfig` to a real embedding model for a vector store, so
+  every live kind the resolver builds is backed by `_hashing_embed` — a token
+  counter where synonyms score 0.000. `semantic_retrieval` nonetheless defaulted
+  `True`, which is the case the capability's own docstring says must declare
+  `False`: Class 6 queries a strict token subset of its canary, retrieved it
+  lexically, and shipped the finding stamped `AML.T0024.001 Invert ML Model`.
+  Classes 6 and 13 now report NOT_COVERED against live stores — the honest verdict
+  for a check that could not be performed. The capability is withdrawn as well as
+  the flag, since `supports()` is computed at construction and is what gates the
+  probe; setting the flag alone looks like a fix and changes nothing.
+
 - **The detector and the erasure scan answered the same question with different
   bytes.** All three detection tiers re-spelled the residue arms inline instead of
   calling `residual_present`, so a rendering one accepted the other rejected: the

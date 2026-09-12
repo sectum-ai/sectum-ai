@@ -47,6 +47,7 @@ from sectum_ai.adapters import (
     AgentAdapter,
     BackupAdapter,
     CacheAdapter,
+    Capability,
     EvalSetAdapter,
     FakeAgent,
     FakeAppApi,
@@ -555,7 +556,55 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
 
 
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
-    """Build the vector-store adapter the config selects."""
+    """Build the vector-store adapter the config selects.
+
+    Every LIVE kind is handed `_hashing_embed`, so none of them ranks
+    semantically and the capability has to say so - see `_lexically_ranked`.
+    Applied here rather than at each of the eight returns so a kind added later
+    cannot miss it.
+    """
+    store = _build_vector_store(config)
+    # The built-in fake keeps the declaration it documents as an exception
+    # (`VectorStoreAdapter.semantic_retrieval`): its Class 6/13 numbers are the
+    # demo exercising the probe, and every example that reports them says so.
+    return store if store.synthetic else _lexically_ranked(store)
+
+
+def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
+    """Mark a store the CLI backs with ``_hashing_embed`` as not semantically ranked.
+
+    ``VectorStoreAdapter.semantic_retrieval`` defaults ``True`` "because every LIVE
+    store Sectum ships is embedding-backed" - which is not true of the ones this
+    resolver builds. There is no config path to a real embedding model for a vector
+    store (``EmbedderConfig`` is the DETECTION pipeline's), so every live kind gets
+    ``_hashing_embed``: a bag-of-tokens counter where synonyms score 0.000, word
+    order is ignored, and a strict token SUBSET of a canary scores 0.894.
+
+    That is exactly the case the capability's own docstring says must declare
+    ``False``: "Run either against a store that matches on substrings instead, and a
+    keyword hit gets recorded as embedding inversion - a real finding attributed to a
+    mechanism the backend does not have." Class 6 queries
+    ``marker.plaintext.rsplit("-", 1)[0]``, which IS that subset, so it retrieved the
+    canary lexically and shipped the finding stamped ``AML.T0024.001 Invert ML
+    Model``. Classes 6 and 13 now report NOT_COVERED - the honest verdict for a check
+    that could not be performed.
+
+    Set per instance, like ``carries_user`` and ``synthetic``. Give the resolver a
+    real embedder and this is the one place to revisit.
+
+    The CAPABILITY has to be withdrawn too, not just the flag:
+    ``VectorStoreAdapter.__init__`` folds ``semantic_retrieval`` into the frozen
+    capability set at construction, so assigning the attribute afterwards leaves
+    ``supports(SEMANTIC_RETRIEVAL)`` true - and the capability is what
+    ``_runnable_probes`` actually gates on. Setting only the flag looks like a fix
+    and changes nothing.
+    """
+    store.semantic_retrieval = False
+    store.capabilities = store.capabilities - {Capability.SEMANTIC_RETRIEVAL}
+    return store
+
+
+def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeVectorStore(
