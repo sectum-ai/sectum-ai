@@ -26,6 +26,7 @@ from sectum_ai.evidence.pdf import (
     _coverage_rows,
     _finding_controls,
     _retrieval_pivot_summary,
+    anchor_statement,
     confirmed_by_kind,
     coverage_gloss,
     probes_exercised,
@@ -158,7 +159,7 @@ def _coverage_html(pack: EvidencePack) -> str:
     )
 
 
-def build_audit_html(pack: EvidencePack) -> str:
+def build_audit_html(pack: EvidencePack, anchor: str | None = None) -> str:
     """Build the full auditor-facing HTML document for ``pack``.
 
     Pure and dependency-free (no weasyprint import), so the template is unit
@@ -222,6 +223,11 @@ def build_audit_html(pack: EvidencePack) -> str:
         "<h2>Integrity and independent verification</h2>"
         f"{_kv_table(integrity, mono_values=True)}"
         f'<p class="verify">{escape(_VERIFICATION_INSTRUCTION)}</p>'
+        # Derived from the pack when not supplied, so a caller that has the signed
+        # pack cannot disagree with the render path, which must pass the INTENT
+        # because the PDF is built before the token exists.
+        f'<p class="verify"><strong>'
+        f"{escape(anchor if anchor is not None else anchor_statement(pack))}</strong></p>"
     )
     return (
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -230,7 +236,7 @@ def build_audit_html(pack: EvidencePack) -> str:
     )
 
 
-def render_weasyprint(pack: EvidencePack) -> bytes:
+def render_weasyprint(pack: EvidencePack, anchor: str | None = None) -> bytes:
     """Render ``pack`` to auditor-facing PDF bytes via weasyprint.
 
     Imports weasyprint lazily so the base install (reportlab only) never pulls
@@ -245,5 +251,5 @@ def render_weasyprint(pack: EvidencePack) -> bytes:
             "the weasyprint PDF engine requires the 'weasyprint' extra: "
             "pip install 'sectum-ai[weasyprint]'"
         ) from error
-    pdf: bytes = HTML(string=build_audit_html(pack)).write_pdf()
+    pdf: bytes = HTML(string=build_audit_html(pack, anchor)).write_pdf()
     return pdf

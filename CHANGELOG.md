@@ -57,6 +57,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The audit PDF says whether this pack has an independent anchor.** It told
+  every reader "any edit to the attested content changes the attested digest and
+  fails verification" and never said whether *this* pack was anchored. Without an
+  external anchor the timestamp is `LocalTimestamper`'s, which its own docstring
+  calls "reproducible by anyone over any digest — an attacker who edits a pack can
+  simply re-stamp it", so the sentence was an over-claim. It also mis-instructed
+  the reader in the other direction: running `sectum-ai verify` on a default pack
+  exactly as the PDF says produces `[FAIL] independent-anchor` and `VERIFICATION
+  FAILED` at exit `4` over a pack nobody touched, with no hint that
+  `--allow-unanchored` is what the pack needs. Every sibling renderer already made
+  the distinction — `_echo_verdict`, the `independent-anchor` check, the in-toto
+  `anchors` block, and `PACK-README.md` inside the same deliverable — and the
+  audit PDF, the artifact an auditor actually reads, was the one that did not. The
+  statement is derived from the pack where one exists and passed as the *intent*
+  from `report`, which renders the PDF before the token that would prove it.
+
+
 - **The audit PDF no longer promises an auditor two detection tiers that did not
   run.** "Each observation passes a layered detector — exact canary match, then
   semantic similarity, then a calibrated judge" was stated on every pack, and the

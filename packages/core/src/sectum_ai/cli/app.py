@@ -1664,7 +1664,16 @@ def report(
     # swap.
     pdf_path = workdir / "audit-pack.pdf"
     pdf_ref = render_audit_pack_and_hash(
-        run, canonical_hash(substrate.manifest), controls, pdf_path, engine=pdf_engine
+        run,
+        canonical_hash(substrate.manifest),
+        controls,
+        pdf_path,
+        engine=pdf_engine,
+        # The INTENT, because the PDF is rendered before the token that would
+        # prove it: `_resolve_timestamper` returns None for the local-dev default,
+        # which is the pack that carries no independent anchor and the one the
+        # PDF's "any edit ... fails verification" sentence was not true of.
+        anchors=(timestamper is not None, transparency_log is not None),
     )
     pack = build_evidence_pack(
         run,

@@ -650,3 +650,46 @@ def test_an_unplaceable_finding_is_not_reported_as_one_on_a_fake() -> None:
     # And its CLI sibling, which had the identical gap.
     assert "does not record" not in _confirmed_summary(list(leaks), on_a_fake)
     assert "does not record" in _confirmed_summary(list(leaks), unplaceable)
+
+
+def test_the_pdf_says_whether_this_pack_has_an_independent_anchor() -> None:
+    # The PDF told every reader "any edit to the attested content changes the
+    # attested digest and fails verification" and never said whether THIS pack is
+    # anchored. Without an external anchor the timestamp is `LocalTimestamper`'s,
+    # which its own docstring calls "reproducible by anyone over any digest ... an
+    # attacker who edits a pack can simply re-stamp it" - so the sentence was an
+    # over-claim, and a reader following the instruction on a default pack gets
+    # `[FAIL] independent-anchor` and `VERIFICATION FAILED` at exit 4 over a pack
+    # nobody touched. Every sibling renderer makes the distinction - `_echo_verdict`,
+    # the `independent-anchor` check, the in-toto `anchors` block, and PACK-README
+    # inside the same deliverable - and the audit PDF, the one an auditor reads,
+    # did not.
+    from sectum_ai.evidence.pdf import anchor_statement
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"tenant-boundary-fetch": "1"},
+    )
+    local = EvidencePack(run_result=run, manifest_hash="m" * 64, tsa_token='{"digest": "x"}')
+    unanchored = anchor_statement(local)
+    assert "Independent anchor: NONE" in unanchored, unanchored
+    assert "--allow-unanchored" in unanchored, unanchored
+
+    # A real TSA returns a signed BINARY token, not JSON; Rekor adds its proof.
+    anchored = local.model_copy(
+        update={"tsa_token": "MIIFbinary", "rekor_proof": '{"logIndex": 42}'}
+    )
+    present = anchor_statement(anchored)
+    assert "RFC 3161 timestamp and Rekor transparency log" in present, present
+    assert "NONE" not in present, present
+
+    # The render path passes the INTENT, because the PDF is built before the token
+    # exists; both sources must agree or the bound PDF contradicts the pack that
+    # binds it - which the sample-regeneration guard would catch only by luck.
+    assert anchor_statement(local, anchors=(False, False)) == unanchored
+    assert anchor_statement(local, anchors=(True, True)) == present

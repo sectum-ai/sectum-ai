@@ -23,6 +23,7 @@ from sectum_ai.evidence.controls import (
     COVERAGE_DISCLAIMER,
     live_surfaces,
 )
+from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ERASURE_SURFACES,
@@ -337,6 +338,32 @@ _VERIFICATION_INSTRUCTION: str = (
     "fails verification."
 )
 
+# Whether THIS pack is independently anchored is the premise of the sentence
+# above, and the PDF said nothing about it. Without an external anchor the
+# timestamp is `LocalTimestamper`'s token, which its own docstring calls
+# "reproducible by anyone over any digest ... an attacker who edits a pack can
+# simply re-stamp it" - so "any edit fails verification" was an over-claim, and
+# the reader following the instruction on a default pack gets
+# `[FAIL] independent-anchor` and `VERIFICATION FAILED` at exit 4 over a pack
+# nobody touched. Every other renderer makes the distinction - `_echo_verdict`,
+# the `independent-anchor` check, the in-toto `anchors` block, and PACK-README
+# inside the same deliverable - and the audit PDF, the artifact the auditor
+# actually reads, was the one that did not.
+_ANCHOR_NONE: str = (
+    "Independent anchor: NONE. This pack's timestamp is Sectum's local "
+    "development token - reproducible by anyone over any digest, so it binds the "
+    "content but is not independent evidence of when, or by whom, it was "
+    "produced. Verification of this pack is integrity-only and 'sectum-ai verify' "
+    "requires --allow-unanchored to complete; without it the run above exits 4 on "
+    "[FAIL] independent-anchor, which is a statement about the anchor and not "
+    "about the content. Re-create the pack with 'report --tsa' and/or '--rekor' "
+    "for a pack whose tamper evidence stands on its own."
+)
+_ANCHOR_PRESENT: str = (
+    "Independent anchor: {anchors}. The attested digest is bound to an anchor "
+    "outside this pack, so an edit cannot be covered up by re-stamping it."
+)
+
 
 def _finding_controls(finding: Finding) -> str:
     """Return a finding's mapped control IDs as ``OWASP ...; ATLAS ...; NIST ...``.
@@ -548,7 +575,7 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
     return f"{metrics.retrieval_pivot_rate:.1%}"
 
 
-def _render_reportlab(pack: EvidencePack) -> bytes:
+def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
 
     Renders only digest-stable content (run digest, manifest hash, control
@@ -640,6 +667,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in integrity
     ]
     flow.append(Paragraph(escape(_VERIFICATION_INSTRUCTION), body))
+    flow.append(Paragraph(f"<b>{escape(anchor)}</b>", body))
 
     buffer = io.BytesIO()
     document = SimpleDocTemplate(buffer, pagesize=LETTER, title="Sectum AI Evidence Pack")
@@ -647,8 +675,44 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     return buffer.getvalue()
 
 
+def anchor_statement(pack: EvidencePack, *, anchors: tuple[bool, bool] | None = None) -> str:
+    """What the PDF says about this pack's independent anchor.
+
+    Derived from the pack by default, so the sample-regeneration guard - which
+    re-renders a committed PDF from its committed pack and compares bytes - keeps
+    holding. `render_audit_pack_and_hash` overrides it with the INTENT, because
+    the PDF is rendered before the token that would prove it exists: its
+    throwaway pack carries `tsa_token=""`, so deriving there would print "no
+    anchor" into the PDF of a `--tsa` run and then disagree with the pack that
+    binds it.
+    """
+    timestamped, logged = (
+        anchors
+        if anchors is not None
+        else (
+            _is_external_timestamp_anchor(pack.tsa_token),
+            bool(pack.rekor_proof and pack.rekor_proof.strip()),
+        )
+    )
+    named = [
+        name
+        for name, present in (
+            ("RFC 3161 timestamp", timestamped),
+            ("Rekor transparency log", logged),
+        )
+        if present
+    ]
+    if not named:
+        return _ANCHOR_NONE
+    return _ANCHOR_PRESENT.format(anchors=" and ".join(named))
+
+
 def render_audit_pack(
-    pack: EvidencePack, output: Path, *, engine: PdfEngine = PdfEngine.REPORTLAB
+    pack: EvidencePack,
+    output: Path,
+    *,
+    engine: PdfEngine = PdfEngine.REPORTLAB,
+    anchors: tuple[bool, bool] | None = None,
 ) -> bytes:
     """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``; return its bytes.
 
@@ -660,13 +724,14 @@ def render_audit_pack(
     returned bytes are exactly what was written to ``output``, so a caller can
     hash them for the ``pdf_ref`` binding.
     """
+    anchor = anchor_statement(pack, anchors=anchors)
     if engine is PdfEngine.WEASYPRINT:
         # Imported lazily so the base install never pulls in weasyprint.
         from sectum_ai.evidence.pdf_weasyprint import render_weasyprint
 
-        data = render_weasyprint(pack)
+        data = render_weasyprint(pack, anchor)
     else:
-        data = _render_reportlab(pack)
+        data = _render_reportlab(pack, anchor)
     output.write_bytes(data)
     return data
 
@@ -678,6 +743,7 @@ def render_audit_pack_and_hash(
     output: Path,
     *,
     engine: PdfEngine = PdfEngine.REPORTLAB,
+    anchors: tuple[bool, bool] = (False, False),
 ) -> str:
     """Render the audit pack to ``output`` and return the SHA-256 of its bytes.
 
@@ -694,4 +760,4 @@ def render_audit_pack_and_hash(
         tsa_token="",
         control_mappings=control_mappings,
     )
-    return sha256_hex(render_audit_pack(render_only, output, engine=engine))
+    return sha256_hex(render_audit_pack(render_only, output, engine=engine, anchors=anchors))
