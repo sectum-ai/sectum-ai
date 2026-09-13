@@ -314,6 +314,7 @@ class DetectingProbe:
         marker: Marker | None,
         evidence: str = _EMPTY_EVIDENCE,
         remediation: str = _EMPTY_REMEDIATION,
+        atlas: tuple[str, ...] | None = None,
     ) -> Finding | None:
         """The UNVERIFIED 200-empty finding for a cross-principal by-id read.
 
@@ -356,7 +357,18 @@ class DetectingProbe:
             evidence_span=evidence,
             owasp_llm=self.owasp_llm,
             owasp_secondary=self.owasp_secondary,
-            atlas=self.atlas_techniques,
+            # The caller's narrowing, where it has one. `AgentToolHijackProbe`
+            # narrows the stamp per SUB-PROBE on its leak path - ADR-0009 adopted
+            # `AML.T0051.001` for the description-injection sub-probe only, because
+            # "stamping them with it would claim an attack the probe never
+            # performed, in a field that ships as signed evidence" - and this
+            # helper hard-coded the probe's full footprint. Measured on a real
+            # `probe; report`: all 24 occurrences of `AML.T0051.001` in the signed
+            # evidence sat on 200-empty notes, which observed nothing and injected
+            # nothing, and none on a leak. `evidence` and `remediation` are already
+            # parameterized here for exactly this reason; `atlas` was the field
+            # that was not.
+            atlas=self.atlas_techniques if atlas is None else atlas,
             nist=self.nist_rmf,
             remediation_pointer=remediation,
         )
@@ -497,6 +509,17 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
     (then higher severity, then higher confidence). A real leak is therefore never
     dropped from the headline count in favor of an earlier UNVERIFIED duplicate.
     First-seen order is preserved.
+
+    The TECHNIQUE lists are unioned rather than taken from the winner, because
+    they are a property of the sub-probe that detected the leak and the id does
+    not encode the sub-probe. `AgentToolHijackProbe` stamps `AML.T0051.001` only
+    on its description-injection sub-probe (ADR-0009); that sub-probe's step is
+    planned last and all four tie on status, severity and confidence, so it always
+    lost. Against a server exploitable BOTH ways - the realistic case - the pack
+    reported the leak and never recorded that ingested tool metadata also reached
+    it, which is a different remediation. Splitting the id by sub-probe would
+    inflate the confirmed-leak count instead; one leak stays one finding, carrying
+    every technique that reached it.
     """
     best: dict[str, Finding] = {}
     order: list[str] = []
@@ -505,9 +528,32 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
         if existing is None:
             best[finding.finding_id] = finding
             order.append(finding.finding_id)
-        elif _finding_strength(finding) > _finding_strength(existing):
-            best[finding.finding_id] = finding
+            continue
+        winner, loser = (
+            (finding, existing)
+            if _finding_strength(finding) > _finding_strength(existing)
+            else (existing, finding)
+        )
+        best[finding.finding_id] = _with_techniques_of(winner, loser)
     return [best[finding_id] for finding_id in order]
+
+
+def _with_techniques_of(winner: Finding, loser: Finding) -> Finding:
+    """``winner`` carrying every technique either duplicate recorded.
+
+    Order-stable and duplicate-free: the winner's own stamps stay first, so a
+    finding's primary attribution does not move when an equal-strength duplicate
+    happens to be seen first.
+    """
+
+    def _union(first: tuple[str, ...], second: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*first, *second)))
+
+    atlas = _union(winner.atlas, loser.atlas)
+    secondary = _union(winner.owasp_secondary, loser.owasp_secondary)
+    if atlas == winner.atlas and secondary == winner.owasp_secondary:
+        return winner
+    return winner.model_copy(update={"atlas": atlas, "owasp_secondary": secondary})
 
 
 def _canonical_embedding_model(model: str) -> str:

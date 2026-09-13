@@ -57,6 +57,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The ATLAS stamp is a per-sub-probe fact, and was written and keyed as if it
+  were per-probe.** Both halves of ADR-0009's contract broke. *Over-claim:*
+  `_empty_ambiguity_finding` hard-coded the probe's whole footprint, so the
+  200-empty caveat escaped the narrowing its own leak path applies — the three
+  `lookup` sub-probes, which name the resource outright and inject nothing,
+  carried `AML.T0051.001` (LLM Prompt Injection: Indirect) in signed evidence. The
+  ADR says stamping them "would claim an attack the probe never performed, in a
+  field that ships as signed evidence". *Under-claim:* the finding id encodes
+  marker, principals and surface but not the sub-probe, and all four tie on
+  status, severity and confidence — so first-seen won and the injection step,
+  planned last, always lost. Against a server exploitable **both** ways the pack
+  reported the leak and never recorded that ingested tool metadata also reached
+  it, which is a different remediation. Techniques are now unioned onto the kept
+  finding, so one leak stays one finding carrying every technique that reached it.
+
+
 - **The audit PDF says whether this pack has an independent anchor.** It told
   every reader "any edit to the attested content changes the attested digest and
   fails verification" and never said whether *this* pack was anchored. Without an

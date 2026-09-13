@@ -143,6 +143,9 @@ class AgentToolHijackProbe(DetectingProbe):
         """
         pipeline = self._providers.pipeline(substrate)
         injected = step.payload.get("tool") == "search"
+        # One expression, both paths: the leak finding and the 200-empty caveat
+        # describe the SAME sub-probe, so they must carry the same stamp.
+        atlas = self.atlas_techniques if injected else self._LOOKUP_ATLAS
         findings = pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
@@ -150,7 +153,7 @@ class AgentToolHijackProbe(DetectingProbe):
             probe_id=self.id,
             observed_user=step.actor_user_id,
             owasp_llm=self.owasp_llm,
-            atlas=self.atlas_techniques if injected else self._LOOKUP_ATLAS,
+            atlas=atlas,
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
         )
@@ -165,6 +168,7 @@ class AgentToolHijackProbe(DetectingProbe):
                 observation,
                 substrate,
                 marker=self._marker_by_id(substrate, marker_id),
+                atlas=atlas,
             )
             if ambiguity is not None:
                 findings.append(ambiguity)
