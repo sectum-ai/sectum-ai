@@ -658,6 +658,15 @@ class IsolationScore(SectumModel):
     # are NOT_COVERED, since a verdict from a fake says nothing about the operator's
     # systems in either direction - a pass is not assurance and a leak is not a fault.
     synthetic_surfaces: tuple[str, ...] = ()
+    # The surfaces this run's confirmed findings rest on that its provenance block
+    # never records, in catalog order. `evidence/labels.py` records that three
+    # renderers answered "was this run live?" from the provenance block alone and
+    # were each fixed - the audit PDF, `verify`'s run-scope gate and the text
+    # scorecard. The machine-readable scorecard was the fourth consumer and was
+    # not: it emitted `"scope": "configured_stack"` with nothing on the subject,
+    # while the text beside it printed "plus 1 surface(s) this run's findings rest
+    # on that its provenance never recorded".
+    unaccounted_surfaces: tuple[str, ...] = ()
     classes: tuple[ClassScore, ...] = ()
     # The methodology revision (weights, thresholds, caps) the grade was computed
     # under, so a recompute uses the same rules and lands on the same letter.

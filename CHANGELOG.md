@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
+  findings rest on that its provenance never recorded, so the machine-readable
+  scorecard carries the disclosure the text one prints.
+
+
 - **`RunResult.detection`** records which detector actually graded a run — the
   embedder kind and model, the judge kind and model, and the *resolved* semantic
   threshold (never the literal `"auto"`). Schema **0.7.0**; `None` on a record
@@ -56,6 +61,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **Class 10's headline counted turns where its label counts sequences.** The
+  probe plans three benign follow-ups per (shared entity, principal) and its own
+  criterion is "the extraction is confirmed when the **sequence** surfaces a
+  foreign canary" — so a sequence that leaks only on its third follow-up scored
+  1/3, and the signed metric understated the extraction by up to 3×, always in the
+  direction that makes the stack look safer. The demo run reads **29.2%**, not
+  18.1%. It is the only headline rate whose unit is not the step; the other three
+  plan one step per attempt and are unchanged.
+- **`score --output json` dropped the unaccounted-surface disclosure.**
+  `evidence/labels.py` records three renderers that answered "was this run live?"
+  from the provenance block alone and were each fixed; the machine-readable
+  scorecard was the fourth consumer and was not. It emitted `"scope":
+  "configured_stack"` with nothing on the subject while the text beside it printed
+  "plus N surface(s) this run's findings rest on that its provenance never
+  recorded".
+- **`pack` exited 1 on a malformed pack.** It was the one pack-reader with neither
+  a schema-stamp check nor typed-error handling, and pydantic's `ValidationError`
+  is a `ValueError` — not a `SectumError` — so it escaped the typed-error handler
+  and exited outside the documented `0/2/3/4` contract with a raw traceback.
+
 
 - **One unreachable backend no longer costs the other seven surfaces their
   verdicts.** The erasure containment caught `AdapterError` only. Translating a

@@ -129,6 +129,7 @@ from sectum_ai.runner import (
     Runner,
     StepResult,
     confirmed_finding_rate,
+    confirmed_sequence_rate,
     retrieval_pivot_counts,
 )
 from sectum_ai.score import PROBE_SURFACES, score_run
@@ -648,11 +649,17 @@ _ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
 def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
     """Refuse a record whose headline counts disagree with its own findings.
 
-    Called from the two commands that COMPARE records - `diff` and
-    `baseline --compare` - and from nowhere else. They are the only readers that
-    take the counts off a loaded record as fact; `score`, `report` and `pack`
-    recount the findings, so a terse record cannot mislead them and refusing it
-    there would buy no safety.
+    Called from the four commands that COMPARE or SIGN a record: `diff` and
+    `baseline --compare`, which take the counts off a loaded record as fact, and
+    `report` and `pack`, because `report` embeds `run.metrics` verbatim in the
+    attested predicate and `pack` bundles the record beside the pack. `score` is
+    the one reader exempt, and genuinely so: it recounts the findings, and
+    `metrics.confirmed_findings` has no reader on its path.
+
+    This paragraph said "and from nowhere else ... `score`, `report` and `pack`
+    recount the findings" for two commits after `report` and `pack` began calling
+    it - the reasoning the commit that added those calls names as the defect. A
+    reviewer working from it would conclude two guarded commands are unguarded.
 
     Both producers derive these counts from the findings they record - `probe`
     from `confirmed_findings(findings)`, `erasure` from
@@ -1235,7 +1242,8 @@ def probe(
                 confirmed_finding_rate(inversion_steps) if inversion_steps else None
             ),
             extraction_efficiency=(
-                confirmed_finding_rate(extraction_steps) if extraction_steps else None
+                # By SEQUENCE, not by turn: see `confirmed_sequence_rate`.
+                confirmed_sequence_rate(extraction_steps, "entity") if extraction_steps else None
             ),
         ),
     )
@@ -1930,7 +1938,20 @@ def pack(
     # (it cannot tell a later run from an altered one); the bundle path can,
     # because a bundle IS a closed container - so the mismatch has to be refused
     # where it is created rather than accused where it is read.
-    attested = EvidencePack.model_validate_json(evidence_path.read_bytes()).run_result
+    attested_raw = json.loads(evidence_path.read_text())
+    _refuse_other_schema_line(
+        attested_raw.get("schema_version") if isinstance(attested_raw, dict) else None,
+        str(evidence_path),
+    )
+    try:
+        attested = EvidencePack.model_validate(attested_raw).run_result
+    except ValidationError as error:
+        # Every sibling that reads a pack checks the stamp and translates the
+        # error; `pack` was the one that did neither, and pydantic's
+        # ValidationError is a ValueError - not a SectumError - so it escaped
+        # `_handle_typed_errors` and exited 1, outside the documented 0/2/3/4
+        # contract, with a raw traceback.
+        raise ConfigError(f"{evidence_path} is not a sectum evidence pack: {error}") from error
     on_disk, signed = run_digest(run), run_digest(attested)
     if on_disk != signed:
         # By DIGEST, not by run_id: `run_id` is stable across runs of the same

@@ -513,6 +513,36 @@ class Runner:
         )
 
 
+def confirmed_sequence_rate(step_results: list[StepResult], key: str) -> float:
+    """Fraction of SEQUENCES in which at least one step surfaced a confirmed leak.
+
+    Class 10 is the one headline rate whose unit is not the step. Its probe plans
+    three benign follow-ups per (shared entity, principal) and its own docstring
+    says "the extraction is confirmed when the SEQUENCE surfaces a foreign
+    canary" - so counting turns scored a sequence that leaks only on its third
+    follow-up as 1/3, and the signed metric understated the extraction by up to
+    3x, always in the direction that makes the stack look safer. Measured on the
+    demo stack: 18.1% by turn, 29.2% by sequence.
+
+    The other three rates are unaffected and keep `confirmed_finding_rate`: their
+    probes plan one step per attempt, so a step IS the unit their label names.
+
+    `key` is the payload field naming the sequence; steps are grouped by it
+    together with the acting principal.
+    """
+    if not step_results:
+        return 0.0
+    sequences: dict[tuple[str, str, str], bool] = {}
+    for step, findings in step_results:
+        identity = (
+            str(step.actor_tenant_id),
+            str(step.actor_user_id or ""),
+            str(step.payload.get(key, "")),
+        )
+        sequences[identity] = sequences.get(identity, False) or bool(confirmed_findings(findings))
+    return sum(1 for leaked in sequences.values() if leaked) / len(sequences)
+
+
 def confirmed_finding_rate(step_results: list[StepResult]) -> float:
     """Fraction of steps that surfaced at least one confirmed cross-tenant leak.
 

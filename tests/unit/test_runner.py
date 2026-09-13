@@ -29,8 +29,11 @@ from sectum_ai.spec import (
     AdapterError,
     ConfigError,
     CorpusDocument,
+    Finding,
+    FindingStatus,
     ProbeStep,
     RunMetrics,
+    Severity,
     Substrate,
     Surface,
 )
@@ -924,3 +927,51 @@ def test_dropped_user_steps_survive_a_probe_that_also_lost_every_plant() -> None
     assert runner.run(probe) == [], "the premise: every plant vanished, nothing observed"
     assert runner.unconfirmed_plants.get(probe.id), runner.unconfirmed_plants
     assert runner.dropped_user_steps.get(probe.id, 0) > 0, runner.dropped_user_steps
+
+
+def test_class_10_is_measured_by_sequence_because_that_is_what_it_claims() -> None:
+    # Class 10's probe plans three benign follow-ups per (shared entity,
+    # principal), and its own module docstring says "the extraction is confirmed
+    # when the SEQUENCE surfaces a foreign canary". The headline rate counted
+    # TURNS, so a sequence that leaks only on its third follow-up scored 1/3 - the
+    # signed metric understating the extraction it exists to measure, by up to 3x
+    # and always in the direction that makes the stack look safer. Measured on the
+    # demo stack: 18.1% by turn, 29.2% by sequence.
+    #
+    # The other three headline rates keep `confirmed_finding_rate`: their probes
+    # plan one step per attempt, so a step IS the unit their label names.
+    from sectum_ai.runner import confirmed_finding_rate, confirmed_sequence_rate
+
+    def _step(entity: str, turn: int) -> ProbeStep:
+        return ProbeStep(
+            step_id=f"ikea-{entity}-{turn}",
+            probe_id="ikea-extraction",
+            actor_tenant_id=UUID(int=1),
+            action="vector.query",
+            payload={"query": f"turn {turn}", "entity": entity},
+        )
+
+    leak = [
+        Finding(
+            finding_id="f",
+            probe_id="ikea-extraction",
+            severity=Severity.HIGH,
+            confidence=1.0,
+            status=FindingStatus.CONFIRMED,
+            owner_tenant_id=UUID(int=2),
+            observed_in_tenant_id=UUID(int=1),
+            surface=Surface.VECTOR_DB,
+        )
+    ]
+    # Two sequences of three turns. The first leaks on its LAST turn only; the
+    # second never leaks.
+    results: list[tuple[ProbeStep, list[Finding]]] = [
+        (_step("acme", 0), []),
+        (_step("acme", 1), []),
+        (_step("acme", 2), leak),
+        (_step("globex", 0), []),
+        (_step("globex", 1), []),
+        (_step("globex", 2), []),
+    ]
+    assert confirmed_finding_rate(results) == 1 / 6, "the old unit: one turn of six"
+    assert confirmed_sequence_rate(results, "entity") == 0.5, "one extraction of two attempted"

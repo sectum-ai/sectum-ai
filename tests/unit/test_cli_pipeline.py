@@ -2366,3 +2366,60 @@ def test_a_vector_store_that_swallows_the_corpus_is_not_graded_as_passing() -> N
     fake = _bundle(FakeVectorStore())
     untouched, _ = _skip_unseedable(suite, fake, substrate)
     assert len(untouched) == 3
+
+
+def test_pack_refuses_a_malformed_evidence_pack_with_a_typed_error(tmp_path: Path) -> None:
+    # `pack` was the one pack-reader with neither a schema-stamp check nor typed
+    # error handling: pydantic's ValidationError is a ValueError, not a
+    # SectumError, so it escaped `_handle_typed_errors` and exited 1 - outside the
+    # documented 0/2/3/4 contract - with a raw traceback. `verify` runs
+    # `check_raw_schema_stamps` then catches ValueError; `_load_run_artifact`
+    # checks both stamps; `_load_run` checks the run stamp.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack_path = tmp_path / "evidence.json"
+    payload = json.loads(pack_path.read_text())
+    del payload["run_result"]  # valid JSON, not a pack
+    pack_path.write_text(json.dumps(payload))
+
+    result = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "not a sectum evidence pack" in result.output, result.output
+    assert not (tmp_path / "run-pack.zip").exists()
+
+
+def test_the_json_scorecard_carries_the_unaccounted_surfaces_the_text_prints(
+    tmp_path: Path,
+) -> None:
+    # `evidence/labels.py` records that three renderers answered "was this run
+    # live?" from the provenance block alone and were each fixed - the audit PDF,
+    # `verify`'s run-scope gate, and the scorecard's scope LINE. The
+    # machine-readable scorecard is the fourth consumer of the same fact and was
+    # not: it emitted `"scope": "configured_stack"` with nothing on the subject,
+    # while the text beside it printed "plus N surface(s) this run's findings rest
+    # on that its provenance never recorded".
+    _seed_and_probe(tmp_path)
+    run = json.loads((tmp_path / "run.json").read_text())
+    # Records SOME surface, but not the one the findings rest on.
+    run["surface_provenance"] = {"semantic_cache": "LIVE"}
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    text = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert "provenance never recorded" in text.output, text.output
+
+    emitted = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    card = json.loads(emitted.stdout)
+    assert card["scope"] == "configured_stack"
+    assert "vector_db" in card["unaccounted_surfaces"], card["unaccounted_surfaces"]
+
+
+def test_the_recorded_extraction_efficiency_is_the_sequence_rate(tmp_path: Path) -> None:
+    # The unit test beside `confirmed_sequence_rate` proves the function; this one
+    # proves the CLI USES it. On the shipped demo the two units are far apart -
+    # 13 of 72 turns (18.1%) against 7 of 24 sequences (29.2%) - because the probe
+    # plans three benign follow-ups per (shared entity, principal) and a sequence
+    # that leaks only on its third turn scored 1/3.
+    _seed_and_probe(tmp_path)
+    recorded = json.loads((tmp_path / "run.json").read_text())["metrics"]["extraction_efficiency"]
+    assert recorded == pytest.approx(7 / 24), recorded
+    assert recorded != pytest.approx(13 / 72), "that is the turn-based rate this replaced"

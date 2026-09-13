@@ -66,7 +66,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sectum_ai.evidence import run_digest
-from sectum_ai.evidence.labels import backing_surface
+from sectum_ai.evidence.labels import backing_surface, unaccounted_surfaces
 from sectum_ai.spec import (
     ClassScore,
     ClassVerdict,
@@ -785,6 +785,7 @@ def score_run(run: RunResult) -> IsolationScore:
         capped_by=capped_by,
         scope=scope,
         synthetic_surfaces=tuple(sorted(synthetic)),
+        unaccounted_surfaces=unaccounted_surfaces(run),
         classes=classes,
         methodology_version=METHODOLOGY_VERSION,
     )
