@@ -874,3 +874,53 @@ def test_a_model_plant_is_deliberately_not_read_back() -> None:
     results = runner.run_per_step(probe)
     assert results, "the probe still runs"
     assert probe.id not in runner.unconfirmed_plants, runner.unconfirmed_plants
+
+
+def test_dropped_user_steps_survive_a_probe_that_also_lost_every_plant() -> None:
+    # The all-plants-unconfirmed branch returns early, and `if dropped:` sat below
+    # it - so a probe that BOTH dropped user-level steps (the adapter cannot carry
+    # a user identity) and lost every plant recorded only the second fact. They are
+    # independent disclosures: the signed record and the audit PDF under-reported
+    # the narrowed user boundary on exactly the runs where the setup also failed,
+    # and `diff`'s [BOUNDARY LOST] signal reads that field.
+    #
+    # Needs the MIDDLE branch, not the all-dropped one above it: a multi-tenant
+    # substrate leaves cross-TENANT judged steps that survive, so the run proceeds
+    # to the plant check with `dropped` already non-zero.
+    from sectum_ai.adapters import FakeCache
+    from sectum_ai.probes import SemanticCacheProbe
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    class _DropsTheUserAndSwallowsThePlant(FakeCache):
+        """Carries no user identity, and never serves a plant back."""
+
+        carries_user = False
+
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            return None
+
+    def _tenant(index: int) -> SyntheticTenantSpec:
+        return SyntheticTenantSpec(
+            tenant_id=UUID(int=index),
+            display_name=f"T{index}",
+            industry="robotics",
+            corpus_size=24,
+            users=(
+                SyntheticUserSpec(user_id=UUID(int=index * 10 + 1), display_name="a"),
+                SyntheticUserSpec(user_id=UUID(int=index * 10 + 2), display_name="b"),
+            ),
+        )
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="two-tenants-with-users",
+            seed=5,
+            tenants=(_tenant(1), _tenant(2)),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    probe = SemanticCacheProbe()
+    runner = Runner(substrate, cache=_DropsTheUserAndSwallowsThePlant())
+    assert runner.run(probe) == [], "the premise: every plant vanished, nothing observed"
+    assert runner.unconfirmed_plants.get(probe.id), runner.unconfirmed_plants
+    assert runner.dropped_user_steps.get(probe.id, 0) > 0, runner.dropped_user_steps

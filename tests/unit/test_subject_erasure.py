@@ -15,6 +15,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.adapters.base import Capability, ModelAdapter, TraceHit, VectorHit
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
+from sectum_ai.probes._recall import FINGERPRINT_QUERY_K
 from sectum_ai.spec import AdapterError, CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
@@ -1022,3 +1023,35 @@ def test_a_contained_failure_does_not_double_count_what_it_saw() -> None:
     assert len({f.finding_id for f in report.findings}) == 2, report.findings
     surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
     assert surface.residual_after == 2, surface
+
+
+def test_a_full_similarity_page_is_not_reported_as_a_badly_shaped_phrase() -> None:
+    # A full page means the phrase may still be stored and ranked below it - a
+    # property of the BACKEND. It was written into `report.unverifiable`, whose
+    # only other producers are phrase-SHAPE shortfalls and whose one CLI rendering
+    # hard-codes their cause, so the operator was told "N supplied fingerprint(s)
+    # could not be checked (trailing part too short, or no control form for the
+    # prefix)" and sent to rewrite a fingerprint that was fine. The per-surface
+    # channel already prints exactly this cause by default and is where every
+    # other surface's inconclusive count goes.
+    class _AlwaysFullPage(FakeVectorStore):
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            hit = VectorHit(doc_id="d", tenant_id=tenant, content="unrelated", score=0.1)
+            return [hit] * max(k, FINGERPRINT_QUERY_K)
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    manifest = SubjectManifest(
+        subject_ref="s",
+        records={},
+        fingerprints={Surface.VECTOR_DB: ("a phrase that is perfectly well formed",)},
+    )
+    report = SubjectErasureProbe(vector=_AlwaysFullPage()).verify(tenant, manifest)
+
+    assert Surface.VECTOR_DB not in report.unverifiable, dict(report.unverifiable)
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert surface.unverifiable_after == 1, surface
+    assert surface.verdict == "NOT VERIFIED", surface.verdict
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED

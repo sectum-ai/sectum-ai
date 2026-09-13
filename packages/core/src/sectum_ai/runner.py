@@ -174,6 +174,14 @@ class Runner:
                 if not self._plant_landed(step):
                     unconfirmed += 1
             results.append((step, probe.detect(step, observation, self._substrate)))
+        # Recorded BEFORE the all-plants-unconfirmed branch, which returns early:
+        # a probe that both dropped its user-level steps and lost every plant
+        # recorded only the second fact, so the signed record and the audit PDF
+        # under-reported the narrowed user boundary on exactly the runs where the
+        # setup also failed. The two are independent disclosures.
+        if dropped:
+            self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + dropped
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
         observed = any(confirmed_findings(findings) for _, findings in results)
         if planted and unconfirmed == planted and not observed:
             # Every plant vanished AND the probe saw nothing, so every read below
@@ -204,9 +212,6 @@ class Runner:
                 self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
             )
             _log.info("probe.plants_unconfirmed", probe=probe.id, plants=unconfirmed)
-        if dropped:
-            self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + dropped
-            _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
         # Operational metadata only — step payloads and observations (tenant
         # content) are never logged here (the engineering spec, section 16).
         confirmed = sum(len(confirmed_findings(findings)) for _, findings in results)

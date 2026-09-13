@@ -278,20 +278,30 @@ class SubjectErasureProbe:
                     verdicts = {p: self._content_surfaces(vector, target, p) for p in phrases}
                     surfacing = [p for p, v in verdicts.items() if v]
                     inconclusive = sum(1 for v in verdicts.values() if v is None)
-                    if inconclusive:
-                        unverifiable[Surface.VECTOR_DB] = inconclusive
-                    # By-id and content residual both count against the vector surface:
-                    # it is ERASED only when no id remains AND no content still surfaces -
-                    # and never while a phrase could not be checked.
-                    if present or surfacing or not inconclusive:
-                        surfaces.append(
-                            SurfaceErasure(
-                                surface=Surface.VECTOR_DB,
-                                markers_before=len(ids) + len(phrases),
-                                residual_after=len(present) + len(surfacing),
-                                baseline_observed=False,
-                            )
+                    # On the SURFACE, not in `report.unverifiable`. That channel's
+                    # only other producers are phrase-SHAPE shortfalls, and its one
+                    # CLI rendering hard-codes their cause - so a full similarity
+                    # page, which means the phrase may still be stored and ranked
+                    # below it, was reported to the operator as "trailing part too
+                    # short, or no control form for the prefix", sending them to
+                    # rewrite a fingerprint that was fine. The per-surface channel
+                    # already prints exactly this cause by default, and is where
+                    # every other surface's inconclusive count goes.
+                    #
+                    # By-id and content residual both count against the vector
+                    # surface: it is ERASED only when no id remains AND no content
+                    # still surfaces - and never while a phrase could not be
+                    # checked, which `verdict` enforces by ranking RESIDUAL DATA
+                    # above NOT VERIFIED and both above ERASED.
+                    surfaces.append(
+                        SurfaceErasure(
+                            surface=Surface.VECTOR_DB,
+                            markers_before=len(ids) + len(phrases),
+                            residual_after=len(present) + len(surfacing),
+                            unverifiable_after=inconclusive,
+                            baseline_observed=False,
                         )
+                    )
                     observed.extend(
                         self._fingerprint_finding(
                             target, Surface.VECTOR_DB, manifest.subject_ref, p

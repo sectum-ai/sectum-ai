@@ -57,6 +57,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A narrowed user boundary is recorded even when the setup also failed.** The
+  all-plants-unconfirmed branch returns early and `if dropped:` sat below it, so a
+  probe that both dropped its user-level steps and lost every plant recorded only
+  the second fact — under-reporting `user_steps_dropped` in the signed record, the
+  audit PDF and `diff`'s `[BOUNDARY LOST]` signal on exactly the runs where the
+  setup also failed.
+- **A full similarity page is no longer reported as a badly shaped phrase.** The
+  A3 vector scan wrote its inconclusive count into `ErasureReport.unverifiable`,
+  whose only other producers are phrase-*shape* shortfalls and whose one CLI
+  rendering hard-codes their cause — so an operator whose backend returned a full
+  page (meaning the phrase may still be stored, ranked below it) was told "N
+  supplied fingerprint(s) could not be checked (trailing part too short, or no
+  control form for the prefix)" and sent to rewrite a fingerprint that was fine.
+  It goes to the per-surface channel, which already prints exactly this cause and
+  is where every other surface's inconclusive count goes.
+
+
 - **A pack that calls itself a demonstration no longer attests in the next
   paragraph.** `provenance_statement` ends "This pack is a demonstration, not an
   attestation." for an all-synthetic run, and the scope paragraph rendered
