@@ -15,6 +15,10 @@ interface so probes can declare what they require:
 - **MCP** — stdio + streamable-HTTP Model Context Protocol clients
 - **Cache** — Redis
 - **Model** — HuggingFace + PEFT LoRA, vLLM and TGI (serving-only)
+- **Memory** — Redis, mem0
+- **Search index** — OpenSearch
+- **Eval set** — LangSmith Datasets
+- **Backup** — S3 (and any S3-compatible store), Google Cloud Storage
 
 ```sh
 pip install sectum-ai-adapters

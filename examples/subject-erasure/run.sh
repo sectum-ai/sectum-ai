@@ -28,7 +28,7 @@ echo "==> 3/3  Independently verify the per-subject attestation"
 sectum-ai verify "$out/erasure-evidence.json" --allow-unanchored --allow-synthetic
 
 echo
-echo "This demo runs against the built-in synthetic store, so it reports ERASED with a"
-echo "warning that no live adapter is configured. Point 'vector_store' in sectum-ai.yaml"
+echo "This demo runs against the built-in synthetic store, so it reports ABSENCE CHECKED"
+echo "with a warning that no live adapter is configured. Point 'vector_store' in sectum-ai.yaml"
 echo "at your real Qdrant/pgvector to verify production data - see"
 echo "tests/integration/test_subject_erasure_qdrant.py for a live, residual-catching run."

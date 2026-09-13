@@ -22,16 +22,19 @@ from sectum_ai.evidence.chain import run_digest
 from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
 from sectum_ai.evidence.pdf import (
     _COVERAGE_CAVEAT,
-    _COVERAGE_VERDICT_GLOSS,
-    _SCOPE_METHODOLOGY,
     _VERIFICATION_INSTRUCTION,
     _coverage_rows,
     _finding_controls,
+    _retrieval_pivot_summary,
+    anchor_statement,
     confirmed_by_kind,
+    coverage_gloss,
     probes_exercised,
     provenance_statement,
+    scope_methodology,
+    synthetic_prefix,
 )
-from sectum_ai.spec import EvidenceError, EvidencePack, Finding
+from sectum_ai.spec import EvidenceError, EvidencePack, Finding, RunResult
 
 # Severity -> CSS accent colour for the finding badge. A muted, print-safe
 # palette (no neon); unknown severities fall back to the neutral grey.
@@ -105,11 +108,13 @@ def _kv_table(rows: tuple[tuple[str, str], ...], *, mono_values: bool = False) -
     return f'<table class="kv">{cells}</table>'
 
 
-def _finding_html(finding: Finding) -> str:
+def _finding_html(finding: Finding, run: RunResult | None = None) -> str:
     """Render one finding as an escaped, severity-accented HTML block."""
     severity = finding.severity.value
     colour = _SEVERITY_COLOURS.get(severity, _NEUTRAL)
+    marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
     head = (
+        f"{marker}"
         f'<span class="badge" style="background:{colour}">{escape(severity)}</span>'
         f"{escape(finding.probe_id)} on {escape(finding.surface.value)}: "
         f"marker {escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
@@ -140,7 +145,7 @@ def _coverage_html(pack: EvidencePack) -> str:
     cells = "".join(
         f"<tr><td>{escape(surface)}</td>"
         f'<td class="verdict">{escape(verdict)}</td>'
-        f"<td>{escape(_COVERAGE_VERDICT_GLOSS.get(verdict, ''))}</td></tr>"
+        f"<td>{escape(coverage_gloss(pack.run_result, surface, verdict))}</td></tr>"
         for surface, verdict in rows
     )
     table = (
@@ -154,7 +159,7 @@ def _coverage_html(pack: EvidencePack) -> str:
     )
 
 
-def build_audit_html(pack: EvidencePack) -> str:
+def build_audit_html(pack: EvidencePack, anchor: str | None = None) -> str:
     """Build the full auditor-facing HTML document for ``pack``.
 
     Pure and dependency-free (no weasyprint import), so the template is unit
@@ -164,13 +169,20 @@ def build_audit_html(pack: EvidencePack) -> str:
     """
     run = pack.run_result
 
-    summary = (
+    summary_rows = [
         ("Run started", run.started_at.isoformat()),
         ("Run finished", run.finished_at.isoformat()),
         ("Probes exercised", probes_exercised(run)),
         ("Findings recorded", str(len(run.findings))),
         ("Confirmed findings", confirmed_by_kind(run)),
-    )
+    ]
+    # The flagship Class 2 metric. Its absence here meant the two engines' packs
+    # asserted different things about the same run, against this module's own
+    # promise that they "assert the same facts".
+    rpr_line = _retrieval_pivot_summary(run)
+    if rpr_line is not None:
+        summary_rows.append(("Retrieval-Pivot Rate", rpr_line))
+    summary = tuple(summary_rows)
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
         ("Manifest hash", pack.manifest_hash),
@@ -178,11 +190,11 @@ def build_audit_html(pack: EvidencePack) -> str:
 
     # The provenance statement leads: every sentence after it is conditional on it.
     methodology = f'<p class="method">{escape(provenance_statement(run))}</p>' + "".join(
-        f'<p class="method">{escape(text)}</p>' for text in _SCOPE_METHODOLOGY
+        f'<p class="method">{escape(text)}</p>' for text in scope_methodology(run)
     )
 
     if run.findings:
-        findings_html = "".join(_finding_html(f) for f in run.findings)
+        findings_html = "".join(_finding_html(f, run) for f in run.findings)
     else:
         findings_html = '<p class="none">No findings were recorded for this run.</p>'
 
@@ -211,6 +223,11 @@ def build_audit_html(pack: EvidencePack) -> str:
         "<h2>Integrity and independent verification</h2>"
         f"{_kv_table(integrity, mono_values=True)}"
         f'<p class="verify">{escape(_VERIFICATION_INSTRUCTION)}</p>'
+        # Derived from the pack when not supplied, so a caller that has the signed
+        # pack cannot disagree with the render path, which must pass the INTENT
+        # because the PDF is built before the token exists.
+        f'<p class="verify"><strong>'
+        f"{escape(anchor if anchor is not None else anchor_statement(pack))}</strong></p>"
     )
     return (
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -219,7 +236,7 @@ def build_audit_html(pack: EvidencePack) -> str:
     )
 
 
-def render_weasyprint(pack: EvidencePack) -> bytes:
+def render_weasyprint(pack: EvidencePack, anchor: str | None = None) -> bytes:
     """Render ``pack`` to auditor-facing PDF bytes via weasyprint.
 
     Imports weasyprint lazily so the base install (reportlab only) never pulls
@@ -234,5 +251,5 @@ def render_weasyprint(pack: EvidencePack) -> bytes:
             "the weasyprint PDF engine requires the 'weasyprint' extra: "
             "pip install 'sectum-ai[weasyprint]'"
         ) from error
-    pdf: bytes = HTML(string=build_audit_html(pack)).write_pdf()
+    pdf: bytes = HTML(string=build_audit_html(pack, anchor)).write_pdf()
     return pdf

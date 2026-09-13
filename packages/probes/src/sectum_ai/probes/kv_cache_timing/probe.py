@@ -12,7 +12,7 @@ Class 11 erasure probe - it exposes its own ``run`` entry point. Per the spec's
 is *both* statistically significant (a two-sided Welch's t-test below a
 Bonferroni-corrected level - ``_ALPHA`` divided by the number of tenant-pair
 comparisons, so the family-wise false-positive rate across all pairs stays at
-``_ALPHA``) *and* practically large (Cohen's d above ``_EFFECT_THRESHOLD``), in
+``_ALPHA``) *and* practically large (Cohen's d at or above ``_EFFECT_THRESHOLD``), in
 the expected direction (the primed prompt is faster). Each finding carries the
 p-value, the corrected level, and a confidence interval on the gap so an auditor
 can judge the strength of evidence.
@@ -25,6 +25,7 @@ SciPy/NumPy dependency (the spec, section 13: dependency discipline).
 
 import hashlib
 import math
+import random
 import statistics
 from dataclasses import dataclass
 from uuid import UUID
@@ -33,9 +34,9 @@ from sectum_ai.adapters import ModelAdapter
 from sectum_ai.spec import Finding, FindingStatus, Severity, Substrate, Surface
 
 # Trials per condition. Enough samples that the jitter noise floor is stable and
-# the t-test has ample degrees of freedom. Must stay EVEN: `_measure` alternates
-# which arm it times first, and only an even count leaves the two arms with equal
-# mean measurement positions, which is what makes a linear drift cancel exactly.
+# the t-test has ample degrees of freedom. Must stay EVEN: `_measure` shuffles a
+# BALANCED order of which arm it times first, and only an even count can be split
+# evenly - equal mean measurement positions are what make a linear drift cancel.
 _TRIALS = 24
 # No latency is measured finer than the clock: variances are floored at the
 # square of a 1 us resolution (perf_counter's is tens of ns), in ms. A jitter-free
@@ -84,17 +85,32 @@ class TimingSignal:
     p_value: float
     ci_low_ms: float
     ci_high_ms: float
+    # True when an arm's observed spread was below the timer's resolution and the
+    # floor stood in for it. Every number derived from that arm - d, t, p and the
+    # interval - is then a BOUND, not a measurement: a jitter-free 60ms gap
+    # produced `d=60000.0, t=207846, p=0.0, CI=[60.00, 60.00]`, and a zero-width
+    # 95% interval claims the gap is known exactly. The floor is the right way to
+    # avoid a degenerate t; printing its outputs as observations is not.
+    variance_floored: bool = False
+    # False when every one of the 48 readings came back identical: the backend's
+    # latency metric has no resolution here, so the pair was not measured. Without
+    # it a flat metric produced d=0.0, p=1.0 - arithmetically indistinguishable
+    # downstream from a careful null result, and Class 5 graded PASS off it.
+    resolved: bool = True
 
     def is_significant_at(self, alpha: float) -> bool:
         """Whether the gap clears ``alpha`` and is practically large and directional.
 
-        All three must hold to report a finding (the spec's "avoid over-claiming"):
-        a p-value below ``alpha``, a large effect size, and the primed prompt
-        being the faster one (a positive gap). ``run`` passes a Bonferroni-
-        corrected ``alpha`` (the per-pair level divided by the number of tenant-
-        pair comparisons) so the *family-wise* false-positive rate across every
-        pair stays at ``_ALPHA``, rather than ``_ALPHA`` leaking once per pair.
+        All four must hold to report a finding (the spec's "avoid over-claiming"):
+        the pair was resolved at all, a p-value below ``alpha``, a large effect
+        size, and the primed prompt being the faster one (a positive gap).
+        ``run`` passes a Bonferroni-corrected ``alpha`` (the per-pair level
+        divided by the number of tenant-pair comparisons) so the *family-wise*
+        false-positive rate across every pair stays at ``_ALPHA``, rather than
+        ``_ALPHA`` leaking once per pair.
         """
+        if not self.resolved:
+            return False
         return (
             self.p_value < alpha
             and self.effect_size >= _EFFECT_THRESHOLD
@@ -120,17 +136,55 @@ class KvCacheTimingReport:
 
     @property
     def effect_sizes(self) -> dict[str, float]:
-        """Per-pair effect sizes, for ``RunMetrics.side_channel_effect_sizes``."""
+        """Per-pair effect sizes, for ``RunMetrics.side_channel_effect_sizes``.
+
+        Resolved pairs only. An unresolved one has an effect size of 0.0 by
+        arithmetic, not by measurement, and writing it into the signed record put
+        a number there the run never established - `diff` then read the drop to
+        zero as an improvement, printing `[ok]` above its own coverage-loss line.
+        `probe_versions` and the exercised-surface set are gated the same way.
+        """
         # Full hex so two tenant pairs cannot collide onto one map key.
-        return {
-            f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}": signal.effect_size
-            for signal in self.signals
-        }
+        return {_pair_key(signal): signal.effect_size for signal in self.signals if signal.resolved}
+
+    @property
+    def variance_floored_pairs(self) -> tuple[str, ...]:
+        """Keys of :attr:`effect_sizes` whose numbers are bounds, not measurements.
+
+        The same qualifier `_finding` puts in the evidence span. It belongs on the
+        METRIC too: `side_channel_effect_sizes` is what `score` reads for Class 5's
+        headline and what `baseline`/`diff` compare between runs, and a floored
+        d=146.7 there compared against a later measured d=5.2 reads as an enormous
+        improvement in a number that was never a measurement.
+        """
+        return tuple(
+            sorted(_pair_key(s) for s in self.signals if s.resolved and s.variance_floored)
+        )
+
+
+def _pair_key(signal: TimingSignal) -> str:
+    return f"{signal.owner_tenant_id.hex}->{signal.observed_in_tenant_id.hex}"
 
 
 def _cohens_d(slow: list[float], fast: list[float]) -> float:
-    """Standardised mean difference (slow minus fast); 0 when the means agree."""
-    pooled_variance = (statistics.pvariance(slow) + statistics.pvariance(fast)) / 2.0
+    """Standardised mean difference (slow minus fast); 0 when the means agree.
+
+    The pooled SAMPLE standard deviation, which is what Cohen's d is defined on.
+    This used ``pvariance`` (population, divided by n) while ``_welch`` twenty
+    lines down used ``variance`` (sample, n-1) - two estimators of the same
+    quantity in one file - and the figure it produced was inflated by
+    sqrt(n/(n-1)): 11.8% at n=5, 2.15% at the default n=24. That number is
+    printed in the finding's evidence span and signed into
+    `side_channel_effect_sizes`, and it escalates severity across the
+    `_LARGE_EFFECT` boundary, so a true d of 4.95 was reported as 5.05 and the
+    finding shipped HIGH instead of MEDIUM.
+
+    One sample cannot estimate a spread, so the floor stands in - the same floor
+    `_welch` applies, and the reason `is_significant_at` also gates on `resolved`.
+    """
+    if len(slow) < 2 or len(fast) < 2:
+        return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(_VARIANCE_FLOOR)
+    pooled_variance = (statistics.variance(slow) + statistics.variance(fast)) / 2.0
     return (statistics.fmean(slow) - statistics.fmean(fast)) / math.sqrt(
         max(pooled_variance, _VARIANCE_FLOOR)
     )
@@ -225,8 +279,9 @@ def _welch(slow: list[float], fast: list[float]) -> tuple[float, float, float]:
     for the confidence interval. A group's variance is floored at the timer's
     resolution, so a constant-latency backend yields a finite, large t rather
     than a degenerate one; only when neither group has two samples is the
-    standard error zero (an infinite t with zero df, which the callers read as
-    not significant).
+    standard error zero - which yields ``0.0`` when the means also agree and an
+    infinite t otherwise, both with zero df, and the callers read either as not
+    significant.
     """
     n_slow, n_fast = len(slow), len(fast)
     var_slow = max(statistics.variance(slow), _VARIANCE_FLOOR) if n_slow > 1 else 0.0
@@ -278,8 +333,8 @@ class KvCacheTimingProbe:
         HuggingFace adapter comply - HF's ``measure_latency_ms`` calls ``infer``).
         An adapter whose two paths use independent caches would show no signal.
 
-        The owner warms one prefix per trial and each is measured exactly once,
-        by one observer arm: on a backend whose latency call runs inference (HF),
+        The owner warms one prefix per (observer, trial) and each is measured
+        exactly once, by one observer arm: on a backend whose latency call runs inference (HF),
         the observer's own trial 0 used to warm the single shared prefix - and the
         single control prefix - for every later trial, so both arms were cache
         hits from trial 1 and a real shared cache survived only in trial 0
@@ -294,14 +349,25 @@ class KvCacheTimingProbe:
         signals: list[TimingSignal] = []
         findings: list[Finding] = []
         for owner in tenants:
-            prefixes = [
-                f"t{_key(owner)}-{trial:02d}-session {_PREFIX_FILLER}" for trial in range(_TRIALS)
-            ]
-            for prefix in prefixes:
-                self._model.infer(owner, f"{prefix} context warm-up prompt")
             for observer in tenants:
                 if observer == owner:
                     continue
+                # Unique per (owner, observer, trial) and warmed inside this loop,
+                # exactly as the control prefix below already is - and for the same
+                # reason, which was written down there and not applied here. One
+                # prefix set per OWNER was measured by every observer in turn, so on
+                # a backend whose latency call runs inference (HF: `measure_latency_ms`
+                # calls `infer`) observer 1's own measurement primed the prefix that
+                # observers 2..n then read as a hit, and the probe attributed it to
+                # the owner - a CONFIRMED, confidence-1.0 finding naming a principal
+                # the measurement never established. 6+6 hex characters keep the pair
+                # inside the leading 20 the fake and the serving doubles key on.
+                prefixes = [
+                    f"t{_key(owner)[:6]}{_key(observer)[:6]}-{trial:02d}-ses {_PREFIX_FILLER}"
+                    for trial in range(_TRIALS)
+                ]
+                for prefix in prefixes:
+                    self._model.infer(owner, f"{prefix} context warm-up prompt")
                 signals.append(self._measure(owner, observer, prefixes))
         # Bonferroni correction: a run performs one Welch's t-test per ordered
         # tenant pair, so judging each at _ALPHA would inflate the family-wise
@@ -316,8 +382,9 @@ class KvCacheTimingProbe:
         return KvCacheTimingReport(signals=tuple(signals), findings=tuple(findings))
 
     def _measure(self, owner: UUID, observer: UUID, prefixes: list[str]) -> TimingSignal:
-        # Interleave the two arms, alternating which is measured first, instead of
-        # timing all primed trials and then all control trials.
+        # Interleave the two arms in a seeded but exactly balanced order (see the
+        # shuffle below), instead of timing all primed trials and then all control
+        # trials.
         #
         # Block ordering confounded the comparison with anything that drifts during
         # the run - thermal throttling, CPU frequency scaling, a noisy neighbour, GC.
@@ -329,13 +396,26 @@ class KvCacheTimingProbe:
         # Manufacturing a cross-tenant finding out of ambient machine noise is the
         # worst direction for a signed evidence pack to be wrong in.
         #
-        # Alternating (ABBA rather than ABAB) makes the two arms' mean measurement
-        # positions equal, so a linear drift cancels exactly rather than merely
-        # shrinking - which is why _TRIALS must stay even. Higher-order drift (a GC
-        # pause mid-run) is damped, not eliminated; the Bonferroni-corrected alpha
-        # and the effect-size floor remain the guards against that.
+        # Balance makes the two arms' mean measurement positions equal, so a
+        # linear drift cancels exactly rather than merely shrinking - which is why
+        # _TRIALS must stay even. Higher-order drift (a GC pause mid-run) is damped,
+        # not eliminated; the Bonferroni-corrected alpha and the effect-size floor
+        # remain the guards against that.
+        #
+        # The order is SHUFFLED, not `trial % 2`. A fixed ABBA schedule puts each
+        # arm on a fixed pair of residues mod 4 - primed at call indices {0,3},
+        # control at {1,2} - so behind a 4-way round-robin dispatcher, where the
+        # replica IS the call index mod 4, the two arms are pinned to disjoint
+        # replica sets. A 5% spread across the pool, or one slow node in four, then
+        # manufactured 12 CONFIRMED cross-tenant findings against a model with no
+        # cache at all. A period-4 systematic is not damped by ABBA; it lands
+        # entirely on one arm. The shuffle is seeded from the pair, so the run stays
+        # reproducible, and stays balanced 12/12 so the mean-position argument above
+        # still holds.
         primed: list[float] = []
         control: list[float] = []
+        primed_first = [True] * (_TRIALS // 2) + [False] * (_TRIALS - _TRIALS // 2)
+        random.Random(owner.bytes + observer.bytes).shuffle(primed_first)
         for trial in range(_TRIALS):
             primed_prompt = f"{prefixes[trial]} probe {trial}"
             # Unique per (owner, observer, trial): a control prefix reused across
@@ -344,7 +424,7 @@ class KvCacheTimingProbe:
                 f"u{_key(observer)[:6]}{_key(owner)[:6]}-{trial:02d}-ctl {_PREFIX_FILLER} "
                 f"probe {trial}"
             )
-            if trial % 2 == 0:
+            if primed_first[trial]:
                 primed.append(self._model.measure_latency(observer, primed_prompt))
                 control.append(self._model.measure_latency(observer, control_prompt))
             else:
@@ -368,6 +448,13 @@ class KvCacheTimingProbe:
             p_value=round(p_value, 10),
             ci_low_ms=round(mean_gap - margin, 2),
             ci_high_ms=round(mean_gap + margin, 2),
+            resolved=len(set(primed) | set(control)) > 1,
+            variance_floored=(
+                statistics.variance(primed) < _VARIANCE_FLOOR
+                or statistics.variance(control) < _VARIANCE_FLOOR
+            )
+            if len(primed) > 1 and len(control) > 1
+            else True,
         )
 
     def _finding(self, signal: TimingSignal, alpha: float) -> Finding:
@@ -393,6 +480,13 @@ class KvCacheTimingProbe:
                 f"{int(_CI_LEVEL * 100)}% CI [{signal.ci_low_ms}, {signal.ci_high_ms}]ms); "
                 f"Welch t={signal.t_statistic}, df={signal.degrees_of_freedom}, p={p_text}, "
                 f"Cohen's d={signal.effect_size}; significant at Bonferroni alpha={alpha:.2g}"
+                + (
+                    " - an arm's spread was below the timer's resolution, so the 1 us "
+                    "variance floor stood in for it: d, t, p and the interval are BOUNDS "
+                    "(the gap is at least this distinguishable), not measurements"
+                    if signal.variance_floored
+                    else ""
+                )
             ),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,

@@ -197,6 +197,14 @@
       "title": "Synthetic Surfaces",
       "type": "array"
     },
+    "unaccounted_surfaces": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unaccounted Surfaces",
+      "type": "array"
+    },
     "weighted_score": {
       "maximum": 1.0,
       "minimum": 0.0,

@@ -56,9 +56,38 @@ class HttpAgent(AgentAdapter):
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = json.loads(response.read())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        # `UnicodeDecodeError` is a sibling of `JSONDecodeError`, not a subclass,
+        # so a non-UTF-8 body escaped this tuple - and the broad wrap added for
+        # exactly that case starts AFTER this block, so it never caught it either.
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ) as error:
             raise AdapterError(f"agent HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"agent response must be a JSON object, got {type(body).__name__}")
-        tool_calls = tuple(str(call) for call in body.get("tool_calls", []))
-        return AgentResult(output=str(body.get("output", "")), tool_calls=tool_calls)
+        # A 200 carrying an error envelope is not a run: read as an empty one, the
+        # step recorded "the agent invoked no foreign tool", which is a verdict the
+        # probe never obtained.
+        for key in ("error", "errors"):
+            if body.get(key):
+                raise AdapterError(
+                    f"agent endpoint at {self._url} returned an error: {str(body[key])[:200]}"
+                )
+        # Any failure SHAPING the response is an adapter failure too, not a crash.
+        # The catch above named three transport errors, so a 200 whose body is
+        # well-formed JSON of the wrong shape - `"tool_calls": null`, a non-UTF-8
+        # body - escaped as a bare `TypeError`/`UnicodeDecodeError`, which is not
+        # this contract's error type and so escapes the runner's handling of it. Six
+        # sibling agent adapters wrap broadly for exactly that reason.
+        try:
+            tool_calls = tuple(str(call) for call in body.get("tool_calls", []))
+            return AgentResult(output=str(body.get("output", "")), tool_calls=tool_calls)
+        except AdapterError:
+            raise
+        except Exception as error:
+            raise AdapterError(
+                f"agent endpoint at {self._url} returned a body this adapter cannot read: {error}"
+            ) from error

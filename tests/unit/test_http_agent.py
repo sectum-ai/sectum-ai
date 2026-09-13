@@ -41,6 +41,8 @@ class _StubHandler(BaseHTTPRequestHandler):
             payload: object = ["not", "an", "object"]
         elif self.path == "/notools":
             payload = {"output": "done"}
+        elif self.path == "/nulltools":
+            payload = {"output": "done", "tool_calls": None}
         else:
             auth = self.headers.get("Authorization", "none")
             output = f"tenant={request['tenant']} task={request['task']} auth={auth}"
@@ -95,6 +97,17 @@ def test_http_agent_rejects_a_non_http_url() -> None:
 def test_http_agent_rejects_a_non_object_response(agent_url: str) -> None:
     agent = HttpAgent(agent_url + "badresponse")
     with pytest.raises(AdapterError, match="JSON object"):
+        agent.run(_TENANT, "anything")
+
+
+def test_http_agent_wraps_a_body_it_cannot_shape_in_adapter_error(agent_url: str) -> None:
+    # The catch named three TRANSPORT errors, so a 200 carrying well-formed JSON of
+    # the wrong shape - `"tool_calls": null` - escaped as a bare TypeError. That is
+    # not this contract's error type, so it escapes the runner's handling of an
+    # adapter failure and takes the whole run with it. Six sibling agent adapters
+    # wrap broadly for exactly that reason.
+    agent = HttpAgent(agent_url + "nulltools")
+    with pytest.raises(AdapterError, match="cannot"):
         agent.run(_TENANT, "anything")
 
 

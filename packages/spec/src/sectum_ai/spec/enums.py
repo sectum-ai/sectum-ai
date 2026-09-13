@@ -75,6 +75,31 @@ class Surface(StrEnum):
     TRACING = "tracing"
 
 
+#: The surfaces an erasure scan can reach, in the order the scan reports them
+#: (the vector store leads because it is always present; the rest follow the run
+#: plan). Not every :class:`Surface` is one: no erasure probe scans ``mcp``,
+#: ``api``, ``rag_pipeline`` or ``agent_framework``, so those are not unverified
+#: erasure surfaces - they are not erasure surfaces.
+#:
+#: Canonical HERE, below everything, because both ends need it and neither can
+#: import the other: `probes` plans the scan from it, `evidence` decides which
+#: surfaces an Article 17 assertion may speak about, and `spec` validates a
+#: record's coverage keys against it. It lived in `probes` and was transcribed
+#: into `evidence` under a parity test - a copy kept honest by a test is still a
+#: copy, and this repo's recurring defect is exactly a rule applied to one member
+#: of a family and not its siblings.
+ERASURE_SURFACES: tuple[Surface, ...] = (
+    Surface.VECTOR_DB,
+    Surface.TRACING,
+    Surface.AGENT_MEMORY,
+    Surface.SEMANTIC_CACHE,
+    Surface.MODEL_ADAPTER,
+    Surface.SEARCH_INDEX,
+    Surface.EVAL_SET,
+    Surface.BACKUP,
+)
+
+
 class SurfaceProvenance(StrEnum):
     """What a run's probes actually interrogated on one surface.
 

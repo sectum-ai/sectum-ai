@@ -23,7 +23,6 @@ tested as an invariant).
 import hashlib
 import math
 import re
-import unicodedata
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -34,17 +33,22 @@ from sectum_ai.spec import (
     FindingStatus,
     Marker,
     MarkerType,
+    Observation,
     Principal,
+    ProbeStep,
     Severity,
     SharedEntity,
     Substrate,
     Surface,
     get_logger,
+    normalize_for_match,
+    ordered_within_span,
+    residual_present,
+    tokenize,
 )
 
 _log = get_logger(__name__)
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
 _OWASP_MULTI_TENANT = "LLM08:2025"
 
 # The conservative semantic-similarity gate that suits the deterministic fake
@@ -123,32 +127,6 @@ def redact_secret(plaintext: str) -> str:
     return f"{plaintext[:4]}...[redacted]"
 
 
-def _strip_format_chars(text: str) -> str:
-    """Drop Unicode format characters (category ``Cf``): zero-width spaces/joiners.
-
-    A leaked canary split with a zero-width character (``SEC​TUM-...``) reads
-    identically to a human but evades a raw substring test; removing format
-    characters before matching closes that evasion.
-    """
-    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
-
-
-def _normalize_for_match(text: str) -> str:
-    """Case-, width-, and zero-width-insensitive form for canary substring matching.
-
-    A model that re-cased, NFKC-normalized (e.g. full-width), or zero-width-split
-    a leaked canary would slip past a raw ``in`` test; normalizing the needle and
-    the haystack the same way before matching catches it. Used only to decide
-    *whether* a canary is present - the original text and the canonical canary are
-    what the evidence pack quotes.
-    """
-    return unicodedata.normalize("NFKC", _strip_format_chars(text)).casefold()
-
-
-def _tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(_normalize_for_match(text))
-
-
 # How many foreign tokens may sit *between* a marker's tokens and still count
 # as the entity surfacing. A real leak lightly paraphrases ("Project (internal)
 # Onyx-00002"), so a strictly contiguous run would miss it - but the entity
@@ -172,35 +150,6 @@ _MAX_INTERPOSED_TOKENS = 1
 # single-entity-marker manifest, which would otherwise let a judge confirm a leak
 # on the bare template word alone.
 _ENTITY_TEMPLATE_TOKENS = frozenset({"project"})
-
-
-def _ordered_within_span(haystack: list[str], needle: list[str], max_interposed: int = 1) -> bool:
-    """Whether ``needle``'s tokens occur in order, close together, inside ``haystack``.
-
-    The needle tokens must appear in the same order within a window of at most
-    ``len(needle) + max_interposed`` tokens. This catches a leak that interposes
-    a token between the entity's words, while rejecting both a reordered
-    coincidence (every token present but out of order) and a scattered one (the
-    tokens spread across an unrelated span). Greedy matching is exact for the
-    distinct-token canary phrases this gates.
-    """
-    if not needle:
-        return False
-    max_span = len(needle) + max_interposed
-    for start in range(len(haystack)):
-        if haystack[start] != needle[0]:
-            continue
-        if len(needle) == 1:
-            # A single-token needle is satisfied by the anchor alone; returning
-            # here also avoids indexing ``needle[1]`` in the loop below.
-            return True
-        matched = 1
-        for pos in range(start + 1, min(start + max_span, len(haystack))):
-            if haystack[pos] == needle[matched]:
-                matched += 1
-                if matched == len(needle):
-                    return True
-    return False
 
 
 def is_cross_principal(marker: Marker, observer: Principal) -> bool:
@@ -310,6 +259,16 @@ class DetectionProviders:
         return DetectionPipeline(substrate, self.embedder, self.judge, self.semantic_threshold)
 
 
+_EMPTY_EVIDENCE = (
+    "cross-principal fetch returned 200-empty, not an explicit deny - "
+    "negative authorization is unproven (the 200-empty vs 403 ambiguity)"
+)
+_EMPTY_REMEDIATION = (
+    "return an explicit authorization error (e.g. 403) for cross-tenant "
+    "object fetches rather than a 200 with an empty body"
+)
+
+
 class DetectingProbe:
     """Base for probes that run the detection pipeline.
 
@@ -319,6 +278,13 @@ class DetectingProbe:
     Subclasses call ``self._providers.pipeline(substrate)`` in ``detect``.
     """
 
+    # Declared by every concrete probe (the `Probe` protocol in `base.py`); named
+    # here so the shared finding builders below can stamp them.
+    id: str
+    owasp_llm: str
+    atlas_techniques: tuple[str, ...]
+    nist_rmf: tuple[str, ...]
+
     # Secondary OWASP LLM Top 10 mapping (the spec §18: "LLM02/LLM06 secondary").
     # Every leakage probe also evidences Sensitive Information Disclosure; the
     # agent/tool probes override this to Excessive Agency (LLM06).
@@ -326,6 +292,92 @@ class DetectingProbe:
 
     def __init__(self, providers: DetectionProviders | None = None) -> None:
         self._providers = providers if providers is not None else DetectionProviders()
+
+    def _observer(self, step: ProbeStep, substrate: Substrate) -> Principal | None:
+        """The principal this step acted as, or ``None`` if the substrate has none."""
+        return next(
+            (
+                principal
+                for principal in substrate.principals()
+                if principal.tenant_id == step.actor_tenant_id
+                and principal.user_id == step.actor_user_id
+            ),
+            None,
+        )
+
+    def _empty_ambiguity_finding(
+        self,
+        step: ProbeStep,
+        observation: Observation,
+        substrate: Substrate,
+        *,
+        marker: Marker | None,
+        evidence: str = _EMPTY_EVIDENCE,
+        remediation: str = _EMPTY_REMEDIATION,
+        atlas: tuple[str, ...] | None = None,
+    ) -> Finding | None:
+        """The UNVERIFIED 200-empty finding for a cross-principal by-id read.
+
+        Class 1's rule, and it belongs to every by-id read, not to one of them.
+        ``AccessOutcome.DENIED`` is produced by no code path - the runner can only
+        emit RETURNED or EMPTY - so "nothing came back" never means "the deny was
+        enforced". The vector fetch said so and its two structural siblings, a
+        foreign ``cache.get`` and a foreign ``mcp.invoke`` of another principal's
+        resource key, did not: Classes 4 and 7 carried Class 1's evidence with
+        none of its caveat, passing with an empty note.
+
+        Each probe addresses its own marker (a planted doc id, a cache key, a
+        resource key); what must not diverge is the finding, so that is here.
+
+        ``evidence``/``remediation`` default to the 200-empty wording the three
+        by-id reads share. Class 7's agent-framework probe overrides them because
+        its read is ambiguous for a DIFFERENT reason - the framework answers in
+        prose either way, so nothing was 200-empty - and a caveat that misstates
+        what was observed is the over-claim it exists to prevent.
+        """
+        observer = self._observer(step, substrate)
+        if observer is None or marker is None or not is_cross_principal(marker, observer):
+            return None
+        user_suffix = f"-{observer.user_id.hex}" if observer.user_id is not None else ""
+        return Finding(
+            finding_id=(
+                f"finding-{self.id}-empty-{marker.marker_id}-"
+                f"{observer.tenant_id.hex}{user_suffix}-{observation.surface.value}"
+            ),
+            probe_id=self.id,
+            severity=Severity.INFO,
+            confidence=0.0,
+            status=FindingStatus.UNVERIFIED,
+            owner_tenant_id=marker.owner_tenant_id,
+            observed_in_tenant_id=observer.tenant_id,
+            owner_user_id=marker.owner_user_id,
+            observed_in_user_id=observer.user_id,
+            surface=observation.surface,
+            marker_id=marker.marker_id,
+            evidence_span=evidence,
+            owasp_llm=self.owasp_llm,
+            owasp_secondary=self.owasp_secondary,
+            # The caller's narrowing, where it has one. `AgentToolHijackProbe`
+            # narrows the stamp per SUB-PROBE on its leak path - ADR-0009 adopted
+            # `AML.T0051.001` for the description-injection sub-probe only, because
+            # "stamping them with it would claim an attack the probe never
+            # performed, in a field that ships as signed evidence" - and this
+            # helper hard-coded the probe's full footprint. Measured on a real
+            # `probe; report`: all 24 occurrences of `AML.T0051.001` in the signed
+            # evidence sat on 200-empty notes, which observed nothing and injected
+            # nothing, and none on a leak. `evidence` and `remediation` are already
+            # parameterized here for exactly this reason; `atlas` was the field
+            # that was not.
+            atlas=self.atlas_techniques if atlas is None else atlas,
+            nist=self.nist_rmf,
+            remediation_pointer=remediation,
+        )
+
+    def _marker_by_id(self, substrate: Substrate, marker_id: str | None) -> Marker | None:
+        return next(
+            (m for m in substrate.manifest.markers if m.marker_id == marker_id),
+            None,
+        )
 
 
 class FakeEmbeddingProvider:
@@ -345,7 +397,7 @@ class FakeEmbeddingProvider:
     def embed(self, text: str) -> tuple[float, ...]:
         """Return a unit-normalized hashing-trick vector for ``text``."""
         vector = [0.0] * self.dim
-        for token in _tokenize(text):
+        for token in tokenize(text):
             digest = hashlib.sha256(token.encode("utf-8")).digest()
             vector[int.from_bytes(digest[:4], "big") % self.dim] += 1.0
         norm = math.sqrt(sum(value * value for value in vector))
@@ -374,10 +426,10 @@ class FakeJudge:
         the zero-false-positive invariant while not missing light paraphrase, and
         stays robust to spacing, casing, and punctuation.
         """
-        marker_tokens = _tokenize(marker.plaintext)
+        marker_tokens = tokenize(marker.plaintext)
         if not marker_tokens:
             return JudgeVerdict(leak=False, rationale="empty marker", evidence_span="")
-        if _ordered_within_span(_tokenize(observed_text), marker_tokens, _MAX_INTERPOSED_TOKENS):
+        if ordered_within_span(tokenize(observed_text), marker_tokens, _MAX_INTERPOSED_TOKENS):
             # On a confirmed leak the fake judge cites the marker plaintext as
             # the evidence span - the same slice the audit-pack PDF quotes.
             return JudgeVerdict(
@@ -457,6 +509,18 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
     (then higher severity, then higher confidence). A real leak is therefore never
     dropped from the headline count in favor of an earlier UNVERIFIED duplicate.
     First-seen order is preserved.
+
+    The TECHNIQUE lists are unioned rather than taken from the winner - but only
+    across duplicates that reached the SAME verdict - because they are a property
+    of the sub-probe that detected the leak and the id does not encode the
+    sub-probe. `AgentToolHijackProbe` stamps `AML.T0051.001` only
+    on its description-injection sub-probe (ADR-0009); that sub-probe's step is
+    planned last and all four tie on status, severity and confidence, so it always
+    lost. Against a server exploitable BOTH ways - the realistic case - the pack
+    reported the leak and never recorded that ingested tool metadata also reached
+    it, which is a different remediation. Splitting the id by sub-probe would
+    inflate the confirmed-leak count instead; one leak stays one finding, carrying
+    every technique that reached it.
     """
     best: dict[str, Finding] = {}
     order: list[str] = []
@@ -465,9 +529,41 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
         if existing is None:
             best[finding.finding_id] = finding
             order.append(finding.finding_id)
-        elif _finding_strength(finding) > _finding_strength(existing):
-            best[finding.finding_id] = finding
+            continue
+        winner, loser = (
+            (finding, existing)
+            if _finding_strength(finding) > _finding_strength(existing)
+            else (existing, finding)
+        )
+        # Only ACROSS THE SAME VERDICT. A technique describes what the detection
+        # that reached this verdict did, so merging across them claims the loser's
+        # attack succeeded: a CONFIRMED leak found by a `lookup` sub-probe, merged
+        # with the injection sub-probe's UNVERIFIED non-finding for the same
+        # resource, came out stamped `AML.T0051.001` - "the tool-description
+        # injection worked here" - over an attempt that found nothing. The union
+        # exists for the opposite case, two detections that BOTH confirmed.
+        best[finding.finding_id] = (
+            _with_techniques_of(winner, loser) if winner.status is loser.status else winner
+        )
     return [best[finding_id] for finding_id in order]
+
+
+def _with_techniques_of(winner: Finding, loser: Finding) -> Finding:
+    """``winner`` carrying every technique either duplicate recorded.
+
+    Order-stable and duplicate-free: the winner's own stamps stay first, so a
+    finding's primary attribution does not move when an equal-strength duplicate
+    happens to be seen first.
+    """
+
+    def _union(first: tuple[str, ...], second: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*first, *second)))
+
+    atlas = _union(winner.atlas, loser.atlas)
+    secondary = _union(winner.owasp_secondary, loser.owasp_secondary)
+    if atlas == winner.atlas and secondary == winner.owasp_secondary:
+        return winner
+    return winner.model_copy(update={"atlas": atlas, "owasp_secondary": secondary})
 
 
 def _canonical_embedding_model(model: str) -> str:
@@ -510,7 +606,7 @@ class DetectionPipeline:
                 self._entity_vectors[marker.marker_id] = vector
                 if marker.embedding_ref is not None:
                     self._stored_vectors[marker.embedding_ref] = vector
-                for token in set(_tokenize(marker.plaintext)):
+                for token in set(tokenize(marker.plaintext)):
                     entity_token_counts[token] = entity_token_counts.get(token, 0) + 1
         # Template boilerplate - the fixed scaffolding words every entity canary
         # ("Project <codename>-<serial>") repeats, NOT distinctive evidence of any
@@ -638,7 +734,7 @@ class DetectionPipeline:
         against). Side-effect-free; it never builds a :class:`Finding`.
         """
         observer = Principal(tenant_id=observed_in_tenant, user_id=observed_user)
-        observation_tokens = _tokenize(observation_text)
+        observation_tokens = tokenize(observation_text)
         window_cache: dict[str, tuple[float, ...]] = {}
         best = 0.0
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
@@ -659,13 +755,18 @@ class DetectionPipeline:
         self, observer: Principal, text: str, surface: Surface, probe_id: str
     ) -> list[Finding]:
         findings: list[Finding] = []
-        haystack = _normalize_for_match(text)
         for marker in self._foreign(observer, MarkerType.HARD_CANARY):
-            needle = _normalize_for_match(marker.plaintext)
-            # ``needle`` guards an empty-plaintext marker (which would substring-
-            # match every observation); normalizing both sides catches a canary
-            # the surface re-cased, NFKC-folded, or zero-width-split.
-            if needle and needle in haystack:
+            # THE shared predicate, not a local copy of it. This spelled the arms
+            # out inline - substring, then ordered tokens - and when a third arm
+            # (the alphanumeric projection, for a canary wrapped INSIDE its opaque
+            # body) was added to `residual_present`, the erasure scan got it and
+            # the detector did not: `residual_present` returned True on a wrapped
+            # canary while this returned no finding, over the same bytes. A missed
+            # HARD_CANARY is an over-claimed PASS on Classes 1, 3, 4, 7, 8 and 9,
+            # and two paths answering "is the canary here" differently is exactly
+            # what the shared predicate exists to stop. An empty plaintext is
+            # handled there too (it would otherwise match every observation).
+            if residual_present(marker.plaintext, text):
                 findings.append(
                     self._finding(
                         marker,
@@ -696,15 +797,19 @@ class DetectionPipeline:
         matches no foreign marker produces no finding.
         """
         findings: list[Finding] = []
-        haystack = _normalize_for_match(text)
         shaped = {
-            _normalize_for_match(match)
+            normalize_for_match(match)
             for pattern in _SECRET_PATTERNS
             for match in pattern.findall(text)
         }
         for marker in self._foreign(observer, MarkerType.SECRET_CANARY):
-            needle = _normalize_for_match(marker.plaintext)
-            if needle and (needle in haystack or needle in shaped):
+            # The shared predicate for the "is it here" half, plus this tier's own
+            # credential-shape branch. Spelling the arms out here meant the
+            # projection arm added to `residual_present` reached the erasure scan
+            # and not the detector, so a secret wrapped INSIDE its key body read as
+            # absent on the path whose whole job is to find it.
+            needle = normalize_for_match(marker.plaintext)
+            if residual_present(marker.plaintext, text) or (needle and needle in shaped):
                 findings.append(
                     self._finding(
                         marker,
@@ -725,13 +830,12 @@ class DetectionPipeline:
         self, observer: Principal, text: str, surface: Surface, probe_id: str
     ) -> list[Finding]:
         findings: list[Finding] = []
-        observation_tokens = _tokenize(text)
+        observation_tokens = tokenize(text)
         # One window->vector cache for the whole observation: every entity marker
         # tokenizes to the same window size, so without this each distinct window
         # is re-embedded once per foreign marker (~Nx the HTTP calls on a real
         # embedder). The cache makes each window embed exactly once per observation.
         window_cache: dict[str, tuple[float, ...]] = {}
-        haystack = _normalize_for_match(text)
         for marker in self._foreign(observer, MarkerType.ENTITY_CANARY):
             # A foreign entity whose plaintext is literally present is a leak by
             # observation, not a judgement: the text contains another principal's
@@ -740,18 +844,42 @@ class DetectionPipeline:
             # alone - and a judge answering "no" (a cautious, flaky, or hostile
             # model) silently downgraded a real cross-tenant leak to a candidate.
             # The threshold could also skip it before the judge ever saw it.
-            needle = _normalize_for_match(marker.plaintext)
-            # Substring, or the marker's tokens contiguous and in order: the entity
-            # with its separator changed ("Quasar7K2Q 00001" for "Quasar7K2Q-00001")
-            # is the same text to a reader, and reached the judge alone - where a
-            # cautious "no" downgraded it - while the fake judge confirmed it.
-            marker_tokens = _tokenize(marker.plaintext)
-            verbatim = bool(needle) and (
-                needle in haystack
-                or (
-                    bool(marker_tokens)
-                    and _ordered_within_span(observation_tokens, marker_tokens, 0)
-                )
+            # The shared predicate, like the two tiers above: the entity with its
+            # separator changed ("Quasar7K2Q 00001" for "Quasar7K2Q-00001") is the
+            # same text to a reader, and reached the judge alone - where a cautious
+            # "no" downgraded it - while the fake judge confirmed it. An entity has
+            # no 16-character opaque token, so the projection arm never fires here
+            # and this tier keeps exactly the two arms it had.
+            #
+            # `residual_present`'s token arm is CONTIGUOUS, while this module's own
+            # bar for "the text carries that marker" allows one interposed token -
+            # `_MAX_INTERPOSED_TOKENS`, which `FakeJudge` and `_span_traceable`
+            # branch 1 both use to CONFIRM. So the canonical leak this file
+            # documents at the top, "Project (internal) Onyx-00002", failed the
+            # bypass it was written for: with a real judge that declines - the
+            # cautious, flaky or hostile model the bypass exists to defend against -
+            # a foreign entity plainly present in the observation was recorded
+            # UNVERIFIED and dropped out of `confirmed_findings` and the headline.
+            # Asking the same question with the same predicate, rather than a
+            # stricter one on this path only.
+            verbatim = residual_present(marker.plaintext, text)
+            # CONFIRMATION and CONFIDENCE are different claims, and one predicate
+            # was answering both. `residual_present`'s token arm is CONTIGUOUS,
+            # while this module's own bar for "the text carries that marker" is
+            # `_MAX_INTERPOSED_TOKENS` - the bar `FakeJudge` and `_span_traceable`
+            # branch 1 both use to confirm. So the canonical leak this file
+            # documents at the top, "Project (internal) Onyx-00002", failed the
+            # bypass written for exactly it: with a real judge that declines - the
+            # cautious, flaky or hostile model the bypass defends against - a
+            # foreign entity plainly present was recorded UNVERIFIED and dropped
+            # out of `confirmed_findings` and the headline.
+            #
+            # Kept separate from `verbatim` rather than widening it: `verbatim`
+            # also sets confidence to 1.0, and a paraphrase is not certainty. One
+            # interposed token is enough to say the leak is THERE; it is not
+            # enough to call the match exact in a signed field.
+            present = verbatim or ordered_within_span(
+                observation_tokens, tokenize(marker.plaintext), _MAX_INTERPOSED_TOKENS
             )
             similarity = self._best_window_similarity(observation_tokens, marker, window_cache)
             # The threshold gates which *semantic* candidates reach the judge. With
@@ -759,7 +887,7 @@ class DetectionPipeline:
             # match) is the binding test; the threshold becomes the real
             # calibration knob once a production embedding model is configured. A
             # verbatim match is never gated by it.
-            if not verbatim and similarity < self._threshold:
+            if not present and similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
             # FP-control backstop (the engineering spec, section 6.4): a judge
@@ -773,14 +901,17 @@ class DetectionPipeline:
             judged = leak.leak and self._span_traceable(
                 text, leak.evidence_span, marker, self._entity_boilerplate
             )
-            confirmed = verbatim or judged
+            confirmed = present or judged
             # `_span_traceable` also confirms via the MARKER being present
             # (branch 1), whatever the judge quoted - so it cannot decide what to
             # QUOTE: a judge affirming a verbatim leak while citing a fabricated
-            # span would put that fabrication in the signed pack. A span is
-            # quotable only when the span itself is in the observation.
-            quotable = bool(leak.evidence_span) and _ordered_within_span(
-                _tokenize(text), _tokenize(leak.evidence_span), _MAX_INTERPOSED_TOKENS
+            # span would put that fabrication in the signed pack. Asking only
+            # whether the span is SOMEWHERE in the observation was not enough
+            # either: an unrelated in-observation sentence passes that, and became
+            # the quoted proof of the leak. A span is quotable only when it also
+            # ties to this marker - branch 2's distinctive-token test.
+            quotable = bool(leak.evidence_span) and self._span_ties_to_marker(
+                text, leak.evidence_span, marker, self._entity_boilerplate
             )
             if confirmed:
                 # The audit pack renders this span (the PDF renderer), so a
@@ -841,14 +972,37 @@ class DetectionPipeline:
         confirm; the finding stays UNVERIFIED. The deterministic fake judge cites
         the marker plaintext, so it always confirms via (1).
         """
-        text_tokens = _tokenize(text)
-        marker_tokens = _tokenize(marker.plaintext)
-        marker_present = bool(marker_tokens) and _ordered_within_span(
+        text_tokens = tokenize(text)
+        marker_tokens = tokenize(marker.plaintext)
+        marker_present = bool(marker_tokens) and ordered_within_span(
             text_tokens, marker_tokens, _MAX_INTERPOSED_TOKENS
         )
         if marker_present:
             return True
-        span_tokens = _tokenize(evidence_span)
+        return DetectionPipeline._span_ties_to_marker(text, evidence_span, marker, boilerplate)
+
+    @staticmethod
+    def _span_ties_to_marker(
+        text: str,
+        evidence_span: str,
+        marker: Marker,
+        boilerplate: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Branch 2 alone: the cited span is in the observation AND ties to ``marker``.
+
+        Separated from :meth:`_span_traceable` because the two questions diverge.
+        `_span_traceable` answers "does this judge verdict confirm", and branch 1
+        says yes on the MARKER being present, whatever the judge quoted - so it
+        cannot decide what to QUOTE. Asking only "is the span somewhere in the
+        text" let a judge affirming a genuine verbatim leak put an unrelated
+        in-observation sentence into the signed pack as the proof of it: a
+        CONFIRMED cross-tenant leak of `Project Onyx-00002` evidenced by "the
+        quarterly roadmap was also reviewed", sharing no token with the marker,
+        in the field the PDF renderer's own docstring calls "the proof".
+        """
+        text_tokens = tokenize(text)
+        marker_tokens = tokenize(marker.plaintext)
+        span_tokens = tokenize(evidence_span)
         # A pure-digit token (the canary's serial, e.g. "00002") is low-entropy and
         # collides with everyday numbers (invoice / ticket / lot), so it can never
         # on its own tie a span to a marker - drop it from the distinctive set. The
@@ -859,7 +1013,7 @@ class DetectionPipeline:
             if not token.isdigit()
         }
         if span_tokens and distinctive_overlap:
-            return _ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
+            return ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
         return False
 
     def _best_window_similarity(
@@ -886,7 +1040,7 @@ class DetectionPipeline:
             marker_vector = self._stored_vectors[marker.embedding_ref]
         else:
             marker_vector = self._entity_vectors[marker.marker_id]
-        window_size = len(_tokenize(marker.plaintext))
+        window_size = len(tokenize(marker.plaintext))
         best = 0.0
         for window in _token_windows(observation_tokens, window_size):
             window_text = " ".join(window)

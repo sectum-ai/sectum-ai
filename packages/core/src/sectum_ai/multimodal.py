@@ -328,6 +328,7 @@ def _sweep(
     from sectum_ai.runner import (
         StepResult,
         payload_int,
+        payload_required,
         retrieval_pivot_counts,
         retrieval_pivot_rate,
     )
@@ -342,7 +343,7 @@ def _sweep(
         item_vectors = model.embed([item.image for item in corpus])
         index = list(zip(corpus, item_vectors, strict=True))
         query_vectors = model.embed(
-            [render_entity_image(step.payload["query"], 0) for step in steps]
+            [render_entity_image(payload_required(step, "query"), 0) for step in steps]
         )
         results: list[StepResult] = []
         for step, query_vector in zip(steps, query_vectors, strict=True):

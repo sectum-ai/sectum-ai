@@ -27,6 +27,7 @@ and the ``LocalTimestamper`` path runs without it.
 """
 
 import base64
+import binascii
 import hashlib
 import json
 import urllib.request
@@ -306,8 +307,17 @@ def _verify_checkpoint(proof: Mapping[str, Any], root: bytes, key_pem: bytes) ->
     lines = text.split("\n")
     if len(lines) < 3:
         raise EvidenceError("the Rekor checkpoint body is malformed")
-    # The checkpoint body is: origin, tree size, base64 root hash.
-    if base64.b64decode(lines[2]) != root:
+    # The checkpoint body is: origin, tree size, base64 root hash. A hostile
+    # checkpoint is refused, not crashed on: every sibling decode here is guarded,
+    # and a caller keying on exit 4 reads an unhandled binascii.Error as the tool
+    # breaking rather than as a rejected proof.
+    try:
+        checkpoint_root = base64.b64decode(lines[2], validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise EvidenceError(
+            f"the Rekor checkpoint root hash is not valid base64: {error}"
+        ) from error
+    if checkpoint_root != root:
         raise EvidenceError(
             "the Rekor checkpoint commits to a different root; the proof was altered"
         )

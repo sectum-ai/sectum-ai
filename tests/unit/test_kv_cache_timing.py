@@ -1,6 +1,9 @@
 """Tests for Class 5 - the KV-cache timing side-channel probe."""
 
+import random
 from uuid import UUID
+
+import pytest
 
 from sectum_ai.adapters import FakeModel
 from sectum_ai.probes import KvCacheTimingProbe, confirmed_findings
@@ -449,3 +452,216 @@ def test_two_low_valued_tenants_do_not_share_a_warm_up_prefix() -> None:
     report = KvCacheTimingProbe(substrate, model=_WarmingModel(shared=False)).run()
     assert report.findings == ()
     assert all(signal.mean_gap_ms == 0.0 for signal in report.signals)
+
+
+class _RoundRobinPool(FakeModel):
+    """No prefix cache. Latency is whichever replica the dispatcher picked.
+
+    A four-way round robin, the ordinary shape of a served model behind a load
+    balancer. Nothing here can leak: the prompt does not affect the latency at
+    all, only the call's position in the rotation does.
+    """
+
+    def __init__(self, pool: tuple[float, ...]) -> None:
+        super().__init__(prefix_cache=False)
+        self._pool = pool
+        self._calls = 0
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        index = self._calls
+        self._calls += 1
+        # Ambient jitter, so the t-test has the non-degenerate variance a real
+        # machine gives it. Identical in distribution for both arms.
+        return self._pool[index % len(self._pool)] + random.Random(index).uniform(-0.5, 0.5)
+
+
+def test_a_round_robin_replica_pool_does_not_manufacture_a_side_channel() -> None:
+    # A fixed ABBA schedule puts each arm on a fixed pair of residues mod 4 -
+    # primed at call indices {0,3}, control at {1,2} - so behind a four-way round
+    # robin, where the replica IS the call index mod 4, the arms are pinned to
+    # disjoint replica sets. Any spread across the pool then lands entirely on one
+    # arm: this pool (two fast replicas exactly where the primed arm lands)
+    # produced 12 CONFIRMED cross-tenant findings at Cohen's d = 19.5 against a
+    # model with no cache at all. ABBA cancels a LINEAR drift; a period-4
+    # systematic it does not touch.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(
+        substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))
+    ).run()
+    assert report.findings == (), (
+        "a round-robin replica pool invented "
+        f"{len(report.findings)} findings; max |d| "
+        f"{max((abs(s.effect_size) for s in report.signals), default=0.0):.2f}"
+    )
+
+
+def test_the_shuffled_arm_order_is_reproducible() -> None:
+    # The order is seeded from the tenant pair, so two runs of the same scenario
+    # against the same backend measure the same thing - the determinism the whole
+    # evidence chain rests on.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    first = KvCacheTimingProbe(substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))).run()
+    second = KvCacheTimingProbe(
+        substrate, model=_RoundRobinPool((100.0, 105.0, 105.0, 100.0))
+    ).run()
+    assert [s.mean_gap_ms for s in first.signals] == [s.mean_gap_ms for s in second.signals]
+
+
+class _NoResolutionModel(FakeModel):
+    """A backend whose latency metric returns one constant, whatever it is asked.
+
+    A real shared prefix cache may sit behind it; this metric simply cannot see
+    one. Reading that as "measured, and clean" is the over-claim.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(prefix_cache=True)
+
+    def measure_latency(self, tenant: UUID, prompt: str) -> float:
+        return 100.0
+
+
+def test_a_latency_metric_with_no_resolution_is_not_a_measurement() -> None:
+    # Every reading identical gives Cohen's d = 0.0 and p = 1.0 - arithmetically
+    # indistinguishable, downstream, from a careful null result. Class 5 recorded
+    # the probe as having run and graded the class PASS off it.
+    substrate = build_substrate(default_scenario(seed=5, corpus_size=8))
+    report = KvCacheTimingProbe(substrate, model=_NoResolutionModel()).run()
+    assert report.signals, "the probe still records what it attempted"
+    assert not any(signal.resolved for signal in report.signals)
+    assert report.findings == ()
+    # A backend the metric CAN see is still resolved, and still caught.
+    real = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert all(signal.resolved for signal in real.signals)
+    assert len(real.findings) == len(real.signals)
+
+
+def test_each_warmed_prefix_is_measured_by_exactly_one_observer() -> None:
+    # The docstring's own invariant: "the owner warms one prefix per (observer,
+    # trial) and each is measured exactly once, by one observer arm". One prefix
+    # set per OWNER was built and handed to every observer in turn, so on a
+    # backend whose latency call runs inference (HF's `measure_latency_ms` calls
+    # `infer`) observer 1's own measurement primed the prefix that observers 2..n
+    # then read as a hit - and the probe attributed that warmth to the OWNER,
+    # emitting a CONFIRMED, confidence-1.0 finding naming a principal the
+    # measurement never established. The CONTROL prefix already carried this fix,
+    # with the reason written beside it; the primed prefix never got it.
+    from collections import Counter
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    model = FakeModel(prefix_cache=True)
+    seen: Counter[str] = Counter()
+    measure = model.measure_latency
+
+    def spy(tenant: UUID, prompt: str) -> float:
+        seen[prompt[:20]] += 1
+        return measure(tenant, prompt)
+
+    model.measure_latency = spy  # type: ignore[method-assign]
+    report = KvCacheTimingProbe(substrate, model=model).run()
+
+    primed = {prefix for prefix in seen if prefix.startswith("t")}
+    assert primed, seen
+    assert set(Counter(seen[prefix] for prefix in primed)) == {1}, Counter(
+        seen[prefix] for prefix in primed
+    )
+    # The pair must still be identifiable inside the leading 20 characters the
+    # fake and the serving doubles key on - a longer key would silently stop the
+    # cache distinguishing trials, and the signal would vanish.
+    assert all(len(prefix) == 20 for prefix in primed), primed
+    # And the probe still measures the side channel it exists for.
+    assert len(report.findings) == 12, report.findings
+
+
+def test_cohens_d_uses_the_pooled_sample_deviation() -> None:
+    # Cohen's d is defined on the pooled SAMPLE SD. This used `pvariance`
+    # (population, / n) while `_welch` in the same file used `variance` (/ n-1),
+    # so the figure was inflated by sqrt(n/(n-1)) - 2.15% at the default 24 trials
+    # and 11.8% at 5. That number is printed in the finding's evidence span and
+    # signed into `side_channel_effect_sizes`, and it crosses the `_LARGE_EFFECT`
+    # boundary, so a true 4.95 shipped as 5.05 and the finding read HIGH.
+    import statistics
+
+    from sectum_ai.probes.kv_cache_timing.probe import _cohens_d
+
+    for n in (5, 24):
+        slow = [20.0 + i for i in range(n)]
+        fast = [10.0 + i for i in range(n)]
+        pooled = ((statistics.variance(slow) + statistics.variance(fast)) / 2.0) ** 0.5
+        expected = (statistics.fmean(slow) - statistics.fmean(fast)) / pooled
+        assert _cohens_d(slow, fast) == pytest.approx(expected), n
+
+    # A single sample cannot estimate a spread; the floor stands in rather than
+    # raising, and `resolved` is what keeps such a pair out of the findings.
+    assert _cohens_d([5.0], [5.0]) == 0.0
+
+
+def test_a_floored_variance_is_reported_as_a_bound_not_a_measurement() -> None:
+    # A jitter-free backend has zero observed spread, and the 1 us floor stands in
+    # for it so Welch's t is finite rather than degenerate - which is right. What
+    # was wrong is printing the floor's outputs as observations: `d=60000.0`,
+    # `t=207846`, `p=0.0` and a 95% interval of `[60.00, 60.00]`. A zero-width
+    # confidence interval claims the gap is known EXACTLY, from a spread the run
+    # never measured, in a signed evidence pack.
+    class _ConstantLatency:
+        name = "constant"
+
+        def __init__(self) -> None:
+            self.warm = False
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            self.warm = True
+            return ""
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            return 60.0 if self.warm and prompt.startswith("t") else 120.0
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    report = KvCacheTimingProbe(substrate, model=_ConstantLatency()).run()  # type: ignore[arg-type]
+
+    signal = report.signals[0]
+    assert signal.variance_floored, signal
+    assert signal.ci_low_ms == signal.ci_high_ms, signal  # the zero-width interval
+    assert report.findings, "the side channel is real and must still be reported"
+    span = report.findings[0].evidence_span
+    assert "BOUNDS" in span and "variance floor stood in" in span, span
+
+    # A backend with real jitter is unchanged: nothing was floored, so nothing is
+    # qualified, and the numbers stay measurements.
+    measured = KvCacheTimingProbe(substrate, model=FakeModel(prefix_cache=True)).run()
+    assert not measured.signals[0].variance_floored
+    assert "BOUNDS" not in measured.findings[0].evidence_span
+
+    # ONE arm floored is still floored. Both fixtures above move both arms
+    # together, so a check on the primed arm alone agreed with them - and a
+    # control arm whose spread the floor invented would have shipped d, t and p
+    # as measurements.
+    class _ConstantControl:
+        name = "constant-control"
+
+        def __init__(self) -> None:
+            self.warm = False
+            self.n = 0
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            self.warm = True
+            return ""
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            if not (self.warm and prompt.startswith("t")):
+                return 120.0  # the control arm: no spread at all
+            self.n += 1
+            return 60.0 + (self.n % 4) * 0.5  # the primed arm jitters
+
+    one_armed = KvCacheTimingProbe(substrate, model=_ConstantControl()).run()  # type: ignore[arg-type]
+    assert one_armed.signals[0].variance_floored, one_armed.signals[0]
+    assert one_armed.findings, "the side channel is real and must still be reported"
+    assert "BOUNDS" in one_armed.findings[0].evidence_span
+    # And the METRIC says it too. The evidence span carried the qualifier and
+    # `side_channel_effect_sizes` - what `score` reads for Class 5 and what
+    # `baseline`/`diff` compare - carried the same number bare, so d=146.7 entered
+    # the signed record as a measurement. Labelled, not dropped: an unresolved pair
+    # is 0.0 by arithmetic and stays out, while this is real evidence of a real
+    # side channel, bounded below.
+    assert set(one_armed.variance_floored_pairs) == set(one_armed.effect_sizes)
+    assert not measured.variance_floored_pairs, measured.variance_floored_pairs

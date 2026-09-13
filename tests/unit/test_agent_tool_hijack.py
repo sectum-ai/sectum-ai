@@ -3,13 +3,19 @@
 from uuid import UUID
 
 from sectum_ai.adapters import FakeMCP
+from sectum_ai.adapters.base import McpResult
 from sectum_ai.probes import AgentToolHijackProbe, confirmed_findings
+from sectum_ai.probes.detection import dedupe_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
+    AccessOutcome,
+    Finding,
+    FindingStatus,
     MarkerType,
     Observation,
     ProbeStep,
     Scenario,
+    Severity,
     SharedEntity,
     Substrate,
     Surface,
@@ -285,3 +291,145 @@ def test_user_level_steps_are_dropped_for_an_adapter_that_cannot_carry_the_user(
     # the same fake carrying the user reports the cross-user leak it really has
     leaky = _seeded_mcp_users(substrate, user_scoped=False)
     assert confirmed_findings(Runner(substrate, mcp=leaky).run(AgentToolHijackProbe()))
+
+
+def test_the_200_empty_caveat_carries_its_own_sub_probes_techniques() -> None:
+    # The test above covers the LEAK path. `_empty_ambiguity_finding` hard-coded
+    # `atlas=self.atlas_techniques`, so the caveat path escaped the narrowing and
+    # every 200-empty note carried the probe's full footprint - including
+    # T0051.001 on the three `lookup` sub-probes, which name the resource outright
+    # and inject nothing. ADR-0009 is explicit that stamping them "would claim an
+    # attack the probe never performed, in a field that ships as signed evidence",
+    # and the helper already parameterizes `evidence` and `remediation` for exactly
+    # this reason; `atlas` was the field it did not.
+    #
+    # Asserted PRE-dedupe, where each sub-probe's own note still exists: against
+    # the shipped fake the lookup path leaks and its notes never survive, so a
+    # CLI-level assertion would pass with the defect intact.
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = AgentToolHijackProbe()
+    by_tool: dict[str, set[tuple[str, ...]]] = {}
+    for step in probe.plan(substrate):
+        observation = Observation(
+            step_id=step.step_id,
+            surface=Surface.MCP,
+            raw_response="",
+            access_outcome=AccessOutcome.EMPTY,
+        )
+        for finding in probe.detect(step, observation, substrate):
+            tool = str(step.payload.get("tool"))
+            by_tool.setdefault(tool, set()).add(finding.atlas)
+
+    assert set(by_tool) == {"lookup", "search"}, by_tool
+    for stamps in by_tool["lookup"]:
+        assert "AML.T0051.001" not in stamps, stamps
+    for stamps in by_tool["search"]:
+        assert "AML.T0051.001" in stamps, stamps
+
+
+def test_dedupe_keeps_every_technique_that_reached_the_same_leak() -> None:
+    # The finding id encodes marker, principals and surface - not the SUB-PROBE -
+    # while the ATLAS stamp is per-sub-probe, and all four sub-probes tie on
+    # status, severity and confidence. First-seen therefore won, and the
+    # description-injection step is planned last, so it always lost: against a
+    # server exploitable BOTH ways the pack reported the leak and never recorded
+    # that ingested tool metadata also reached it - a different remediation
+    # (ignore description-supplied coordinates vs scope the tool call).
+    #
+    # Unioned rather than split by sub-probe: splitting would report one leak as
+    # four and inflate the headline count.
+    lookup = _finding(atlas=("AML.T0024", "AML.T0053"))
+    injection = _finding(atlas=("AML.T0024", "AML.T0051.001", "AML.T0053"))
+    assert lookup.finding_id == injection.finding_id, "the premise of the defect"
+
+    kept = dedupe_findings([lookup, injection])
+    assert len(kept) == 1, kept
+    assert lookup.status is injection.status, "both CONFIRMED: the union's own precondition"
+    assert set(kept[0].atlas) == {"AML.T0024", "AML.T0053", "AML.T0051.001"}, kept[0].atlas
+    # Order-stable: the winner's own stamps stay first, so a finding's primary
+    # attribution does not move with the order duplicates happen to arrive in.
+    assert kept[0].atlas[:2] == ("AML.T0024", "AML.T0053"), kept[0].atlas
+    assert dedupe_findings([injection, lookup])[0].atlas[0] == "AML.T0024"
+
+
+def _finding(*, atlas: tuple[str, ...]) -> Finding:
+    """Two detections of ONE leak: same id, different sub-probe attribution."""
+    return Finding(
+        finding_id="finding-agent-tool-hijack-mkr-1-tenant-mcp",
+        probe_id="agent-tool-hijack",
+        severity=Severity.CRITICAL,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=UUID(int=1),
+        observed_in_tenant_id=UUID(int=2),
+        surface=Surface.MCP,
+        atlas=atlas,
+    )
+
+
+def test_a_leak_does_not_borrow_a_technique_from_an_attempt_that_found_nothing() -> None:
+    # The union's mirror defect. A technique describes what the detection that
+    # reached THIS verdict did, so merging across verdicts claims the loser's
+    # attack succeeded: a CONFIRMED leak found by a `lookup` sub-probe, merged
+    # with the injection sub-probe's UNVERIFIED non-finding for the same resource,
+    # came out stamped `AML.T0051.001` - "the tool-description injection worked
+    # here" - over an attempt that found nothing. ADR-0009 calls that "an attack
+    # the probe never performed, in a field that ships as signed evidence", which
+    # is the same sentence the narrowing exists for, reached from the other side.
+    leak = _finding(atlas=("AML.T0024", "AML.T0053"))
+    found_nothing = _finding(atlas=("AML.T0024", "AML.T0051.001", "AML.T0053")).model_copy(
+        update={"status": FindingStatus.UNVERIFIED, "confidence": 0.0}
+    )
+    kept = dedupe_findings([leak, found_nothing])
+    assert len(kept) == 1, kept
+    assert kept[0].status is FindingStatus.CONFIRMED
+    assert "AML.T0051.001" not in kept[0].atlas, kept[0].atlas
+
+    # The caveat path is unaffected: four sub-probes that ALL returned 200-empty
+    # share a verdict, so their merged note still records every technique the run
+    # attempted and left undetermined - which is what a caveat is for.
+    attempts = [
+        _finding(atlas=("AML.T0024", "AML.T0053")).model_copy(
+            update={"status": FindingStatus.UNVERIFIED, "confidence": 0.0}
+        ),
+        found_nothing,
+    ]
+    merged = dedupe_findings(attempts)[0]
+    assert set(merged.atlas) == {"AML.T0024", "AML.T0053", "AML.T0051.001"}, merged.atlas
+
+
+def test_the_caveat_does_not_depend_on_how_a_server_words_a_miss() -> None:
+    # The 200-empty caveat gated on `AccessOutcome.EMPTY`, which the runner derives
+    # from `bool(result.output)`. That works for the two TYPED by-id reads -
+    # `vector.fetch` and `cache.get` return `VectorHit | None` and `str | None`, so
+    # RETURNED there genuinely means an object came back. `McpResult.output` is
+    # free-form TOOL TEXT, so a correctly tenant-scoped server answering "No
+    # resource found for that key." is RETURNED, and the caveat went silent.
+    #
+    # The agent-framework sibling was made unconditional for exactly this reason -
+    # "an agent framework answers in prose whichever way its tool went ... there is
+    # no reading of the output that establishes a deny" - and the reasoning was not
+    # carried over. `FakeMCP` returns "", so no shipped configuration exercised the
+    # failing path.
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _ReturnsEmpty(FakeMCP):
+        def invoke(
+            self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+        ) -> McpResult:
+            return McpResult(tool=tool, output="")
+
+    class _NarratesTheMiss(FakeMCP):
+        """The same correct scoping, worded rather than empty."""
+
+        def invoke(
+            self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+        ) -> McpResult:
+            return McpResult(tool=tool, output="No resource found for that key.")
+
+    counts = {
+        label: len(Runner(substrate, mcp=mcp).run(AgentToolHijackProbe()))
+        for label, mcp in (("empty", _ReturnsEmpty()), ("narrated", _NarratesTheMiss()))
+    }
+    assert counts["empty"] > 0, counts
+    assert counts["narrated"] == counts["empty"], counts

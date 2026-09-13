@@ -19,7 +19,7 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | `sentence-transformers` (local), `openai`, `cohere`, `voyage`, `bedrock` (the four hosted opt-in live) | ✅ |
+| Embedding provider (Class 2 sweep) | not an adapter `kind:` — an `embedding_models:` entry, spelled `st:<model>` (local), `openai:<model>`, `cohere:<model>`, `voyage:<model>`, `bedrock:<model>` (the four hosted opt-in live) | ✅ (`hash-<dim>`, `fake-<name>`) |
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Application resource API (`app`) | *(live HTTP adapter not yet implemented)* | ✅ |
@@ -52,11 +52,11 @@ point: it is rejected at config load, since v0.10.0.)
 | Adversarial RAG poisoning (3) | vector store | any live vector backend |
 | Semantic-cache contamination (4) | cache | Redis |
 | KV-cache timing side channel (5) | model | a self-hosted model (vLLM/TGI/HF) — real signal needs a GPU |
-| Embedding inversion (6) | vector store | any live vector backend |
-| Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
-| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse |
+| Embedding inversion (6) | vector store | the built-in fake only — every live backend the CLI builds declares no semantic retrieval, so this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
+| Agent tool-call hijack (7) | MCP | the built-in fake only — the resource key is one Sectum invents and the MCP protocol has no write primitive, so against a live server this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
+| Agent-framework hijack (7) | agent | the built-in fake only — the lookup target is one Sectum invents and no agent adapter has a write primitive, so against a live LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / `http` agent this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
-| LoRA cross-tenant influence (9) | model | a self-hosted model with per-tenant adapters (HF + PEFT) |
+| LoRA cross-tenant influence (9) | model | a self-hosted model that trains on tenant data — per-tenant adapters (HF + PEFT), or shared weights, which is the posture the probe exists to catch |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
 | GDPR Art. 17 erasure — canary (11) | vector store (+ optional cache / tracing / memory / model / search / eval / backup) | vector always; each extra surface needs its adapter |
 | Data-subject erasure — A3 DSR | vector store + cache (+ optional model, tracing, memory, search index) | vector + cache; model / tracing / memory / search index when configured |
@@ -66,10 +66,12 @@ point: it is rejected at config load, since v0.10.0.)
 
 A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis** with
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
-agents — runs Classes **1, 2, 3, 4, 6, 7, 8, 10, 11** and the **A3 DSR** check out of
+agents — runs Classes **1, 2, 3, 4, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
 and **Class 9** (once a per-tenant-LoRA model is configured — the example's serving-only
-vLLM covers Class 5 but not Class 9). Every one of the erasure scan's **eight wired
+vLLM covers Class 5 but not Class 9). **Class 6 is not in that list**: pgvector, like
+every live vector backend, declares no semantic retrieval, so it reads `NOT_COVERED`
+for the same kind of reason the vLLM does for Class 9. Every one of the erasure scan's **eight wired
 surfaces** now has a live backend too — the search index (**OpenSearch**), the eval set
 (**LangSmith Datasets**), and the backup store (**S3**, with **GCS** as a second backend)
 were the last three fake-only surfaces. (The remaining hiding place — third-party
@@ -79,20 +81,72 @@ scanning adapter yet, so it is out of scope, not fake; see the
 
 ## Known coverage gaps
 
+- **The subject-erasure vector fingerprint rarely reaches `ERASED` against a real
+  ANN store.** The check reads a top-50 similarity page and treats a *full* page
+  without the phrase as inconclusive, because a phrase still stored but ranked
+  past the page looks identical. A real approximate-nearest-neighbour store
+  returns exactly `k` whenever the tenant holds that many vectors — and an A3
+  subject erasure removes one subject's data, not the tenant's — so the page is
+  usually full and the vector surface reads `NOT_COVERED` rather than `ERASED`.
+  That is the honest answer for what this method can see, not a bug, but it means
+  the surface's clean verdict is reachable in practice only for a small tenant.
+  Class 11's tenant-level scan is unaffected: it deletes the whole tenant, so the
+  post-erasure page is short. A filtered or exact-match lookup would settle it
+  and is the natural next step.
+- **Classes 6 and 13 do not run against any live vector store.** Both need a vector
+  slot that reports the `semantic_retrieval` capability, because a backend matching on
+  substrings can return a document for a fragment query with no embedding involved and
+  that keyword hit would be recorded as `AML.T0024.001 Invert ML Model` — a real finding
+  attributed to a mechanism the backend does not have. There is no path from
+  `sectum-ai.yaml` to a real embedding model for a vector store (`embedding_model`
+  configures the *detection* pipeline), so every live kind the CLI builds is backed by a
+  bag-of-tokens hashing embedder and declares the capability absent. Against Qdrant,
+  pgvector, Weaviate, Chroma, Milvus, OpenSearch, Pinecone and Azure AI Search these classes
+  therefore read `NOT_COVERED` — the honest verdict for a check that cannot be
+  performed, and the same shape as the erasure-fingerprint gap above. The built-in fake
+  still runs them, which is what the walkthroughs demonstrate and what they say they
+  demonstrate. Wiring a real embedder into the vector slot is the natural next step;
+  the SDK can already do it by constructing the adapter directly.
+- **Class 7 does not run against a live MCP server or a live agent.** Both halves of
+  the class read back something *Sectum planted*: an MCP resource under a key it
+  invents, and an agent lookup for an id it invents. Neither the MCP protocol nor
+  any agent adapter has a write primitive, so Sectum seeds those slots only for its
+  own in-memory fakes and a live backend never receives the canary. Rather than
+  query a backend that cannot hold the answer and grade the empty result `PASS`,
+  the probe is skipped and the class reads `NOT_COVERED` — the same honest verdict,
+  and the same shape, as the Class 6/13 gap above. Configuring a live MCP server or
+  agent framework therefore *removes* Class 7 from a run rather than adding it.
+  The other two seeded slots can be asked rather than assumed, and are: Sectum
+  queries a live `rag` pipeline for the canary it seeded, and reads one corpus
+  document back out of a live vector store, skipping only a backend that cannot
+  see what was just written. A vector store that acknowledges the corpus and
+  serves none of it back — a quota, the wrong namespace, a read-side ACL, an index
+  that never settles — therefore reports Classes 1, 2, 3, 6 and 10 `NOT_COVERED`
+  instead of grading them `PASS` off an empty index.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests
   that skip without credentials, so their contract is verified offline against a mock and
   live against a real backend on demand (S3 against a local MinIO, GCS against a local
   fake-gcs-server). The search index
-  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores run
-  against docker-compose backends in CI every push. The agent-memory surface also has a
+  (**OpenSearch**), agent memory (**Redis**), and the self-hosted vector stores
+  except **Milvus** (pgvector, Chroma, Weaviate, Qdrant) run against docker-compose
+  backends in CI every push; Milvus is gated behind the compose `milvus` profile —
+  too heavy for the CI job — so its integration test skips there and is run on
+  demand. The agent-memory surface also has a
   live **mem0** backend (opt-in, since mem0 needs an embedder); a Zep adapter can follow
   the same seam.
-- **The model probes need a self-hosted model.** Classes 5 (KV timing) and 9 (LoRA)
-  require a model adapter that exposes latency and per-tenant adapters — vLLM, TGI, or
-  HuggingFace + PEFT. A stack that reaches generation only through a hosted API
-  (OpenAI / Anthropic) cannot run them as-is; the Class 2 embedding sweep still does.
+- **The model probes need a self-hosted model.** Class 9 (LoRA) requires a model
+  that *trains* on tenant data: HuggingFace + PEFT (per-tenant adapters), or any
+  backend reporting shared weights. vLLM and TGI are serving-only — they declare a
+  shared prefix cache and neither per-tenant adapters nor shared weights — so
+  Class 9 is **skipped** against them and scores `NOT_COVERED`, never `PASS`.
+  Class 5 (KV timing) requires a prefix
+  cache *shared across principals*, which only the serving backends (vLLM, TGI)
+  declare: HuggingFace + PEFT loads per tenant, so the probe runs there but can find
+  nothing by construction, and its PASS is a property of the deployment, not a
+  measurement. A stack that reaches generation only through a hosted API (OpenAI /
+  Anthropic) cannot run either as-is; the Class 2 embedding sweep still does.
 - **Embedding providers**: the Class 2 rate sweep ships `sentence-transformers`
   (local, BYOC-safe) plus the hosted `openai`, `cohere`, `voyage`, and `bedrock`
   (all opt-in live and key/region-gated). The Bedrock adapter covers both invoke-body

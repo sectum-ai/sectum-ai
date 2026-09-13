@@ -6,7 +6,7 @@ attack catalog into one letter plus a per-class breakdown, from a signed
 run rather than trusting the grade. The published methodology (``docs/scorecard.md``)
 pins the weights, thresholds, and caps that :data:`METHODOLOGY_VERSION` stamps.
 
-Six rules keep the letter honest (the same anti-over-claim discipline as the Class 11
+Seven rules keep the letter honest (the same anti-over-claim discipline as the Class 11
 coverage block):
 
 1. **A class that did not run can only ever be NOT_COVERED - never PASS.** A grade must
@@ -47,6 +47,13 @@ coverage block):
    the scorecard cannot identify, so it fails closed, exactly as rule 1 does for a class
    that never ran. A record with no provenance at all (one predating the block) is
    exempt: absence of the block is not evidence of a mismatch.
+7. **Withholding a class must not flatter the letter.** A NOT_COVERED class leaves the
+   weighted DENOMINATOR, so rules 5 and 6 made the grade BETTER on their own: the same
+   record graded F with a provenance key present and A with it deleted. Rule 6's
+   unplaceable class therefore caps the letter at its own band, rule 3's mechanism for
+   the same reason - a confirmed finding nobody can place is not assurance. Rule 5's
+   synthetic-backed classes are exempt: the record positively states the surface was
+   Sectum's own fake.
 
 Class 11 (GDPR Article 17 erasure) is deliberately out of scope here: it is a control
 check with its own attestation (``sectum-ai erasure``), not an adversarial isolation
@@ -59,7 +66,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sectum_ai.evidence import run_digest
-from sectum_ai.evidence.labels import backing_surface
+from sectum_ai.evidence.labels import backing_surface, unaccounted_surfaces
 from sectum_ai.spec import (
     ClassScore,
     ClassVerdict,
@@ -74,6 +81,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    rate_from_counts,
     untrusted,
     wilson_interval,
 )
@@ -86,7 +94,7 @@ __all__ = [
     "score_run",
 ]
 
-METHODOLOGY_VERSION = "1.2"
+METHODOLOGY_VERSION = "1.4"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -231,6 +239,29 @@ def _confidence_for(coverage: float) -> Confidence:
     return Confidence.LOW
 
 
+# The four classes `_headline` can render a rate for. A class outside this set has
+# no *renderable* headline, which is not the same as having no measurement:
+# Class 5's is `side_channel_effect_sizes`, a map rather than a scalar, so it
+# never reaches `_headline` and a Class 5 PASS rendered identically with and
+# without one. `diff` prints [SIDE CHANNEL NOT REMEASURED] for that same absence.
+_HEADLINE_RATE_CLASSES = frozenset({2, 3, 6, 10})
+_KV_TIMING_CLASS = 5
+
+
+def _confirmed_in_class(run: RunResult, entry: _CatalogClass) -> int:
+    """The class's confirmed findings, however the class was ultimately graded.
+
+    Rules 5 and 6 both decline to GRADE a class while its findings still exist,
+    and both have to say how many: a `NOT_COVERED` verdict beside a count of `0`
+    reads as "nothing was found here", which is a different claim.
+    """
+    return sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
+    )
+
+
 def _rate_from_counts(metrics: RunMetrics) -> float | None:
     """Class 2's rate as its own counts give it, or ``None`` if the record has no counts.
 
@@ -247,9 +278,7 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
             "the record's Retrieval-Pivot counts are incoherent, so its headline rate "
             "cannot be trusted and the run is not graded."
         )
-    if not metrics.retrieval_pivot_n:
-        return None
-    return metrics.retrieval_pivot_k / metrics.retrieval_pivot_n
+    return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
 def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
@@ -323,6 +352,55 @@ def _scope_of(run: RunResult) -> tuple[ScoreScope, frozenset[str]]:
     return scope, synthetic
 
 
+def _uncapped_confirmed(run: RunResult, entry: _CatalogClass, synthetic: frozenset[str]) -> bool:
+    """Does this withheld class hold a confirmed finding that must still cap the letter?
+
+    Every confirmed finding in a class the scorer declined to grade counts - EXCEPT
+    one the record positively states rests on Sectum's own fake. That is rule 5's
+    exemption and the only one: "this describes our fake" is a statement about the
+    finding, and absence of a statement is not one.
+
+    A run recording no provenance at all is exempt whole: it has its own UNRECORDED
+    scope and grades deliberately, the same carve-out `_unattributed_in_class` makes.
+    """
+    if not run.surface_provenance:
+        return False
+    return any(
+        finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) not in synthetic
+        for finding in run.findings
+    )
+
+
+def _probe_ids_with_findings(run: RunResult) -> set[str]:
+    """Every probe this record carries a finding from, whatever the finding's status."""
+    return {finding.probe_id for finding in run.findings}
+
+
+def _unattributed_in_class(run: RunResult, entry: _CatalogClass) -> int:
+    """Confirmed findings in ``entry`` resting on a surface the provenance never records.
+
+    Shared by the class verdict and by the grade cap in :func:`score_run`, which
+    have to agree: the verdict alone withheld such a finding from the letter, and
+    a withheld class leaves the weighted DENOMINATOR - so deleting one provenance
+    key turned a confirmed critical leak from GRADE F into GRADE A, which is
+    exactly what the withholding was written to prevent.
+
+    Empty for a run recording no provenance at all: that run has its own
+    UNRECORDED scope and grades deliberately.
+    """
+    if not run.surface_provenance:
+        return 0
+    return sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) not in run.surface_provenance
+    )
+
+
 def _score_class(
     entry: _CatalogClass,
     run: RunResult,
@@ -330,10 +408,18 @@ def _score_class(
     synthetic: frozenset[str],
     exercised: frozenset[str],
 ) -> ClassScore:
+    # "Did this probe run?" - which ANY finding answers, not only a confirmed one.
+    # `proven` is confirmed-only because it answers a different question ("did this
+    # probe prove a leak?"), and `baseline._exercised_probes` states the distinction
+    # in as many words. Using it here made the scorecard assert "probe did not run"
+    # over a record holding 24 of that probe's unverified candidates - which the
+    # audit PDF listed as exercised on the same run - and drop the class from
+    # coverage entirely. An unverified candidate is exactly the evidence a class
+    # PASSES with a caveat on, not evidence that nothing happened.
     ran = [
         probe_id
         for probe_id in entry.probe_ids
-        if probe_id in run.probe_versions or probe_id in proven
+        if probe_id in run.probe_versions or probe_id in _probe_ids_with_findings(run)
     ]
     accepted = {surface for probe_id in ran for surface in PROBE_SURFACES.get(probe_id, ())}
     # What actually backed this class in THIS run: the acceptable surfaces the run
@@ -347,20 +433,32 @@ def _score_class(
         # this methodology cannot tie to a class. Grading it would assert a verdict
         # about a system the scorecard cannot identify, so it fails closed - the same
         # answer rule 1 gives for a class that never ran at all.
+        # Not grading the class is not the same as asserting it had no findings.
+        # Omitting this count let a record hide a confirmed CRITICAL by deleting
+        # one provenance key: the class line then positively read `0`, where rule
+        # 5 fifteen lines below counts and names the same findings. Rule 4 forbids
+        # dropping a finding silently, and the count is how the reader sees it.
+        unattributed = _confirmed_in_class(run, entry)
+        detail = (
+            f"; the {unattributed} confirmed finding(s) here are not attributed to a surface"
+            if unattributed
+            else ""
+        )
         return ClassScore(
             class_id=entry.class_id,
             name=entry.name,
             verdict=ClassVerdict.NOT_COVERED,
             severity=entry.severity,
             probe_ids=tuple(ran),
+            confirmed_findings=unattributed,
             # Say only what is known. The run records WHICH surfaces it exercised,
             # not which one backed this class, so naming the others would imply an
             # attribution this rule exists to refuse.
             note=(
                 f"expected {'one of ' if len(accepted) > 1 else ''}"
                 f"{', '.join(sorted(accepted))}, none of which this run's provenance "
-                "records; the surface it ran against cannot be attributed to a class "
-                "by this methodology"
+                f"records; the surface it ran against cannot be attributed to a class "
+                f"by this methodology{detail}"
             ),
         )
     if ran and backing and backing <= synthetic:
@@ -368,11 +466,7 @@ def _score_class(
         # cannot speak for the operator's stack in either direction - a pass is not
         # assurance and a leak is not their fault. Its findings are still counted and
         # named, so nothing is dropped silently; they just do not move this grade.
-        confirmed_synthetic = sum(
-            1
-            for finding in run.findings
-            if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
-        )
+        confirmed_synthetic = _confirmed_in_class(run, entry)
         against = ", ".join(sorted(backing))
         detail = (
             f"; the {confirmed_synthetic} finding(s) here describe that fake, not your stack"
@@ -400,6 +494,14 @@ def _score_class(
         and finding.status is FindingStatus.CONFIRMED
         and backing_surface(finding) in synthetic
     )
+    # Rule 5's sibling, and the one case that was graded as certainly the
+    # operator's: a finding whose backing surface the run's provenance never
+    # recorded cannot be attributed to their stack any more than one on a known
+    # fake can. The same record, class and finding graded A with a note when the
+    # block said SYNTHETIC and F with `note=None` when the key was simply absent.
+    # Withheld from the letter, never from the page - and never as a PASS, which
+    # would let dropping one provenance key turn a confirmed leak into assurance.
+    unattributed = _unattributed_in_class(run, entry)
     confirmed = (
         sum(
             1
@@ -407,6 +509,7 @@ def _score_class(
             if finding.probe_id in entry.probe_ids and finding.status is FindingStatus.CONFIRMED
         )
         - withheld
+        - unattributed
     )
     if not ran:
         # Rule 1: a class whose probe never ran can only be NOT_COVERED - never PASS.
@@ -418,9 +521,122 @@ def _score_class(
             probe_ids=entry.probe_ids,
             note=(
                 "probe did not run - no configured adapter satisfies it, it was not in "
-                "this run's suite, or the substrate left it no step to take"
+                "this run's suite, the substrate left it no step to take, or every one "
+                "of its plants was acknowledged by the backend and not served back"
             ),
         )
+    if unattributed and not confirmed:
+        # Not a PASS and not a FAIL: neither is supportable. NOT_COVERED lowers
+        # coverage and confidence and grants nothing, which is what "this class's
+        # only confirmed evidence cannot be placed" actually means. A class that
+        # ALSO has attributable confirmed findings still fails on those - rule 4
+        # never drops contradicting evidence - and names these on the same line.
+        return ClassScore(
+            class_id=entry.class_id,
+            name=entry.name,
+            verdict=ClassVerdict.NOT_COVERED,
+            severity=entry.severity,
+            probe_ids=tuple(ran),
+            confirmed_findings=unattributed,
+            note=(
+                f"the {unattributed} confirmed finding(s) here rest on surfaces this "
+                "run's provenance does not record, so they can be attributed neither to "
+                "your stack nor to Sectum's built-in fake; this class is not graded, and "
+                "the letter is capped at this class's band"
+            ),
+        )
+    # A PASS the probe could not actually establish. `AccessOutcome.DENIED` is
+    # produced by NO code path - the runner can only emit RETURNED or EMPTY - so a
+    # Class 1 PASS can only ever mean "no canary came back", never "the deny was
+    # enforced", and the class page says the probe does not treat 200-empty as a
+    # clean pass. The scorecard did, with note=None and full critical-band weight.
+    # An unverified finding must not FLIP the class (that is the false-positive
+    # control the whole detector rests on), so it says so on the line instead.
+    unverified = sum(
+        1
+        for finding in run.findings
+        if finding.probe_id in entry.probe_ids
+        and finding.status is FindingStatus.UNVERIFIED
+        and backing_surface(finding) not in synthetic
+    )
+    # A class whose headline rate the run never measured passes with an EMPTY
+    # detail column, indistinguishable on the page from one that measured 0.0%.
+    # `_headline` returns None for both "this class has no rate" and "the rate is
+    # None", so the four classes that HAVE one are named here.
+    headline = _headline(entry, run.metrics)
+    unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
+        entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
+    )
+    # A class whose catalog entry names two probes and whose run exercised one is
+    # graded on half its evidence, at full weight, with nothing on the line to
+    # say so - while every class that ran NO probe says "probe did not run". For
+    # Class 2 the omission also moves the headline: `BLEED_PROBE_IDS`' own
+    # comment says counting the vector probe alone "understates the rate when a
+    # leak manifests solely at the pipeline surface (it would read 0%)", and that
+    # understated rate is what the line prints.
+    missing = tuple(sorted(set(entry.probe_ids) - set(ran)))
+    # Rule 5 withholds a class only when EVERY probe's backing surface is
+    # synthetic, so a class with two probes and one live surface grades normally,
+    # at full band weight, with nothing on the line about the half that ran
+    # against Sectum's own fake. Measured: a live MCP server with no agent adapter
+    # configured graded `Class 7 PASS critical` and `GRADE A`, note-free, over a
+    # run whose agent half never touched the operator's stack. The `withheld` note
+    # cannot reach it (it needs the fake to have CONFIRMED something) and neither
+    # can `missing` (the probe did run) - the gap between the two.
+    fake_backed = tuple(
+        sorted(
+            probe_id
+            for probe_id in ran
+            if (own := set(PROBE_SURFACES.get(probe_id, ())) & exercised) and own <= synthetic
+        )
+    )
+    user_dropped = sum(run.metrics.user_steps_dropped.get(probe_id, 0) for probe_id in ran)
+    unlanded = sum(run.metrics.unconfirmed_plants.get(probe_id, 0) for probe_id in ran)
+    notes = [
+        f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
+        "that fake, not your stack"
+        if withheld
+        else "",
+        f"{unattributed} confirmed finding(s) here rest on surfaces this run's "
+        "provenance does not record and are excluded from this verdict; the letter is "
+        "capped at this class's band"
+        if unattributed
+        else "",
+        f"{unverified} unverified finding(s) here: the probe could not establish the "
+        "negative, so this is not proof the boundary was enforced"
+        if unverified and not confirmed
+        else "",
+        "this class's headline measurement was never recorded in this run, so the pass "
+        "rests on the absence of confirmed findings alone"
+        if unmeasured_rate and not confirmed
+        else "",
+        f"graded on {len(ran)} of {len(entry.probe_ids)} probes for this class; "
+        f"{', '.join(missing)} did not run"
+        if missing
+        else "",
+        # The two record-level disclosures of a run that did LESS than it planned.
+        # Both were carried by the audit PDF alone, so a PASS line - the thing a
+        # reader acts on - was identical whether the user boundary had been tested
+        # or never exercised, and whether the probe's setup landed or half vanished.
+        # This list exists because "a PASS is never silent about what it could not
+        # establish"; these are two more things it could not.
+        f"graded on the tenant boundary only: {user_dropped} user-level step(s) were "
+        "not run, because the adapter cannot carry a user identity to its backend"
+        if user_dropped and not confirmed
+        else "",
+        f"{unlanded} planted write(s) never came back from the backend, so this class "
+        "was graded on less setup than it planned"
+        if unlanded and not confirmed
+        else "",
+        # Ungated by `confirmed`, like `withheld`: which half of a class spoke for
+        # the operator's stack is as material to a FAIL as to a PASS.
+        f"{', '.join(fake_backed)} ran against the built-in fake, so its verdict is "
+        "neither assurance nor fault; this class is graded on "
+        f"{len(ran) - len(fake_backed)} of {len(entry.probe_ids)} probes that touched "
+        "your stack"
+        if fake_backed and len(fake_backed) < len(ran)
+        else "",
+    ]
     return ClassScore(
         class_id=entry.class_id,
         name=entry.name,
@@ -428,13 +644,8 @@ def _score_class(
         severity=entry.severity,
         probe_ids=tuple(ran),
         confirmed_findings=confirmed,
-        headline=_headline(entry, run.metrics),
-        note=(
-            f"{withheld} confirmed finding(s) on the built-in fake withheld; they describe "
-            "that fake, not your stack"
-            if withheld
-            else None
-        ),
+        headline=headline,
+        note="; ".join(part for part in notes if part) or None,
     )
 
 
@@ -498,8 +709,11 @@ def score_run(run: RunResult) -> IsolationScore:
     covered = [c for c in classes if c.verdict is not ClassVerdict.NOT_COVERED]
     if not covered:
         raise ConfigError(
-            "no catalog class was exercised by this run, so there is nothing to grade; "
-            "run 'sectum-ai probe' against a configured stack first"
+            "no catalog class this run exercised can be graded: no probe ran, every class "
+            "that ran was backed only by Sectum's built-in fakes (their verdicts describe "
+            "that fake, not your stack), or their confirmed findings rest on surfaces this "
+            "run's provenance does not record; run 'sectum-ai probe' against a configured "
+            "stack first"
         )
     covered_weight = sum(weight[c.class_id] for c in covered)
     if not covered_weight:
@@ -515,7 +729,38 @@ def score_run(run: RunResult) -> IsolationScore:
     coverage = covered_weight / total_weight
 
     failed = [c for c in covered if c.verdict is ClassVerdict.FAIL]
-    capped_by = max((c.severity for c in failed), key=_SEVERITY_ORDER.index) if failed else None
+    # A class withheld from the letter leaves the DENOMINATOR, so withholding
+    # alone made the grade BETTER: the same record graded F with a provenance key
+    # present and A with it deleted. Withholding says "this is not evidence about
+    # your stack"; it must not also say "and therefore you passed". The band caps
+    # the letter exactly as a failing class does - rule 3's mechanism, for the
+    # same reason: a confirmed finding nobody can place is not assurance.
+    # Rule 5's synthetic-backed classes are deliberately NOT here: there the
+    # record positively states the surface was Sectum's own fake, and a leak on a
+    # fake is not the operator's fault in either direction. `withhold`, not the raw
+    # `synthetic` set - they differ on a run with nothing live, where rule 5 is
+    # switched off so the demo still grades. Handing the cap the raw set exempted
+    # findings rule 5 never withheld, and the inversion came straight back in that
+    # scope: the same record graded F with a provenance key present and A with it
+    # deleted. One set for the verdict and the cap, or they disagree again.
+    #
+    # Keyed on the VERDICT the scorer actually reached, not on a second predicate
+    # shaped differently. It used to ask `_unattributed_in_class`, which decides per
+    # FINDING (is this finding's surface recorded?), while rules 5 and 6 decide per
+    # class SLOT (`PROBE_SURFACES[probe] & exercised`). Where the two disagreed the
+    # class was withheld and nothing capped: a class whose slot the catalog cannot
+    # place, holding 24 confirmed CRITICAL findings on a surface the block records
+    # LIVE, graded A - while the byte-identical record with those findings on an
+    # UNRECORDED surface graded F. Moving a confirmed critical leak onto a surface
+    # the record positively calls live IMPROVED the letter, which is the same
+    # inversion rule 7 was written to stop, through a different door.
+    unplaceable_bands: list[Severity] = [
+        entry.severity
+        for entry, klass in zip(CATALOG, classes, strict=True)
+        if klass.verdict is ClassVerdict.NOT_COVERED and _uncapped_confirmed(run, entry, withhold)
+    ]
+    capping: list[Severity] = [c.severity for c in failed] + unplaceable_bands
+    capped_by = max(capping, key=_SEVERITY_ORDER.index) if capping else None
     # Rule 3: the letter is the WORSE of the weighted grade and the band cap, so a
     # failing critical-band class floors it at F and many failures can still push lower.
     grade = _grade_for(weighted_score)
@@ -540,6 +785,7 @@ def score_run(run: RunResult) -> IsolationScore:
         capped_by=capped_by,
         scope=scope,
         synthetic_surfaces=tuple(sorted(synthetic)),
+        unaccounted_surfaces=unaccounted_surfaces(run),
         classes=classes,
         methodology_version=METHODOLOGY_VERSION,
     )

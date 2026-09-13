@@ -21,6 +21,11 @@ body:
         - MCP
         - Cache
         - Model / fine-tune
+        - Agent memory
+        - Search index
+        - Eval set
+        - Backup
+        - Other
     validations:
       required: true
   - type: textarea

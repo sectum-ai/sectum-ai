@@ -25,8 +25,9 @@ verifies the retriever, this one verifies the pipeline that wraps it.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex, Initech,
    Hooli), generates their corpora, and plants canary markers.
-2. **`sectum-ai probe --probe rag-pipeline-bleed`** issues one benign shared-entity
-   query per tenant through the demo RAG pipeline — a shared-index retriever with
+2. **`sectum-ai probe --probe rag-pipeline-bleed`** issues a benign query for each
+   shared entity from each tenant - six per tenant, 24 in all - through the demo
+   RAG pipeline — a shared-index retriever with
    no tenant scoping.
 3. **`sectum-ai report`** assembles a tamper-evident evidence pack (JSON + PDF).
 4. **`sectum-ai verify`** independently re-checks the pack's integrity.
@@ -45,11 +46,13 @@ The demo pipeline wraps a single shared index, so benign cross-tenant queries
 surface foreign canaries through the answer:
 
 ```
-ran 1 probe: 15 confirmed cross-tenant findings
+ran 1 probe: 15 confirmed cross-tenant findings; 0 on live surfaces
 retrieval-pivot rate: 62.5% (95% CI 42.7%-78.8%, n=24)
 ```
 
 `sectum-ai probe` exits with code 2 because it confirmed cross-tenant leaks, and
-`sectum-ai verify` confirms the evidence pack is intact. As with the vector-store
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the pack is internally
+consistent, but its only timestamp is a reproducible local-dev token, so this
+is not independent tamper evidence. As with the vector-store
 demo, the rate is a property of the *stack under test*: point the RAG adapter at
 a properly tenant-scoped pipeline and the same probe reports **0%**.

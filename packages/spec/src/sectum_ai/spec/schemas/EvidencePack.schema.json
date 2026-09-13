@@ -28,6 +28,57 @@
       "title": "ControlMapping",
       "type": "object"
     },
+    "DetectionProvenance": {
+      "additionalProperties": false,
+      "description": "Which detector actually graded this run's observations.\n\nThe audit PDF states the method in its Scope-and-methodology section - \"exact\ncanary match, then semantic similarity, then a calibrated judge\" - and the\nrecord carried nothing that could condition it. Both tiers past the first are\noff by default: `sectum-ai init` scaffolds `embedder.kind: fake` and\n`judge.kind: fake`, which resolve to an offline hashing vector whose own\ndocstring calls it \"not semantically meaningful beyond lexical overlap\" and a\ntoken-order string matcher - not an embedding model, and not a calibrated\njudge. A pack where the semantic tier was gated shut (a threshold of 1.0\nadmits nothing) was indistinguishable from one where it ran.\n\nRecorded per run so the claim is a function of what happened. ``None`` on a\nrecord from a path that runs no detector at all - `erasure` matches by exact\nsubstring and invokes neither provider.",
+      "properties": {
+        "embedder_kind": {
+          "title": "Embedder Kind",
+          "type": "string"
+        },
+        "embedder_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedder Model"
+        },
+        "judge_kind": {
+          "title": "Judge Kind",
+          "type": "string"
+        },
+        "judge_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Model"
+        },
+        "semantic_threshold": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Semantic Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "embedder_kind",
+        "judge_kind",
+        "semantic_threshold"
+      ],
+      "title": "DetectionProvenance",
+      "type": "object"
+    },
     "Finding": {
       "additionalProperties": false,
       "description": "A detected cross-tenant leakage result (the engineering spec, section 9).\n\nFrozen like every other aggregate model. The detection pipeline classifies\neach finding as confirmed or unverified - the false-positive control (the\nengineering spec, section 6.4) - when it constructs the finding.",
@@ -298,6 +349,21 @@
           "title": "Side Channel Effect Sizes",
           "type": "object"
         },
+        "side_channel_variance_floored": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Side Channel Variance Floored",
+          "type": "array"
+        },
+        "unconfirmed_plants": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Unconfirmed Plants",
+          "type": "object"
+        },
         "user_steps_dropped": {
           "additionalProperties": {
             "type": "integer"
@@ -319,6 +385,17 @@
           },
           "title": "Adapter Versions",
           "type": "object"
+        },
+        "detection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DetectionProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "findings": {
           "default": [],

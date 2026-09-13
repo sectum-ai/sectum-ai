@@ -85,9 +85,13 @@ def test_a_mixed_config_says_which_models_it_dropped(capsys: pytest.CaptureFixtu
     substrate = build_substrate(_scenario_with_models("hash-32", "hash-256", "fake-mini"))
     rates = _per_model_rpr(substrate, FakeVectorStore())
     assert set(rates) == {"hash-32", "hash-256"}  # the real pair still compares
-    output = capsys.readouterr().out
-    assert "fake-mini" in output
-    assert "excluded from the embedding-model gradient" in output
+    # On stderr, like every other warning: `probe --output json` writes its report
+    # to stdout, and these two landed IN it - the shipped Action reads that file
+    # with `jq` and got nothing.
+    captured = capsys.readouterr()
+    assert "fake-mini" in captured.err
+    assert "excluded from the embedding-model gradient" in captured.err
+    assert captured.out == ""
 
 
 def test_one_real_model_among_fakes_is_not_reported_as_a_gradient(
@@ -98,5 +102,6 @@ def test_one_real_model_among_fakes_is_not_reported_as_a_gradient(
     # against nothing, recorded into the run's metrics as if it were a sweep.
     substrate = build_substrate(_scenario_with_models("hash-256", "fake-mini"))
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
-    output = capsys.readouterr().out
-    assert "two or more real embedding models" in output
+    captured = capsys.readouterr()
+    assert "two or more real embedding models" in captured.err
+    assert captured.out == ""

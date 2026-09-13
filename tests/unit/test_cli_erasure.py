@@ -1,7 +1,9 @@
 """Tests for the ``sectum-ai erasure`` CLI command (Class 11, the wedge)."""
 
+import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import app
@@ -389,3 +391,139 @@ def test_a_scoped_erasure_records_provenance_for_the_scanned_surfaces_only(
     assert result.exit_code == 0, result.output
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert set(pack["run_result"]["surface_provenance"]) == {"vector_db"}
+
+
+def test_erasure_that_could_not_establish_absence_is_inconclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A marker still stored but ranked below the similarity page is invisible to
+    # the scan and looks exactly like a purged one. The run must say so rather
+    # than sign ERASURE VERIFIED, and the reason has to reach the operator: "0
+    # after" on its own reads as a purge.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes.erasure import probe as erasure_probe
+
+    erased: list[bool] = []
+    real_delete = FakeVectorStore.delete
+
+    def _delete(self: FakeVectorStore, tenant: object) -> None:
+        real_delete(self, tenant)  # type: ignore[arg-type]
+        erased.append(True)
+
+    # Present before the purge, then neither found nor ruled out: every page
+    # comes back full without the marker, which a still-stored one produces too.
+    monkeypatch.setattr(FakeVectorStore, "delete", _delete)
+    monkeypatch.setattr(
+        erasure_probe.ErasureProbe,
+        "_marker_observable",
+        lambda self, target, marker: None if erased else True,
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert result.exit_code == 3, result.output
+    assert "ERASURE VERIFIED" not in result.output
+    assert "ERASURE INCONCLUSIVE" in result.output
+    # The summary must name the reason, not fall through to the "no baseline"
+    # wording - there WAS a baseline; what failed is establishing absence.
+    assert "could not establish that the tenant's markers are absent" in result.output, (
+        result.output
+    )
+    assert "no baseline on" not in result.output
+    # And the per-surface line says why "0 after" is not a purge.
+    assert "-> NOT VERIFIED" in result.output
+    assert "full similarity page" in result.output
+
+
+def test_erasure_honours_a_configured_app_adapter(tmp_path: Path) -> None:
+    # `erasure` read `vector_store` directly while `probe` resolves the same slot
+    # from `app` too, so a config carrying only `app` built a clean DEFAULT fake:
+    # the run dropped that adapter's soft_delete knob and attested ERASURE
+    # VERIFIED against a backend the operator never configured.
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text(
+        "workdir: " + str(tmp_path) + "\nadapters:\n  app:\n    kind: fake\n    soft_delete: true\n"
+    )
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+    result = _runner.invoke(
+        app,
+        ["erasure", "--workdir", str(tmp_path), "--config", str(config), "--scope", "vector_db"],
+    )
+    assert "ERASURE VERIFIED" not in result.output, result.output
+    assert "RESIDUAL DATA" in result.output, result.output
+    assert result.exit_code == 2
+
+
+def test_soft_delete_reaches_the_vector_store(tmp_path: Path) -> None:
+    # The `--soft-delete` flag rides on the default adapter config. A shared
+    # vector-slot builder that made its OWN default dropped it, so the surface the
+    # whole demo is about attested ERASED on a run explicitly modelling a store
+    # that fails erasure - and the shipped residual-data sample could no longer be
+    # regenerated from its own documented recipe.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--soft-delete"])
+    assert "vector_db: 2 markers before, 2 after -> RESIDUAL DATA" in result.output, result.output
+    assert "ERASURE FAILED" in result.output
+    assert result.exit_code == 2
+
+
+def test_a_surface_with_no_baseline_records_no_residue_count(tmp_path: Path) -> None:
+    # The other way to establish nothing. A surface with no pre-erasure baseline
+    # wrote `erasure_residue: 0` - a number the run never measured - and `diff`
+    # read the drop from a prior run's 2 as a leak that had been fixed, which is
+    # exactly what the guard beside it exists to stop.
+    from sectum_ai.adapters import FakeVectorStore
+
+    monkeypatch = pytest.MonkeyPatch()
+    # A store that was never seeded: no baseline on the vector surface.
+    monkeypatch.setattr(FakeVectorStore, "query", lambda self, tenant, text, k=5, **kw: [])
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        result = _runner.invoke(
+            app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"]
+        )
+    finally:
+        monkeypatch.undo()
+    assert result.exit_code == 3, result.output
+    run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
+    assert run["metrics"]["erasure_residue"] == {}, run["metrics"]["erasure_residue"]
+    assert run["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED"
+
+
+def test_erasure_records_provenance_for_a_configured_app_adapter(tmp_path: Path) -> None:
+    # An `app` adapter fills the vector SLOT but declares Surface.API, so its
+    # provenance was keyed `api` while the erasure report speaks of `vector_db` -
+    # and the "only the surfaces this run scanned" filter then dropped it,
+    # leaving the block EMPTY. `verify` read that as "the run records no surface
+    # provenance (it predates the block)" on a pack stamped 0.7.0.
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("workdir: " + str(tmp_path) + "\nadapters:\n  app:\n    kind: fake\n")
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+    _runner.invoke(
+        app,
+        ["erasure", "--workdir", str(tmp_path), "--config", str(config), "--scope", "vector_db"],
+    )
+    run = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
+    assert run["surface_provenance"] == {"vector_db": "SYNTHETIC"}, run["surface_provenance"]
+
+
+def test_an_inconclusive_surface_reports_the_backend_s_own_reason(tmp_path: Path) -> None:
+    # The verdict was right and the REASON was fiction: both messages hard-coded
+    # the vector store's "full similarity page", while a capped search-index,
+    # eval-set, memory or trace listing never ran a similarity query - and the
+    # adapter's own message, which names the actual cap and count, was discarded.
+    from sectum_ai.adapters import FakeObservability
+    from sectum_ai.spec import AdapterError
+
+    def _refuse(self: object, tenant: object, marker: object) -> list[object]:
+        raise AdapterError("Datadog listed 1000 traces, its page cap, so a miss is not absence")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(FakeObservability, "search_traces", _refuse)
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "tracing"])
+    finally:
+        monkeypatch.undo()
+    assert "its page cap" in result.output, result.output
+    assert "full similarity page" not in result.output
+    assert result.exit_code == 3

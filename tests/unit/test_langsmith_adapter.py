@@ -130,3 +130,34 @@ def test_langsmith_search_tolerates_a_run_missing_fields() -> None:
     # a sparse run with no name/inputs/outputs attributes must not crash
     client.add(_project(_TENANT_A), SimpleNamespace(id="sparse-1"))
     assert LangSmithObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
+
+
+def test_a_marker_in_the_run_metadata_is_found() -> None:
+    # This was the one trace backend that read only `name`/`inputs`/`outputs`.
+    # `@traceable(metadata=...)` lands in `extra`, and every sibling reads its own
+    # bag - Langfuse takes `metadata`, Datadog takes `custom` AND `meta` with a
+    # comment saying missing it "would be a false erasure PASS", and
+    # helicone/phoenix/otel each read their attribute map. So a marker carried in
+    # metadata was invisible: the surface signed `TRACING: ERASED` over content
+    # the read path never looked at, and reported no cross-tenant leak for the
+    # same reason.
+    #
+    # The double modelled only id/name/inputs/outputs, which is why no test could
+    # have caught it - so it models the whole shape now.
+    client = _FakeLangSmith()
+    adapter = LangSmithObservability(client)
+    cases: tuple[tuple[str, dict[str, Any], str], ...] = (
+        (
+            "extra",
+            {"extra": {"metadata": {"account": "SECTUM-CANARY-EXTRA"}}},
+            "SECTUM-CANARY-EXTRA",
+        ),
+        ("tags", {"tags": ["tenant:SECTUM-CANARY-TAG"]}, "SECTUM-CANARY-TAG"),
+        ("error", {"error": "failed resolving SECTUM-CANARY-ERR"}, "SECTUM-CANARY-ERR"),
+    )
+    for index, (field, extra_fields, marker) in enumerate(cases):
+        client.add(
+            _project(_TENANT_A),
+            SimpleNamespace(id=f"r-{index}", name="n", inputs={}, outputs={}, **extra_fields),
+        )
+        assert adapter.search_traces(_TENANT_A, marker), f"a marker in `{field}` must be found"

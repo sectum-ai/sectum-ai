@@ -150,3 +150,29 @@ not a per-PR enforcement.
   Stamping them with it would claim an attack the probe never performed, in a field that
   ships as signed evidence. `agent-framework-hijack` is unchanged: it has only the
   confused-deputy and token-passthrough sub-probes, so no injection to describe.
+  The caveat path carries the same narrowing as the leak path: the 200-empty
+  ambiguity note takes its sub-probe's stamp, not the probe's footprint.
+  Per-sub-probe stamping needs `dedupe_findings` to UNION techniques rather than
+  keep the winner's: the finding id does not encode the sub-probe and all four
+  tie on status, severity and confidence, so first-seen won and the injection
+  step, planned last, always lost — a server exploitable both ways reported the
+  leak without the ingested-metadata path, which is a different remediation.
+
+- **2026-09-07** (at v0.11.0) — **partial sweep: the offline half only.** Releases
+  v0.7.1 through v0.11.0 shipped with no entry here, so this records what *is*
+  verified and, explicitly, what is not.
+
+  Verified: every id in use (`AML.T0020`, `AML.T0024`, `AML.T0024.000`,
+  `AML.T0024.001`, `AML.T0051.001`, `AML.T0053`, `AML.T0057`) appears in
+  `_VERIFIED_ATLAS_IDS`; every probe's `atlas_techniques` matches the ATLAS ids
+  published on its own `docs/attack-catalog/class-NN-*.md` page and in
+  `index.md`, in both directions, across all 15 probes; and the set is unchanged
+  from the 2026-07-20 entry.
+
+  **Not verified: the comparison against the upstream MISP galaxy ATLAS mirror.**
+  This ADR's own note says the offline tripwire "cannot judge renames or fit
+  (that stays the manual release-time sweep)", so nothing here rules out an
+  upstream rename, retirement or a newly-added technique that would fit better.
+  That half remains outstanding and is a release blocker under
+  `docs/RELEASING.md` step 2. An entry that claimed the full sweep would be the
+  same over-claim this project refuses everywhere else.

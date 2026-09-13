@@ -16,4 +16,6 @@ surfaces:
 - vector_db
 requires_adapters:
 - vector
+requires_any_capability:
+- semantic_retrieval
 example: examples/embedding-inversion

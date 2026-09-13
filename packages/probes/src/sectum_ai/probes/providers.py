@@ -13,9 +13,17 @@ spec section 17: never inline a credential). A provider failure - a network
 error, a non-2xx response, or an unparseable body - raises
 :class:`~sectum_ai.spec.DetectionError`.
 
-The judge is asked a narrow, structured question and never receives the
-ground-truth manifest: it sees only the candidate entity descriptor and the
-observed text, as the engineering spec section 6.4 requires (to avoid priming).
+The judge is asked a narrow, structured question: it sees the candidate entity and
+the observed text, and nothing else of the run - no other tenant's markers, no
+scenario, no verdict from another tier.
+
+It IS shown that entity's plaintext, so it is primed on the one string it is being
+asked about, and `detection.py` says so where it matters: "A real LLM judge is
+primed with the marker plaintext", which is why the semantic tier's
+`_span_traceable` false-positive control exists at all. This module used to claim
+the opposite ("never receives the ground-truth manifest ... to avoid priming"),
+which is true of the manifest and false of the marker, and the two modules
+described one fact in opposite words.
 """
 
 import json

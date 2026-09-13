@@ -22,7 +22,14 @@ simplification of the LLM-agent-level description-poisoning attack).
 """
 
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
-from sectum_ai.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
+from sectum_ai.spec import (
+    Finding,
+    MarkerType,
+    Observation,
+    ProbeStep,
+    Substrate,
+    Surface,
+)
 
 
 class AgentToolHijackProbe(DetectingProbe):
@@ -135,14 +142,48 @@ class AgentToolHijackProbe(DetectingProbe):
         """
         pipeline = self._providers.pipeline(substrate)
         injected = step.payload.get("tool") == "search"
-        return pipeline.detect(
+        # One expression, both paths: the leak finding and the 200-empty caveat
+        # describe the SAME sub-probe, so they must carry the same stamp.
+        atlas = self.atlas_techniques if injected else self._LOOKUP_ATLAS
+        findings = pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
             probe_id=self.id,
             observed_user=step.actor_user_id,
             owasp_llm=self.owasp_llm,
-            atlas=self.atlas_techniques if injected else self._LOOKUP_ATLAS,
+            atlas=atlas,
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
         )
+        # Class 1's 200-empty rule again: invoking a foreign resource key through a
+        # tool is a by-id read, and an empty result is not a proven deny. The rule
+        # lived only on the vector fetch, so this class passed with no note over
+        # exactly Class 1's evidence.
+        #
+        # Unconditional, as the agent-framework sibling already is and for the
+        # reason it gives: the two typed by-id reads (`vector.fetch`, `cache.get`)
+        # return `VectorHit | None` / `str | None`, so RETURNED there genuinely
+        # means an object came back. `McpResult.output` is free-form TOOL TEXT and
+        # the runner derives the outcome from `bool(result.output)` - so a server
+        # answering "No resource found for that key." is RETURNED, and the caveat
+        # went silent. Measured: two correctly tenant-scoped servers differing only
+        # in how they word a miss - the one returning "" emitted 96 caveat
+        # findings, the one narrating emitted 0. `FakeMCP` returns "", so no
+        # shipped configuration exercises the failing path.
+        #
+        # `sectum-ai probe` skips this probe against a live MCP server
+        # (`_skip_unseedable`), so the CLI cannot reach it today; the SDK path,
+        # which the Class 7 docs now point at for driving a live backend, can.
+        if not findings:
+            marker_id = step.payload.get("key") or step.payload.get("desc_key")
+            ambiguity = self._empty_ambiguity_finding(
+                step,
+                observation,
+                substrate,
+                marker=self._marker_by_id(substrate, marker_id),
+                atlas=atlas,
+            )
+            if ambiguity is not None:
+                findings.append(ambiguity)
+        return findings
