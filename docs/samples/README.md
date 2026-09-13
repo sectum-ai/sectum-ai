@@ -20,7 +20,7 @@ Two erasure flavours ship side-by-side so prospects can see both:
 
 | File | Source example | What it is |
 |---|---|---|
-| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | The auditor-facing PDF: executive summary, scope / methodology, all 343 findings (each with its OWASP LLM and NIST ids; ATLAS ids and remediation pointers where the probe declares them), the compliance-control section (it reads "No control mappings were recorded.": every surface of this demo run is the built-in fake, and a mapping needs evidence from a live surface), and the integrity / verification block. |
+| [`retrieval-pivot-audit-pack.pdf`](retrieval-pivot-audit-pack.pdf) | `examples/retrieval-pivot` | The auditor-facing PDF: executive summary, scope / methodology, all 367 findings (each with its OWASP LLM and NIST ids; ATLAS ids and remediation pointers where the probe declares them), the compliance-control section (it reads "No control mappings were recorded.": every surface of this demo run is the built-in fake, and a mapping needs evidence from a live surface), and the integrity / verification block. |
 | [`retrieval-pivot-attestation.intoto.json`](retrieval-pivot-attestation.intoto.json) | `examples/retrieval-pivot` | The [in-toto](https://in-toto.io/) attestation statement: the run digest as its subject, and a predicate carrying the scenario and manifest hashes, the metrics, the finding count, the control mappings, and which integrity anchors the pack has. |
 | [`erasure-attestation-audit-pack.pdf`](erasure-attestation-audit-pack.pdf) | `examples/erasure-attestation` | The DPO-facing GDPR Article 17 erasure attestation, **happy path**: per-surface verdicts ERASED across all eight configured surfaces, with the Coverage & caveats matrix. |
 | [`erasure-attestation-evidence.json`](erasure-attestation-evidence.json) | `examples/erasure-attestation` | The machine-readable evidence pack for the happy-path erasure run (the JSON sibling of the PDF, schema-versioned). |
@@ -105,7 +105,7 @@ structure, never against a regenerated run. Regenerate all three together, and
 re-read the regenerated retrieval-pivot PDF when the renderer changes.
 
 The full retrieval-pivot `evidence.json` is intentionally *not* checked in
-(~298 KB with 343 findings); run the example locally to inspect the JSON
+(~316 KB with 367 findings); run the example locally to inspect the JSON
 structure, or read the
 [`Finding`](https://github.com/sectum-ai/sectum-ai/blob/main/packages/spec/src/sectum_ai/spec/models.py)
 schema.

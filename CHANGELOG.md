@@ -57,6 +57,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Docs: the reasoning the previous entry repudiated was still on the page.**
+  `docs/quickstart.md` said "`score`, `report` and `pack` read `findings` directly
+  and are unaffected" — written when that was true, and false the moment `report`
+  and `pack` began refusing a self-contradicting record. The exit-3 list gains both
+  refusals, including `pack`'s run-vs-pack mismatch.
+- **Docs: two walkthroughs still told the reader to run a Class 7 probe the CLI
+  now skips.** `docs/coverage.md` and the Class 7 catalog page were corrected when
+  the seeding guard landed; the two examples that actually instruct the reader to
+  point `agent.kind` at LangGraph/CrewAI and run `--probe agent-framework-hijack`
+  were not — and with a live backend that command now exits `3` with "no probe
+  interrogated the stack". Both say so, and name the SDK as the path that drives a
+  live backend.
+- **Docs: the samples' finding count drifted under a regeneration.**
+  `docs/samples/README.md` said 343; the committed sidecar and PDF say 367. The
+  page's own warning that the retrieval-pivot artifacts "can drift silently"
+  (nothing renders them from a committed pack) was accurate.
+- **Docs: five smaller gaps.** `data-models.md` never learned about
+  `RunResult.detection`; the Class 11 page stated attestable-with-caveat
+  unconditionally, where it now needs an observed baseline; the Class 7 page and
+  ADR-0009 described per-sub-probe ATLAS stamping without the union that dedupe
+  now performs; `adapters.md` gave the skip consequence for the model family and
+  not for the agent and MCP families that now have a stronger one; and
+  `quickstart.md`'s `[ERASURE NOT RESCANNED]` clause named one of three channels —
+  not the one an `erasure --subject` run takes — and its SARIF properties list
+  omitted the two new disclosures.
+
+
 - **A narrowed user boundary is recorded even when the setup also failed.** The
   all-plants-unconfirmed branch returns early and `if dropped:` sat below it, so a
   probe that both dropped its user-level steps and lost every plant recorded only

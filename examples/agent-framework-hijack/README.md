@@ -103,6 +103,17 @@ detected with `LangGraphAgent`, `AutoGenAgent`, `CrewAIAgent`,
 `OpenAIAssistantsAgent`, or `AnthropicToolUseAgent`; only the agent
 caller varies.
 
+> **`sectum-ai probe` skips this probe against a live agent.** The lookup
+> target is an id Sectum *invents*, and no agent adapter has a write
+> primitive, so only the built-in fake ever holds it. Rather than query a
+> backend that cannot hold the answer and grade the empty result `PASS`, the
+> CLI skips the probe and Class 7 reads `NOT_COVERED` — and with `--probe
+> agent-framework-hijack` naming the only probe, the run exits `3` with "no
+> probe interrogated the stack". Driving a live agent is the **SDK** path,
+> where the caller provisions the resource itself; the command above is the
+> fake-backed walkthrough. See
+> [Known coverage gaps](../../docs/coverage.md#known-coverage-gaps).
+
 ## Agent end vs. MCP end
 
 Two probes exercise the same Class 7 pattern from opposite ends:

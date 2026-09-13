@@ -77,7 +77,10 @@ the later run did not run because its adapter cannot carry a user, reported as
 and did not serve back, reported as `[PLANTS LOST]`, a probe the earlier run
 exercised and this one did not,
 reported as `[COVERAGE LOST]`, an erasure surface the earlier run scanned to a
-residue count and this one did not, reported as `[ERASURE NOT RESCANNED]`, a tenant
+residue count, or whose coverage verdict fell from `ERASED` / `RESIDUAL` /
+`ATTESTABLE_WITH_CAVEAT` to none of those — the channel an `erasure --subject`
+run takes, since no A3 surface establishes a pre-erasure baseline and so none
+records a residue count at all — reported as `[ERASURE NOT RESCANNED]`, a tenant
 pair whose Class 5 timing effect size the earlier run measured and this one did not,
 reported as `[SIDE CHANNEL NOT REMEASURED]`, a headline rate the earlier run
 measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
@@ -94,9 +97,12 @@ interrogated the stack, a `report` on a run that names no probe (or one recorded
 against a since re-seeded substrate), an erasure run whose absence could not be
 established (`ERASURE INCONCLUSIVE`), a pack whose every answerable check passed
 while a sibling document it could not excuse remains (`VERIFICATION
-INDETERMINATE` — neither verified nor shown altered), a record `diff` or
-`baseline --compare` cannot compare because its own `confirmed_findings` /
-`per_probe_findings` disagree with the findings it carries, a `calibrate` run in
+INDETERMINATE` — neither verified nor shown altered), a record `diff`,
+`baseline --compare`, `report` or `pack` cannot use because its own
+`confirmed_findings` / `per_probe_findings` disagree with the findings it
+carries, a `pack` whose `run.json` is not the run its `evidence.json` attests
+(a later `probe` overwrote it — the bundle would ship a record `verify` calls
+altered), a `calibrate` run in
 which no threshold separated the classes with zero false positives so it
 recommends nothing (the run completed — this is a result, not a failure), or a
 record `score` refuses to grade; `4` evidence verification failure.
@@ -106,8 +112,10 @@ disagreement means the file was edited or written partially. It is refused rathe
 than recounted: which half is wrong is not knowable from the file, and believing
 the findings over the count would read a truncated write as clean exactly as
 believing the count over the findings turned 229 confirmed leaks into
-`[ok] confirmed_findings: 229 -> 0` under `RESULT: no regression`. `score`,
-`report` and `pack` read `findings` directly and are unaffected.
+`[ok] confirmed_findings: 229 -> 0` under `RESULT: no regression`. `report` and
+`pack` refuse it too — `report` *signs* the metrics block (it travels verbatim
+into the in-toto predicate), and `pack` bundles the record beside the pack that
+attests it. `score` reads `findings` directly and is unaffected.
 
 `0` means "nothing this command gates on", not "no leaks": the reporting commands do
 not gate, so `sectum-ai score` exits `0` whatever the letter — a grade of `F` on a run
@@ -216,7 +224,11 @@ capped at SARIF `note`, and so is a confirmed finding whose backing surface ran
 against a built-in fake — its message is prefixed `[synthetic surface - ...]`, as is
 one on a surface the record does not describe (`[surface provenance not recorded - ...]`), and each
 carries `backingSurface` and `surfaceProvenance`, so a no-`config` demo run is
-entirely `note`-level. The signed `evidence.json` stays the canonical record.
+entirely `note`-level. The run's own properties carry `plantsNotConfirmed` and
+`userStepsDropped` beside `surfaceProvenance`, so a class graded on setup that
+did not land, or with its user boundary never exercised, does not read in the
+Security tab as a class that came back clean. The signed `evidence.json` stays
+the canonical record.
 
 For a GRC platform or auditor, pass `--output oscal` to emit a **NIST OSCAL 1.1.x
 assessment-results** document so the run can be ingested as a machine-readable,

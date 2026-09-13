@@ -68,6 +68,13 @@ retention window, but the gap is a documented backend limitation rather than a
 defect in the customer's erasure flow (the engineering spec, §7, Class 11,
 hiding place #8). It is never a clean pass — the data genuinely remains.
 
+That verdict needs a **baseline**: the pre-erasure scan has to have observed the
+tenant's markers on that surface. "The data is presumed retained" is a positive
+claim about the tenant's data, so a caveat backend whose pre-erasure scan found
+nothing — a Datadog tenant whose traces had already aged out of `search_window`,
+say — reads `NO BASELINE` / `NOT_COVERED` instead, which is the rule stated two
+paragraphs above applied to this case rather than an exception to it.
+
 ## Coverage — the attestation never over-claims
 
 Every erasure surface gets an explicit, machine-readable **coverage verdict** in

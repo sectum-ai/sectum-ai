@@ -63,6 +63,17 @@ principal — for 24 confirmed cross-tenant findings in total. The PDF's
 
 ## Swap the agent caller
 
+> **`sectum-ai probe` skips both Class 7 probes against a live backend.** Each
+> reads back a canary Sectum *plants* — an MCP resource under a key it invents,
+> an agent lookup for an id it invents — and neither protocol has a write
+> primitive, so only the built-in fakes ever receive it. Rather than query a
+> backend that cannot hold the answer and grade the empty result `PASS`, the CLI
+> skips the probe and Class 7 reads `NOT_COVERED`; with `--probe` naming only
+> that probe, the run exits `3` with "no probe interrogated the stack". The
+> swaps below are how the adapters are *driven* — the SDK path, where the caller
+> provisions the resource itself. See
+> [Known coverage gaps](../../docs/coverage.md#known-coverage-gaps).
+
 `agent.kind` selects the agent adapter that the **`agent-framework-hijack`**
 probe drives (`--probe agent-framework-hijack`). The `agent-tool-hijack` probe
 in `run.sh` drives the MCP adapter (`mcp.invoke` steps) and is unaffected by

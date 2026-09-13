@@ -150,6 +150,13 @@ not a per-PR enforcement.
   Stamping them with it would claim an attack the probe never performed, in a field that
   ships as signed evidence. `agent-framework-hijack` is unchanged: it has only the
   confused-deputy and token-passthrough sub-probes, so no injection to describe.
+  The caveat path carries the same narrowing as the leak path: the 200-empty
+  ambiguity note takes its sub-probe's stamp, not the probe's footprint.
+  Per-sub-probe stamping needs `dedupe_findings` to UNION techniques rather than
+  keep the winner's: the finding id does not encode the sub-probe and all four
+  tie on status, severity and confidence, so first-seen won and the injection
+  step, planned last, always lost — a server exploitable both ways reported the
+  leak without the ingested-metadata path, which is a different remediation.
 
 - **2026-09-07** (at v0.11.0) — **partial sweep: the offline half only.** Releases
   v0.7.1 through v0.11.0 shipped with no entry here, so this records what *is*

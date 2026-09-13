@@ -22,7 +22,8 @@ without running Sectum.
 | `Observation` | A step's result: `step_id`, `surface`, `raw_response`, `structured?`, `latency_ms?`, `access_outcome?`. |
 | `Finding` | A detected leak: severity, confidence, status (`confirmed`/`unverified`), owner vs observed principal, `marker_id?`, `evidence_span`, `surface`, and the OWASP/ATLAS/NIST control IDs. |
 | `RunMetrics` | Headline metrics: per-probe counts, the Retrieval-Pivot Rate (with its binomial counts, Wilson interval, and the **modelled** per-embedding-model gradient `retrieval_pivot_rate_by_model`, which every renderer must label as modelled), erasure residue counts, the per-surface `erasure_coverage` block (surface → `CoverageVerdict`) and its `erasure_caveats`, side-channel effect sizes (with `side_channel_variance_floored` naming the pairs whose numbers are bounds rather than measurements), `user_steps_dropped`, `unconfirmed_plants`, and the Class 3/6/10 rates. |
-| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped` and `unconfirmed_plants`). |
+| `RunResult` | A whole run: ids, timestamps, scenario/manifest hashes, adapter and probe versions, `surface_provenance`, `findings[]`, `metrics` (which include `user_steps_dropped` and `unconfirmed_plants`), and `detection` — which detector graded it. |
+| `DetectionProvenance` | Which detector actually ran: embedder kind/model, judge kind/model, and the **resolved** semantic threshold (never the literal `"auto"`). `None` on a record from a path that runs no detector — `erasure` matches by exact substring and invokes neither provider. The audit PDF's methodology paragraph is a function of this, because both tiers past the exact match are off by default. |
 | `EvidencePack` | The attested bundle: the run result, manifest hash, timestamp token, Rekor proof, control mappings, PDF reference, the `anchored_in_log` / `anchored_with_timestamp` downgrade guards, and `schema_version`. |
 | `ControlMapping` | A pack-level framework mapping (framework, control ids, an assertion ending in the live surfaces it rests on) — see the [compliance mappings](compliance-mappings.md). |
 | `ClassScore` | One attack class's line in an isolation scorecard: `class_id`, `name`, `verdict` (`PASS`/`FAIL`/`NOT_COVERED`), weight `severity` band, `probe_ids`, `confirmed_findings`, `headline?`, `note?`. |
@@ -31,9 +32,9 @@ without running Sectum.
 `Scenario`, `GroundTruthManifest`, `Substrate`, `RunResult`, `EvidencePack`, and
 `IsolationScore` each carry a `schema_version`, so a verifier can refuse a pack whose major/minor
 schema it does not understand. The current `SCHEMA_VERSION` is **0.7.0** — it
-added two disclosure blocks to `RunMetrics`, each recording something a run did
-*less* of than it planned, so that neither is distinguishable only from outside
-the signed record. `user_steps_dropped` (probe id → the user-level steps the
+added `RunResult.detection` (above) and two disclosure blocks to `RunMetrics`,
+each recording something a run did *less* of than it planned, so that neither is
+distinguishable only from outside the signed record. `user_steps_dropped` (probe id → the user-level steps the
 runner did not run because the adapter cannot carry a user identity to its
 backend) makes a run that quietly stopped exercising the user boundary
 distinguishable from one that exercised it and found it clean; `diff` and

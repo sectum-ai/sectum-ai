@@ -36,7 +36,11 @@ metadata the agent ingests rather than through the call. The three lookup
 sub-probes reach the resource by naming it — a plugin-scope failure
 (`AML.T0053`), not an injection — so their findings are stamped without it. The
 class tuple above is the probe's full footprint; each finding carries the subset
-its own sub-probe demonstrates.
+its own sub-probe demonstrates. Findings that share a finding id are merged, and
+the merge takes the **union** of their techniques — the id encodes marker,
+principals and surface, not the sub-probe — so a leak a server serves up *both*
+ways carries both stamps rather than only the first-seen one. One leak stays one
+finding.
 
 **Agent end (`agent-framework-hijack`)** — verifies the *agent caller* itself.
 Each tenant's hard canary is provisioned as a resolvable resource the agent's

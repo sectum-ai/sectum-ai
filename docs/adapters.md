@@ -184,7 +184,11 @@ cannot tell "the framework dropped the scope" from "the model was talked out of
 it" (LangGraph's `configurable` is the out-of-band exception); and the observation
 is the agent's final message, so a foreign canary a tool returned but the model
 did not echo is not seen. The agent contract also carries no user identity, so
-this end verifies the tenant boundary only. The OpenAI Assistants run loop gives
+this end verifies the tenant boundary only. And because the lookup target is an
+id Sectum invents, with no write primitive to plant it, `sectum-ai probe` seeds
+this slot only for the built-in fake: against a live agent the Class 7 probe is
+skipped and the class reads `NOT_COVERED` rather than passing on an empty answer.
+Driving a live agent is an SDK path, where the caller provisions the resource. The OpenAI Assistants run loop gives
 up after `run_timeout_s` (default 300 s) instead of polling a parked run forever.
 
 **Model.** The HuggingFace LoRA model fine-tunes a per-tenant PEFT adapter on a
@@ -206,7 +210,10 @@ HuggingFace Text Generation Inference's native text-generation API.
 **MCP.** The MCP client speaks the Model Context Protocol over either a stdio
 subprocess or a streamable HTTP session; a generic MCP call carries no tenant
 identity, which is the confused-deputy gap Class 7 examines. Nor does it carry a
-*user* identity unless `user_argument` names the tool argument to put it in.
+*user* identity unless `user_argument` names the tool argument to put it in. As
+with the agent slot, the resource key is one Sectum invents and the protocol has
+no write primitive, so `sectum-ai probe` seeds it only for the built-in fake and
+skips the Class 7 probe against a live server — `NOT_COVERED`, not a pass.
 
 **Which boundary a run can claim.** Every adapter declares whether a call made as a
 user reaches the backend *as that user* (`carries_user`). The RAG, agent,
