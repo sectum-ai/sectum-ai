@@ -269,6 +269,20 @@ _ERASURE_METHODOLOGY: str = (
     "run measured."
 )
 
+# The same sentence with the attestation claim removed, for the erasure branch.
+# `scope_methodology` gained the provenance narrowing on its isolation arms only,
+# so an all-synthetic erasure pack still read "This pack ATTESTS whether those
+# markers are still retrievable" directly beneath `provenance_statement`'s "This
+# pack is a demonstration, not an attestation." - present in both shipped erasure
+# samples.
+_ERASURE_SYNTHETIC: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. This pack records "
+    "whether those markers were still retrievable after erasure on the surfaces "
+    "scanned, on the stack named above, which is not a production system; it "
+    "makes no claim about tenant isolation, which no probe in this run measured."
+)
+
 _DETECTOR_TAIL = (
     "Confirmation requires the observed content to trace back to a specific "
     "marker in the ground-truth manifest, so a candidate that cannot be tied to "
@@ -292,6 +306,48 @@ _DETECTOR_LAYERED = (
     "configured judge. An exact canary match is decided by the observation "
     "itself; a semantic match also depends on that judge. "
 ) + _DETECTOR_TAIL
+# Composed per TIER, because the two are configured independently and
+# `offline_only` collapsed them with `and`: one real provider flipped the whole
+# paragraph to the fully-layered claim, so a run with a real embedder and the
+# default `judge.kind: fake` told an auditor "then the configured judge" over a
+# token-order string matcher. That is a documented setup - `EmbedderConfig`'s own
+# `base_url` markets pointing the embedder at a local Ollama, while a judge needs
+# a chat model.
+_TIER_EMBEDDER = {
+    True: (
+        "an OFFLINE similarity stage - this run configured no embedding model, so "
+        "the second tier was Sectum's hashing vector, which measures lexical "
+        "overlap rather than meaning"
+    ),
+    False: "semantic similarity against the configured embedding model",
+}
+_TIER_JUDGE = {
+    True: (
+        "an OFFLINE adjudication stage - this run configured no judge, so the third "
+        "tier was Sectum's token-order string matcher, which is not a calibrated "
+        "judge"
+    ),
+    False: "the configured judge",
+}
+
+
+def _detector_tiers(embedder_offline: bool, judge_offline: bool) -> str:
+    """The layered-detector sentence, naming each tier as it actually ran."""
+    tail = (
+        " A paraphrase an offline stage cannot see is not reported as absent - it "
+        "is not reported at all; configure `detection.embedder` and "
+        "`detection.judge` to exercise the semantic tiers. "
+        if embedder_offline or judge_offline
+        else " An exact canary match is decided by the observation itself; a "
+        "semantic match also depends on that judge. "
+    )
+    return (
+        "Each observation passes a layered detector - exact canary match, then "
+        f"{_TIER_EMBEDDER[embedder_offline]}, then {_TIER_JUDGE[judge_offline]}."
+        f"{tail}"
+    ) + _DETECTOR_TAIL
+
+
 _DETECTOR_OFFLINE = (
     "Each observation passes a layered detector - exact canary match, then an "
     "OFFLINE similarity and adjudication stage. This run configured no embedding "
@@ -495,9 +551,11 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
         # first tier always runs - rather than assert the two that may not have.
         detector = _DETECTOR_TAIL
     else:
-        detector = _DETECTOR_OFFLINE if run.detection.offline_only else _DETECTOR_LAYERED
+        detector = _detector_tiers(
+            run.detection.embedder_kind == "fake", run.detection.judge_kind == "fake"
+        )
     if erasure_only:
-        head = _ERASURE_METHODOLOGY
+        head = _ERASURE_METHODOLOGY if live_surfaces(run) else _ERASURE_SYNTHETIC
     elif live_surfaces(run):
         head = _SCOPE_METHODOLOGY[0]
     else:

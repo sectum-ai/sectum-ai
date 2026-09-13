@@ -1055,3 +1055,68 @@ def test_a_full_similarity_page_is_not_reported_as_a_badly_shaped_phrase() -> No
     assert surface.unverifiable_after == 1, surface
     assert surface.verdict == "NOT VERIFIED", surface.verdict
     assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+
+
+def test_every_surface_keeps_the_residual_it_saw_before_a_later_read_failed() -> None:
+    # The previous fix hoisted the by-id findings on the vector surface and its
+    # commit claimed it was "applied to all six contained surfaces". It reached one
+    # PHASE of one surface. Every other scan was a comprehension, which dies WHOLE:
+    # a residual seen on marker 1 is destroyed when marker 2's read raises, so
+    # `_contained` recorded `residual_after=0` and the DPO was told the absence
+    # could not be established over content the tool had looked at and seen - the
+    # exact harm the guard's docstring says it fixed.
+    #
+    # One case per contained surface that can raise mid-scan, because "applied to
+    # all six" is the claim that was false.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+
+    class _SecondKeyRaises(FakeCache):
+        def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+            if key.endswith("-2"):
+                raise AdapterError("redis: connection reset")
+            return "the subject's cached answer"
+
+    class _SecondRecallRaises(FakeMemory):
+        def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+            if "two" in query:
+                raise AdapterError("mem0: 503 upstream")
+            return [query]
+
+    class _SecondSearchRaises(FakeSearchIndex):
+        def search(self, tenant: UUID, query: str) -> list[str]:
+            if "two" in query:
+                raise AdapterError("opensearch: shard failure")
+            return [query]
+
+    phrases = ("the subject phrase one", "the subject phrase two")
+    cases = (
+        (
+            Surface.SEMANTIC_CACHE,
+            {"cache": _SecondKeyRaises()},
+            SubjectManifest(subject_ref="s", records={Surface.SEMANTIC_CACHE: ("k-1", "k-2")}),
+        ),
+        (
+            Surface.AGENT_MEMORY,
+            {"memory": _SecondRecallRaises()},
+            SubjectManifest(
+                subject_ref="s", records={}, fingerprints={Surface.AGENT_MEMORY: phrases}
+            ),
+        ),
+        (
+            Surface.SEARCH_INDEX,
+            {"search_index": _SecondSearchRaises()},
+            SubjectManifest(
+                subject_ref="s", records={}, fingerprints={Surface.SEARCH_INDEX: phrases}
+            ),
+        ),
+    )
+    for surface, adapters, manifest in cases:
+        report = SubjectErasureProbe(**adapters).verify(tenant, manifest)
+        scanned = next(s for s in report.surfaces if s.surface is surface)
+        assert scanned.residual_after == 1, (surface, scanned)
+        assert scanned.verdict == "RESIDUAL DATA", (surface, scanned.verdict)
+        assert len(report.findings) == 1, (surface, report.findings)
+        # ...and what it could not read is still declared unverifiable, with the
+        # backend's own words: a residual must not swallow the coverage gap.
+        assert scanned.unverifiable_after >= 1, (surface, scanned)

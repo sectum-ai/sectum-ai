@@ -57,6 +57,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A leak no longer borrows a technique from an attempt that found nothing.**
+  `dedupe_findings` unioned techniques across *any* two duplicates, so a
+  `CONFIRMED` leak found by a `lookup` sub-probe, merged with the injection
+  sub-probe's `UNVERIFIED` non-finding for the same resource, came out stamped
+  `AML.T0051.001` — "the tool-description injection worked here" — over an attempt
+  that found nothing. The union is restricted to duplicates that reached the same
+  verdict; the caveat merge, where all four attempts are `UNVERIFIED` and the note
+  records what was *tried*, is unaffected.
+- **The containment fix reached one phase of one surface.** Every other scan was a
+  comprehension, which dies whole: a residual seen on marker 1 was destroyed when
+  marker 2's read raised, so the DPO was told the absence could not be established
+  over content the tool had looked at and seen. All six surfaces now record each
+  positive as it is found, through one shared scanner, with a test per surface —
+  because "applied to all six" was the claim that was false.
+- **An anchored `erasure` attestation said it had no anchor.** `erasure` never
+  passed the anchor intent, so it took the unanchored default: an
+  `evidence.timestamper: rfc3161` pack bound a PDF reading "Independent anchor:
+  NONE … reproducible by anyone over any digest". An AST sweep now pins that every
+  caller passes it, since the default is the conservative one and a missing
+  argument is therefore silent.
+- **The erasure methodology paragraph attested on an all-synthetic pack.** The
+  provenance narrowing added an entry ago reached the isolation arms only, so both
+  shipped erasure samples said "This pack **attests** whether those markers are
+  still retrievable" directly beneath "This pack is a demonstration, not an
+  attestation."
+- **A mixed detector config claimed both tiers were real.** `offline_only` was an
+  `and`, so one real provider flipped the whole paragraph: a run with a real
+  embedder and the default `judge.kind: fake` told an auditor "then the configured
+  judge" over a token-order string matcher. The sentence is composed per tier.
+
+
 - **The A3 erasure gate failed the run that proves the deletion worked.** The term
   added an entry ago keyed on the coverage *verdict*, and with no baseline the only
   verdicts an A3 surface can reach are `RESIDUAL` (the scan found the subject's

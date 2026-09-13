@@ -2706,16 +2706,30 @@ def _emit_erasure_attestation(
     )
     controls = control_mappings(run)
     pdf_path = workdir / "erasure-attestation.pdf"
+    # Resolved BEFORE the render, because the PDF has to state this pack's anchor
+    # status and is built before the token that would prove it. `report` threads
+    # the same intent; this caller took the `(False, False)` default, so an
+    # `evidence.timestamper: rfc3161` attestation bound a PDF reading "Independent
+    # anchor: NONE ... reproducible by anyone over any digest" - the bound document
+    # contradicting the pack that binds it, which is the failure this shape invites
+    # and the one the other caller's test asserts against itself rather than
+    # against a caller.
+    timestamper = _resolve_timestamper(loaded.evidence, None)
+    transparency_log = _resolve_transparency_log(loaded.evidence, False)
     pdf_ref = render_audit_pack_and_hash(
-        run, canonical_hash(substrate.manifest), controls, pdf_path
+        run,
+        canonical_hash(substrate.manifest),
+        controls,
+        pdf_path,
+        anchors=(timestamper is not None, transparency_log is not None),
     )
     pack = build_evidence_pack(
         run,
         substrate.manifest,
         control_mappings=controls,
         pdf_ref=pdf_ref,
-        timestamper=_resolve_timestamper(loaded.evidence, None),
-        transparency_log=_resolve_transparency_log(loaded.evidence, False),
+        timestamper=timestamper,
+        transparency_log=transparency_log,
     )
     json_path = workdir / "erasure-evidence.json"
     json_path.write_text(pack.model_dump_json(indent=2))

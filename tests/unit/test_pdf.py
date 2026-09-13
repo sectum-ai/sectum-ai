@@ -534,6 +534,13 @@ def test_an_erasure_only_pack_does_not_claim_to_attest_isolation() -> None:
     # it was is what let an erasure attestation promise an auditor "semantic
     # similarity, then a calibrated judge" over a workflow that invokes neither.
     assert scope_methodology(erasure_only)[2:] == scope_methodology(isolation)[2:]
+    # The scope paragraph narrows on provenance here as well: an all-synthetic
+    # erasure pack said "This pack ATTESTS whether those markers are still
+    # retrievable" directly beneath "This pack is a demonstration, not an
+    # attestation" - in both shipped samples.
+    assert "attests whether" not in scope_methodology(erasure_only)[0].lower()
+    live_erasure = erasure_only.model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    assert "attests whether" in scope_methodology(live_erasure)[0].lower()
     erasure_detector = scope_methodology(erasure_only)[1]
     assert "no embedding model and no judge" in erasure_detector, erasure_detector
     for claim in ("semantic similarity", "calibrated judge"):
@@ -581,17 +588,50 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     # says "not a calibrated judge", so `"calibrated judge" not in ...` fails on
     # the sentence that fixes the defect.
     claims_a_judge = "then the configured judge"
-    assert "no embedding model and no judge" in offline_para, offline_para
+    assert "no embedding model" in offline_para, offline_para
+    assert "no judge" in offline_para, offline_para
     assert claims_a_judge not in offline_para, offline_para
-    assert "offline stubs" in offline_para, offline_para
+    assert "lexical overlap rather than meaning" in offline_para, offline_para
     assert "semantic similarity against the configured embedding model" in real_para, real_para
     assert claims_a_judge in real_para, real_para
 
     # A record written before `detection` existed asserts neither: the first tier
     # always runs, the other two are unknown, and claiming either is the defect.
     unrecorded = scope_methodology(RunResult(**base))[1]
-    for claim in (claims_a_judge, "semantic similarity", "offline stubs"):
+    for claim in (claims_a_judge, "semantic similarity", "OFFLINE"):
         assert claim not in unrecorded, unrecorded
+
+    # The two MIXED corners. `offline_only` collapsed the tiers with `and`, so one
+    # real provider flipped the whole paragraph to the layered claim: a run with a
+    # real embedder and the default `judge.kind: fake` told an auditor "then the
+    # configured judge" over a token-order string matcher. Both are configured
+    # independently, and `EmbedderConfig.base_url` markets pointing the embedder at
+    # a local Ollama while a judge needs a chat model - so this corner is a
+    # documented setup, not a corner case.
+    real_embedder_only = RunResult(
+        **base,
+        detection=DetectionProvenance(
+            embedder_kind="openai",
+            embedder_model="text-embedding-3-small",
+            judge_kind="fake",
+            semantic_threshold=0.83,
+        ),
+    )
+    mixed = scope_methodology(real_embedder_only)[1]
+    assert "semantic similarity against the configured embedding model" in mixed, mixed
+    assert claims_a_judge not in mixed, mixed
+    assert "not a calibrated judge" in mixed, mixed
+
+    real_judge_only = RunResult(
+        **base,
+        detection=DetectionProvenance(
+            embedder_kind="fake", judge_kind="anthropic", semantic_threshold=0.62
+        ),
+    )
+    other = scope_methodology(real_judge_only)[1]
+    assert claims_a_judge in other, other
+    assert "semantic similarity against the configured embedding model" not in other, other
+    assert "lexical overlap rather than meaning" in other, other
 
 
 def test_the_coverage_matrix_says_which_rows_describe_a_fake() -> None:

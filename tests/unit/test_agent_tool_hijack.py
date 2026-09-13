@@ -343,6 +343,7 @@ def test_dedupe_keeps_every_technique_that_reached_the_same_leak() -> None:
 
     kept = dedupe_findings([lookup, injection])
     assert len(kept) == 1, kept
+    assert lookup.status is injection.status, "both CONFIRMED: the union's own precondition"
     assert set(kept[0].atlas) == {"AML.T0024", "AML.T0053", "AML.T0051.001"}, kept[0].atlas
     # Order-stable: the winner's own stamps stay first, so a finding's primary
     # attribution does not move with the order duplicates happen to arrive in.
@@ -363,3 +364,34 @@ def _finding(*, atlas: tuple[str, ...]) -> Finding:
         surface=Surface.MCP,
         atlas=atlas,
     )
+
+
+def test_a_leak_does_not_borrow_a_technique_from_an_attempt_that_found_nothing() -> None:
+    # The union's mirror defect. A technique describes what the detection that
+    # reached THIS verdict did, so merging across verdicts claims the loser's
+    # attack succeeded: a CONFIRMED leak found by a `lookup` sub-probe, merged
+    # with the injection sub-probe's UNVERIFIED non-finding for the same resource,
+    # came out stamped `AML.T0051.001` - "the tool-description injection worked
+    # here" - over an attempt that found nothing. ADR-0009 calls that "an attack
+    # the probe never performed, in a field that ships as signed evidence", which
+    # is the same sentence the narrowing exists for, reached from the other side.
+    leak = _finding(atlas=("AML.T0024", "AML.T0053"))
+    found_nothing = _finding(atlas=("AML.T0024", "AML.T0051.001", "AML.T0053")).model_copy(
+        update={"status": FindingStatus.UNVERIFIED, "confidence": 0.0}
+    )
+    kept = dedupe_findings([leak, found_nothing])
+    assert len(kept) == 1, kept
+    assert kept[0].status is FindingStatus.CONFIRMED
+    assert "AML.T0051.001" not in kept[0].atlas, kept[0].atlas
+
+    # The caveat path is unaffected: four sub-probes that ALL returned 200-empty
+    # share a verdict, so their merged note still records every technique the run
+    # attempted and left undetermined - which is what a caveat is for.
+    attempts = [
+        _finding(atlas=("AML.T0024", "AML.T0053")).model_copy(
+            update={"status": FindingStatus.UNVERIFIED, "confidence": 0.0}
+        ),
+        found_nothing,
+    ]
+    merged = dedupe_findings(attempts)[0]
+    assert set(merged.atlas) == {"AML.T0024", "AML.T0053", "AML.T0051.001"}, merged.atlas

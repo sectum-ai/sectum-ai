@@ -510,9 +510,10 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
     dropped from the headline count in favor of an earlier UNVERIFIED duplicate.
     First-seen order is preserved.
 
-    The TECHNIQUE lists are unioned rather than taken from the winner, because
-    they are a property of the sub-probe that detected the leak and the id does
-    not encode the sub-probe. `AgentToolHijackProbe` stamps `AML.T0051.001` only
+    The TECHNIQUE lists are unioned rather than taken from the winner - but only
+    across duplicates that reached the SAME verdict - because they are a property
+    of the sub-probe that detected the leak and the id does not encode the
+    sub-probe. `AgentToolHijackProbe` stamps `AML.T0051.001` only
     on its description-injection sub-probe (ADR-0009); that sub-probe's step is
     planned last and all four tie on status, severity and confidence, so it always
     lost. Against a server exploitable BOTH ways - the realistic case - the pack
@@ -534,7 +535,16 @@ def dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
             if _finding_strength(finding) > _finding_strength(existing)
             else (existing, finding)
         )
-        best[finding.finding_id] = _with_techniques_of(winner, loser)
+        # Only ACROSS THE SAME VERDICT. A technique describes what the detection
+        # that reached this verdict did, so merging across them claims the loser's
+        # attack succeeded: a CONFIRMED leak found by a `lookup` sub-probe, merged
+        # with the injection sub-probe's UNVERIFIED non-finding for the same
+        # resource, came out stamped `AML.T0051.001` - "the tool-description
+        # injection worked here" - over an attempt that found nothing. The union
+        # exists for the opposite case, two detections that BOTH confirmed.
+        best[finding.finding_id] = (
+            _with_techniques_of(winner, loser) if winner.status is loser.status else winner
+        )
     return [best[finding_id] for finding_id in order]
 
 
