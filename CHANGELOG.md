@@ -57,6 +57,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **One unreachable backend no longer costs the other seven surfaces their
+  verdicts.** The erasure containment caught `AdapterError` only. Translating a
+  client failure is the *adapter's* contract, and the erasure surfaces keep it
+  unevenly — `backup/s3` and `otel` translate at every call site, `cache/redis` and
+  `memory/redis` have no `except` at all — so a `redis.ConnectionError` walked
+  straight past the guard and aborted the whole run, *after* it had seeded canaries
+  into the operator's live backends. Contracting the guarantee on a contract half
+  the adapters do not keep made it untrue for most of them. Any exception is
+  contained now; the surface reads `NOT_COVERED` carrying the exception's own text,
+  so nothing is silenced.
+- **The AutoGen adapter returned Sectum's own prompt as the agent's answer.**
+  `ChatResult.chat_history` is the *initiator's* view, and the adapter initiates
+  from the user proxy — so in pyautogen 0.2.x the messages the proxy **sent** are
+  stored `role="assistant"` and the replies received are `role="user"`. Verified
+  against a real `ConversableAgent`. Taking the last `role == "assistant"`
+  therefore handed the hijack probe a string that structurally cannot carry a
+  leak, and the run recorded "the agent answered and surfaced no foreign canary" —
+  the caveat written to keep the class honest making a false statement. Selected by
+  `name` now, which carries the real speaker on both sides of the flip.
+
+
 - **The GCS backup's one guard against a false `ERASED` failed open.** A non-zero
   soft-delete retention is what makes the adapter refuse to attest a purge — a
   deleted object stays restorable for the window, and `_blobs` lists

@@ -986,3 +986,34 @@ def test_no_delete_api_and_no_baseline_is_not_a_caveat_about_the_tenants_data() 
     assert real.attestable_with_caveat
     kept = ErasureReport(target_tenant=UUID(int=1), findings=(), surfaces=(real,))
     assert [s.surface for s in kept.caveats] == [Surface.TRACING]
+
+
+def test_a_raw_client_failure_is_contained_to_its_own_surface() -> None:
+    # The containment caught `AdapterError` only. Translating a client failure is
+    # the ADAPTER's contract, and the erasure surfaces keep it unevenly: `backup/s3`
+    # and `otel` translate at every call site, while `cache/redis` and `memory/redis`
+    # have no `except` at all. So a `redis.ConnectionError` - the real client's own
+    # type - walked straight past the guard and destroyed all eight surface
+    # verdicts, after the run had already seeded canaries into live backends.
+    #
+    # Contracting the guarantee on a contract half the adapters do not keep made the
+    # guarantee untrue for most of them.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    store = FakeVectorStore()
+    store.upsert(tenant, [doc for doc in substrate.documents if doc.tenant_id == tenant])
+
+    class _RedisDown(FakeCache):
+        def delete(self, tenant: UUID) -> None:
+            raise ConnectionError("redis: connection refused")
+
+    report = ErasureProbe(substrate, vector=store, cache=_RedisDown()).run(tenant)
+    verdicts = {s.surface: s for s in report.surfaces}
+    # The other surface keeps its verdict...
+    assert verdicts[Surface.VECTOR_DB].verdict == "ERASED"
+    # ...and the failing one is NOT_COVERED, carrying the backend's own words.
+    broken = verdicts[Surface.SEMANTIC_CACHE]
+    assert broken.verdict == "NOT VERIFIED", broken.verdict
+    assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.NOT_COVERED
+    assert "connection refused" in (broken.unverifiable_reason or "")
+    assert not report.erased

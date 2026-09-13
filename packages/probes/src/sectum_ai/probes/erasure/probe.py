@@ -29,7 +29,6 @@ from sectum_ai.spec import (
     ERASURE_SURFACES as _ERASURE_SURFACES,
 )
 from sectum_ai.spec import (
-    AdapterError,
     CoverageVerdict,
     ErasureUnsupported,
     Finding,
@@ -400,10 +399,24 @@ class ErasureProbe:
         aborted the whole erasure run instead of marking that one surface
         uncovered. The verdict for the surface is the same either way: not
         ERASED, and NOT_COVERED in the coverage block.
+
+        Any ``Exception``, not only ``AdapterError``. Translating a client failure
+        is the ADAPTER's contract and the erasure surfaces keep it unevenly -
+        `backup/s3` and `otel` translate at every call site, `cache/redis` and
+        `memory/redis` have no ``except`` at all - so a `redis.ConnectionError`
+        walked straight past this guard and destroyed all eight verdicts, after
+        the run had already seeded canaries into the operator's live backends.
+        Contracting the containment on a contract half the adapters do not keep
+        made the guarantee this docstring gives untrue for most of them.
+
+        Nothing is silenced by widening it: the surface reads NOT_COVERED and the
+        exception's own text is what the CLI prints as the reason, so a Sectum bug
+        caught here is visible in the output rather than swallowed - and one
+        surface's bug no longer costs the other seven their verdicts.
         """
         try:
             before = scan(target, markers)
-        except AdapterError as error:
+        except Exception as error:
             return (
                 SurfaceErasure(
                     surface=surface,
@@ -420,7 +433,7 @@ class ErasureProbe:
             delete(target)
         except ErasureUnsupported:
             supported = False
-        except AdapterError as error:
+        except Exception as error:
             # The DELETE failed - not "no erasure API" (that is ErasureUnsupported
             # above) but a purge that was attempted and did not complete: an S3
             # bulk delete reporting per-key failures, a denied key, a retained
@@ -437,7 +450,7 @@ class ErasureProbe:
         self._inconclusive.pop(surface, None)
         try:
             residual = scan(target, markers)
-        except AdapterError as error:
+        except Exception as error:
             # Present before, and the post-scan could not establish absence: the
             # markers it did see are the baseline, and none of them is ruled out.
             # A backend with no erasure API still gets its caveat findings - the

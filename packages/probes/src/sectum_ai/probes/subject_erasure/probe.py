@@ -58,7 +58,6 @@ from sectum_ai.probes._recall import (
 )
 from sectum_ai.probes.erasure import ErasureReport, SurfaceErasure
 from sectum_ai.spec import (
-    AdapterError,
     Finding,
     FindingStatus,
     Severity,
@@ -196,6 +195,11 @@ class SubjectErasureProbe:
         trace backend aborted the whole run and every other surface's verdict went
         with it.
 
+        Any ``Exception``, not only ``AdapterError``: translating a client failure
+        is the ADAPTER's contract and the erasure surfaces keep it unevenly, so a
+        `redis.ConnectionError` walked past this guard and destroyed every other
+        surface's verdict. The Class 11 sibling says the same at more length.
+
         It records a ``SurfaceErasure`` carrying the backend's OWN words, exactly as
         `_erase_surface` does. The first version of this guard wrote to
         ``ErasureReport.unverifiable`` instead and dropped the surface from the
@@ -210,7 +214,7 @@ class SubjectErasureProbe:
         observed: list[Finding] = []
         try:
             yield observed
-        except AdapterError as error:
+        except Exception as error:
             at_stake = len(manifest.records.get(surface, ())) + len(
                 manifest.fingerprints.get(surface, ())
             )

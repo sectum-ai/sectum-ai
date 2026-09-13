@@ -132,7 +132,10 @@ class AutoGenAgent(AgentAdapter):
         history = _chat_history(chat_result, self._assistant)
         if not isinstance(history, list):
             raise AdapterError(f"autogen chat history must be a list, got {type(history).__name__}")
-        return AgentResult(output=_final_text(history), tool_calls=_tool_calls(history))
+        return AgentResult(
+            output=_final_text(history, getattr(self._assistant, "name", None)),
+            tool_calls=_tool_calls(history),
+        )
 
 
 def _chat_history(chat_result: Any, assistant: Any) -> Any:
@@ -204,8 +207,41 @@ def _is_assistant(message: Any) -> bool:
     return getattr(message, "role", None) == "assistant"
 
 
-def _final_text(messages: list[Any]) -> str:
-    """Return the text of the last assistant message, or empty string."""
+def _speaker(message: Any) -> str | None:
+    """Who actually said this, from ``name`` - the field that survives the flip."""
+    name = message.get("name") if isinstance(message, dict) else getattr(message, "name", None)
+    return str(name) if name else None
+
+
+def _final_text(messages: list[Any], assistant_name: str | None = None) -> str:
+    """Return the text of the assistant's last reply, or empty string.
+
+    Selected by ``name``, not by ``role``. ``ChatResult.chat_history`` is the
+    INITIATOR's view, and this adapter initiates from the user proxy - so in
+    pyautogen 0.2.x the messages the proxy SENT are stored ``role="assistant"``
+    and the replies received are ``role="user"``. Verified against a real
+    ``ConversableAgent``:
+
+        role=assistant  name=user       content='[tenant:abc] lookup mkr-00001'
+        role=user       name=assistant  content='the canary is SECTUM-CANARY-XYZ'
+
+    Taking the last ``role == "assistant"`` therefore returned Sectum's OWN
+    tenant-prefixed prompt, so the hijack probe scanned a string that
+    structurally cannot carry a leak and recorded "the agent answered and
+    surfaced no foreign canary" - the caveat written to keep the class honest
+    making a false statement. ``name`` carries the real speaker on both sides of
+    the flip.
+
+    Falls back to the role test when the history carries no usable ``name`` (a
+    stand-in or a future shape), so a caller that never learned the assistant's
+    name is no worse off than before.
+    """
+    if assistant_name:
+        for message in reversed(messages):
+            if _speaker(message) == assistant_name:
+                if isinstance(message, dict):
+                    return _content_to_text(message.get("content", ""))
+                return _content_to_text(getattr(message, "content", ""))
     for message in reversed(messages):
         if not _is_assistant(message):
             continue
