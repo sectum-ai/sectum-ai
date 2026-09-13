@@ -51,6 +51,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`report` signed the record `diff` refuses.** The self-contradiction guard was
+  left off the shared loaders on the reasoning that "`score`, `report` and `pack`
+  recount the findings" — true of what they *render*, false of what `report`
+  *signs*. `intoto.py` embeds `run.metrics` verbatim into the attested predicate,
+  "the part a downstream policy engine reads", so a record with its counts zeroed
+  produced a DSSE-signed, timestamped attestation asserting `confirmed_findings: 0`
+  beside its own `finding_count: 280`, over 229 confirmed cross-tenant leaks —
+  and `verify` called the pack internally consistent. `report` and `pack` now
+  refuse it, as `diff` and `baseline --compare` do.
+- **Deleting a per-probe key bypassed the same guard.** Checking only the keys the
+  record still carried let `[ok] per_probe_findings[rag-poisoning]: 24 -> 0` through
+  under `RESULT: no regression` at exit `0`, with `confirmed_findings` left truthful
+  so the total agreed — the hole one granularity down, still open after the fix that
+  closed it for the total. The map is compared over the union of what it records and
+  what the findings count. The `erasure` exemption is keyed on the two erasure
+  workflow probes rather than on the map being empty, because "empty" is also what a
+  gutted probe record looks like.
+- **`pack` shipped a bundle its own README tells the auditor to reject.** Nothing
+  checked that the workdir's `run.json` is the run `evidence.json` attests, though
+  `pack` bundles both — so the ordinary `probe; report; probe; pack` workflow, whose
+  second run legitimately rewrites `run.json`, produced a run-pack that answers
+  `[FAIL] bundled-run: … altered or replaced after signing` at exit `4`: a tamper
+  accusation against files the tool wrote minutes earlier. The directory path of
+  `verify` deliberately declines to make that accusation because it cannot tell a
+  later run from an altered one; a bundle *is* a closed container, so the mismatch is
+  refused where it is created instead. Keyed on the record digest, not `run_id`,
+  which is stable across runs of one scenario.
+
+
 - **Docs: Class 7 is not covered against a live MCP server or a live agent.** Both
   halves of the class read back a canary *Sectum plants* — an MCP resource under a
   key it invents, an agent lookup for an id it invents — and neither protocol has a

@@ -2233,3 +2233,66 @@ def test_a_genuine_other_pack_still_claims_its_own_document(tmp_path: Path) -> N
     assert result.exit_code == 0, result.output
     assert "[FAIL]" not in result.output, result.output
     assert "audit-pack.pdf" in result.output, result.output
+
+
+def test_report_and_pack_refuse_the_record_diff_refuses(tmp_path: Path) -> None:
+    # The guard was left off the shared loaders on the reasoning that "`score`,
+    # `report` and `pack` recount the findings". True of what they RENDER, false
+    # of what `report` SIGNS: `intoto.py` embeds `run.metrics` verbatim into the
+    # attested predicate - "the part a downstream policy engine reads" - so a
+    # record whose counts contradict its findings became a DSSE-signed
+    # attestation asserting `confirmed_findings: 0` beside its own
+    # `finding_count: 280`, over 229 confirmed cross-tenant leaks, while `diff`
+    # refused that very file.
+    _seed_and_probe(tmp_path)
+    run = json.loads((tmp_path / "run.json").read_text())
+    carried = sum(1 for f in run["findings"] if f["status"] == "confirmed")
+    assert carried, "the demo run must confirm something for this to mean anything"
+    run["metrics"]["confirmed_findings"] = 0
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    report = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert report.exit_code == 3, report.output
+    assert "contradicts itself" in report.output, report.output
+    assert not (tmp_path / "evidence.json").exists(), "nothing may be signed"
+
+
+def test_pack_names_a_contradicting_record_for_what_it_is(tmp_path: Path) -> None:
+    # `pack` reaches its self-contradiction guard only when a pack already exists,
+    # so the record has to be doctored AFTER a clean `report` - otherwise `pack`
+    # stops at "no evidence pack" and the guard is never exercised. The
+    # run-vs-pack digest check would also refuse this file; what this pins is
+    # that the operator is told WHICH thing is wrong, rather than being sent to
+    # re-run `report` over a record no re-run will fix.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    run = json.loads((tmp_path / "run.json").read_text())
+    run["metrics"]["confirmed_findings"] = 0
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    pack = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert pack.exit_code == 3, pack.output
+    assert "contradicts itself" in pack.output, pack.output
+
+
+def test_pack_refuses_a_run_that_is_not_the_one_the_evidence_attests(tmp_path: Path) -> None:
+    # `pack` is the only writer that puts run.json INTO a bundle, and `verify`'s
+    # bundle path judges it against the pack's attested run. So the ordinary
+    # `probe; report; probe; pack` workflow - whose second run legitimately
+    # rewrites run.json - shipped a deliverable whose own PACK-README tells the
+    # auditor to run a command answering "[FAIL] bundled-run: ... altered or
+    # replaced after signing" at exit 4. The directory path of `verify`
+    # deliberately refuses to make that accusation because it cannot tell a later
+    # run from an altered one; a bundle IS a closed container, so the mismatch is
+    # refused where it is created rather than accused where it is read.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["pack", "--workdir", str(tmp_path)]).exit_code == 0
+
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    again = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert again.exit_code == 3, again.output
+    assert "is not the run" in again.output, again.output
+    # By digest, not by run_id: run_id is stable across runs of one scenario, so
+    # naming it printed the same string on both sides of "vs".
+    assert "record " in again.output, again.output

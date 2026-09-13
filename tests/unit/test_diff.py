@@ -614,10 +614,13 @@ def test_a_count_that_rose_under_a_loss_is_still_a_regression(tmp_path: Path) ->
     # Blanking the pooled count in both directions said "we didn't check" about a
     # number the run measured and tripled.
     earlier = _run(_finding("f-1"))
-    later = _run(_finding("f-1"), _finding("f-2"), _finding("f-3")).model_copy(
-        update={"metrics": RunMetrics(confirmed_findings=3, user_steps_dropped={"p": 4})}
+    # `user_steps_dropped` is the point; the counts come from `_run` so the record
+    # stays one a producer could write (a `model_copy` of the whole metrics object
+    # would blank `per_probe_findings` beside three confirmed findings).
+    later = _run(_finding("f-1"), _finding("f-2"), _finding("f-3"))
+    later = later.model_copy(
+        update={"metrics": later.metrics.model_copy(update={"user_steps_dropped": {"p": 4}})}
     )
-    earlier = earlier.model_copy(update={"metrics": RunMetrics(confirmed_findings=1)})
     cli = CliRunner().invoke(
         app,
         [
@@ -1288,15 +1291,37 @@ def test_a_terse_record_still_scores_and_reports(tmp_path: Path) -> None:
 
 def test_a_record_that_records_no_per_probe_counts_at_all_still_loads(tmp_path: Path) -> None:
     # The refusal above must not fire on `erasure`, which records its findings and
-    # leaves `per_probe_findings` empty - so requiring the MAP to match would turn
-    # an honest erasure record carrying a residual finding into a refusal, trading
-    # the false pass for a false alarm. An absent key is an unrecorded count (the
-    # distinction `erasure_residue` already turns on); a present one that
-    # disagrees is the contradiction.
-    erasure_shaped = _run(*_carrying(2)).model_copy(
+    # leaves `per_probe_findings` empty - requiring the map to match would trade the
+    # false pass for a false alarm on an honest erasure record carrying a residual.
+    # The exemption is keyed on the two erasure WORKFLOW PROBES, not on the map
+    # being empty: "empty" is also what a gutted probe record looks like, so
+    # exempting the shape would leave every key deletable at once.
+    erasure_shaped = _run(*_carrying(2, probe_id="gdpr-erasure-verification")).model_copy(
         update={"metrics": RunMetrics(confirmed_findings=2, erasure_residue={"vector_db": 2})}
     )
     path = _write(tmp_path / "erasure.json", erasure_shaped)
     cli = runner.invoke(app, ["diff", str(path), str(path)])
     assert cli.exit_code == 0, cli.output
     assert "contradicts itself" not in cli.output, cli.output
+
+
+def test_deleting_a_per_probe_key_is_the_same_contradiction(tmp_path: Path) -> None:
+    # Checking only the keys the record still CARRIES let the hole through one
+    # granularity down: with `confirmed_findings` left truthful so the total
+    # agreed, deleting a single key printed
+    #     [ok] per_probe_findings[rag-entity-bleed]: 3 -> 0
+    #     RESULT: no regression
+    # at exit 0 over a record still carrying those three confirmed findings.
+    # `_per_probe_counts` emits a key for every probe with a confirmed finding, so
+    # in a POPULATED map a missing key is a deletion, never an omission.
+    honest = _run(*_carrying(3))
+    gutted = honest.model_copy(
+        update={"metrics": RunMetrics(confirmed_findings=3, per_probe_findings={})}
+    )
+    clean = _write(tmp_path / "honest.json", honest)
+    path = _write(tmp_path / "gutted.json", gutted)
+    for earlier, later in ((clean, path), (path, clean)):
+        cli = runner.invoke(app, ["diff", str(earlier), str(later)])
+        assert cli.exit_code == 3, cli.output
+        assert "contradicts itself" in cli.output, cli.output
+        assert "RESULT: no regression" not in cli.output, cli.output

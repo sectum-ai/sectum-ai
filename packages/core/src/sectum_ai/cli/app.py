@@ -82,6 +82,7 @@ from sectum_ai.evidence import (
     dsse_binding_detail,
     rekor_keyring,
     render_audit_pack_and_hash,
+    run_digest,
     run_to_oscal,
     run_to_sarif,
     to_in_toto_statement,
@@ -599,6 +600,9 @@ def _refuse_other_schema_line(recorded: object, what: str) -> None:
         )
 
 
+_ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
+
+
 def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
     """Refuse a record whose headline counts disagree with its own findings.
 
@@ -627,11 +631,24 @@ def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
     cleanly as believing the count over-reports one. "This record contradicts
     itself" is the only thing measured, so it is the only thing said.
 
-    Per-probe counts are checked KEY BY KEY, not as a whole map: `erasure`
-    records findings and leaves `per_probe_findings` empty, so requiring the map
-    to match would refuse an honest erasure record carrying a residual finding.
-    An absent key is an unrecorded count (the distinction `erasure_residue`
-    already turns on); a present one that disagrees is the same contradiction.
+    The per-probe map is compared over the UNION of what it records and what the
+    findings count, because `_per_probe_counts` emits a key for every probe with
+    a confirmed finding: a missing key is a deletion, not an omission. Checking
+    only the keys the record still carried let
+
+        [ok] per_probe_findings[rag-poisoning]: 24 -> 0
+        RESULT: no regression
+
+    through at exit 0, with `confirmed_findings` left truthful so the total
+    agreed - the same hole one granularity down, still open after the fix that
+    closed it for the total.
+
+    One producer legitimately records findings under an EMPTY map: `erasure`
+    never fills `per_probe_findings`. That exemption is keyed on the two erasure
+    workflow probes rather than on the map being empty, because "empty" is also
+    what a gutted probe record looks like - exempting the shape instead of the
+    producer would have left every key deletable at once, which is the same hole
+    a third time.
     """
     confirmed = confirmed_findings(run.findings)
     if run.metrics.confirmed_findings != len(confirmed):
@@ -643,14 +660,20 @@ def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
             "compared"
         )
     counted = _per_probe_counts(confirmed)
-    disagreeing = sorted(
-        probe_id
-        for probe_id, recorded in run.metrics.per_probe_findings.items()
-        if counted.get(probe_id, 0) != recorded
+    recorded_counts = run.metrics.per_probe_findings
+    erasure_only = not recorded_counts and set(counted) <= _ERASURE_WORKFLOW_IDS
+    disagreeing = (
+        []
+        if erasure_only
+        else sorted(
+            probe_id
+            for probe_id in set(counted) | set(recorded_counts)
+            if counted.get(probe_id, 0) != recorded_counts.get(probe_id, 0)
+        )
     )
     if disagreeing:
         detail = ", ".join(
-            f"{probe_id}: records {run.metrics.per_probe_findings[probe_id]}, "
+            f"{probe_id}: records {recorded_counts.get(probe_id, 0)}, "
             f"carries {counted.get(probe_id, 0)}"
             for probe_id in disagreeing
         )
@@ -1556,6 +1579,14 @@ def report(
         workdir = loaded.workdir
     substrate = _load_substrate(workdir, _resolve_manifest_key(loaded.security))
     run = _load_run(workdir)
+    # `report` SIGNS the metrics block: `intoto.py` embeds `run.metrics` verbatim
+    # into the attested predicate - "the part a downstream policy engine reads" -
+    # and the pack carries the same object. Only the two finding-derived rows are
+    # recounted, so a record whose counts contradict its findings produced a
+    # DSSE-signed attestation asserting `confirmed_findings: 0` beside its own
+    # `finding_count: 280`, over 229 confirmed cross-tenant leaks, while `diff`
+    # refused the very same file.
+    _refuse_self_contradicting_record(run, str(workdir / "run.json"))
     if not run.probe_versions and not run.findings:
         raise ConfigError(
             f"the run at {workdir / 'run.json'} records no probe and no finding, so there "
@@ -1824,6 +1855,28 @@ def pack(
     if not evidence_path.exists():
         raise ConfigError(f"no evidence pack at {evidence_path}; run 'sectum-ai report' first")
     run = _load_run(workdir)
+    _refuse_self_contradicting_record(run, str(workdir / "run.json"))
+    # `pack` is the only writer that puts `run.json` INTO a bundle, and
+    # `verify`'s bundle path judges it against the pack's own attested run - so
+    # the ordinary `probe; report; probe; pack` workflow, whose second run
+    # legitimately rewrites run.json, shipped a deliverable whose own
+    # PACK-README tells the auditor to run a command that answers
+    # "[FAIL] bundled-run: ... altered or replaced after signing" at exit 4. The
+    # directory path of `verify` deliberately refuses to make that accusation
+    # (it cannot tell a later run from an altered one); the bundle path can,
+    # because a bundle IS a closed container - so the mismatch has to be refused
+    # where it is created rather than accused where it is read.
+    attested = EvidencePack.model_validate_json(evidence_path.read_bytes()).run_result
+    on_disk, signed = run_digest(run), run_digest(attested)
+    if on_disk != signed:
+        # By DIGEST, not by run_id: `run_id` is stable across runs of the same
+        # scenario, so naming it printed the same string on both sides of "vs".
+        raise ConfigError(
+            f"the run at {workdir / 'run.json'} (record {on_disk[:16]}) is not the run "
+            f"{evidence_path} attests (record {signed[:16]}); a later `probe` overwrote "
+            "it. Re-run 'sectum-ai report' so the pack and the run bundled beside it are "
+            "the same run"
+        )
 
     members: dict[str, bytes] = {"evidence.json": evidence_path.read_bytes()}
     for name in ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json", "run.json"):
