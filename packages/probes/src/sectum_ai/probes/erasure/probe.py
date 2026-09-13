@@ -137,7 +137,17 @@ class SurfaceErasure:
     @property
     def verdict(self) -> str:
         """ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, NO BASELINE, or ABSENCE CHECKED."""
-        if not self.erasure_supported and self.baseline_observed:
+        # `attestable_with_caveat`, not its own spelling of it. Three properties
+        # tested the same five fields three ways, and the third clause -
+        # `markers_before > 0` - was the one only `attestable_with_caveat` had. A
+        # backend that raises `ErasureUnsupported` unconditionally (Helicone,
+        # Datadog) on a tenant whose traces had already aged out therefore read
+        # ATTESTABLE WITH CAVEAT here and False there: the coverage matrix
+        # asserted "no per-tenant erasure API - data presumed retained", a
+        # positive claim about the tenant's DATA, on a surface where the scan
+        # observed nothing. It fell out of `caveats` and out of `not_covered`
+        # too, so one pack carried the claim and no disclosure of it.
+        if self.attestable_with_caveat:
             return "ATTESTABLE WITH CAVEAT"
         if self.residual_after > 0:
             return "RESIDUAL DATA"
@@ -172,8 +182,9 @@ class SurfaceErasure:
         """
         # A caveat is a statement about the BACKEND (no per-tenant erasure API),
         # and its `residual_after` is by construction the retained count - so it
-        # is decided first or every caveat surface reads RESIDUAL.
-        if not self.erasure_supported and self.baseline_observed:
+        # is decided first or every caveat surface reads RESIDUAL. Keyed on the
+        # same predicate as `verdict` and `attestable_with_caveat`: see there.
+        if self.attestable_with_caveat:
             return CoverageVerdict.ATTESTABLE_WITH_CAVEAT
         # A hit is a hit whether or not a baseline was established: content still
         # surfacing IS residual data, so this outranks the no-baseline branches.

@@ -14,6 +14,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.adapters.base import ObservabilityAdapter, VectorHit
 from sectum_ai.probes import ERASURE_SURFACES, ErasureProbe
+from sectum_ai.probes.erasure.probe import ErasureReport, SurfaceErasure
 from sectum_ai.spec import AdapterError, CoverageVerdict, MarkerType, Substrate, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
@@ -942,3 +943,46 @@ def test_a_shared_weights_model_that_memorized_the_canary_is_still_residual() ->
         substrate, vector=_seeded_store(substrate, soft_delete=False), model=model
     ).run(target)
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL, report.coverage()
+
+
+def test_no_delete_api_and_no_baseline_is_not_a_caveat_about_the_tenants_data() -> None:
+    # Three properties tested the same five fields three ways. `verdict` and
+    # `coverage_verdict` asked "no delete API and a baseline was observed";
+    # `attestable_with_caveat` asked that AND `markers_before > 0`. A backend that
+    # raises ErasureUnsupported unconditionally - Helicone, Datadog APM - on a
+    # tenant whose traces had already aged out lands exactly in the gap.
+    #
+    # The caveat is a positive claim about the tenant's DATA ("no per-tenant
+    # erasure API - data presumed retained"), so making it on a surface where the
+    # scan observed nothing is an over-claim. It also fell out of `caveats` (which
+    # keys on the strict property) and out of `not_covered` (which keys on the
+    # loose one), so the pack asserted it and disclosed it nowhere.
+    starved = SurfaceErasure(
+        surface=Surface.TRACING,
+        markers_before=0,
+        residual_after=0,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert starved.verdict == "NO BASELINE", starved.verdict
+    assert starved.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not starved.attestable_with_caveat
+    report = ErasureReport(target_tenant=UUID(int=1), findings=(), surfaces=(starved,))
+    assert report.caveats == ()
+    assert Surface.TRACING in report.not_covered, "it has to be disclosed as SOMETHING"
+
+    # A genuine caveat - the scan saw markers and the backend has no delete API -
+    # is untouched, or the fix trades the over-claim for silence about hiding
+    # place #8.
+    real = SurfaceErasure(
+        surface=Surface.TRACING,
+        markers_before=3,
+        residual_after=3,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert real.verdict == "ATTESTABLE WITH CAVEAT"
+    assert real.coverage_verdict is CoverageVerdict.ATTESTABLE_WITH_CAVEAT
+    assert real.attestable_with_caveat
+    kept = ErasureReport(target_tenant=UUID(int=1), findings=(), surfaces=(real,))
+    assert [s.surface for s in kept.caveats] == [Surface.TRACING]

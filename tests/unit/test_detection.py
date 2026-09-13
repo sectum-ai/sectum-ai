@@ -1227,3 +1227,77 @@ def test_a_re_punctuated_hard_canary_is_still_a_confirmed_leak() -> None:
         )
         == []
     )
+
+
+class _DecliningJudge:
+    """A judge that says no to everything - cautious, flaky, or hostile."""
+
+    def judge(self, text: str, marker: Marker) -> JudgeVerdict:
+        return JudgeVerdict(leak=False, evidence_span="", rationale="no leak")
+
+
+def test_a_leak_one_token_apart_survives_a_judge_that_declines() -> None:
+    # The verbatim bypass exists because "a judge answering no (a cautious, flaky,
+    # or hostile model) silently downgraded a real cross-tenant leak to a
+    # candidate". It asked with `residual_present`, whose token arm is CONTIGUOUS,
+    # while this module's own bar for "the text carries that marker" allows one
+    # interposed token - `_MAX_INTERPOSED_TOKENS`, which `FakeJudge` and
+    # `_span_traceable` branch 1 both use to CONFIRM. So the canonical leak shape
+    # this file documents at the top, "Project (internal) Onyx-00002", failed the
+    # bypass written for exactly it.
+    substrate = _entity_substrate("Project Onyx-00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DecliningJudge(), 0.99)
+
+    spaced = pipeline.detect(
+        _TA, "leak: Project (internal) Onyx-00002 surfaced", Surface.VECTOR_DB, probe_id="p"
+    )
+    [finding] = [f for f in spaced if f.marker_id == "e-Project Onyx-00002"]
+    assert finding.status is FindingStatus.CONFIRMED
+    # CONFIRMATION and CONFIDENCE are different claims: one interposed token says
+    # the leak is there, not that the match was exact. Widening `verbatim` itself
+    # would have written 1.0 into a signed field for a paraphrase.
+    assert finding.confidence < 1.0, finding.confidence
+
+    verbatim = pipeline.detect(
+        _TA, "leak: Project Onyx-00002 surfaced", Surface.VECTOR_DB, probe_id="p"
+    )
+    exact = next(f for f in verbatim if f.marker_id == "e-Project Onyx-00002")
+    assert exact.confidence == 1.0
+
+    # And nothing is confirmed off text that does not carry the marker at all.
+    unrelated = pipeline.detect(
+        _TA, "the quarterly roadmap was reviewed", Surface.VECTOR_DB, probe_id="p"
+    )
+    assert not [f for f in unrelated if f.marker_id == "e-Project Onyx-00002"]
+
+
+def test_the_quoted_proof_of_a_leak_has_to_be_about_that_leak() -> None:
+    # `_span_traceable` branch 1 confirms on the MARKER being present, whatever the
+    # judge quoted - so it cannot decide what to QUOTE. `quotable` asked only
+    # whether the span was somewhere in the observation, which an unrelated
+    # sentence from the same response passes. The audit PDF renders this field and
+    # its own docstring says "showing it in the auditor pack IS the proof", so a
+    # confirmed cross-tenant leak shipped evidenced by a sentence sharing no token
+    # with the marker.
+    substrate = _entity_substrate("Project Onyx-00002")
+    text = "leak: Project Onyx-00002 surfaced. the quarterly roadmap was also reviewed"
+
+    unrelated = DetectionPipeline(
+        substrate,
+        FakeEmbeddingProvider(),
+        _LyingJudge(span="the quarterly roadmap was also reviewed"),
+        0.0,
+    ).detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    [finding] = [f for f in unrelated if f.marker_id == "e-Project Onyx-00002"]
+    # Still CONFIRMED - the marker really is there - but evidenced by the marker,
+    # not by the judge's unrelated pick.
+    assert finding.status is FindingStatus.CONFIRMED
+    assert finding.evidence_span == "Project Onyx-00002", finding.evidence_span
+
+    # A genuine paraphrase that ties to the marker is still preferred: it is the
+    # richer context, and dropping it would trade the over-claim for a worse pack.
+    tied = DetectionPipeline(
+        substrate, FakeEmbeddingProvider(), _LyingJudge(span="Onyx-00002 surfaced"), 0.0
+    ).detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+    kept = next(f for f in tied if f.marker_id == "e-Project Onyx-00002")
+    assert kept.evidence_span == "Onyx-00002 surfaced"

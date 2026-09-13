@@ -840,14 +840,44 @@ class DetectionPipeline:
             # "no" downgraded it - while the fake judge confirmed it. An entity has
             # no 16-character opaque token, so the projection arm never fires here
             # and this tier keeps exactly the two arms it had.
+            #
+            # `residual_present`'s token arm is CONTIGUOUS, while this module's own
+            # bar for "the text carries that marker" allows one interposed token -
+            # `_MAX_INTERPOSED_TOKENS`, which `FakeJudge` and `_span_traceable`
+            # branch 1 both use to CONFIRM. So the canonical leak this file
+            # documents at the top, "Project (internal) Onyx-00002", failed the
+            # bypass it was written for: with a real judge that declines - the
+            # cautious, flaky or hostile model the bypass exists to defend against -
+            # a foreign entity plainly present in the observation was recorded
+            # UNVERIFIED and dropped out of `confirmed_findings` and the headline.
+            # Asking the same question with the same predicate, rather than a
+            # stricter one on this path only.
             verbatim = residual_present(marker.plaintext, text)
+            # CONFIRMATION and CONFIDENCE are different claims, and one predicate
+            # was answering both. `residual_present`'s token arm is CONTIGUOUS,
+            # while this module's own bar for "the text carries that marker" is
+            # `_MAX_INTERPOSED_TOKENS` - the bar `FakeJudge` and `_span_traceable`
+            # branch 1 both use to confirm. So the canonical leak this file
+            # documents at the top, "Project (internal) Onyx-00002", failed the
+            # bypass written for exactly it: with a real judge that declines - the
+            # cautious, flaky or hostile model the bypass defends against - a
+            # foreign entity plainly present was recorded UNVERIFIED and dropped
+            # out of `confirmed_findings` and the headline.
+            #
+            # Kept separate from `verbatim` rather than widening it: `verbatim`
+            # also sets confidence to 1.0, and a paraphrase is not certainty. One
+            # interposed token is enough to say the leak is THERE; it is not
+            # enough to call the match exact in a signed field.
+            present = verbatim or ordered_within_span(
+                observation_tokens, tokenize(marker.plaintext), _MAX_INTERPOSED_TOKENS
+            )
             similarity = self._best_window_similarity(observation_tokens, marker, window_cache)
             # The threshold gates which *semantic* candidates reach the judge. With
             # the deterministic fake providers the judge (a full marker-phrase
             # match) is the binding test; the threshold becomes the real
             # calibration knob once a production embedding model is configured. A
             # verbatim match is never gated by it.
-            if not verbatim and similarity < self._threshold:
+            if not present and similarity < self._threshold:
                 continue
             leak = self._judge.judge(text, marker)
             # FP-control backstop (the engineering spec, section 6.4): a judge
@@ -861,14 +891,17 @@ class DetectionPipeline:
             judged = leak.leak and self._span_traceable(
                 text, leak.evidence_span, marker, self._entity_boilerplate
             )
-            confirmed = verbatim or judged
+            confirmed = present or judged
             # `_span_traceable` also confirms via the MARKER being present
             # (branch 1), whatever the judge quoted - so it cannot decide what to
             # QUOTE: a judge affirming a verbatim leak while citing a fabricated
-            # span would put that fabrication in the signed pack. A span is
-            # quotable only when the span itself is in the observation.
-            quotable = bool(leak.evidence_span) and ordered_within_span(
-                tokenize(text), tokenize(leak.evidence_span), _MAX_INTERPOSED_TOKENS
+            # span would put that fabrication in the signed pack. Asking only
+            # whether the span is SOMEWHERE in the observation was not enough
+            # either: an unrelated in-observation sentence passes that, and became
+            # the quoted proof of the leak. A span is quotable only when it also
+            # ties to this marker - branch 2's distinctive-token test.
+            quotable = bool(leak.evidence_span) and self._span_ties_to_marker(
+                text, leak.evidence_span, marker, self._entity_boilerplate
             )
             if confirmed:
                 # The audit pack renders this span (the PDF renderer), so a
@@ -936,6 +969,29 @@ class DetectionPipeline:
         )
         if marker_present:
             return True
+        return DetectionPipeline._span_ties_to_marker(text, evidence_span, marker, boilerplate)
+
+    @staticmethod
+    def _span_ties_to_marker(
+        text: str,
+        evidence_span: str,
+        marker: Marker,
+        boilerplate: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Branch 2 alone: the cited span is in the observation AND ties to ``marker``.
+
+        Separated from :meth:`_span_traceable` because the two questions diverge.
+        `_span_traceable` answers "does this judge verdict confirm", and branch 1
+        says yes on the MARKER being present, whatever the judge quoted - so it
+        cannot decide what to QUOTE. Asking only "is the span somewhere in the
+        text" let a judge affirming a genuine verbatim leak put an unrelated
+        in-observation sentence into the signed pack as the proof of it: a
+        CONFIRMED cross-tenant leak of `Project Onyx-00002` evidenced by "the
+        quarterly roadmap was also reviewed", sharing no token with the marker,
+        in the field the PDF renderer's own docstring calls "the proof".
+        """
+        text_tokens = tokenize(text)
+        marker_tokens = tokenize(marker.plaintext)
         span_tokens = tokenize(evidence_span)
         # A pure-digit token (the canary's serial, e.g. "00002") is low-entropy and
         # collides with everyday numbers (invoice / ticket / lot), so it can never

@@ -57,6 +57,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A surface with no delete API and no baseline is no longer a claim about the
+  tenant's data.** Three properties tested the same five fields three ways:
+  `verdict` and `coverage_verdict` asked "no delete API and a baseline was
+  observed", while `attestable_with_caveat` also required `markers_before > 0`. A
+  backend that raises `ErasureUnsupported` unconditionally (Helicone, Datadog APM)
+  on a tenant whose traces had already aged out landed in the gap, so the coverage
+  matrix asserted "no per-tenant erasure API — data presumed retained" — a
+  positive claim about the tenant's data — on a surface where the scan observed
+  nothing, and the surface fell out of `caveats` *and* out of `not_covered`, so
+  nothing disclosed it. All three now key on one predicate; the truthful verdict
+  is `NO BASELINE` / `NOT_COVERED`.
+- **A leak one token apart no longer needs the judge's permission.** The verbatim
+  bypass exists because a judge answering "no" — cautious, flaky, or hostile —
+  silently downgrades a real cross-tenant leak to a candidate. It asked with
+  `residual_present`, whose token arm is *contiguous*, while this module's own bar
+  for "the text carries that marker" allows one interposed token — the bar
+  `FakeJudge` and `_span_traceable` branch 1 both use to confirm. The canonical
+  leak shape the module documents, `Project (internal) Onyx-00002`, therefore
+  failed the bypass written for exactly it. Kept separate from `verbatim` rather
+  than widening it: `verbatim` also writes confidence `1.0`, and a paraphrase is
+  not certainty in a signed field.
+- **The quoted proof of a leak has to be about that leak.** `_span_traceable`
+  branch 1 confirms on the marker being present, whatever the judge quoted, so it
+  cannot decide what to *quote* — and `quotable` asked only whether the span was
+  somewhere in the observation, which any other sentence in the same response
+  passes. A confirmed cross-tenant leak of `Project Onyx-00002` shipped evidenced
+  by "the quarterly roadmap was also reviewed", sharing no token with the marker,
+  in the field the PDF renderer's own docstring calls "the proof". A span is now
+  quotable only when it also ties to the marker; a genuine paraphrase is still
+  preferred over the bare plaintext.
+
+
 - **The ATLAS stamp is a per-sub-probe fact, and was written and keyed as if it
   were per-probe.** Both halves of ADR-0009's contract broke. *Over-claim:*
   `_empty_ambiguity_finding` hard-coded the probe's whole footprint, so the
