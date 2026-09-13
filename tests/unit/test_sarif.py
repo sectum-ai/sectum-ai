@@ -301,3 +301,34 @@ def test_a_probe_with_only_unverified_findings_does_not_advertise_a_leak() -> No
     confirmed = run_to_sarif(_run(_finding("c")))["runs"][0]["tool"]["driver"]["rules"][0]
     assert confirmed["shortDescription"]["text"].startswith("Cross-principal leak finding")
     assert confirmed["defaultConfiguration"]["level"] == "note"
+
+
+def test_the_sarif_run_discloses_setup_that_did_not_land() -> None:
+    # SARIF was the one projection without these two. A probe whose every plant the
+    # backend swallowed - acknowledged the write, never served it - appears in
+    # `probesExercised` because it ran, and raises no alert, which in a Security
+    # tab reads as "this class is clean". Same for a probe that took only
+    # tenant-level steps because the adapter cannot carry a user identity: the user
+    # boundary was never exercised and the SARIF said nothing about it. That is the
+    # absent-vs-zero conflation this run's own `sectum.no-probe-executed`
+    # notification exists to break, one level down.
+    #
+    # Every sibling already discloses both: the PDF appends them to "Probes
+    # exercised", OSCAL narrows its satisfied isolation verdict, the JSON summary
+    # carries them, and `score` reports such a class NOT_COVERED with a note.
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"rag-poisoning": "1", "tenant-boundary-fetch": "1"},
+        metrics=RunMetrics(
+            unconfirmed_plants={"rag-poisoning": 8},
+            user_steps_dropped={"tenant-boundary-fetch": 12},
+        ),
+    )
+    properties = run_to_sarif(run)["runs"][0]["properties"]
+    assert properties["plantsNotConfirmed"] == {"rag-poisoning": 8}
+    assert properties["userStepsDropped"] == {"tenant-boundary-fetch": 12}

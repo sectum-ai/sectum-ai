@@ -309,6 +309,22 @@ _DETECTOR_EXACT = (
     "so no semantic or adjudicated tier contributed to any verdict here. "
 ) + _DETECTOR_TAIL
 
+# The same sentence, minus the attestation claim. `provenance_statement` already
+# ends "This pack is a demonstration, not an attestation." for an all-synthetic
+# run, and this paragraph is rendered directly beneath it - so the two read, back
+# to back, "not an attestation" and "this pack attests the isolation of those
+# surfaces". `scope_methodology` conditioned this paragraph on erasure-vs-isolation
+# and never on provenance, and the renderer's own doctrine ("a run-level paragraph
+# does not reach a reader tabulating rows") cuts both ways: a reader who lands on
+# Scope and methodology carries away the second sentence.
+_SCOPE_SYNTHETIC: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. Probes run from each "
+    "tenant's session against the configured surfaces; this pack records what "
+    "those probes observed on the stack named above, which is not a production "
+    "system."
+)
+
 _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
     "markers, recorded in a hashed ground-truth manifest. Probes run from each "
@@ -480,7 +496,14 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
         detector = _DETECTOR_TAIL
     else:
         detector = _DETECTOR_OFFLINE if run.detection.offline_only else _DETECTOR_LAYERED
-    head = _ERASURE_METHODOLOGY if erasure_only else _SCOPE_METHODOLOGY[0]
+    if erasure_only:
+        head = _ERASURE_METHODOLOGY
+    elif live_surfaces(run):
+        head = _SCOPE_METHODOLOGY[0]
+    else:
+        # Nothing ran live, so there is no isolation of "those surfaces" to attest
+        # - which is exactly what the paragraph above this one already says.
+        head = _SCOPE_SYNTHETIC
     return (head, detector, *_SCOPE_METHODOLOGY[2:])
 
 
@@ -570,9 +593,12 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
         return f"{rate:.1%} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
     if metrics.retrieval_pivot_rate is None:
         return None
-    # No counts, so the rate is all the record has, and any interval it asserts is
-    # uncheckable - there is no sample size to compute one from. Shown bare.
-    return f"{metrics.retrieval_pivot_rate:.1%}"
+    # No counts, so the rate is all the record has and any interval it asserts is
+    # uncheckable - there is no sample size to compute one from. Rendered bare it
+    # was byte-identical to a measured rate beside its CI, which is the same
+    # conflation the `k > n` branch above refuses: label it instead of hiding it,
+    # and instead of presenting it as something it is not.
+    return f"{metrics.retrieval_pivot_rate:.1%} (asserted by the record; no sample size recorded)"
 
 
 def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:

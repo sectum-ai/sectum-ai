@@ -296,6 +296,21 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     # Which stack the results describe. Absent from the projection,
                     # an all-synthetic demo read exactly like a production scan.
                     "surfaceProvenance": dict(run.surface_provenance),
+                    # The two "graded on setup that did not land" disclosures. This
+                    # was the one projection without them: a probe whose every
+                    # plant the backend swallowed appears in `probesExercised` - it
+                    # ran - and raises no alert, which in a Security tab reads as
+                    # "this class is clean". Same for a probe that took only
+                    # tenant-level steps because the adapter cannot carry a user:
+                    # the user boundary was never exercised and the SARIF said
+                    # nothing. Every sibling discloses both - the PDF appends them
+                    # to "Probes exercised", OSCAL narrows its satisfied verdict,
+                    # the JSON summary carries them, and `score` reports such a
+                    # class NOT_COVERED - which is the absent-vs-zero conflation
+                    # this run's own `sectum.no-probe-executed` notification exists
+                    # to break, one level down.
+                    "plantsNotConfirmed": dict(run.metrics.unconfirmed_plants),
+                    "userStepsDropped": dict(run.metrics.user_steps_dropped),
                 },
             }
         ],

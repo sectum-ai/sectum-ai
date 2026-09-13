@@ -57,6 +57,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A pack that calls itself a demonstration no longer attests in the next
+  paragraph.** `provenance_statement` ends "This pack is a demonstration, not an
+  attestation." for an all-synthetic run, and the scope paragraph rendered
+  directly beneath it said "this pack attests the isolation of those surfaces".
+  `scope_methodology` conditioned that paragraph on erasure-vs-isolation and never
+  on provenance. With no live surface it now records what the probes observed
+  instead of attesting isolation.
+- **A retrieval-pivot rate with no sample is no longer rendered as a
+  measurement.** With `n = 0` the rate was printed bare — byte-identical to a
+  measured rate, which everywhere else in the PDF carries its interval and its
+  `n`. It is labelled as asserted by the record, the same treatment the
+  incoherent-counts branch already gets for the same reason.
+- **SARIF discloses setup that did not land.** It was the one projection carrying
+  neither `unconfirmed_plants` nor `user_steps_dropped`, so a probe whose every
+  plant the backend swallowed appeared in `probesExercised` and raised no alert —
+  which in a Security tab reads as "this class is clean". The PDF, OSCAL, the JSON
+  summary and `score` all disclose both.
+- **`report` and `pack` warn about them too.** Each warning had exactly one caller,
+  `probe`, so an operator who ran `probe` in CI and `report` by hand signed and
+  shipped a pack whose own audit PDF discloses a narrowed user boundary and
+  half-landed setup they were never told about.
+
+
 - **A surface with no delete API and no baseline is no longer a claim about the
   tenant's data.** Three properties tested the same five fields three ways:
   `verdict` and `coverage_verdict` asked "no delete API and a baseline was

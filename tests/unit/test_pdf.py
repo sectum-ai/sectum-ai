@@ -427,11 +427,15 @@ def test_the_pdf_recomputes_the_rate_from_the_counts_it_was_given() -> None:
     assert "1.9%" not in line and "2.1%" not in line
 
     # No counts: the rate is all the record has, and any interval it asserts is
-    # uncheckable, so it is shown bare rather than dressed in one.
+    # uncheckable - so it is not dressed in one, and not printed bare either.
+    # Bare, it was byte-identical to a measured rate, which is the same conflation
+    # the incoherent branch below refuses.
     bare = _retrieval_pivot_summary(
         _rpr_run(RunMetrics(retrieval_pivot_rate=0.125, retrieval_pivot_rate_ci=(0.124, 0.126)))
     )
-    assert bare == "12.5%"
+    assert bare is not None and bare.startswith("12.5%"), bare
+    assert "asserted by the record" in bare, bare
+    assert "0.124" not in bare and "12.4%" not in bare, bare
 
     # Counts that contradict themselves state the contradiction. Omitting the row
     # was byte-identical to a run that took no Class-2 step, so the auditor's
@@ -514,12 +518,16 @@ def test_an_erasure_only_pack_does_not_claim_to_attest_isolation() -> None:
     assert "attests the isolation" not in scope_methodology(erasure_only)[0]
     assert "makes no claim about tenant isolation" in scope_methodology(erasure_only)[0]
 
-    # An isolation run keeps the original wording, and a mixed one does too.
-    isolation = RunResult(**base, probe_versions={"tenant-boundary-fetch": "1"})
+    # An isolation run keeps the original wording, and a mixed one does too -
+    # given a live surface to attest. With none, the paragraph directly above this
+    # one already calls the pack a demonstration, so it says so here too.
+    live = {"surface_provenance": {"vector_db": "LIVE"}}
+    isolation = RunResult(**base, probe_versions={"tenant-boundary-fetch": "1"}, **live)
     assert "attests the isolation" in scope_methodology(isolation)[0]
     mixed = RunResult(
         **base,
         probe_versions={"gdpr-erasure-verification": "1", "tenant-boundary-fetch": "1"},
+        **live,
     )
     assert "attests the isolation" in scope_methodology(mixed)[0]
     # The scope paragraph is shared; the DETECTOR paragraph is not, and asserting
@@ -693,3 +701,67 @@ def test_the_pdf_says_whether_this_pack_has_an_independent_anchor() -> None:
     # binds it - which the sample-regeneration guard would catch only by luck.
     assert anchor_statement(local, anchors=(False, False)) == unanchored
     assert anchor_statement(local, anchors=(True, True)) == present
+
+
+def test_a_pack_that_calls_itself_a_demonstration_does_not_then_attest() -> None:
+    # `provenance_statement` ends "This pack is a demonstration, not an
+    # attestation." for an all-synthetic run, and the scope paragraph is rendered
+    # directly beneath it saying "this pack attests the isolation of those
+    # surfaces". `scope_methodology` conditioned that paragraph on
+    # erasure-vs-isolation and never on provenance, so the two shipped back to
+    # back. The renderer's own doctrine cuts both ways: a reader who lands on
+    # "Scope and methodology" carries away the second sentence.
+    from sectum_ai.evidence.pdf import provenance_statement, scope_methodology
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    base = {
+        "run_id": "r",
+        "scenario_hash": "s",
+        "manifest_hash": "m" * 64,
+        "started_at": moment,
+        "finished_at": moment,
+        "probe_versions": {"tenant-boundary-fetch": "1"},
+    }
+    synthetic = RunResult(**base, surface_provenance={"vector_db": "SYNTHETIC"})
+    assert "not an attestation" in provenance_statement(synthetic)
+    assert "attests the isolation" not in scope_methodology(synthetic)[0]
+
+    # A live run keeps the attestation claim - the paragraph above it earns it.
+    live = RunResult(**base, surface_provenance={"vector_db": "LIVE"})
+    assert "attests the isolation" in scope_methodology(live)[0]
+
+
+def test_a_pivot_rate_with_no_sample_is_not_rendered_as_a_measurement() -> None:
+    # The `k > n` branch already refuses to relay an incoherent record, for the
+    # stated reason that omitting the row is "byte-identical to a run that took no
+    # Class-2 step at all". A rate with n=0 has the mirror problem: rendered bare
+    # it is byte-identical to a measured rate, which everywhere else in this PDF
+    # comes with its interval and its n.
+    from sectum_ai.evidence.pdf import _retrieval_pivot_summary
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    asserted = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        metrics=RunMetrics(retrieval_pivot_rate=0.125, retrieval_pivot_n=0, retrieval_pivot_k=0),
+    )
+    summary = _retrieval_pivot_summary(asserted)
+    assert summary is not None
+    assert "12.5%" in summary, summary
+    assert "asserted by the record" in summary, summary
+
+    # A measured rate is unchanged: it keeps its interval and its n.
+    measured = asserted.model_copy(
+        update={
+            "metrics": RunMetrics(
+                retrieval_pivot_rate=0.125, retrieval_pivot_n=48, retrieval_pivot_k=6
+            )
+        }
+    )
+    measured_summary = _retrieval_pivot_summary(measured)
+    assert measured_summary is not None
+    assert "95% CI" in measured_summary and "n=48" in measured_summary, measured_summary
+    assert "asserted by the record" not in measured_summary, measured_summary

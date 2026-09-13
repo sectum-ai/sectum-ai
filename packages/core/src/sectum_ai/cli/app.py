@@ -1644,6 +1644,14 @@ def report(
     # fails run-scope), but the operator building a pack to hand to an auditor
     # should hear it here, the way `probe` and `erasure` say it.
     _warn_on_synthetic_surfaces(run.surface_provenance)
+    # The other two record-level "did less than it planned" signals. Both are in
+    # the record being signed and both are rendered into the audit PDF, and each
+    # had exactly one caller - `probe` - so an operator who ran `probe` in CI and
+    # `report` by hand signed and shipped a pack disclosing a narrowed user
+    # boundary and half-landed setup they were never told about. The comment above
+    # states the rule for the whole family: they should hear it here.
+    _warn_on_dropped_user_steps(run.metrics.user_steps_dropped)
+    _warn_on_unconfirmed_plants(run.metrics.unconfirmed_plants)
     if run.manifest_hash != canonical_hash(substrate.manifest) or run.scenario_hash != (
         canonical_hash(substrate.scenario)
     ):
@@ -1973,6 +1981,10 @@ def pack(
     out_path = out if out is not None else workdir / "run-pack.zip"
     out_path.write_bytes(build_bundle(members))
     _warn_on_synthetic_surfaces(run.surface_provenance)
+    # Same family, same reason as in `report`: this bundle is what gets handed to
+    # an auditor, and its own PDF discloses both signals.
+    _warn_on_dropped_user_steps(run.metrics.user_steps_dropped)
+    _warn_on_unconfirmed_plants(run.metrics.unconfirmed_plants)
     typer.echo(f"run pack -> {out_path}")
     typer.echo(
         "SENSITIVE: this pack carries the run details and ground-truth markers; "
