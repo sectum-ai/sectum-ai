@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bb77ccea5102499d2e3be2ccab9f70af5470a3400fad878e0b6ad94b8c7eb253",
     "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-    "started_at": "2026-09-12T02:25:52.452428+00:00",
-    "finished_at": "2026-09-12T02:25:52.459428+00:00",
+    "started_at": "2026-09-13T09:37:59.814777+00:00",
+    "finished_at": "2026-09-13T09:37:59.816569+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -435,13 +435,14 @@
       "user_steps_dropped": {},
       "unconfirmed_plants": {}
     },
+    "detection": null,
     "schema_version": "0.7.0"
   },
   "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-  "tsa_token": "{\"digest\":\"f8786123e8ad333698839c6d09d843247f32743c680f181528984a727c37acc7\",\"timestamped_at\":\"2026-09-12T02:25:52.482691+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"1ed4e92d036d4802e39375b82b3fb5abf6cba2c29c7d0238634ec603b291a96b\",\"timestamped_at\":\"2026-09-13T09:37:59.830998+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [],
-  "pdf_ref": "f0c731965667cc0c4e6d278038a454a5585ae044e89e32046787d0cdc2501350",
+  "pdf_ref": "d75615b291da41dc00d872ea6c5e7927930f90ed555f16e4dd7c6c5542112aad",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.7.0"

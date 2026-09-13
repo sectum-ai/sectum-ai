@@ -268,20 +268,52 @@ _ERASURE_METHODOLOGY: str = (
     "run measured."
 )
 
+_DETECTOR_TAIL = (
+    "Confirmation requires the observed content to trace back to a specific "
+    "marker in the ground-truth manifest, so a candidate that cannot be tied to "
+    "a manifest marker is recorded as unverified rather than confirmed. "
+    "Confirmed findings are therefore manifest-grounded - they are not asserted "
+    "to be free of error, and this pack does not rate their exploitability."
+)
+
+# Which tiers ran is a property of the RUN, not of the product. Stated
+# unconditionally, this paragraph promised an auditor "semantic similarity, then
+# a calibrated judge" over three kinds of run that had neither: an `erasure`
+# attestation, whose probe matches by exact substring and invokes no provider at
+# all; a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
+# fake` and `judge.kind: fake` - an offline hashing vector its own docstring
+# calls "not semantically meaningful beyond lexical overlap", and a token-order
+# string matcher; and a run whose threshold gated the semantic tier shut. The
+# record now carries `detection`, so the sentence can be true.
+_DETECTOR_LAYERED = (
+    "Each observation passes a layered detector - exact canary match, then "
+    "semantic similarity against the configured embedding model, then the "
+    "configured judge. An exact canary match is decided by the observation "
+    "itself; a semantic match also depends on that judge. "
+) + _DETECTOR_TAIL
+_DETECTOR_OFFLINE = (
+    "Each observation passes a layered detector - exact canary match, then an "
+    "OFFLINE similarity and adjudication stage. This run configured no embedding "
+    "model and no judge, so the second and third tiers were Sectum's built-in "
+    "offline stubs: a hashing vector that measures lexical overlap rather than "
+    "meaning, and a token-order string matcher. They are not an embedding model "
+    "and not a calibrated judge, and a paraphrase they cannot see is not "
+    "reported as absent - it is not reported at all. Configure "
+    "`detection.embedder` and `detection.judge` to exercise the semantic tiers. "
+) + _DETECTOR_TAIL
+_DETECTOR_EXACT = (
+    "Each observation is matched against the ground-truth manifest by exact "
+    "content. This run invoked no embedding model and no judge - the erasure "
+    "workflow reads each surface and checks the subject's own markers directly - "
+    "so no semantic or adjudicated tier contributed to any verdict here. "
+) + _DETECTOR_TAIL
+
 _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
     "markers, recorded in a hashed ground-truth manifest. Probes run from each "
     "tenant's session against the configured surfaces; this pack attests the "
     "isolation of those surfaces under the run's scenario.",
-    "Each observation passes a layered detector - exact canary match, then "
-    "semantic similarity, then a calibrated judge. Confirmation requires the "
-    "observed content to trace back to a specific marker in the ground-truth "
-    "manifest, so a candidate that cannot be tied to a manifest marker is "
-    "recorded as unverified rather than confirmed. An exact canary match is "
-    "decided by the observation itself; a semantic match also depends on the "
-    "configured judge. Confirmed findings are therefore manifest-grounded - "
-    "they are not asserted to be free of error, and this pack does not rate "
-    "their exploitability.",
+    _DETECTOR_TAIL,
     "Scope is limited to the probes and surfaces exercised in this run, against "
     "the test condition fixed by the manifest hash below. Sectum verifies and "
     "attests; it does not remediate - findings carry remediation pointers, not "
@@ -410,9 +442,19 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
     erasure samples carry it.
     """
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
-    if exercised and not exercised - _ERASURE_PROBE_IDS:
-        return (_ERASURE_METHODOLOGY, *_SCOPE_METHODOLOGY[1:])
-    return _SCOPE_METHODOLOGY
+    erasure_only = bool(exercised) and not exercised - _ERASURE_PROBE_IDS
+    if erasure_only:
+        # No detector ran at all, whatever the config says: the erasure workflow
+        # never constructs one.
+        detector = _DETECTOR_EXACT
+    elif run.detection is None:
+        # A record from before `detection` was recorded. Say what is known - the
+        # first tier always runs - rather than assert the two that may not have.
+        detector = _DETECTOR_TAIL
+    else:
+        detector = _DETECTOR_OFFLINE if run.detection.offline_only else _DETECTOR_LAYERED
+    head = _ERASURE_METHODOLOGY if erasure_only else _SCOPE_METHODOLOGY[0]
+    return (head, detector, *_SCOPE_METHODOLOGY[2:])
 
 
 def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:

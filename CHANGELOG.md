@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`RunResult.detection`** records which detector actually graded a run — the
+  embedder kind and model, the judge kind and model, and the *resolved* semantic
+  threshold (never the literal `"auto"`). Schema **0.7.0**; `None` on a record
+  from a path that runs no detector, which is what `erasure` is.
+
+
 - **The user boundary is stated once**, in the attack catalog's index, and the
   class pages point at it: a probe plans cross-user steps only where its adapter
   carries the caller's user, a tenant-scoped backend fails there, and where the
@@ -50,6 +56,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **The audit PDF no longer promises an auditor two detection tiers that did not
+  run.** "Each observation passes a layered detector — exact canary match, then
+  semantic similarity, then a calibrated judge" was stated on every pack, and the
+  record carried nothing that could condition it — while both tiers past the first
+  are off by default: `sectum-ai init` scaffolds `embedder.kind: fake` and
+  `judge.kind: fake`, which resolve to a hashing vector whose own docstring calls
+  it "not semantically meaningful beyond lexical overlap" and a token-order string
+  matcher. Worse on the wedge SKU: the `erasure` workflow invokes **no** embedder
+  and **no** judge at all — it matches by exact substring — and the branch that
+  already swaps the scope paragraph for an erasure run left this one verbatim, so
+  the Article 17 deliverable described two tiers that structurally cannot have
+  run. The paragraph is now a function of `RunResult.detection`, with three
+  wordings: the tiers that ran, the offline stubs named as stubs, and exact-match
+  only. A record written before the field existed asserts neither.
+
 
 - **A data-subject residual the scan had already seen no longer disappears.**
   `_contained`'s own docstring lists three harms the abort-free rewrite fixed, and

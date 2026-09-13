@@ -79,7 +79,7 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError, SurfaceProvenance
+from sectum_ai.spec import AdapterError, ConfigError, DetectionProvenance, SurfaceProvenance
 
 
 class ScenarioConfig(BaseModel):
@@ -1555,5 +1555,20 @@ def build_detection_providers(config: DetectionConfig) -> DetectionProviders:
     return DetectionProviders(
         embedder=build_embedder(config.embedder),
         judge=build_judge(config.judge),
+        semantic_threshold=resolve_semantic_threshold_config(config),
+    )
+
+
+def detection_provenance(config: DetectionConfig) -> DetectionProvenance:
+    """What the run's detector actually was, for the record.
+
+    The RESOLVED threshold, never the literal "auto": the record has to say the
+    number that ran, because that is the one a reader would have to reproduce.
+    """
+    return DetectionProvenance(
+        embedder_kind=config.embedder.kind,
+        embedder_model=config.embedder.model,
+        judge_kind=config.judge.kind,
+        judge_model=config.judge.model,
         semantic_threshold=resolve_semantic_threshold_config(config),
     )

@@ -18,6 +18,7 @@ from sectum_ai.evidence.pdf import (
 from sectum_ai.evidence.pdf_weasyprint import build_audit_html
 from sectum_ai.spec import (
     CoverageVerdict,
+    DetectionProvenance,
     EvidencePack,
     Finding,
     FindingStatus,
@@ -521,8 +522,68 @@ def test_an_erasure_only_pack_does_not_claim_to_attest_isolation() -> None:
         probe_versions={"gdpr-erasure-verification": "1", "tenant-boundary-fetch": "1"},
     )
     assert "attests the isolation" in scope_methodology(mixed)[0]
-    # Every paragraph after the first is untouched either way.
-    assert scope_methodology(erasure_only)[1:] == scope_methodology(isolation)[1:]
+    # The scope paragraph is shared; the DETECTOR paragraph is not, and asserting
+    # it was is what let an erasure attestation promise an auditor "semantic
+    # similarity, then a calibrated judge" over a workflow that invokes neither.
+    assert scope_methodology(erasure_only)[2:] == scope_methodology(isolation)[2:]
+    erasure_detector = scope_methodology(erasure_only)[1]
+    assert "no embedding model and no judge" in erasure_detector, erasure_detector
+    for claim in ("semantic similarity", "calibrated judge"):
+        assert claim not in erasure_detector, erasure_detector
+
+
+def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
+    # The paragraph stated "exact canary match, then semantic similarity, then a
+    # calibrated judge" unconditionally, and the record carried nothing that could
+    # condition it - while both tiers past the first are OFF by default:
+    # `sectum-ai init` scaffolds `embedder.kind: fake` and `judge.kind: fake`,
+    # which resolve to a hashing vector its own docstring calls "not semantically
+    # meaningful beyond lexical overlap" and a token-order string matcher. A
+    # customer with live adapters read "a calibrated judge" in the same PDF that
+    # told them every surface was a live backend.
+    from sectum_ai.evidence.pdf import scope_methodology
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    base = {
+        "run_id": "r",
+        "scenario_hash": "s",
+        "manifest_hash": "m" * 64,
+        "started_at": moment,
+        "finished_at": moment,
+        "probe_versions": {"tenant-boundary-fetch": "1"},
+    }
+    offline = RunResult(
+        **base,
+        detection=DetectionProvenance(
+            embedder_kind="fake", judge_kind="fake", semantic_threshold=0.62
+        ),
+    )
+    real = RunResult(
+        **base,
+        detection=DetectionProvenance(
+            embedder_kind="openai",
+            embedder_model="text-embedding-3-small",
+            judge_kind="anthropic",
+            judge_model="claude-sonnet-5",
+            semantic_threshold=0.83,
+        ),
+    )
+    offline_para, real_para = scope_methodology(offline)[1], scope_methodology(real)[1]
+    # Checked as an AFFIRMATIVE claim, not as a substring: the offline paragraph
+    # says "not a calibrated judge", so `"calibrated judge" not in ...` fails on
+    # the sentence that fixes the defect.
+    claims_a_judge = "then the configured judge"
+    assert "no embedding model and no judge" in offline_para, offline_para
+    assert claims_a_judge not in offline_para, offline_para
+    assert "offline stubs" in offline_para, offline_para
+    assert "semantic similarity against the configured embedding model" in real_para, real_para
+    assert claims_a_judge in real_para, real_para
+
+    # A record written before `detection` existed asserts neither: the first tier
+    # always runs, the other two are unknown, and claiming either is the defect.
+    unrecorded = scope_methodology(RunResult(**base))[1]
+    for claim in (claims_a_judge, "semantic similarity", "offline stubs"):
+        assert claim not in unrecorded, unrecorded
 
 
 def test_the_coverage_matrix_says_which_rows_describe_a_fake() -> None:

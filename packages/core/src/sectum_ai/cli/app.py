@@ -61,6 +61,7 @@ from sectum_ai.config import (
     build_observability,
     build_search_index,
     build_vector_slot,
+    detection_provenance,
     embedder_model_name,
     load_config,
     surface_provenance,
@@ -1205,6 +1206,11 @@ def probe(
             ),
         },
         findings=findings,
+        # What actually graded these observations. The audit PDF states the method
+        # in prose - "exact canary match, then semantic similarity, then a
+        # calibrated judge" - and had nothing to condition it on, while both tiers
+        # past the first are off by default.
+        detection=detection_provenance(loaded.detection),
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=rpr_rate,

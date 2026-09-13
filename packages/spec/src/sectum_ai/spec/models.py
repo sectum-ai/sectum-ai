@@ -460,6 +460,45 @@ class RunMetrics(SectumModel):
         return value
 
 
+class DetectionProvenance(SectumModel):
+    """Which detector actually graded this run's observations.
+
+    The audit PDF states the method in its Scope-and-methodology section - "exact
+    canary match, then semantic similarity, then a calibrated judge" - and the
+    record carried nothing that could condition it. Both tiers past the first are
+    off by default: `sectum-ai init` scaffolds `embedder.kind: fake` and
+    `judge.kind: fake`, which resolve to an offline hashing vector whose own
+    docstring calls it "not semantically meaningful beyond lexical overlap" and a
+    token-order string matcher - not an embedding model, and not a calibrated
+    judge. A pack where the semantic tier was gated shut (a threshold of 1.0
+    admits nothing) was indistinguishable from one where it ran.
+
+    Recorded per run so the claim is a function of what happened. ``None`` on a
+    record from a path that runs no detector at all - `erasure` matches by exact
+    substring and invokes neither provider.
+    """
+
+    embedder_kind: str
+    """The configured embedder kind (``fake`` / ``st`` / ``openai`` / ...)."""
+
+    embedder_model: str | None = None
+    """The embedding model name, where the kind names one."""
+
+    judge_kind: str
+    """The configured judge kind (``fake`` / ``openai`` / ``anthropic`` / ...)."""
+
+    judge_model: str | None = None
+    """The judge model name, where the kind names one."""
+
+    semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)]
+    """The RESOLVED similarity gate - the number that ran, never the literal "auto"."""
+
+    @property
+    def offline_only(self) -> bool:
+        """True when neither tier past the exact match is a real provider."""
+        return self.embedder_kind == "fake" and self.judge_kind == "fake"
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 
@@ -484,6 +523,8 @@ class RunResult(SectumModel):
     probe_versions: dict[str, str] = Field(default_factory=dict)
     findings: tuple[Finding, ...] = ()
     metrics: RunMetrics = Field(default_factory=RunMetrics)
+    detection: DetectionProvenance | None = None
+    """Which detector graded this run, or ``None`` where no detector ran."""
     schema_version: str = SCHEMA_VERSION
 
     @field_validator("surface_provenance")
