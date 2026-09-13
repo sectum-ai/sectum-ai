@@ -115,9 +115,14 @@ scanning adapter yet, so it is out of scope, not fake; see the
   query a backend that cannot hold the answer and grade the empty result `PASS`,
   the probe is skipped and the class reads `NOT_COVERED` — the same honest verdict,
   and the same shape, as the Class 6/13 gap above. Configuring a live MCP server or
-  agent framework therefore *removes* Class 7 from a run rather than adding it. The
-  `rag` slot is the one that can be asked: Sectum queries the live pipeline for the
-  canary it seeded and skips only a pipeline that cannot see it.
+  agent framework therefore *removes* Class 7 from a run rather than adding it.
+  The other two seeded slots can be asked rather than assumed, and are: Sectum
+  queries a live `rag` pipeline for the canary it seeded, and reads one corpus
+  document back out of a live vector store, skipping only a backend that cannot
+  see what was just written. A vector store that acknowledges the corpus and
+  serves none of it back — a quota, the wrong namespace, a read-side ACL, an index
+  that never settles — therefore reports Classes 1, 2, 3, 6 and 10 `NOT_COVERED`
+  instead of grading them `PASS` off an empty index.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests

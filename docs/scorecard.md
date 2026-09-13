@@ -316,8 +316,9 @@ A class is uncovered when the configured stack cannot satisfy its probe (no adap
 reports the capability it needs, so it is skipped rather than run into a mid-probe
 error), when the canary the probe reads for cannot reach the configured backend (the
 `mcp` and `agent` slots hold ids Sectum invents and have no write primitive, so only
-the built-in fakes ever receive them; the live `rag` pipeline is asked directly and
-skipped only if it cannot see what was seeded), when it was not in the run's suite, or
+the built-in fakes ever receive them; a live `rag` pipeline and a live vector store
+are asked directly — a same-tenant query and a by-id read of the corpus — and skipped
+only if they cannot see what was just seeded), when it was not in the run's suite, or
 when the substrate left its probe no step to take — its markers were foreign to no
 principal, so there was nothing to plant that anyone could try to steal.
 

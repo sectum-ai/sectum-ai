@@ -51,6 +51,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A vector store that swallows the corpus no longer grades `PASS`.** The seeding
+  guard added two entries ago asked three slots whether the canary reached them and
+  skipped the fourth — the vector store, which the most classes stand on. `upsert`
+  *is* a write primitive, so the corpus goes into a live store unconditionally, and
+  nothing read it back. A store that acknowledges the bulk load and serves none of
+  it (a quota, the wrong namespace, a read-side ACL, an index that never settles —
+  `pinecone.upsert` settles on the last id of a batch only, `weaviate.upsert` settles
+  not at all) left Classes 1, 2, 6 and 10 querying an empty index and grading `PASS`
+  off it, printing `0.0% reconstruction` and `0.0% extraction efficiency` as
+  measurements. The planting probes were guarded all along, because their bait is a
+  `ProbeStep` that `_plant_landed` reads back; the corpus is a direct adapter call,
+  which `_plant_landed` never sees — the same rule, one sibling over. Asked with
+  `fetch` rather than `query`, so the answer does not depend on ranking, and starved
+  only when the corpus is *wholly* unreadable — `_plant_landed`'s own all-or-nothing
+  rule — so a store slow to settle one tenant does not flip five classes to
+  `NOT_COVERED`.
+
+
 - **`report` signed the record `diff` refuses.** The self-contradiction guard was
   left off the shared loaders on the reasoning that "`score`, `report` and `pack`
   recount the findings" — true of what they *render*, false of what `report`

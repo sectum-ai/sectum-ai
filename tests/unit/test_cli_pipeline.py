@@ -2296,3 +2296,73 @@ def test_pack_refuses_a_run_that_is_not_the_one_the_evidence_attests(tmp_path: P
     # By digest, not by run_id: run_id is stable across runs of one scenario, so
     # naming it printed the same string on both sides of "vs".
     assert "record " in again.output, again.output
+
+
+def test_a_vector_store_that_swallows_the_corpus_is_not_graded_as_passing() -> None:
+    # The fourth seeded slot, and the one the most classes stand on. `upsert` IS a
+    # write primitive, so the corpus goes into a live store unconditionally - and
+    # nothing read it back. A store that acknowledges the bulk load and serves
+    # none of it (a quota, the wrong namespace, a read-side ACL, an index that
+    # never settles; `pinecone.upsert` settles on the last id of a batch only,
+    # `weaviate.upsert` settles not at all) left Classes 1, 2, 6 and 10 querying
+    # an empty index and grading PASS off it, printing `0.0% reconstruction` and
+    # `0.0% extraction efficiency` as measurements.
+    #
+    # The planting probes were guarded all along: their bait is a `ProbeStep` that
+    # `_plant_landed` reads back. The corpus is a direct adapter call, which
+    # `_plant_landed` never sees - one sibling of the same rule, unguarded.
+    from dataclasses import replace
+
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+    from sectum_ai.cli.app import _skip_unseedable
+    from sectum_ai.config import AdapterBundle
+    from sectum_ai.probes import IkeaExtractionProbe, RagEntityBleedProbe, TenantBoundaryProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = (TenantBoundaryProbe(), RagEntityBleedProbe(), IkeaExtractionProbe())
+
+    def _bundle(store: FakeVectorStore) -> AdapterBundle:
+        # Seeded exactly as `probe` seeds it, then handed to the guard: the guard
+        # runs AFTER the corpus load and asks what actually landed.
+        for tenant in substrate.tenants:
+            documents = [d for d in substrate.documents if d.tenant_id == tenant.tenant_id]
+            store.upsert(tenant.tenant_id, documents)
+        base = _bundle_with_rag(FakeRAGPipeline())
+        bundle: AdapterBundle = replace(base, vector=store)
+        return bundle
+
+    class _Swallows(FakeVectorStore):
+        """Live, ACKs every write, stores nothing."""
+
+        synthetic = False
+
+        def upsert(self, tenant: UUID, documents: Any) -> None:
+            return None
+
+    class _Works(FakeVectorStore):
+        """Live, and the corpus lands - the common case."""
+
+        synthetic = False
+
+    seeded = _bundle(_Swallows())
+    runnable, skipped = _skip_unseedable(suite, seeded, substrate)
+    assert runnable == (), skipped
+    assert len(skipped) == 3, skipped
+    for _, reason in skipped:
+        assert "cannot reach the configured vector backend" in reason, reason
+
+    # The direction that matters more: a live store the corpus DID reach must not
+    # be starved, or the fix trades a false pass for a false NOT_COVERED across
+    # five classes. Starved only when the corpus is WHOLLY unreadable, which is
+    # `_plant_landed`'s own all-or-nothing rule.
+    healthy = _bundle(_Works())
+    kept, none_skipped = _skip_unseedable(suite, healthy, substrate)
+    assert len(kept) == 3, none_skipped
+    assert none_skipped == []
+
+    # And the built-in fake is never interrogated at all.
+    fake = _bundle(FakeVectorStore())
+    untouched, _ = _skip_unseedable(suite, fake, substrate)
+    assert len(untouched) == 3

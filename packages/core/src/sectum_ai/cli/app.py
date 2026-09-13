@@ -219,11 +219,11 @@ def _skip_unseedable(
 ) -> tuple[tuple[Probe, ...], list[tuple[str, str]]]:
     """Drop probes whose canary this stack has no way to receive.
 
-    Three slots carry a canary that Sectum PUTS THERE: the MCP server's resource,
-    the agent's lookup target, and the RAG pipeline's index. Their adapter
-    protocols expose only ``invoke`` / ``run`` / ``ask`` - no write primitive - so
-    the seeding below is guarded by ``isinstance(..., Fake...)`` and a live backend
-    is never given the marker. The probes ran anyway: they planned, queried, found
+    Four slots carry a canary that Sectum PUTS THERE. Three of them - the MCP
+    server's resource, the agent's lookup target, and the RAG pipeline's index -
+    expose only ``invoke`` / ``run`` / ``ask``, no write primitive, so the seeding
+    below is guarded by ``isinstance(..., Fake...)`` and a live backend is never
+    given the marker. The probes ran anyway: they planned, queried, found
     nothing (there was nothing to find), entered ``probe_versions`` and graded
     **PASS**, so pointing Sectum at a live pipeline produced
     ``Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)`` - a well-powered answer to a
@@ -237,6 +237,27 @@ def _skip_unseedable(
     skipping it would lose a true positive. So the question is asked of the backend
     rather than assumed - a same-tenant read for a marker the seeding placed. What
     comes back decides it, which is `_plant_landed`'s rule one layer out.
+
+    The fourth slot is the VECTOR STORE, and it was the one this guard did not
+    ask - the slot the most classes stand on. `upsert` IS a write primitive, so
+    the corpus is loaded into a live store unconditionally; nothing then read it
+    back. A store that acknowledges the bulk load and serves none of it - a
+    quota, the wrong namespace, a read-side ACL, an index that never settles;
+    `pinecone.upsert` settles on the last id of a batch only and `weaviate.upsert`
+    settles not at all - left Classes 1, 2, 6 and 10 querying an empty index and
+    grading **PASS** off it, with `0.0% reconstruction` and `0.0% extraction
+    efficiency` printed as measurements. The planting probes (3, 4, 8, 9) were
+    guarded all along, because their bait is a `ProbeStep` that `_plant_landed`
+    reads back; the corpus is a direct adapter call, which `_plant_landed` never
+    sees.
+
+    Asked with ``fetch``, not ``query``: a by-id read answers "did it land"
+    without depending on ranking, and a store whose ranking is weak is already
+    handled by the ``semantic_retrieval`` capability gate. Starved only when the
+    corpus is WHOLLY unreadable - `_plant_landed`'s own rule, where every plant
+    vanishing starves the probe and a partial loss is recorded and run - so a
+    store that is merely slow to settle one tenant does not flip five classes to
+    NOT_COVERED.
 
     Returns the runnable probes and ``(probe id, reason)`` for those dropped.
     """
@@ -261,6 +282,25 @@ def _skip_unseedable(
             reachable["mcp"] = False
         if bundle.agent is not None and not bundle.agent.synthetic:
             reachable["agent"] = False
+    vector = bundle.vector
+    if vector is not None and not vector.synthetic:
+        # One document per tenant, not every document: this asks whether the
+        # corpus landed, and 2000 misses against a live store is a stall, not a
+        # better answer.
+        first_of: dict[UUID, str] = {}
+        for document in substrate.documents:
+            first_of.setdefault(document.tenant_id, document.doc_id)
+        seeded = sorted(first_of.items())
+        if seeded:
+            landed = False
+            for tenant_id, doc_id in seeded:
+                try:
+                    if vector.fetch(tenant_id, doc_id) is not None:
+                        landed = True
+                        break
+                except AdapterError:
+                    continue
+            reachable["vector"] = landed
 
     runnable: list[Probe] = []
     skipped: list[tuple[str, str]] = []
@@ -271,7 +311,8 @@ def _skip_unseedable(
                 (
                     probe.id,
                     f"its canary cannot reach the configured {', '.join(starved)} backend "
-                    "(Sectum seeds that slot only for its own in-memory fake, and the "
+                    "(the store acknowledged the corpus and serves none of it back, or "
+                    "Sectum seeds that slot only for its own in-memory fake because the "
                     "adapter protocol has no write primitive)",
                 )
             )
