@@ -172,7 +172,7 @@ over-claim. Seven rules prevent it:
 
 ### What a `PASS` line can still tell you
 
-A `PASS` is never silent about what it could not establish. Seven notes attach to
+A `PASS` is never silent about what it could not establish. Eight notes attach to
 one:
 
 - **findings withheld** — confirmed findings on a surface backed by the built-in
@@ -207,6 +207,13 @@ one:
   vanished and confirmed nothing is `NOT_COVERED` under rule 1 instead; this note is
   the partial case, and the case where every plant vanished but a leak was confirmed
   anyway.
+- **a probe that ran against the built-in fake** — one of this class's probes was
+  backed by a surface the run records as `SYNTHETIC`, and at least one other was
+  not. Rule 5 withholds a class only when *every* probe is fake-backed, so this is
+  the partial case: the class grades at full band weight on evidence that is half
+  Sectum's own fake, and the line has to say which half. It applies to a `FAIL` as
+  well as a `PASS` — which half spoke for the operator's stack is as material
+  either way. Only Classes 2 and 7 have two probes, so only they can reach it.
 
 ## The catalog and its weights
 

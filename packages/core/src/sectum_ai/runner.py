@@ -463,10 +463,25 @@ class Runner:
         if self._rag is None:
             raise AdapterError("a rag.ask step needs a rag adapter")
         answer = self._rag.ask(step.actor_tenant_id, payload_required(step, "query"))
+        # The RETRIEVED CONTEXT as well as the generated answer, which is what the
+        # sibling `_vector_query` has always done with its hits. Scanning the
+        # answer alone made the verdict a property of the model's wording: a
+        # shared-index retriever that hands another tenant's documents to the
+        # model - the exact Class 2 pivot this probe exists to detect - graded
+        # PASS at 0.0% RPR whenever the model paraphrased instead of quoting the
+        # canary. Measured on one shared-index pipeline with 24 markers served
+        # cross-tenant: 15 confirmed with the answer shaped like the fake's, 0
+        # with the answer shaped like a real LLM's. It hid because
+        # `FakeRAGPipeline.ask` returns the chunks AS the answer, so every test
+        # and the demo exercise the one shape where the two agree.
+        #
+        # A foreign document reaching the model's context IS the retrieval-boundary
+        # failure; whether the model then repeats it is the model's disposition,
+        # and resting a signed verdict on it makes the measurement non-deterministic.
         return Observation(
             step_id=step.step_id,
             surface=self._rag.surface,
-            raw_response=answer.answer,
+            raw_response="\n".join([answer.answer, *(hit.content for hit in answer.retrieved)]),
         )
 
     def _observability_search(self, step: ProbeStep) -> Observation:

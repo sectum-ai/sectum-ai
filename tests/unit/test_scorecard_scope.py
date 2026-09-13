@@ -639,3 +639,45 @@ def test_a_run_recording_no_provenance_at_all_still_grades_its_classes() -> None
     class2 = next(c for c in card.classes if c.class_id == 2)
     assert class2.verdict is ClassVerdict.FAIL, class2
     assert class2.confirmed_findings == 1
+
+
+def test_a_class_half_backed_by_the_fake_says_so_on_its_line() -> None:
+    # Rule 5 withholds a class only when EVERY probe's backing surface is
+    # synthetic, so a two-probe class with one live surface grades normally, at
+    # full band weight, with nothing on the line about the half that ran against
+    # Sectum's own fake. Measured through the real CLI: a live MCP server with no
+    # agent adapter configured produced `Class 7 PASS critical` and `GRADE A`,
+    # note-free, over a run whose agent half never touched the operator's stack.
+    #
+    # Neither existing note reaches it. `withheld` needs the fake to have
+    # CONFIRMED something; `missing` needs the probe not to have RUN. This is the
+    # gap between them, and only Classes 2 and 7 have two probes to fall into it.
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"agent-tool-hijack": "1", "agent-framework-hijack": "1"},
+        surface_provenance={"mcp": "LIVE", "agent_framework": "SYNTHETIC"},
+    )
+    klass = next(c for c in score_run(run).classes if c.class_id == 7)
+    assert klass.verdict is ClassVerdict.PASS
+    assert klass.note and "agent-framework-hijack ran against the built-in fake" in klass.note
+    assert "1 of 2 probes that touched your stack" in klass.note
+
+    # Both probes live: nothing to disclose, and the note must not fire.
+    both_live = run.model_copy(
+        update={"surface_provenance": {"mcp": "LIVE", "agent_framework": "LIVE"}}
+    )
+    live_class = next(c for c in score_run(both_live).classes if c.class_id == 7)
+    assert "built-in fake" not in (live_class.note or ""), live_class.note
+
+    # Both probes fake: rule 5 withholds the whole class, and this note would be
+    # noise on top of that verdict - `len(fake_backed) < len(ran)` keeps it off.
+    both_fake = run.model_copy(
+        update={"surface_provenance": {"mcp": "SYNTHETIC", "agent_framework": "SYNTHETIC"}}
+    )
+    fake_class = next(c for c in score_run(both_fake).classes if c.class_id == 7)
+    assert "ran against the built-in fake, so its verdict" not in (fake_class.note or "")

@@ -575,6 +575,21 @@ def _score_class(
     # leak manifests solely at the pipeline surface (it would read 0%)", and that
     # understated rate is what the line prints.
     missing = tuple(sorted(set(entry.probe_ids) - set(ran)))
+    # Rule 5 withholds a class only when EVERY probe's backing surface is
+    # synthetic, so a class with two probes and one live surface grades normally,
+    # at full band weight, with nothing on the line about the half that ran
+    # against Sectum's own fake. Measured: a live MCP server with no agent adapter
+    # configured graded `Class 7 PASS critical` and `GRADE A`, note-free, over a
+    # run whose agent half never touched the operator's stack. The `withheld` note
+    # cannot reach it (it needs the fake to have CONFIRMED something) and neither
+    # can `missing` (the probe did run) - the gap between the two.
+    fake_backed = tuple(
+        sorted(
+            probe_id
+            for probe_id in ran
+            if (own := set(PROBE_SURFACES.get(probe_id, ())) & exercised) and own <= synthetic
+        )
+    )
     user_dropped = sum(run.metrics.user_steps_dropped.get(probe_id, 0) for probe_id in ran)
     unlanded = sum(run.metrics.unconfirmed_plants.get(probe_id, 0) for probe_id in ran)
     notes = [
@@ -612,6 +627,14 @@ def _score_class(
         f"{unlanded} planted write(s) never came back from the backend, so this class "
         "was graded on less setup than it planned"
         if unlanded and not confirmed
+        else "",
+        # Ungated by `confirmed`, like `withheld`: which half of a class spoke for
+        # the operator's stack is as material to a FAIL as to a PASS.
+        f"{', '.join(fake_backed)} ran against the built-in fake, so its verdict is "
+        "neither assurance nor fault; this class is graded on "
+        f"{len(ran) - len(fake_backed)} of {len(entry.probe_ids)} probes that touched "
+        "your stack"
+        if fake_backed and len(fake_backed) < len(ran)
         else "",
     ]
     return ClassScore(

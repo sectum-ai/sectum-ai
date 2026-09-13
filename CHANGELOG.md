@@ -57,6 +57,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The RAG probe never saw the retrieved context.** `_rag_ask` scanned
+  `RagAnswer.answer` and discarded `RagAnswer.retrieved`, while its sibling
+  `_vector_query` has always scanned every hit — so the flagship Class 2 verdict
+  was a property of the *model's wording*. A shared-index retriever that hands
+  another tenant's documents to the model, the exact pivot the probe exists to
+  detect, graded `PASS` at `0.0% RPR` stamped `rag_pipeline: LIVE` whenever the
+  model paraphrased instead of quoting the canary. Measured on one shared-index
+  pipeline with 24 markers served cross-tenant: **15 confirmed** with the answer
+  shaped like the fake's, **0** with the answer shaped like a real LLM's. It hid
+  because `FakeRAGPipeline.ask` returns the retrieved chunks *as* the answer, so
+  every test and the demo exercise the one shape where the two agree.
+- **An eighth PASS note: a class half-backed by the built-in fake says so.** Rule 5
+  withholds a class only when *every* probe's backing surface is synthetic, so a
+  two-probe class with one live surface graded at full band weight with nothing on
+  the line about the other half. A live MCP server with no agent adapter configured
+  produced `Class 7 PASS critical` and `GRADE A`, note-free. Neither existing note
+  reaches it — `withheld` needs the fake to have *confirmed* something, `missing`
+  needs the probe not to have *run*.
+
+
 - **Docs: the reasoning the previous entry repudiated was still on the page.**
   `docs/quickstart.md` said "`score`, `report` and `pack` read `findings` directly
   and are unaffected" — written when that was true, and false the moment `report`
