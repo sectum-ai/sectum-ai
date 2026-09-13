@@ -58,10 +58,23 @@ class LangSmithObservability(ObservabilityAdapter):
     def _snippet(run: Any) -> str:
         # Read each field defensively with getattr: a run may omit any of them,
         # and inputs/outputs are dicts whose string form carries the marker.
+        #
+        # `extra`, `tags` and `error` as well, which this was the ONE trace backend
+        # not to read. `@traceable(metadata=...)` lands in `extra`, and every
+        # sibling reads its own equivalent bag - Langfuse takes `metadata`, Datadog
+        # takes `custom` AND `meta` with a comment saying missing it "would be a
+        # false erasure PASS", and helicone/phoenix/otel each read their attribute
+        # map. A marker carried in metadata was invisible here, so the surface
+        # signed TRACING: ERASED over content the read path never looked at, and
+        # reported no cross-tenant leak for the same reason. The test double
+        # modelled only id/name/inputs/outputs, so no test could have caught it.
         parts = (
             getattr(run, "name", None),
             getattr(run, "inputs", None),
             getattr(run, "outputs", None),
+            getattr(run, "extra", None),
+            getattr(run, "tags", None),
+            getattr(run, "error", None),
         )
         return " ".join(str(part) for part in parts if part)
 

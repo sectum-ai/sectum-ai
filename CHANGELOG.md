@@ -57,6 +57,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The GCS backup's one guard against a false `ERASED` failed open.** A non-zero
+  soft-delete retention is what makes the adapter refuse to attest a purge — a
+  deleted object stays restorable for the window, and `_blobs` lists
+  `versions=True` but never `soft_deleted=True`, so nothing downstream can catch
+  it. It was read with `getattr(..., 0) or 0`, so every way of *failing* to read
+  the policy collapsed into "there is no policy" and the purge proceeded. Buckets
+  created since 2024 default to a 7-day policy, so that is the common case. An
+  unreadable policy now raises; a policy the client can read and that is genuinely
+  disabled still purges.
+- **LangSmith was the only trace backend that never read the run's metadata bag.**
+  `@traceable(metadata=...)` lands in `extra`, and every sibling reads its own —
+  Langfuse takes `metadata`, Datadog takes `custom` *and* `meta` with a comment
+  saying missing it "would be a false erasure PASS". A marker carried in metadata
+  was invisible, so the surface signed `TRACING: ERASED` over content the read path
+  never looked at. `extra`, `tags` and `error` are read now, and the test double —
+  which modelled only `id`/`name`/`inputs`/`outputs`, so no test could have caught
+  it — models the whole shape.
+- **Class 7's 200-empty caveat was silenced by a server that words its miss.** The
+  caveat gated on `AccessOutcome.EMPTY`, which the runner derives from
+  `bool(result.output)`. That holds for the two *typed* by-id reads, whose `None`
+  genuinely means nothing came back; `McpResult.output` is free-form tool text, so
+  a correctly tenant-scoped server answering "No resource found for that key." read
+  as `RETURNED` and the caveat vanished — 96 findings against a server returning
+  `""`, 0 against one that narrates. The agent-framework sibling was made
+  unconditional for exactly this reason and the reasoning was not carried over.
+  `sectum-ai probe` skips this probe against a live MCP server, so the CLI cannot
+  reach it today; the SDK path can.
+
+
 - **A leak no longer borrows a technique from an attempt that found nothing.**
   `dedupe_findings` unioned techniques across *any* two duplicates, so a
   `CONFIRMED` leak found by a `lookup` sub-probe, merged with the injection

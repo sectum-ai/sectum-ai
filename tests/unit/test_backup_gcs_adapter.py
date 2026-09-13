@@ -272,3 +272,41 @@ def test_gcs_backup_soft_delete_policy_is_attestable_with_caveat() -> None:
     adapter.add(_TENANT_A, "SECTUM-CANARY-SOFT-POLICY")
     with pytest.raises(ErasureUnsupported, match="soft-delete policy"):
         adapter.delete(_TENANT_A)
+
+
+def test_an_unreadable_soft_delete_policy_is_not_read_as_no_policy() -> None:
+    # A non-zero soft-delete retention is the ONE thing standing between this
+    # adapter and signing `backup: ERASED` over data GCS restores on request: a
+    # deleted object stays restorable for the window, and `_blobs` lists
+    # `versions=True` but never `soft_deleted=True`, so nothing downstream can
+    # catch the mistake.
+    #
+    # It was read with `getattr(..., 0) or 0`, so every way of FAILING to read the
+    # policy - a client too old to model it, a response without the field -
+    # collapsed into "there is no policy" and the purge proceeded. Buckets created
+    # since 2024 default to a 7-day policy, so that is the common case, not a
+    # corner. The rule this codebase applies everywhere else: a number nobody
+    # measured is not a measurement of zero.
+    class _ClientWithoutThePolicy:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace()  # an older client models no such field
+
+    blind = GCSBackup(client=_ClientWithoutThePolicy(), bucket="b")
+    with pytest.raises(AdapterError, match="soft-delete policy"):
+        blind._soft_delete_retention_s()
+
+    class _ClientWithAnEmptyPolicy:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace(soft_delete_policy=SimpleNamespace())
+
+    empty = GCSBackup(client=_ClientWithAnEmptyPolicy(), bucket="b")
+    with pytest.raises(AdapterError, match="retention duration"):
+        empty._soft_delete_retention_s()
+
+    # A bucket the client CAN read and that genuinely has no retention still
+    # purges - the fix must not turn every unversioned bucket into a caveat.
+    class _ClientWithItDisabled:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace(soft_delete_policy=SimpleNamespace(retention_duration_seconds=0))
+
+    assert GCSBackup(client=_ClientWithItDisabled(), bucket="b")._soft_delete_retention_s() == 0

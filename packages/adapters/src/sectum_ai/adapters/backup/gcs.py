@@ -32,6 +32,10 @@ def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
 
 
+_UNREAD = object()
+"""Sentinel: the attribute was absent, which is not the same as a zero retention."""
+
+
 class GCSBackup(BackupAdapter):
     """A backup / snapshot store backed by a GCS bucket, one object-name prefix per tenant."""
 
@@ -96,11 +100,42 @@ class GCSBackup(BackupAdapter):
         return self._bucket_meta
 
     def _soft_delete_retention_s(self) -> int:
-        # Buckets created since 2024 default to a 7-day soft-delete policy: a
-        # deleted object is restorable for that window, which a listing without
-        # `soft_deleted=True` cannot see - so the scan read it as purged.
-        policy = getattr(self._meta(), "soft_delete_policy", None)
-        return int(getattr(policy, "retention_duration_seconds", 0) or 0)
+        """Seconds a deleted object stays restorable, or raise if that cannot be read.
+
+        Buckets created since 2024 default to a 7-day soft-delete policy: a
+        deleted object is restorable for that window, which a listing without
+        `soft_deleted=True` cannot see - so the scan reads it as purged. A
+        non-zero retention is therefore the ONE thing standing between this
+        adapter and signing `backup: ERASED` over data GCS restores on request.
+
+        It read that guard with `getattr(..., 0) or 0`, so every way of failing
+        to read the policy - a client too old to model it, a response without the
+        field, a permission that hides it - collapsed into "there is no policy"
+        and the purge proceeded. That is the fail-open direction on the one check
+        that cannot be caught downstream, and it is the same rule this codebase
+        applies to a supplied-versus-observed count everywhere else: a number
+        nobody measured is not a measurement of zero.
+        """
+        meta = self._meta()
+        if not hasattr(meta, "soft_delete_policy"):
+            raise AdapterError(
+                f"cannot read the soft-delete policy of bucket {self._bucket!r} "
+                "(the installed google-cloud-storage does not model it), so a "
+                "deleted object may stay restorable and this surface cannot be "
+                "attested erased; upgrade the client or scope this run out"
+            )
+        policy = meta.soft_delete_policy
+        if policy is None:
+            # The client knows the field and the bucket has no policy.
+            return 0
+        retention: Any = getattr(policy, "retention_duration_seconds", _UNREAD)
+        if retention is _UNREAD:
+            raise AdapterError(
+                f"the soft-delete policy of bucket {self._bucket!r} carries no "
+                "retention duration, so whether a deleted object stays restorable "
+                "cannot be established and this surface cannot be attested erased"
+            )
+        return int(retention or 0)
 
     def _blobs(self, tenant: UUID) -> list[Any]:
         # With object versioning a delete makes the object noncurrent, not gone;

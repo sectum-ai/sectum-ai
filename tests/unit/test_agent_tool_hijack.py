@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sectum_ai.adapters import FakeMCP
+from sectum_ai.adapters.base import McpResult
 from sectum_ai.probes import AgentToolHijackProbe, confirmed_findings
 from sectum_ai.probes.detection import dedupe_findings
 from sectum_ai.runner import Runner
@@ -395,3 +396,40 @@ def test_a_leak_does_not_borrow_a_technique_from_an_attempt_that_found_nothing()
     ]
     merged = dedupe_findings(attempts)[0]
     assert set(merged.atlas) == {"AML.T0024", "AML.T0053", "AML.T0051.001"}, merged.atlas
+
+
+def test_the_caveat_does_not_depend_on_how_a_server_words_a_miss() -> None:
+    # The 200-empty caveat gated on `AccessOutcome.EMPTY`, which the runner derives
+    # from `bool(result.output)`. That works for the two TYPED by-id reads -
+    # `vector.fetch` and `cache.get` return `VectorHit | None` and `str | None`, so
+    # RETURNED there genuinely means an object came back. `McpResult.output` is
+    # free-form TOOL TEXT, so a correctly tenant-scoped server answering "No
+    # resource found for that key." is RETURNED, and the caveat went silent.
+    #
+    # The agent-framework sibling was made unconditional for exactly this reason -
+    # "an agent framework answers in prose whichever way its tool went ... there is
+    # no reading of the output that establishes a deny" - and the reasoning was not
+    # carried over. `FakeMCP` returns "", so no shipped configuration exercised the
+    # failing path.
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _ReturnsEmpty(FakeMCP):
+        def invoke(
+            self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+        ) -> McpResult:
+            return McpResult(tool=tool, output="")
+
+    class _NarratesTheMiss(FakeMCP):
+        """The same correct scoping, worded rather than empty."""
+
+        def invoke(
+            self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
+        ) -> McpResult:
+            return McpResult(tool=tool, output="No resource found for that key.")
+
+    counts = {
+        label: len(Runner(substrate, mcp=mcp).run(AgentToolHijackProbe()))
+        for label, mcp in (("empty", _ReturnsEmpty()), ("narrated", _NarratesTheMiss()))
+    }
+    assert counts["empty"] > 0, counts
+    assert counts["narrated"] == counts["empty"], counts
