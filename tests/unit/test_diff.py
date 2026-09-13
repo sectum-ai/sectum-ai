@@ -1331,18 +1331,23 @@ def test_an_a3_surface_that_stopped_being_scanned_fails_the_gate(tmp_path: Path)
     # `_erasure_lost` was computed purely from `erasure_residue` and
     # `erasure_caveats`, and the CLI writes a key into either only for a surface
     # with `baseline_observed` - which the A3 `--subject` probe sets False on every
-    # surface it builds, because it scans AFTER the controller's deletion. So no
+    # surface, because it scans AFTER the controller's deletion. So no
     # `erasure --subject` run writes into either dict, and this gate was
-    # structurally unable to fire on the wedge SKU's own path: a run that found
-    # residue, followed by one that could not scan at all, printed
-    #     [ok] confirmed_findings: 2 -> 0
-    #     RESULT: no regression
-    # at exit 0, with the two confirmed residual findings listed as RESOLVED.
-    # `erasure_coverage` is the one field that records an A3 scan and it had no
-    # reader in this module.
+    # structurally blind on the wedge SKU's own path.
+    #
+    # Keyed on WAS IT SCANNED, not on the coverage verdict. Reading the verdict is
+    # the obvious move and it is wrong in the worst direction - see the test below.
+    # The erasure commands record a `surface_provenance` row only for a surface
+    # actually in `report.surfaces`, so that is what separates "scanned" from
+    # "not scanned".
     scanned = _run(
         *_carrying(2, probe_id="gdpr-subject-erasure-verification"),
         metrics=RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+    ).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
     )
     unscanned = _run(metrics=RunMetrics(erasure_coverage={"vector_db": "NOT_COVERED"}))
     cli = runner.invoke(
@@ -1354,12 +1359,10 @@ def test_an_a3_surface_that_stopped_being_scanned_fails_the_gate(tmp_path: Path)
         ],
     )
     assert cli.exit_code == 2, cli.output
-    assert "vector_db" in cli.output, cli.output
-    assert "RESULT: no regression" not in cli.output, cli.output
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
 
-    # And the other direction is an improvement, not a regression: a surface that
-    # could not be scanned and now can must not gate, or every fixed backend
-    # fails CI.
+    # A surface that could not be scanned and now can is an improvement, not a
+    # regression, or every repaired backend fails CI.
     back = runner.invoke(
         app,
         [
@@ -1369,3 +1372,42 @@ def test_an_a3_surface_that_stopped_being_scanned_fails_the_gate(tmp_path: Path)
         ],
     )
     assert "[ERASURE NOT RESCANNED]" not in back.output, back.output
+
+
+def test_the_run_that_proves_an_a3_erasure_worked_is_not_a_regression(tmp_path: Path) -> None:
+    # The direction the first version of this gate got wrong, and the reason it is
+    # keyed on provenance rather than on the coverage verdict. With no baseline the
+    # only verdicts an A3 surface can reach are RESIDUAL (the scan found the
+    # subject's data) and NOT_COVERED (it found nothing) - so `RESIDUAL ->
+    # NOT_COVERED` is the SUCCESSFUL DELETION, and gating on that verdict pair
+    # failed the very run that proves the remediation worked.
+    #
+    # Both runs SCANNED the surface; only what they found differs.
+    found = _run(
+        *_carrying(1, probe_id="gdpr-subject-erasure-verification"),
+        metrics=RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+    ).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
+    )
+    # The same probe ran in both: a second A3 scan records its probe_versions like
+    # the first, and omitting it makes `[COVERAGE LOST]` fire for an unrelated
+    # reason - which would let this test pass while saying nothing.
+    purged = _run(metrics=RunMetrics(erasure_coverage={"vector_db": "NOT_COVERED"})).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "found.json", found)),
+            str(_write(tmp_path / "purged.json", purged)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED]" not in cli.output, cli.output
+    assert cli.exit_code == 0, cli.output

@@ -57,6 +57,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The A3 erasure gate failed the run that proves the deletion worked.** The term
+  added an entry ago keyed on the coverage *verdict*, and with no baseline the only
+  verdicts an A3 surface can reach are `RESIDUAL` (the scan found the subject's
+  data) and `NOT_COVERED` (it found nothing) — so `RESIDUAL → NOT_COVERED` is the
+  **successful deletion**, and gating on it turned a clean remediation into
+  `RESULT: REGRESSION` at exit `2`. It is keyed on *was it scanned* now: the
+  erasure commands record a `surface_provenance` row only for a surface actually in
+  `report.surfaces`, so a clean scan has one and an unscanned surface does not. The
+  test that pinned the false alarm as intended behaviour is corrected, and the
+  direction it never checked is pinned beside it.
+
+
 - **The RAG probe never saw the retrieved context.** `_rag_ask` scanned
   `RagAnswer.answer` and discarded `RagAnswer.retrieved`, while its sibling
   `_vector_query` has always scanned every hit — so the flagship Class 2 verdict

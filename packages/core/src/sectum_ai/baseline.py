@@ -11,7 +11,6 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from sectum_ai.spec import (
-    CoverageVerdict,
     Finding,
     FindingStatus,
     RunMetrics,
@@ -553,18 +552,24 @@ def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
     # structurally unable to fire on the paid path: a run that found residue
     # followed by one that could not scan at all printed `[ok] confirmed_findings:
     # 2 -> 0` under `RESULT: no regression` at exit 0, with the two confirmed
-    # residual findings listed as RESOLVED. `erasure_coverage` is the one field
-    # that records an A3 scan, and it had no reader here at all.
-    definite = {
-        CoverageVerdict.ERASED.value,
-        CoverageVerdict.RESIDUAL.value,
-        CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value,
-    }
-    lost |= {
-        surface
-        for surface, verdict in earlier.metrics.erasure_coverage.items()
-        if verdict in definite and later.metrics.erasure_coverage.get(surface) not in definite
-    }
+    # residual findings listed as RESOLVED.
+    #
+    # Keyed on WAS IT SCANNED, not on the verdict. Reading `erasure_coverage`'s
+    # verdict was the obvious move and it is wrong in the worst direction: with no
+    # baseline the only reachable verdicts are RESIDUAL (found something) and
+    # NOT_COVERED (found nothing), so `RESIDUAL -> NOT_COVERED` is the SUCCESSFUL
+    # DELETION - and gating on it failed the very run that proves the remediation
+    # worked. `surface_provenance` is the field that answers the real question:
+    # the erasure commands record a row only for a surface actually in
+    # `report.surfaces`, so a clean scan has one and an unscanned surface does
+    # not. Restricted to records that scanned at all (`erasure_coverage` is empty
+    # on a `probe` run), so two probe runs are judged by `_scope_lost` as before.
+    if earlier.metrics.erasure_coverage:
+        lost |= {
+            surface
+            for surface in earlier.metrics.erasure_coverage
+            if surface in earlier.surface_provenance and surface not in later.surface_provenance
+        }
     return tuple(sorted(lost))
 
 
