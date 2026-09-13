@@ -51,6 +51,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A data-subject residual the scan had already seen no longer disappears.**
+  `_contained`'s own docstring lists three harms the abort-free rewrite fixed, and
+  the third — "a scan that had already OBSERVED residual records before failing
+  lost them" — was the one the rewrite did not. The vector surface is the only one
+  that reads twice, by id and then by fingerprint: a store whose `fetch` answered
+  and whose `query` then raised had positively found the subject's record still
+  present, and the handler replaced the whole surface with `residual_after=0`. A
+  GDPR Article 17 *failure* therefore reached the DPO as "absence could not be
+  established, re-run" at exit `0`, over a record the tool had looked at and seen.
+  What a block observes is now recorded as it is observed and survives a later
+  failure on the same surface, across all six contained surfaces; what went
+  unchecked is still declared unverifiable, with the backend's own words.
+- **The erasure gate could not fire on the data-subject path at all.**
+  `_erasure_lost` was computed from `erasure_residue` and `erasure_caveats`, and
+  the CLI writes a key into either only for a surface with `baseline_observed` —
+  which the A3 `--subject` probe sets `False` on every surface, because it scans
+  after the controller's deletion. So no `erasure --subject` run writes into
+  either dict, and the gate was structurally blind on the wedge SKU's own path: a
+  run that found residue followed by one that could not scan printed
+  `[ok] confirmed_findings: 2 -> 0` under `RESULT: no regression` at exit `0`,
+  with the confirmed residual findings listed as *resolved*. `erasure_coverage` —
+  the one field that records an A3 scan — had no reader in `baseline.py`; a
+  definite verdict degrading to `NOT_COVERED` now gates, and the reverse does not.
+
+
 - **A vector store that swallows the corpus no longer grades `PASS`.** The seeding
   guard added two entries ago asked three slots whether the canary reached them and
   skipped the fourth — the vector store, which the most classes stand on. `upsert`

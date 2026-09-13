@@ -13,7 +13,7 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum_ai.adapters.base import Capability, ModelAdapter, TraceHit
+from sectum_ai.adapters.base import Capability, ModelAdapter, TraceHit, VectorHit
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
 from sectum_ai.spec import AdapterError, CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -955,3 +955,70 @@ def test_no_subject_surface_ever_claims_an_observed_baseline() -> None:
     assert not claiming, f"A3 surfaces claiming an observed baseline: {claiming}"
     # And none of them can therefore be attested ERASED.
     assert CoverageVerdict.ERASED not in set(report.coverage().values())
+
+
+def test_a_residual_already_seen_survives_a_later_failure_on_the_same_surface() -> None:
+    # `_contained`'s own docstring lists three harms the abort-free rewrite fixed,
+    # and this is the third: "a scan that had already OBSERVED residual records
+    # before failing lost them, so a run with two confirmed residuals reported NO
+    # RESIDUAL FOUND at exit 0." The rewrite moved WHERE the failure is recorded -
+    # a `SurfaceErasure` instead of `ErasureReport.unverifiable` - and did not
+    # preserve the residuals.
+    #
+    # The vector surface is the only one that reads twice: by id, then by
+    # fingerprint. A store whose `fetch` answers and whose `query` then raises has
+    # positively found the subject's record still present - an Article 17 FAILURE -
+    # and the handler replaced the whole surface with `residual_after=0`, so the
+    # DPO was told "absence could not be established, re-run" at exit 0 about a
+    # record the tool had looked at and seen.
+    class _FetchOkQueryBroken(FakeVectorStore):
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            raise AdapterError("index unavailable: shard 3 is down")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = _FetchOkQueryBroken()
+    store.upsert(tenant, docs)
+
+    manifest = SubjectManifest(
+        subject_ref="subject-1",
+        records={Surface.VECTOR_DB: (docs[0].doc_id,)},
+        fingerprints={Surface.VECTOR_DB: ("a phrase the broken query cannot check",)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+
+    # The residual it saw is reported as a residual, not as a coverage gap...
+    assert surface.residual_after == 1, surface
+    assert surface.verdict == "RESIDUAL DATA", surface
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    assert len(report.findings) == 1, report.findings
+    assert not report.erased
+    # ...and what it could NOT check is still declared unverifiable, with the
+    # backend's own words - the residual must not swallow the coverage gap either.
+    assert surface.unverifiable_after == 1, surface
+    assert "shard 3 is down" in (surface.unverifiable_reason or "")
+
+
+def test_a_contained_failure_does_not_double_count_what_it_saw() -> None:
+    # The accumulator is flushed on BOTH paths of `_contained`, so the success path
+    # must not emit its findings twice - the obvious way to get the test above to
+    # pass while breaking every clean run.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = FakeVectorStore()
+    store.upsert(tenant, docs)
+
+    manifest = SubjectManifest(
+        subject_ref="subject-1",
+        records={Surface.VECTOR_DB: (docs[0].doc_id, docs[1].doc_id)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    assert len(report.findings) == 2, report.findings
+    assert len({f.finding_id for f in report.findings}) == 2, report.findings
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert surface.residual_after == 2, surface

@@ -1325,3 +1325,47 @@ def test_deleting_a_per_probe_key_is_the_same_contradiction(tmp_path: Path) -> N
         assert cli.exit_code == 3, cli.output
         assert "contradicts itself" in cli.output, cli.output
         assert "RESULT: no regression" not in cli.output, cli.output
+
+
+def test_an_a3_surface_that_stopped_being_scanned_fails_the_gate(tmp_path: Path) -> None:
+    # `_erasure_lost` was computed purely from `erasure_residue` and
+    # `erasure_caveats`, and the CLI writes a key into either only for a surface
+    # with `baseline_observed` - which the A3 `--subject` probe sets False on every
+    # surface it builds, because it scans AFTER the controller's deletion. So no
+    # `erasure --subject` run writes into either dict, and this gate was
+    # structurally unable to fire on the wedge SKU's own path: a run that found
+    # residue, followed by one that could not scan at all, printed
+    #     [ok] confirmed_findings: 2 -> 0
+    #     RESULT: no regression
+    # at exit 0, with the two confirmed residual findings listed as RESOLVED.
+    # `erasure_coverage` is the one field that records an A3 scan and it had no
+    # reader in this module.
+    scanned = _run(
+        *_carrying(2, probe_id="gdpr-subject-erasure-verification"),
+        metrics=RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+    )
+    unscanned = _run(metrics=RunMetrics(erasure_coverage={"vector_db": "NOT_COVERED"}))
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "scanned.json", scanned)),
+            str(_write(tmp_path / "unscanned.json", unscanned)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "vector_db" in cli.output, cli.output
+    assert "RESULT: no regression" not in cli.output, cli.output
+
+    # And the other direction is an improvement, not a regression: a surface that
+    # could not be scanned and now can must not gate, or every fixed backend
+    # fails CI.
+    back = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "unscanned2.json", unscanned)),
+            str(_write(tmp_path / "scanned2.json", scanned)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED]" not in back.output, back.output

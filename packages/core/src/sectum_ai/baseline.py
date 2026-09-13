@@ -11,6 +11,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from sectum_ai.spec import (
+    CoverageVerdict,
     Finding,
     FindingStatus,
     RunMetrics,
@@ -544,6 +545,26 @@ def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
     # The COUNT is the measurement; a caveat is the absence of one. Only this
     # direction: caveat -> residue is a surface that gained a delete API.
     lost |= set(earlier.metrics.erasure_residue) - set(later.metrics.erasure_residue)
+    # A THIRD way to stop scanning, and the only one the wedge SKU can take. Both
+    # dicts above are written only for a surface with `baseline_observed`, and the
+    # A3 `--subject` probe sets that False on every surface it builds - it scans
+    # after the controller's deletion, so nothing establishes a baseline. So no
+    # `erasure --subject` run writes a key into either, and this function was
+    # structurally unable to fire on the paid path: a run that found residue
+    # followed by one that could not scan at all printed `[ok] confirmed_findings:
+    # 2 -> 0` under `RESULT: no regression` at exit 0, with the two confirmed
+    # residual findings listed as RESOLVED. `erasure_coverage` is the one field
+    # that records an A3 scan, and it had no reader here at all.
+    definite = {
+        CoverageVerdict.ERASED.value,
+        CoverageVerdict.RESIDUAL.value,
+        CoverageVerdict.ATTESTABLE_WITH_CAVEAT.value,
+    }
+    lost |= {
+        surface
+        for surface, verdict in earlier.metrics.erasure_coverage.items()
+        if verdict in definite and later.metrics.erasure_coverage.get(surface) not in definite
+    }
     return tuple(sorted(lost))
 
 

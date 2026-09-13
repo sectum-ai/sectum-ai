@@ -186,7 +186,8 @@ class SubjectErasureProbe:
         surface: Surface,
         surfaces: list[SurfaceErasure],
         manifest: SubjectManifest,
-    ) -> Iterator[None]:
+        findings: list[Finding],
+    ) -> Iterator[list[Finding]]:
         """Keep one adapter's failure to its own surface, the way Class 11 does.
 
         `_listing._refuse_capped` was written FOR this path - "the A3 subject check
@@ -206,18 +207,30 @@ class SubjectErasureProbe:
         already OBSERVED residual records before failing lost them, so a run with
         two confirmed residuals reported NO RESIDUAL FOUND at exit 0.
         """
+        observed: list[Finding] = []
         try:
-            yield
+            yield observed
         except AdapterError as error:
             at_stake = len(manifest.records.get(surface, ())) + len(
                 manifest.fingerprints.get(surface, ())
             )
+            # What the scan ALREADY SAW is a fact, and a later failure on the same
+            # surface does not unmake it. The vector surface checks by id and THEN
+            # by fingerprint: a store whose `fetch` answered and whose `query` then
+            # raised had positively found the subject's record still present, and
+            # this handler replaced the whole surface with `residual_after=0` - so
+            # an Article 17 FAILURE reached the DPO as "absence could not be
+            # established, re-run", at exit 0, over a record the tool had looked at
+            # and seen. That is the third of the three harms this guard's own
+            # docstring says it fixed, and the only one the rewrite did not.
+            # `verdict` already ranks RESIDUAL DATA above NOT VERIFIED, so recording
+            # it is enough; only what went unchecked is unverifiable.
             surfaces.append(
                 SurfaceErasure(
                     surface=surface,
                     markers_before=0,
-                    residual_after=0,
-                    unverifiable_after=max(at_stake, 1),
+                    residual_after=len(observed),
+                    unverifiable_after=max(at_stake - len(observed), 1),
                     unverifiable_reason=str(error),
                 )
             )
@@ -225,7 +238,12 @@ class SubjectErasureProbe:
                 "subject_erasure.surface_unverifiable",
                 surface=surface.value,
                 reason=str(error),
+                observed=len(observed),
             )
+        finally:
+            # Flushed on BOTH paths, so a block never writes to `findings` itself
+            # and the success path cannot double-count.
+            findings.extend(observed)
 
     def verify(self, target: UUID, manifest: SubjectManifest) -> ErasureReport:
         """Check the subject's ids and content are gone; return an erasure report.
@@ -242,13 +260,21 @@ class SubjectErasureProbe:
 
         vector = self._vector
         if vector is not None:
-            with self._contained(Surface.VECTOR_DB, surfaces, manifest):
+            with self._contained(Surface.VECTOR_DB, surfaces, manifest, findings) as observed:
                 # Dedupe per surface so the count is distinct and a repeat cannot emit
                 # two findings with the same finding_id.
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.VECTOR_DB, ())))
                 phrases = tuple(dict.fromkeys(manifest.fingerprints.get(Surface.VECTOR_DB, ())))
                 if ids or phrases:
                     present = [rid for rid in ids if vector.fetch(target, rid) is not None]
+                    # Recorded BEFORE the fingerprint phase, which is the call that can
+                    # raise: this is the only surface that reads twice, and a `query`
+                    # failure was unmaking a `fetch` that had already found the
+                    # subject's record still present.
+                    observed.extend(
+                        self._residual_finding(target, Surface.VECTOR_DB, manifest.subject_ref, rid)
+                        for rid in present
+                    )
                     verdicts = {p: self._content_surfaces(vector, target, p) for p in phrases}
                     surfacing = [p for p, v in verdicts.items() if v]
                     inconclusive = sum(1 for v in verdicts.values() if v is None)
@@ -266,11 +292,7 @@ class SubjectErasureProbe:
                                 baseline_observed=False,
                             )
                         )
-                    findings.extend(
-                        self._residual_finding(target, Surface.VECTOR_DB, manifest.subject_ref, rid)
-                        for rid in present
-                    )
-                    findings.extend(
+                    observed.extend(
                         self._fingerprint_finding(
                             target, Surface.VECTOR_DB, manifest.subject_ref, p
                         )
@@ -279,12 +301,12 @@ class SubjectErasureProbe:
 
         cache = self._cache
         if cache is not None:
-            with self._contained(Surface.SEMANTIC_CACHE, surfaces, manifest):
+            with self._contained(Surface.SEMANTIC_CACHE, surfaces, manifest, findings) as observed:
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.SEMANTIC_CACHE, ())))
                 if ids:
                     present = [rid for rid in ids if cache.get(target, rid) is not None]
                     surfaces.append(self._surface(Surface.SEMANTIC_CACHE, ids, present))
-                    findings.extend(
+                    observed.extend(
                         self._residual_finding(
                             target, Surface.SEMANTIC_CACHE, manifest.subject_ref, rid
                         )
@@ -293,7 +315,7 @@ class SubjectErasureProbe:
 
         observability = self._observability
         if observability is not None:
-            with self._contained(Surface.TRACING, surfaces, manifest):
+            with self._contained(Surface.TRACING, surfaces, manifest, findings) as observed:
                 ids = tuple(dict.fromkeys(manifest.records.get(Surface.TRACING, ())))
                 if ids:
                     try:
@@ -306,7 +328,7 @@ class SubjectErasureProbe:
                         pass
                     else:
                         surfaces.append(self._surface(Surface.TRACING, ids, present))
-                        findings.extend(
+                        observed.extend(
                             self._residual_finding(
                                 target, Surface.TRACING, manifest.subject_ref, tid
                             )
@@ -315,7 +337,7 @@ class SubjectErasureProbe:
 
         model = self._model
         if model is not None:
-            with self._contained(Surface.MODEL_ADAPTER, surfaces, manifest):
+            with self._contained(Surface.MODEL_ADAPTER, surfaces, manifest, findings) as observed:
                 # The model surface is fingerprint-only: there is no "fetch a memorized
                 # fact by id" primitive, so a subject's model residual is caught by
                 # probing inference with the subject's content. Only a trainable model
@@ -351,7 +373,7 @@ class SubjectErasureProbe:
                                 baseline_observed=False,
                             )
                         )
-                    findings.extend(
+                    observed.extend(
                         self._fingerprint_finding(
                             target, Surface.MODEL_ADAPTER, manifest.subject_ref, p
                         )
@@ -360,7 +382,7 @@ class SubjectErasureProbe:
 
         memory = self._memory
         if memory is not None:
-            with self._contained(Surface.AGENT_MEMORY, surfaces, manifest):
+            with self._contained(Surface.AGENT_MEMORY, surfaces, manifest, findings) as observed:
                 # Fingerprint-only, like the vector store: the agent-memory store has no
                 # stable by-id primitive, so a subject's residual is caught by recalling
                 # the subject's content and checking the returned entries still carry it.
@@ -375,7 +397,7 @@ class SubjectErasureProbe:
                             baseline_observed=False,
                         )
                     )
-                    findings.extend(
+                    observed.extend(
                         self._fingerprint_finding(
                             target, Surface.AGENT_MEMORY, manifest.subject_ref, p
                         )
@@ -384,7 +406,7 @@ class SubjectErasureProbe:
 
         search_index = self._search_index
         if search_index is not None:
-            with self._contained(Surface.SEARCH_INDEX, surfaces, manifest):
+            with self._contained(Surface.SEARCH_INDEX, surfaces, manifest, findings) as observed:
                 # Fingerprint-only: the derived full-text index is searched for the
                 # subject's content, and a hit whose text still carries the phrase is
                 # residual in the tenth hiding place a by-id check cannot see into.
@@ -401,7 +423,7 @@ class SubjectErasureProbe:
                             baseline_observed=False,
                         )
                     )
-                    findings.extend(
+                    observed.extend(
                         self._fingerprint_finding(
                             target, Surface.SEARCH_INDEX, manifest.subject_ref, p
                         )
