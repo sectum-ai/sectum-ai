@@ -51,6 +51,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Docs: Class 7 is not covered against a live MCP server or a live agent.** Both
+  halves of the class read back a canary *Sectum plants* — an MCP resource under a
+  key it invents, an agent lookup for an id it invents — and neither protocol has a
+  write primitive, so only the built-in fakes ever receive it. The previous entry
+  taught the CLI to skip those probes rather than grade the empty answer `PASS`,
+  and left `docs/coverage.md` telling the reader the opposite: that pointing
+  Sectum at a live MCP server or CrewAI *adds* Class 7 to a run, when it removes
+  it. The two coverage rows, the worked example's class list, the Class 7 catalog
+  page and the previous changelog entry (which generalised "asked of the backend"
+  from the `rag` slot to all three) are corrected, and the gap is stated beside the
+  Class 6/13 one.
+- **Docs: `erasure --subject` cannot reach `ERASED`, and the example said it did.**
+  Every A3 surface is built with `baseline_observed=False` — the scan runs only
+  after the controller's deletion — so the verdict is `ABSENCE CHECKED`. The
+  example's README said so correctly while `run.sh` and its `sectum-ai.yaml`, the
+  text the operator actually sees, promised the product's strongest erasure claim.
+- **Docs: rule 1's plant check is conditional now, and four statements still read
+  as absolute.** A probe whose every plant vanished is `NOT_COVERED` only when it
+  also confirmed nothing — a leak it saw regardless is no longer suppressed for
+  want of its own setup — so `docs/scorecard.md` (twice), `docs/data-models.md` and
+  the operator-facing CLI warning are qualified to match. `scorecard.md`'s closed
+  list of why a class is uncovered gains the canary-cannot-reach-the-backend
+  reason the same change introduced.
+- **Docs: three smaller over-claims.** The Class 5 walkthrough offered `huggingface`
+  as a real-engagement target without the caveat its own coverage page carries (HF +
+  PEFT loads per tenant and declares no shared prefix cache, so the probe runs and
+  can find nothing by construction). The Class 13 walkthrough said a real CLIP sweep
+  "reflects a production multi-modal retriever" — CLIP changes the embedder, never
+  the index, and the class reads `NOT_COVERED` against every live store. And
+  `docs/quickstart.md`'s exit-code list was missing `calibrate`'s "no threshold
+  separated the classes", while `docs/configuration.md` promised unknown top-level
+  keys are rejected — true only of keys that carry a value, since a
+  commented-out section parses as `null` and is dropped before the check.
+
+
 - **A record whose headline counts contradict its own findings is no longer
   compared.** `diff` and `baseline --compare` are the only readers that take
   `confirmed_findings` / `per_probe_findings` off a *loaded* record as fact;
@@ -90,8 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have had one, which is the exact shape `docs/scorecard.md` names as the dangerous case
   and rests on a guard to prevent; that guard asks whether *any* marker is foreign to
   anybody, which the substrate always satisfies while one class sits starved. The
-  question is now asked of the backend rather than assumed: after seeding, a same-tenant
-  read decides it. A live pipeline reading the store this command just seeded still runs
+  question is now asked of the `rag` backend rather than assumed: after seeding, a
+  same-tenant read decides it. The `mcp` and `agent` slots hold resource keys and
+  lookup targets Sectum *invents*, and neither protocol has a write primitive, so
+  there is nothing to ask — a live backend cannot be holding them, and those probes
+  are skipped outright. A live pipeline reading the store this command just seeded still runs
   — skipping it blindly would have lost a real finding — while one that cannot see the
   canary is skipped with the reason stated and its class reads `NOT_COVERED`.
 

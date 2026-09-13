@@ -96,8 +96,10 @@ established (`ERASURE INCONCLUSIVE`), a pack whose every answerable check passed
 while a sibling document it could not excuse remains (`VERIFICATION
 INDETERMINATE` — neither verified nor shown altered), a record `diff` or
 `baseline --compare` cannot compare because its own `confirmed_findings` /
-`per_probe_findings` disagree with the findings it carries, or a record `score`
-refuses to grade; `4` evidence verification failure.
+`per_probe_findings` disagree with the findings it carries, a `calibrate` run in
+which no threshold separated the classes with zero false positives so it
+recommends nothing (the run completed — this is a result, not a failure), or a
+record `score` refuses to grade; `4` evidence verification failure.
 
 Both producers derive those counts from the findings they record, so a
 disagreement means the file was edited or written partially. It is refused rather

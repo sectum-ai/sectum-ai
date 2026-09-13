@@ -1408,8 +1408,9 @@ def _warn_on_unconfirmed_plants(unconfirmed: dict[str, int]) -> None:
     typer.echo(
         f"warning: planted data could not be read back for {names}: the backend "
         "acknowledged the write and did not serve it (a zero TTL, a read-only replica, "
-        "a quota). A probe whose every plant vanished asked the stack nothing, so its "
-        "class is NOT_COVERED rather than passed.",
+        "a quota). A probe whose every plant vanished and confirmed nothing asked the "
+        "stack nothing, so its class is NOT_COVERED rather than passed; one that "
+        "confirmed a leak regardless is still graded on it.",
         err=True,
     )
 

@@ -36,8 +36,11 @@ detection:
   mode: hosted                             # hosted | local
 ```
 
-Unknown top-level keys, unknown `evidence.timestamper` values, and malformed
-YAML are rejected with a `ConfigError` and the CLI exits with code 3.
+Unknown top-level keys *that carry a value*, unknown `evidence.timestamper`
+values, and malformed YAML are rejected with a `ConfigError` and the CLI exits
+with code 3. A key whose whole body is commented out parses as `null`, and
+null-valued keys are dropped before the unknown-key check — so a misspelled
+section with nothing under it is silently ignored rather than reported.
 
 ## `scenario`
 

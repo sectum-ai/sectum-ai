@@ -110,8 +110,11 @@ over-claim. Seven rules prevent it:
    acknowledges the write and drops it — a zero TTL, a read-only replica, a quota —
    leaves the probe reading for something that was never there. It runs, finds nothing,
    and looks exactly like isolation working. The runner reads each plant back as the
-   principal that made it, and a probe whose *every* plant vanished leaves
-   `probe_versions`, so this rule catches it. Class 11 never had the hole, because it
+   principal that made it, and a probe whose *every* plant vanished **and which
+   surfaced no confirmed finding** leaves `probe_versions`, so this rule catches it.
+   A leak the probe did see is never suppressed for want of its own setup: the same
+   reads that miss a plant also surface the corpus the seeding placed, so "it asked
+   the stack nothing" is false the moment anything was confirmed. Class 11 never had the hole, because it
    counts markers **before** acting. (Reading a write back is the adapter's contract, so
    there is no retry here: Pinecone and Azure AI Search poll, OpenSearch refreshes,
    Qdrant waits, Milvus reads `Strong`. `model.train` is exempt — asking a LoRA to
@@ -201,7 +204,9 @@ one:
 - **plants that never landed** — the backend acknowledged some of this class's
   planted writes and did not serve them back (`RunMetrics.unconfirmed_plants`), so
   the class was graded on less setup than it planned. A probe whose *every* plant
-  vanished is `NOT_COVERED` under rule 1 instead; this note is the partial case.
+  vanished and confirmed nothing is `NOT_COVERED` under rule 1 instead; this note is
+  the partial case, and the case where every plant vanished but a leak was confirmed
+  anyway.
 
 ## The catalog and its weights
 
@@ -309,9 +314,12 @@ into it:
 
 A class is uncovered when the configured stack cannot satisfy its probe (no adapter
 reports the capability it needs, so it is skipped rather than run into a mid-probe
-error), when it was not in the run's suite, or when the substrate left its probe no step
-to take — its markers were foreign to no principal, so there was nothing to plant that
-anyone could try to steal.
+error), when the canary the probe reads for cannot reach the configured backend (the
+`mcp` and `agent` slots hold ids Sectum invents and have no write primitive, so only
+the built-in fakes ever receive them; the live `rag` pipeline is asked directly and
+skipped only if it cannot see what was seeded), when it was not in the run's suite, or
+when the substrate left its probe no step to take — its markers were foreign to no
+principal, so there was nothing to plant that anyone could try to steal.
 
 That last reason is **per class**, and the substrate refusal above cannot stand in for it:
 the refusal asks whether *some* marker is foreign to *somebody*, so a substrate can

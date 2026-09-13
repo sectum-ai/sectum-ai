@@ -104,9 +104,13 @@ deployments.
   `FakeModel` with the deliberately-leaky `prefix_cache=true` knob.
   Real engagements point at a self-hosted server via the
   `ModelAdapter` interface: the live `vllm` and `tgi` kinds are the
-  serving-only adapters built for this probe, and `huggingface` covers
-  the local PEFT case. A hosted API (OpenAI / Anthropic) exposes no
-  prefix cache to time, so there is no adapter for one.
+  serving-only adapters built for this probe. `huggingface` covers the
+  local PEFT case for *other* classes but not this one: HF + PEFT loads
+  per tenant and declares no shared prefix cache, so the probe runs
+  against it and can find nothing by construction — its `PASS` is a
+  property of the deployment, not a measurement. A hosted API (OpenAI /
+  Anthropic) exposes no prefix cache to time, so there is no adapter for
+  one.
 - **A statistical baseline against load.** A noisy production
   endpoint may swamp the signal even when the cache is leaky; the
   probe's 24 trials + (p < 0.01 / ordered tenant pairs, Bonferroni; d ≥ 0.8) gate is calibrated for the

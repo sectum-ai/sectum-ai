@@ -53,8 +53,8 @@ point: it is rejected at config load, since v0.10.0.)
 | Semantic-cache contamination (4) | cache | Redis |
 | KV-cache timing side channel (5) | model | a self-hosted model (vLLM/TGI/HF) — real signal needs a GPU |
 | Embedding inversion (6) | vector store | the built-in fake only — every live backend the CLI builds declares no semantic retrieval, so this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
-| Agent tool-call hijack (7) | MCP | an MCP server (`stdio`/`http`) |
-| Agent-framework hijack (7) | agent | LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / a generic `http` agent endpoint |
+| Agent tool-call hijack (7) | MCP | the built-in fake only — the resource key is one Sectum invents and the MCP protocol has no write primitive, so against a live server this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
+| Agent-framework hijack (7) | agent | the built-in fake only — the lookup target is one Sectum invents and no agent adapter has a write primitive, so against a live LangGraph / CrewAI / AutoGen / OpenAI-Assistants / Anthropic-tooluse / `http` agent this reads `NOT_COVERED` (see [Known coverage gaps](#known-coverage-gaps)) |
 | Persistent memory contamination (8) | memory | Redis (in CI) or mem0 (opt-in live); the fake offline |
 | LoRA cross-tenant influence (9) | model | a self-hosted model that trains on tenant data — per-tenant adapters (HF + PEFT), or shared weights, which is the posture the probe exists to catch |
 | IKEA-style benign extraction (10) | vector store | any live vector backend |
@@ -66,7 +66,7 @@ point: it is rejected at config load, since v0.10.0.)
 
 A typical multi-tenant RAG product — **pgvector + LangChain + Langfuse + Redis** with
 an **OpenAI embedding model**, a **self-hosted vLLM** for generation, and **CrewAI**
-agents — runs Classes **1, 2, 3, 4, 7, 8, 10, 11** and the **A3 DSR** check out of
+agents — runs Classes **1, 2, 3, 4, 8, 10, 11** and the **A3 DSR** check out of
 the box (Class 8 against a Redis-backed agent memory), plus **Class 5** (with a GPU)
 and **Class 9** (once a per-tenant-LoRA model is configured — the example's serving-only
 vLLM covers Class 5 but not Class 9). **Class 6 is not in that list**: pgvector, like
@@ -107,6 +107,17 @@ scanning adapter yet, so it is out of scope, not fake; see the
   still runs them, which is what the walkthroughs demonstrate and what they say they
   demonstrate. Wiring a real embedder into the vector slot is the natural next step;
   the SDK can already do it by constructing the adapter directly.
+- **Class 7 does not run against a live MCP server or a live agent.** Both halves of
+  the class read back something *Sectum planted*: an MCP resource under a key it
+  invents, and an agent lookup for an id it invents. Neither the MCP protocol nor
+  any agent adapter has a write primitive, so Sectum seeds those slots only for its
+  own in-memory fakes and a live backend never receives the canary. Rather than
+  query a backend that cannot hold the answer and grade the empty result `PASS`,
+  the probe is skipped and the class reads `NOT_COVERED` — the same honest verdict,
+  and the same shape, as the Class 6/13 gap above. Configuring a live MCP server or
+  agent framework therefore *removes* Class 7 from a run rather than adding it. The
+  `rag` slot is the one that can be asked: Sectum queries the live pipeline for the
+  canary it seeded and skips only a pipeline that cannot see it.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests

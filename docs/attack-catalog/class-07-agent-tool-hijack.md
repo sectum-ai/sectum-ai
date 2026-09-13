@@ -44,10 +44,15 @@ built-in `lookup` tool can fetch. From every other *tenant's* session the
 probe issues `agent.run(tenant, "lookup <marker_id>")` and, separately,
 `agent.run(tenant, "lookup <marker_id> token=<owner-hex>")` — the same
 confused-deputy + token-passthrough pair, but at the agent layer. The same
-probe runs cleanly against every shipped v1 agent backend (`fake` / `http`
-/ `langgraph` / `autogen` / `crewai` / `openai-assistants` /
-`anthropic-tooluse`), so the attestation pack speaks the same language to a
-DPO regardless of which framework the customer ran. The agent contract carries
+probe drives every shipped v1 agent backend (`fake` / `http` / `langgraph` /
+`autogen` / `crewai` / `openai-assistants` / `anthropic-tooluse`) through one
+contract, so the attestation pack speaks the same language to a DPO regardless
+of which framework the customer ran. In a `sectum-ai probe` run, though, the
+lookup target is an id **Sectum invents** and no agent adapter has a write
+primitive, so only the built-in fake ever holds it: against a live agent the
+probe is skipped and Class 7 reads `NOT_COVERED` rather than being graded on an
+empty answer. The same is true of the MCP end. Driving a live backend is an SDK
+path, where the caller provisions the resource itself. The agent contract carries
 no user identity (`run(tenant, task)`), so this end verifies the tenant boundary
 only; the MCP end, whose `call_tool` carries the user, verifies both. A
 user-level step here would run as the tenant and be judged as the user — a

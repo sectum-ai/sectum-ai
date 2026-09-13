@@ -40,9 +40,10 @@ distinguishable from one that exercised it and found it clean; `diff` and
 `baseline --compare` report the difference as `[BOUNDARY LOST]`.
 `unconfirmed_plants` (probe id → the plants the backend acknowledged and did not
 serve back — a zero TTL, a read-only replica, a quota) does the same for a
-*planting* probe: a probe whose every plant vanished asked the stack nothing and
-its class is `NOT_COVERED`, while one that lost only some still runs and still
-grades, on less setup than it planned. `diff` reports that as `[PLANTS LOST]`.
+*planting* probe: a probe whose every plant vanished and which confirmed nothing
+asked the stack nothing and its class is `NOT_COVERED`, while one that lost only
+some — or that confirmed a leak regardless — still runs and still grades, on less
+setup than it planned. `diff` reports that as `[PLANTS LOST]`.
 The prior **0.6.0** added `surface_provenance` to `RunResult` — a per-surface record of whether each
 adapter family the run exercised was a live backend or Sectum's built-in
 in-memory fake. Sectum ships a fake for every family and resolves an omitted (or
