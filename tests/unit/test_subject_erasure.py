@@ -1120,3 +1120,31 @@ def test_every_surface_keeps_the_residual_it_saw_before_a_later_read_failed() ->
         # ...and what it could not read is still declared unverifiable, with the
         # backend's own words: a residual must not swallow the coverage gap.
         assert scanned.unverifiable_after >= 1, (surface, scanned)
+
+
+def test_markers_ruled_absent_are_not_counted_as_a_coverage_gap() -> None:
+    # Two errors in one row. `unverifiable_after` subtracted only what was FOUND,
+    # so a scan that ruled five ids absent and then failed on the sixth reported
+    # "6 marker(s) were neither found nor ruled out" - counting its own five clean
+    # answers as a gap. And the row left `baseline_observed` at its default True,
+    # where every other A3 row sets it False, so the CLI printed the Class 11
+    # wording: "0 markers before, 1 after", a measurement that cannot happen.
+    class _SixthRaises(FakeCache):
+        def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+            if key.endswith("-6"):
+                raise AdapterError("redis: connection reset")
+            return None  # the first five are positively ABSENT
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    manifest = SubjectManifest(
+        subject_ref="s",
+        records={Surface.SEMANTIC_CACHE: tuple(f"k-{index}" for index in range(1, 7))},
+    )
+    report = SubjectErasureProbe(cache=_SixthRaises()).verify(tenant, manifest)
+    surface = next(s for s in report.surfaces if s.surface is Surface.SEMANTIC_CACHE)
+
+    assert surface.unverifiable_after == 1, surface
+    assert surface.markers_before == 6, surface
+    assert not surface.baseline_observed, "the A3 path establishes no baseline"
+    assert surface.verdict == "NOT VERIFIED", surface.verdict

@@ -21,11 +21,14 @@ from sectum_ai.probes.detection import (
     markers_naming_entity,
 )
 from sectum_ai.spec import (
+    AccessOutcome,
     FindingStatus,
     GroundTruthManifest,
     Marker,
     MarkerType,
+    Observation,
     Principal,
+    ProbeStep,
     Scenario,
     Severity,
     Substrate,
@@ -1301,3 +1304,58 @@ def test_the_quoted_proof_of_a_leak_has_to_be_about_that_leak() -> None:
     ).detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
     kept = next(f for f in tied if f.marker_id == "e-Project Onyx-00002")
     assert kept.evidence_span == "Onyx-00002 surfaced"
+
+
+def test_a_confirmed_leak_never_quotes_text_the_run_did_not_see() -> None:
+    # `present` confirms a marker whose tokens appear in order with one interposed
+    # word, so for "Project (internal) Onyx-00002" the plaintext "Project
+    # Onyx-00002" is NOT a substring of the observation - and quoting it put a
+    # phrase in the signed pack that the run never saw. That is the defect
+    # `quotable` was narrowed to prevent, one branch over, introduced by the fix
+    # that split confirmation from verbatim-ness.
+    substrate = _entity_substrate("Project Onyx-00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), _DecliningJudge(), 0.99)
+
+    for text, must_be_substring in (
+        ("leak: Project Onyx-00002 surfaced", True),
+        ("leak: Project (internal) Onyx-00002 surfaced", False),
+    ):
+        findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+        [finding] = [f for f in findings if f.marker_id == "e-Project Onyx-00002"]
+        assert finding.status is FindingStatus.CONFIRMED, text
+        span = finding.evidence_span or ""
+        assert (span in text) is must_be_substring, (text, span)
+        if not must_be_substring:
+            # It says what was matched instead of showing something that was not.
+            assert "interposed word" in span, span
+            assert "Project Onyx-00002" in span, span
+
+
+def test_the_200_empty_caveat_defaults_to_its_probes_own_techniques() -> None:
+    # `atlas=self.atlas_techniques if atlas is None else atlas` could be reverted
+    # to a bare `()` default - stripping the stamp from every 200-empty caveat of
+    # the three probes that do not narrow - with the whole suite green. The
+    # narrowing test covers the CALLER that passes a value; nothing covered the
+    # default for the callers that do not.
+    substrate = _entity_substrate("Project Onyx-00002")
+    marker = substrate.manifest.markers[0]
+    from sectum_ai.probes import TenantBoundaryProbe
+
+    probe = TenantBoundaryProbe()
+    step = ProbeStep(
+        step_id="s",
+        probe_id=probe.id,
+        actor_tenant_id=_TA,
+        action="vector.fetch",
+        payload={"doc_id": "d"},
+    )
+    observation = Observation(
+        step_id="s",
+        surface=Surface.VECTOR_DB,
+        raw_response="",
+        access_outcome=AccessOutcome.EMPTY,
+    )
+    note = probe._empty_ambiguity_finding(step, observation, substrate, marker=marker)
+    assert note is not None
+    assert note.atlas == probe.atlas_techniques, note.atlas
+    assert note.atlas, "a caveat with no technique at all tells an auditor nothing"

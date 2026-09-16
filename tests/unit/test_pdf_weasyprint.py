@@ -242,3 +242,18 @@ def test_the_summary_counts_confirmed_findings_by_what_they_are() -> None:
     assert "live-surface attribution not recorded" in confirmed_by_kind(unrecorded)
     html = build_audit_html(pack.model_copy(update={"run_result": run}))
     assert "Confirmed findings" in html and "Confirmed cross-tenant findings" not in html
+
+
+def test_the_weasyprint_engine_renders_the_anchor_statement() -> None:
+    # The anchor paragraph was pinned by nothing on this engine: it could be
+    # deleted from `build_audit_html` with the whole suite green, and the two
+    # engines "render the same digest-stable content" is a claim the reportlab
+    # test alone cannot make. An unanchored pack's PDF has to say so on both.
+    from sectum_ai.evidence.pdf import anchor_statement
+
+    pack = _pack()
+    html = build_audit_html(pack)
+    from html import escape
+
+    assert escape(anchor_statement(pack)) in html, "the anchor statement must be rendered"
+    assert "Independent anchor" in html, html[:200]

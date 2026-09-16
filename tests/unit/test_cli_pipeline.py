@@ -778,7 +778,9 @@ def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) 
     # The rendered numbers ARE the scorecard, and docs/scorecard.md reproduces this block
     # verbatim. Greping only for the letter let a swapped covered/total or
     # weighted/coverage print a plausible, wrong posture, so pin the exact strings.
-    assert "10/11 classes covered" in result.output  # Class 13 needs a multimodal adapter
+    assert (
+        "weighted coverage 0.88 over 10/11 classes" in result.output
+    )  # Class 13 needs a multimodal adapter
     assert "weighted 0.00 over the covered classes; coverage 0.88." in result.output
 
 
@@ -1140,8 +1142,8 @@ def test_score_explicit_workdir_overrides_a_config_value(tmp_path: Path) -> None
 def test_score_renders_a_row_per_class_with_its_verdict_and_band(tmp_path: Path) -> None:
     # The breakdown IS the evidence behind the letter, and only the letter was asserted.
     # Dropping every failing row, or rendering every band as a constant, left GRADE F,
-    # "10/11 classes covered" and the capped-by line all intact - a scorecard that reads
-    # whole while the evidence under it is gone.
+    # the confidence header and the capped-by line all intact - a scorecard that
+    # reads whole while the evidence under it is gone.
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 0
@@ -1182,7 +1184,7 @@ def test_score_renders_the_confidence_of_a_thin_run_as_low(tmp_path: Path) -> No
     assert result.exit_code == 0
     assert "GRADE A" in result.output  # the letter is clean...
     assert "confidence: low" in result.output  # ...and says how little it rests on
-    assert "1/11 classes covered" in result.output
+    assert "weighted coverage 0.12 over 1/11 classes" in result.output
 
 
 def test_score_names_the_pack_when_it_graded_the_pack(tmp_path: Path) -> None:

@@ -3950,10 +3950,16 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
 
 def _render_scorecard(card: IsolationScore, run: RunResult, source: Path) -> None:
     """Render the scorecard: the letter, its confidence, and every class - covered or not."""
+    # The confidence is derived from WEIGHTED coverage (`_confidence_for`), not
+    # from the class count - so offering the count as its basis stated a
+    # denominator that is not the one used: "high - 10/11 classes covered" (0.909)
+    # where the figure behind the word was 0.878. They rarely disagree across a
+    # threshold, which is what kept it unnoticed; the count still belongs on the
+    # line, as what it is.
     typer.echo(
         f"Multi-tenant isolation: GRADE {card.grade.value}"
-        f"   (confidence: {card.confidence.value} - "
-        f"{card.classes_covered}/{card.classes_total} classes covered)"
+        f"   (confidence: {card.confidence.value} - weighted coverage "
+        f"{card.coverage:.2f} over {card.classes_covered}/{card.classes_total} classes)"
     )
     # Name the graded record: a letter with no provenance invites grading the wrong run.
     # run_id is the record's own claim about itself, so it is escaped, not trusted - and

@@ -62,6 +62,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A contained A3 scan no longer counts its own clean answers as a coverage gap,
+  or reports an impossible measurement.** `unverifiable_after` subtracted only what
+  was *found*, so a scan that ruled five ids absent and then failed on the sixth
+  reported "6 marker(s) were neither found nor ruled out". The same row also left
+  `baseline_observed` at its default, where every other A3 row sets it `False`, so
+  the CLI printed the Class 11 wording — "0 markers before, 1 after".
+- **A confirmed leak never quotes text the run did not see.** `present` confirms a
+  marker whose tokens appear in order with one interposed word, so for `Project
+  (internal) Onyx-00002` the plaintext is not a substring of the observation — and
+  quoting it put a phrase in the signed pack that the run never saw, which is the
+  defect `quotable` was narrowed to prevent one branch over.
+- **The scorecard header states the basis it actually uses.** `confidence` is
+  derived from *weighted* coverage, and the header offered the class count as its
+  basis: "high - 10/11 classes covered" (0.909) where the figure behind the word
+  was 0.878.
+- Two behaviours that could be reverted with the whole suite green now have tests:
+  the 200-empty caveat's default ATLAS stamp (revertable to `()`, stripping it from
+  three probes' caveats) and the weasyprint engine's anchor paragraph.
+
+
 - **A live cache and agent memory are seeded, so their erasure can be verified.**
   The search index, eval set and backup seed on any backend; the cache and memory
   were `isinstance(..., Fake…)`-guarded, though `set` and `remember` *are* write

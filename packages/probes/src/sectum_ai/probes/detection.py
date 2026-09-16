@@ -918,7 +918,26 @@ class DetectionPipeline:
                 # confirmed leak always shows the auditor text that was really
                 # observed: the judge's quotation when it is genuinely there
                 # (richer context), otherwise the marker plaintext.
-                evidence = leak.evidence_span if judged and quotable else marker.plaintext
+                #
+                # Except where the plaintext ISN'T there. `present` confirms a
+                # marker whose tokens appear in order with one interposed word, so
+                # for "Project (internal) Onyx-00002" the plaintext "Project
+                # Onyx-00002" is not a substring of the observation - and quoting
+                # it puts a phrase in the signed pack that the run never saw,
+                # which is the defect `quotable` was just narrowed to prevent, one
+                # branch over. Recovering the real substring would need token
+                # offsets `tokenize` does not carry, so this says what was matched
+                # instead of showing something that was not.
+                if judged and quotable:
+                    evidence = leak.evidence_span
+                elif verbatim:
+                    evidence = marker.plaintext
+                else:
+                    evidence = (
+                        f"the foreign marker {marker.plaintext!r} appears in the "
+                        "observation with an interposed word, so it is present but not "
+                        "a verbatim substring"
+                    )
             elif leak.leak:
                 evidence = (
                     "judge affirmed a leak but its cited evidence is not traceable "
