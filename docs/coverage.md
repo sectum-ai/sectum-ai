@@ -123,6 +123,15 @@ scanning adapter yet, so it is out of scope, not fake; see the
   serves none of it back — a quota, the wrong namespace, a read-side ACL, an index
   that never settles — therefore reports Classes 1, 2, 3, 6 and 10 `NOT_COVERED`
   instead of grading them `PASS` off an empty index.
+- **LangSmith's erasure is attested at the project row, not at the runs.** Its
+  listing is project-scoped, so `delete` removes the tenant's project and the
+  post-erasure scan can only confirm the project is gone — verified, and refused
+  if the backend accepts the delete without applying it. What no call can
+  establish through this API is whether LangSmith retains the runs server-side
+  after the row disappears: there is nothing left to query. The Langfuse sibling
+  deletes traces *within* a project and polls those traces, so it does not have
+  this limit. Treat a LangSmith `ERASED` as "the project the tenant's traces lived
+  in is gone", which is what the API can show.
 - **Some live adapters are opt-in (credential- or endpoint-gated), not run in CI.** The
   eval set (**LangSmith Datasets**) and backup (**S3** / **GCS**) adapters — like the
   hosted vector stores (Pinecone, Azure AI Search) — are exercised by opt-in live tests

@@ -2,13 +2,41 @@
 
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from uuid import UUID
 
 import pytest
 from typer.testing import CliRunner
 
+from sectum_ai.adapters.base import CacheAdapter, MemoryAdapter
 from sectum_ai.cli.app import app
 
 _runner = CliRunner()
+
+
+class _LiveCacheBase(CacheAdapter):
+    """A cache that is NOT a `FakeCache` - the shape the isinstance guard excluded."""
+
+    def __init__(self) -> None:
+        super().__init__(name="live-cache")
+        self._store: dict[tuple[UUID, str], str] = {}
+
+    def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+        return self._store.get((tenant, key))
+
+    def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+        self._store[(tenant, key)] = value
+
+    def keys(self) -> list[str]:
+        return [key for _tenant, key in self._store]
+
+    def values(self, tenant: UUID) -> list[str]:
+        return [v for (owner, _key), v in self._store.items() if owner == tenant]
+
+    def delete(self, tenant: UUID) -> None:
+        for owner, key in list(self._store):
+            if owner == tenant:
+                del self._store[(owner, key)]
 
 
 def test_erasure_is_verified_against_a_hard_deleting_store(tmp_path: Path) -> None:
@@ -527,3 +555,78 @@ def test_an_inconclusive_surface_reports_the_backend_s_own_reason(tmp_path: Path
     assert "its page cap" in result.output, result.output
     assert "full similarity page" not in result.output
     assert result.exit_code == 3
+
+
+def test_a_live_cache_and_memory_receive_the_canary(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The search index, eval set and backup seed on ANY backend; the cache and
+    # memory were `isinstance(..., Fake...)`-guarded, though `set` and `remember`
+    # ARE write primitives on their protocols. So a customer who configured a live
+    # Redis or mem0 got a permanent NOT_COVERED on those two surfaces however well
+    # their erasure worked - and `_warn_on_synthetic_surfaces` warns only about the
+    # opposite case, so nothing said so.
+    #
+    # Asserted at the seeding call, because the guard was an isinstance test: a
+    # subclass that only reports itself live is exactly the shape it excluded.
+    # NOT subclasses of the fakes: the guard was `isinstance(..., FakeCache)`, and
+    # a subclass still satisfies it - so a double built that way passes whether the
+    # guard is there or not, which is how this test first failed to discriminate.
+    # A real live adapter (RedisCache, Mem0Memory) is not a FakeCache either.
+    seeded = {"cache": 0, "memory": 0}
+
+    class _LiveCache(_LiveCacheBase):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            seeded["cache"] += 1
+            super().set(tenant, key, value, user=user)
+
+    class _LiveMemory(MemoryAdapter):
+        def __init__(self) -> None:
+            super().__init__(name="live-memory")
+            self._entries: dict[UUID, list[str]] = {}
+
+        def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+            seeded["memory"] += 1
+            self._entries.setdefault(tenant, []).append(text)
+
+        def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+            return list(self._entries.get(tenant, ()))
+
+        def delete(self, tenant: UUID) -> None:
+            self._entries.pop(tenant, None)
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_cache", lambda _cfg: _LiveCache())
+    monkeypatch.setattr("sectum_ai.cli.app.build_memory", lambda _cfg: _LiveMemory())
+
+    with TemporaryDirectory() as directory:
+        workdir = Path(directory)
+        _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
+    assert result.exit_code == 0, result.output
+    assert seeded["cache"] > 0, "a live cache must receive the canary"
+    assert seeded["memory"] > 0, "a live memory must receive the canary"
+
+
+def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The seeding runs BEFORE the probe, so an exception there aborts the whole
+    # command and loses every other surface's verdict - the harm
+    # `_erase_surface`'s containment prevents one step later. An unseeded surface
+    # has no markers before, so it attests nothing and reads NOT_COVERED.
+    class _RefusesTheWrite(_LiveCacheBase):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            raise ConnectionError("redis: connection refused")
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_cache", lambda _cfg: _RefusesTheWrite())
+    with TemporaryDirectory() as directory:
+        workdir = Path(directory)
+        _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
+    # Exit 3, not a crash: the run completed and could not establish ONE surface,
+    # which is what ERASURE INCONCLUSIVE means. Before this, the seeding raised
+    # and the command died with no report at all.
+    assert result.exit_code == 3, result.output
+    assert "ERASURE INCONCLUSIVE: no baseline on semantic_cache" in result.output, result.output
+    assert "could not seed the semantic_cache canary" in result.output, result.output
+    assert "connection refused" in result.output, result.output
+    # ...and every other surface still got its verdict.
+    assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output

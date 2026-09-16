@@ -11,8 +11,11 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
 from sectum_ai.adapters.observability.langsmith import LangSmithObservability
+from sectum_ai.spec import AdapterError
 
 _PREFIX = "sectum-ai"
 _TENANT_A = UUID(int=0xA)
@@ -161,3 +164,32 @@ def test_a_marker_in_the_run_metadata_is_found() -> None:
             SimpleNamespace(id=f"r-{index}", name="n", inputs={}, outputs={}, **extra_fields),
         )
         assert adapter.search_traces(_TENANT_A, marker), f"a marker in `{field}` must be found"
+
+
+def test_delete_confirms_the_project_is_gone_before_returning(monkeypatch: Any) -> None:
+    # Every other trace backend verifies its own purge: Langfuse polls until the
+    # traces are no longer listed and RAISES on the timeout, with a comment
+    # recording that "returning silently on the timeout let the re-scan confirm a
+    # residual"; Phoenix and OTel re-check on a 404. This one returned the moment
+    # the API accepted the call - and `search_traces` then reports absence from the
+    # project row alone, without reading a run, so a delete the backend accepted
+    # and did not apply read back as `TRACING: ERASED`.
+    monkeypatch.setattr("sectum_ai.adapters.observability.langsmith.time.sleep", lambda _: None)
+
+    class _IgnoresTheDelete(_FakeLangSmith):
+        def delete_project(self, *, project_name: str) -> None:
+            return None  # accepted, not applied
+
+    client = _IgnoresTheDelete()
+    _seed(client, _TENANT_A, "a trace mentioning SECTUM-CANARY-AAA")
+    adapter = LangSmithObservability(client)
+    with pytest.raises(AdapterError, match="purge cannot be confirmed"):
+        adapter.delete(_TENANT_A)
+
+    # A backend that applies the delete returns cleanly, and a tenant that never
+    # accumulated traces stays a no-op.
+    working = _FakeLangSmith()
+    _seed(working, _TENANT_A, "a trace mentioning SECTUM-CANARY-AAA")
+    LangSmithObservability(working).delete(_TENANT_A)
+    assert LangSmithObservability(working).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
+    LangSmithObservability(_FakeLangSmith()).delete(_TENANT_A)

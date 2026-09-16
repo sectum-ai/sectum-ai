@@ -1546,6 +1546,25 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     )
 
 
+def _seed_erasure_surface(
+    unseedable: dict[Surface, str], surface: Surface, write: Callable[[], None]
+) -> None:
+    """Plant one erasure canary, recording rather than raising when it will not take.
+
+    The seeding runs before the probe, so an exception here aborts the whole
+    command - losing every other surface's verdict, which is exactly what
+    `_erase_surface`'s containment exists to prevent one step later. A backend
+    that refuses the write leaves its surface unseeded, and unseeded is
+    NOT_COVERED: the probe finds no markers before, so it attests nothing.
+    """
+    if surface in unseedable:
+        return
+    try:
+        write()
+    except Exception as error:
+        unseedable[surface] = str(error)
+
+
 def _resolve_timestamper(evidence: EvidenceConfig, tsa_override: str | None) -> Timestamper | None:
     """Resolve the configured timestamper, or ``None`` to use the local default.
 
@@ -3108,6 +3127,7 @@ def erasure(
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         store.upsert(tenant.tenant_id, documents)
+    unseedable: dict[Surface, str] = {}
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue
@@ -3117,20 +3137,52 @@ def erasure(
                 "sectum-ai-erasure",
                 f"trace recording marker {marker.plaintext}",
             )
-        if isinstance(memory, FakeMemory):
-            memory.remember(marker.owner_tenant_id, f"memory note recording {marker.plaintext}")
-        if isinstance(cache, FakeCache):
-            cache.set(
+        # Seeded whatever the backend, like the search index, eval set and backup
+        # three lines down - `remember` and `set` ARE write primitives on their
+        # protocols, so a live Redis or mem0 can be seeded and then verified. The
+        # `isinstance` guard here was the reason a customer who configured them got
+        # a permanent NOT_COVERED on those two surfaces however well their erasure
+        # worked, and `_warn_on_synthetic_surfaces` warns only about the opposite
+        # case, so nothing said so.
+        #
+        # Contained per slot: this runs BEFORE the probe, so a live backend that
+        # refuses the write would abort the whole command rather than leave one
+        # surface uncovered - the same harm `_erase_surface`'s containment exists
+        # to prevent, one step earlier.
+        _seed_erasure_surface(
+            unseedable,
+            Surface.AGENT_MEMORY,
+            functools.partial(
+                memory.remember,
+                marker.owner_tenant_id,
+                f"memory note recording {marker.plaintext}",
+            ),
+        )
+        _seed_erasure_surface(
+            unseedable,
+            Surface.SEMANTIC_CACHE,
+            functools.partial(
+                cache.set,
                 marker.owner_tenant_id,
                 f"sectum-ai-erasure-{marker.marker_id}",
                 f"cached answer mentioning {marker.plaintext}",
-            )
+            ),
+        )
         if isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
         search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
         evalset.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
         backup.add(marker.owner_tenant_id, f"backup snapshot mentioning {marker.plaintext}")
 
+    for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
+        # Said out loud: an unseeded surface has no markers before, so the probe
+        # attests nothing there and the coverage block reads NOT_COVERED. Silent,
+        # that is indistinguishable from a surface nobody configured.
+        typer.echo(
+            f"warning: could not seed the {unseeded.value} canary, so that surface "
+            f"reads NOT_COVERED rather than erased: {untrusted(reason)}",
+            err=True,
+        )
     started = datetime.now(UTC)
     report = ErasureProbe(
         substrate,

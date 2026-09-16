@@ -62,6 +62,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A live cache and agent memory are seeded, so their erasure can be verified.**
+  The search index, eval set and backup seed on any backend; the cache and memory
+  were `isinstance(..., Fake…)`-guarded, though `set` and `remember` *are* write
+  primitives on their protocols. A customer who configured a live Redis or mem0
+  therefore got a permanent `NOT_COVERED` on two of the seven surfaces however
+  well their erasure worked — and `_warn_on_synthetic_surfaces` warns only about
+  the opposite case, so nothing said so. The model stays guarded deliberately:
+  `train_adapter` on a live HuggingFace backend fits a real LoRA, which is not a
+  side effect an erasure scan should take on its own. Observability has no write
+  primitive at all.
+- **A backend that refuses the canary costs only its own surface.** The seeding
+  runs *before* the probe, so an exception there aborted the whole command and
+  lost every other surface's verdict — the harm `_erase_surface`'s containment
+  prevents one step later. An unseeded surface is disclosed and reads
+  `NOT_COVERED`; the run ends `ERASURE INCONCLUSIVE` instead of crashing.
+- **LangSmith's `delete` confirms the purge.** Every other trace backend verifies
+  its own: Langfuse polls until the traces are gone and raises on the timeout,
+  with a comment recording that "returning silently on the timeout let the re-scan
+  confirm a residual". This returned the moment the API accepted the call, and
+  `search_traces` reports absence from the project row alone — so a delete the
+  backend accepted and did not apply read back as `TRACING: ERASED`. What no call
+  can establish through that API is whether runs are retained after the row
+  disappears; `docs/coverage.md` records the limit rather than papering over it.
+
+
 - **Class 10's headline counted turns where its label counts sequences.** The
   probe plans three benign follow-ups per (shared entity, principal) and its own
   criterion is "the extraction is confirmed when the **sequence** surfaces a
