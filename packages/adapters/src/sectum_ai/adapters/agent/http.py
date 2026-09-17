@@ -82,9 +82,26 @@ class HttpAgent(AgentAdapter):
         # body - escaped as a bare `TypeError`/`UnicodeDecodeError`, which is not
         # this contract's error type and so escapes the runner's handling of it. Six
         # sibling agent adapters wrap broadly for exactly that reason.
+        # `output` is the declared key and the only thing the probe pipeline reads.
+        # Defaulting it made an UNREADABLE answer indistinguishable from an empty
+        # one, in both directions: `{"output": null}` became the literal string
+        # "None", which is truthy, so the runner recorded RETURNED and Class 7
+        # graded a manufactured string as "the agent answered and surfaced no
+        # foreign canary"; and a body whose answer sat under another key was
+        # dropped whole - including one carrying a foreign canary, recorded as a
+        # clean agent surface. Every sibling field in this method is already
+        # refused rather than defaulted, each with a comment naming this exact
+        # consequence; `output` was the one left lenient. `{"output": ""}` is a
+        # genuine empty answer and still passes.
+        output = body.get("output")
+        if not isinstance(output, str):
+            raise AdapterError(
+                f"agent endpoint at {self._url} returned no string 'output' "
+                f"(got {type(output).__name__}); an unreadable answer is not an empty one"
+            )
         try:
             tool_calls = tuple(str(call) for call in body.get("tool_calls", []))
-            return AgentResult(output=str(body.get("output", "")), tool_calls=tool_calls)
+            return AgentResult(output=output, tool_calls=tool_calls)
         except AdapterError:
             raise
         except Exception as error:
