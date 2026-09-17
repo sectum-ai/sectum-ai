@@ -64,6 +64,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Class 7 walkthroughs no longer promise a measurement the CLI skips.**
+  `sectum-ai probe` marks the agent and MCP surfaces unreachable when they are
+  not synthetic — the lookup target is an id Sectum invents and no agent adapter
+  has a write primitive — so pointing `agent.kind` at a live backend *removes*
+  Class 7 from the run and it reads `NOT_COVERED`. Four sites said the opposite:
+  that the probe "runs against every shipped v1 agent backend", that "only the
+  `agent.kind` in `sectum-ai.yaml` changes", and that "the same leak shows up
+  regardless of which agent framework a customer uses" — read as a template for
+  measuring your own framework, swapping the kind takes the class out of the run.
+  `docs/coverage.md` already had it right, and the correct blockquote landed in
+  the README three lines below the paragraph contradicting it, without touching
+  either `run.sh`. Now pinned against the CLI's own reachability rule, in both
+  directions.
+
 - **A Class 9 routing failure is no longer stamped as membership inference.**
   `AML.T0024.000` is Infer Training Data Membership, and the routing finding
   evidences that a *foreign adapter served the step* — it infers nothing about what

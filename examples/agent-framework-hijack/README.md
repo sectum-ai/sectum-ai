@@ -101,7 +101,8 @@ the substrate, the canary detection pipeline, and the evidence chain
 are all adapter-agnostic. A leak detected with `FakeAgent` is a leak
 detected with `LangGraphAgent`, `AutoGenAgent`, `CrewAIAgent`,
 `OpenAIAssistantsAgent`, or `AnthropicToolUseAgent`; only the agent
-caller varies.
+caller varies. That is a statement about *detection*, not about what
+`sectum-ai probe` will run for you — see the note directly below.
 
 > **`sectum-ai probe` skips this probe against a live agent.** The lookup
 > target is an id Sectum *invents*, and no agent adapter has a write
