@@ -43,11 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the Class 5 tenant pairs whose effect sizes are bounds rather than
   measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
   minor-bump rule); regenerate them.
-- **Scorecard methodology `1.3`.** What counts as evidence is part of the
+- **Scorecard methodology `1.4`.** What counts as evidence is part of the
   methodology, not only the weights: `1.2` graded a class on findings whose
-  backing surface was the built-in fake, `1.3` withholds them. A run that graded
-  `F` under `1.2` can grade differently here, so the stamp moves with the rule
-  that a given version always recomputes to the same letter.
+  backing surface was the built-in fake, `1.3` withholds them, and `1.4` caps a
+  withheld class's letter at that class's band so the withholding cannot read as
+  a pass (the rule-7 entry below). A run that graded `F` under `1.2` can grade
+  differently here, so the stamp moves with the rule that a given version always
+  recomputes to the same letter. This release ships `1.4`.
 - **The Action's output strings changed.** The step summary now reads
   `Confirmed findings: N (on live surfaces: M)`, the console annotations read
   "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the

@@ -433,7 +433,25 @@ _ANCHOR_NONE: str = (
 )
 _ANCHOR_PRESENT: str = (
     "Independent anchor: {anchors}. The attested digest is bound to an anchor "
-    "outside this pack, so an edit cannot be covered up by re-stamping it."
+    "outside this pack. The tamper evidence is comparative, not self-contained: "
+    "an adversary can edit a pack, recompute the digest and obtain a fresh "
+    "anchor, and that pack will also verify. What gives it away is a reader "
+    "holding the originally published digest, or the Rekor log's history, "
+    "seeing that the re-anchored pack is a different, later record."
+)
+# Both branches above describe the ANCHOR. Whether anything was LIVE is a
+# separate axis, and `verify` gates on it separately - so an all-synthetic pack
+# exits 4 on [FAIL] run-scope no matter which branch it took. The unanchored
+# branch named one flag and stopped, which sent an auditor following the
+# document's own bolded instruction to a tamper-style failure on a genuine
+# artifact; the anchored branch named no flag at all. `docs/samples/README.md`
+# already named both. The note is appended to BOTH branches because the
+# condition belongs to neither.
+_SCOPE_FLAG_NOTE: str = (
+    " No surface in this run was live, so 'sectum-ai verify' also requires "
+    "--allow-synthetic to complete; without it the run exits 4 on [FAIL] "
+    "run-scope, which is a statement about what was in scope and not about "
+    "the content."
 )
 
 
@@ -786,9 +804,10 @@ def anchor_statement(pack: EvidencePack, *, anchors: tuple[bool, bool] | None = 
         )
         if present
     ]
+    scope_note = "" if live_surfaces(pack.run_result) else _SCOPE_FLAG_NOTE
     if not named:
-        return _ANCHOR_NONE
-    return _ANCHOR_PRESENT.format(anchors=" and ".join(named))
+        return _ANCHOR_NONE + scope_note
+    return _ANCHOR_PRESENT.format(anchors=" and ".join(named)) + scope_note
 
 
 def render_audit_pack(
