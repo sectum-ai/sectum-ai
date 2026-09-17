@@ -75,3 +75,21 @@ def test_the_page_states_as_many_pass_notes_as_the_scorer_can_attach() -> None:
     section = body[body.index("notes attach to") :].split("## ")[0]
     listed = len(re.findall(r"^- \*\*", section, re.MULTILINE))
     assert stated == listed == _pass_note_slots(), (stated, listed, _pass_note_slots())
+
+
+def test_the_changelog_announces_the_methodology_stamp_the_code_ships() -> None:
+    # The stamp is a recompute contract - a given version always recomputes to the
+    # same letter - so the release notes naming a superseded one tells a reader
+    # their `1.3` packs are current. `[Unreleased]` carried BOTH: a `Changed`
+    # headline announcing `1.3` and, 1100 lines below it, an entry announcing the
+    # `1.4` the code actually stamps. A count is cheap to falsify; so is a version.
+    changelog = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
+    text = changelog.read_text()
+    start = text.index("## [Unreleased]")
+    unreleased = text[start : text.index("\n## [", start + 1)]
+    shipped = score_module.METHODOLOGY_VERSION
+    headline = re.search(r"\*\*Scorecard methodology `([0-9.]+)`", unreleased)
+    assert headline, "the Unreleased section no longer announces a methodology stamp"
+    assert headline.group(1) == shipped, (
+        f"CHANGELOG announces methodology {headline.group(1)!r}; score.py stamps {shipped!r}"
+    )

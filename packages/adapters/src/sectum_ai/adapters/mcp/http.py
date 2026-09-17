@@ -32,9 +32,10 @@ from sectum_ai.spec import AdapterError
 class HttpMCPClient(MCPAdapter):
     """A Model Context Protocol client that speaks to a streamable HTTP server.
 
-    Scopes by tenant. ``user`` is accepted on ``invoke`` for interface
-    conformance (ADR-0008) but not yet enforced - per-user tool scoping is a
-    follow-on - so this adapter does not report ``USER_SCOPED``.
+    Scopes by tenant. ``user`` is forwarded to the server when ``user_argument``
+    names the tool argument that carries it (ADR-0008), and ``carries_user``
+    reports whether it does. Left unconfigured, the adapter transmits no user and
+    the runner DROPS user-level steps rather than running them as the tenant.
     """
 
     def __init__(

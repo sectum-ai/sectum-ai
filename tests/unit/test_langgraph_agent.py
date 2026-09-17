@@ -44,10 +44,14 @@ class _StubMessage:
 class _StubGraph:
     """A compiled-graph stand-in that records calls and returns a scripted state.
 
-    The ``thread_state`` map keys on each ``configurable.thread_id`` and
-    returns the matching final state, so a test can prove every ``run`` is
-    invoked with the tenant-scoped thread id - the isolation mechanism the
-    adapter is meant to provide.
+    The ``thread_state`` map keys on each ``configurable.thread_id`` so a test
+    can script a distinct reply per tenant and check the adapter propagated the
+    id. It does NOT stand in for tenant isolation: keying a dict on the thread
+    id makes this double behave like a graph compiled with a checkpointer, and
+    ``connect`` builds one with none - so a test that read the per-thread replies
+    as proof of state separation would be proving a property of the stub. What
+    the adapter is responsible for, and all these tests assert, is that the
+    tenant-scoped id reaches the runtime config.
     """
 
     thread_state: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -77,9 +81,13 @@ def test_langgraph_conforms_to_the_family_and_reports_tool_invocation() -> None:
     assert agent.supports(Capability.TOOL_INVOCATION)
 
 
-def test_langgraph_scopes_each_run_by_tenant_thread_id() -> None:
-    # Each tenant's hex id becomes its thread_id, so a graph wired with a
-    # per-thread checkpointer keeps the state in that tenant's namespace.
+def test_langgraph_propagates_the_tenant_scoped_thread_id() -> None:
+    # Each tenant's hex id becomes its thread_id. That is the whole of what this
+    # adapter can do: whether the id keeps anything apart is a property of the
+    # graph the caller compiled, and `connect` compiles one with no checkpointer,
+    # which persists nothing. The distinct replies below are scripted by the
+    # stub, not produced by isolation - asserted here only to show each run read
+    # the state for ITS OWN id.
     graph = _StubGraph(
         thread_state={
             _TENANT_A.hex: {"messages": [_human("hi A"), _ai("hello tenant A")]},
