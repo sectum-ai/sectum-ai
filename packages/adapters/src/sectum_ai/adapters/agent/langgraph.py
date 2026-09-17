@@ -11,8 +11,10 @@ mechanism the substrate verifies (the engineering spec, section 7, Class 7).
 tenant-scoped config, then extracts the final assistant text plus the **names
 of every tool the graph called during the run** by walking the messages in the
 returned state. Tool-call records are surfaced on every run - not just the
-final state - so the Class 7 (agent tool-call hijack) probes can see which
-tools fired (the engineering spec, section 7).
+final state - but the probe pipeline does NOT read them today:
+`Runner._agent_run` records the agent's TEXT output as the observation, so a
+hijacked call that returns no text is invisible to a `sectum-ai probe` run. The
+names are surfaced for SDK callers and the live integration tests.
 
 The ``langgraph`` package is imported only on the live ``connect`` path, so the
 adapter and its mock-backed contract test need no extra dependency. The live

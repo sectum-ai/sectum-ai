@@ -64,9 +64,9 @@ A mapping from adapter-family name to that family's configuration. Each entry
 takes a `kind` plus any backend-specific fields. A family that is omitted
 defaults to a plain (non-leaky) fake.
 
-The resolver reads eight families — `vector_store`, `cache`, `model`, `mcp`,
-`memory`, `rag`, `observability`, and `agent` — and `sectum-ai probe` drives all
-of them through the runner. `sectum-ai erasure` additionally consumes the three
+The resolver reads twelve families. `sectum-ai probe` drives eight of them
+through the runner — `vector_store`, `cache`, `model`, `mcp`, `memory`, `rag`,
+`observability`, and `agent`. `sectum-ai erasure` additionally consumes the three
 Class 11 erasure surfaces `search_index`, `eval_set`, and `backup` (documented
 below).
 

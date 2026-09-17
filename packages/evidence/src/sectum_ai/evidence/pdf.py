@@ -565,8 +565,9 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
         # never constructs one.
         detector = _DETECTOR_EXACT
     elif run.detection is None:
-        # A record from before `detection` was recorded. Say what is known - the
-        # first tier always runs - rather than assert the two that may not have.
+        # A record from before `detection` was recorded. Which tiers ran cannot be
+        # read off it, so say only what holds for any run - the manifest-grounding
+        # rule - rather than assert tiers that may not have run.
         detector = _DETECTOR_TAIL
     else:
         detector = _detector_tiers(

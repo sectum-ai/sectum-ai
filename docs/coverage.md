@@ -81,6 +81,16 @@ scanning adapter yet, so it is out of scope, not fake; see the
 
 ## Known coverage gaps
 
+- **Class 9's routing assertion never fires against a live model adapter.** It reads
+  `ModelAdapter.served_by`, whose base implementation returns `None` (unknown) and
+  which only the built-in fake overrides. `None` is never a finding, so on a live
+  adapter the assertion emits neither a finding nor a `NOT_COVERED` — unlike every
+  other gap on this page, it is *silent*, and the class reads as though routing had
+  been checked and found correct. The recall half is unaffected and does run against
+  a live HuggingFace adapter (which reports `per_tenant_adapter` or `shared_weights`),
+  so a clean Class 9 there is evidence about memorization only. Implementing
+  `served_by` on an adapter that can introspect its routing closes it.
+
 - **The subject-erasure vector fingerprint rarely reaches `ERASED` against a real
   ANN store.** The check reads a top-50 similarity page and treats a *full* page
   without the phrase as inconclusive, because a phrase still stored but ranked

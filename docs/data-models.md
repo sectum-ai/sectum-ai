@@ -74,9 +74,9 @@ The committed schemas are: `Scenario`, `Marker`, `CorpusDocument`,
 `GroundTruthManifest`, `Substrate`, `ProbeStep`, `Observation`, `Finding`,
 `RunMetrics`, `RunResult`, `EvidencePack`, `ControlMapping`, `ClassScore`, and
 `IsolationScore`. The nested models a parent embeds inline —
-`SyntheticTenantSpec`, `SyntheticUserSpec`, `SharedEntity`, and
-`PlantedLocation` — have no standalone schema file; they appear in their
-parent's `$defs`. `Principal` has neither: no model carries it as a field
+`SyntheticTenantSpec`, `SyntheticUserSpec`, `SharedEntity`,
+`PlantedLocation`, and `DetectionProvenance` — have no standalone schema file;
+they appear in their parent's `$defs`. `Principal` has neither: no model carries it as a field
 (`Substrate.principals()` returns it), so it appears in no schema at all.
 
 ## Canonical hashing

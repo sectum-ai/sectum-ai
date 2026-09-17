@@ -64,6 +64,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Class 9's routing assertion is disclosed as inert against every live model
+  adapter.** It reads `ModelAdapter.served_by`, whose base implementation returns
+  `None` and which only the built-in fake overrides — and `None` is never a
+  finding, so on a live adapter the assertion emits neither a finding nor a
+  `NOT_COVERED`. Unlike every other coverage gap it is *silent*: the class reads
+  as though routing had been checked and found correct. The recall half does run
+  live (a HuggingFace adapter reports `per_tenant_adapter`/`shared_weights`), so a
+  clean Class 9 there is evidence about memorization only. The class page also
+  named the method `served_by_tenant`; it is `served_by`.
+- **`AgentResult.tool_calls` is produced by all six agent adapters and read by
+  nothing.** `Runner._agent_run` builds the observation from `result.output`
+  alone, so a confused-deputy invocation that returns no text is invisible end to
+  end. Nine sites across the six adapters said the Class 7 probes "need to see
+  which tool was invoked — which is what `run()` surfaces"; they now say the names
+  serve SDK callers and the live integration tests.
+- **Two family enumerations that drifted when the family grew, now pinned.**
+  `docs/data-models.md` listed four inline-only nested models and
+  `DetectionProvenance` is a fifth; `labels.unaccounted_surfaces` counted "three
+  renderers" and the OSCAL export is a fourth. `docs/scorecard.md`'s counts were
+  already pinned, which is the whole of why they did not drift.
+- **Smaller corrections.** `docs/configuration.md` said the resolver reads eight
+  families; `ADAPTER_FAMILIES` has twelve. Both MCP client docstrings said `user`
+  is "accepted for interface conformance but not yet enforced" while `_invoke`
+  forwards it under `user_argument`. A comment in `pdf.py` said its branch asserts
+  "the first tier always runs"; the branch says nothing about tiers, which is the
+  honest choice for a record that cannot report them.
+
 - **The Class 7 walkthroughs no longer promise a measurement the CLI skips.**
   `sectum-ai probe` marks the agent and MCP surfaces unreachable when they are
   not synthetic — the lookup target is an id Sectum invents and no agent adapter

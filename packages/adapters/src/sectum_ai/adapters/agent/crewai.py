@@ -13,9 +13,11 @@ This adapter scopes per tenant by passing ``tenant_id=tenant.hex`` and
 tenant-aware routing read the id from their call arguments. The substrate
 verifies agent-level isolation (the engineering spec, section 7, Class 7): a
 tool call in tenant Y's session that resolves a resource in tenant X's scope
-is a confused-deputy leak, and the cross-tenant agent tool-call hijack probes
-need to see *which* tool was invoked in each tenant's session - which is what
-``run()`` surfaces in ``AgentResult.tool_calls``.
+is a confused-deputy leak. ``run()`` surfaces the name of every tool invoked
+in ``AgentResult.tool_calls`` - but the probe pipeline does NOT read it today:
+`Runner._agent_run` records the agent's TEXT output as the observation, so a
+hijacked call that returns no text is invisible to a `sectum-ai probe` run. The
+names are surfaced for SDK callers and the live integration tests.
 
 The ``crewai`` package is imported only on the live ``connect`` path, so the
 adapter and its mock-backed contract test need no extra dependency. The live
@@ -44,8 +46,9 @@ class CrewAIAgent(AgentAdapter):
     templated with ``{tenant_id}`` interpolate the value, and tools with
     tenant-aware routing read it from their call arguments. The crew's
     ``tasks_output`` is walked to surface every tool call the agents made
-    during the run - not just the final state - so the Class 7 probes can
-    see which tool fired in each tenant's session.
+    during the run - not just the final state. `Runner._agent_run` does not read
+    them, so they serve SDK callers and the live integration tests rather than a
+    `sectum-ai probe` run.
     """
 
     def __init__(
@@ -220,8 +223,9 @@ def _task_tool_calls(task_output: Any) -> Iterable[Any]:
 def _tool_calls(tasks_output: list[Any]) -> tuple[str, ...]:
     """Walk every task's tool-use trace and surface each tool call's name.
 
-    Returns the names in task order so a Class 7 probe sees which tool fired
-    on which task. A task with no tool use contributes nothing; a task with
+    Returns the names in task order, for an SDK caller reading the result - the
+    probe pipeline records the agent's text output and not these names. A task
+    with no tool use contributes nothing; a task with
     several tool calls contributes one entry per call.
     """
     names: list[str] = []
