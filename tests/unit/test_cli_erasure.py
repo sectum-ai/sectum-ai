@@ -774,3 +774,20 @@ def test_scope_restricts_the_seeding_and_not_only_the_scan(
         "semantic_cache",
         "agent_memory",
     }, writes
+
+
+def test_the_verified_verdict_names_its_subject_on_its_own_stream(tmp_path: Path) -> None:
+    # `_warn_on_synthetic_surfaces` says this on STDERR, so `sectum-ai erasure
+    # 2>/dev/null` - a DPO piping the verdict into a regulator ticket - read a
+    # clean eight-surface Article 17 attestation with nothing anywhere saying the
+    # eight backends were Sectum's own in-memory fakes. `probe` and `score` both
+    # put their subject on stdout; this is the wedge command, and it reused the
+    # word `scope` for coverage alone.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "ERASURE VERIFIED" in result.stdout, result.stdout
+    assert "SYNTHETIC" in result.stdout, (
+        "the verified verdict does not name its subject on the stream it is printed on"
+    )
+    assert "attests no production system" in result.stdout, result.stdout

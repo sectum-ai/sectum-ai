@@ -1525,6 +1525,43 @@ def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
     )
 
 
+def _erasure_provenance_lines(
+    report: ErasureReport, surface_provenance: dict[str, str]
+) -> list[str]:
+    """What the attested surfaces actually were, for the verdict's own stream.
+
+    Three-valued like every sibling disclosure (`verify`'s run-scope, `score`'s
+    scope line, the audit PDF's "Surface provenance: not recorded"): a record that
+    does not say is not a record that says live.
+    """
+    attested = [surface.surface.value for surface in report.surfaces]
+    if not attested:
+        return []
+    recorded = {name: surface_provenance.get(name) for name in attested}
+    unrecorded = sorted(name for name, value in recorded.items() if value is None)
+    synthetic = sorted(
+        name for name, value in recorded.items() if value == SurfaceProvenance.SYNTHETIC.value
+    )
+    if unrecorded:
+        return [
+            f"  provenance: not recorded for {', '.join(unrecorded)}, so whether this "
+            "attestation describes production systems cannot be established from it.",
+        ]
+    if not synthetic:
+        return []
+    if len(synthetic) == len(attested):
+        return [
+            "  provenance: every surface above is Sectum's built-in SYNTHETIC store - "
+            "this attests no production system, and is a demonstration rather than "
+            "an Article 17 attestation.",
+        ]
+    return [
+        f"  provenance: {', '.join(synthetic)} {'is' if len(synthetic) == 1 else 'are'} "
+        "Sectum's built-in SYNTHETIC store, not a configured backend; those surfaces "
+        "attest no production system.",
+    ]
+
+
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     """Tell the operator which surfaces this run never touched for real.
 
@@ -2875,6 +2912,14 @@ def _emit_erasure_attestation(
                 f"  scope: this attests {scanned} only; NOT_COVERED (not verified): "
                 f"{not_covered_names}.",
             )
+        # On STDOUT, beside the verdict. `_warn_on_synthetic_surfaces` says this on
+        # stderr, so `erasure ... 2>/dev/null` - a DPO piping the verdict into a
+        # ticket - read a clean eight-surface Article 17 attestation with nothing
+        # anywhere saying the eight backends were Sectum's own in-memory fakes.
+        # `probe` and `score` both put their subject on stdout; this is the wedge
+        # command, and it reused the word `scope` for coverage alone.
+        for line in _erasure_provenance_lines(report, surface_provenance):
+            typer.echo(line)
         return
     unverified = [
         surface.surface.value for surface in report.surfaces if surface.unverifiable_after

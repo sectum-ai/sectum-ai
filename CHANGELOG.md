@@ -64,6 +64,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`ERASURE VERIFIED` names its subject on its own stream.** The provenance
+  disclosure went to stderr, so `sectum-ai erasure 2>/dev/null` — a DPO piping
+  the verdict into a regulator ticket — read a clean eight-surface Article 17
+  attestation with nothing saying the eight backends were Sectum's own in-memory
+  fakes. `probe` and `score` both put their subject on stdout; this is the wedge
+  command, and it reused the word `scope` for coverage alone. Three-valued like
+  every sibling: a record that does not say is not a record that says live.
+- **The TGI backend pins `return_full_text=False`.** `huggingface_hub` declares
+  it `bool | None = None` and forwards it verbatim, so the server's default
+  applied — and on the compat route that default prepends the prompt for a
+  `text-generation` model. `ModelAdapter.infer` states the consequence: the
+  erasure probe prompts with the canary it scans for, so an echo would fabricate
+  a confirmed residual about data that was never stored. Both sibling backends
+  already pinned it.
+
 - **`--scope` now restricts the seeding, not only the scan.** It reached the
   probe and never the seeding loop, so a scoped engagement planted canaries
   across all eight erasure surfaces and then verified, erased and reported only
