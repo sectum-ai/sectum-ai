@@ -166,7 +166,13 @@ def _final_text(output: Any, tasks_output: list[Any]) -> str:
                 return last_raw
     if isinstance(output, str):
         return output
-    return str(output) if output is not None else ""
+    # NOT `str(output)`. A CrewOutput this function cannot read has no text, and
+    # stringifying it yields the object's repr - "<CrewOutput object at 0x...>" -
+    # which is truthy, so `Runner._agent_run` recorded AccessOutcome.RETURNED and
+    # Class 7 graded a memory address as the agent's answer. Both siblings return
+    # "" on the same shape and the runner records EMPTY. An unreadable answer is
+    # not an answer; the same rule `HttpAgent` enforces on its own `output` key.
+    return ""
 
 
 def _tool_call_name(call: Any) -> str | None:

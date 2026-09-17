@@ -288,7 +288,7 @@ def test_unreadable_index_stats_do_not_settle_the_delete_poll() -> None:
 
     from sectum_ai.spec import AdapterError
 
-    class _UnreadableStats(_FakeIndex):  # type: ignore[misc,name-defined]
+    class _UnreadableStats(_FakeIndex):
         def describe_index_stats(self) -> SimpleNamespace:
             # A list, not a mapping - no `.get`, and previously read as "empty".
             return SimpleNamespace(namespaces=["some", "other", "shape"])
@@ -305,7 +305,7 @@ def test_a_summary_without_a_vector_count_is_refused_too() -> None:
 
     from sectum_ai.spec import AdapterError
 
-    class _CountlessSummary(_FakeIndex):  # type: ignore[misc,name-defined]
+    class _CountlessSummary(_FakeIndex):
         def describe_index_stats(self) -> SimpleNamespace:
             return SimpleNamespace(namespaces={_TENANT_A.hex: SimpleNamespace()})
 
@@ -318,7 +318,7 @@ def test_an_absent_namespace_is_still_a_clean_purge() -> None:
     # The false-alarm half: Pinecone drops a namespace from the stats once it
     # holds nothing, so an absent one is the shape of a SUCCESSFUL delete and
     # must keep settling at zero.
-    store = PineconeVectorStore(_FakeIndex(), embed=_embed)  # type: ignore[name-defined]
+    store = PineconeVectorStore(_FakeIndex(), embed=_embed)
     store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
     store.delete(_TENANT_A)
     assert _TENANT_A.hex not in store.list_namespaces()

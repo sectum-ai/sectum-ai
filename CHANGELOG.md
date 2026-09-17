@@ -64,6 +64,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`--scope` now restricts the seeding, not only the scan.** It reached the
+  probe and never the seeding loop, so a scoped engagement planted canaries
+  across all eight erasure surfaces and then verified, erased and reported only
+  the named ones. `sectum-ai erasure --scope vector_db` wrote 8 markers into each
+  of five other backends and exited 0 — against a live stack, data Sectum put in
+  the operator's production systems and never came back for. A named surface is
+  still seeded, because the scan needs its baseline, and an unscoped run is
+  unchanged.
+- **`CrewAIAgent` no longer launders an unreadable `CrewOutput` into an answer.**
+  `str(output)` yielded the object's repr — truthy — so the runner recorded
+  `RETURNED` and Class 7 graded a memory address as the agent's answer. Both
+  sibling adapters return `""` on the same shape.
+
 - **An unreadable Pinecone namespace count is no longer read as an empty one.**
   `_namespace_count` backs `delete`'s settle poll, and `hasattr(stats, "get")`
   turned a stats shape the adapter cannot parse into "the namespace holds

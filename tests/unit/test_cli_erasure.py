@@ -722,3 +722,55 @@ def test_a_residual_the_scan_observed_is_never_reported_as_markers_not_found(
     assert "were not found on those surfaces" not in result.output, result.output
     assert "residual data remains on search_index" in result.output, result.output
     assert result.exit_code == 2, result.output
+
+
+def test_scope_restricts_the_seeding_and_not_only_the_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `--scope` reached the probe and never the seeding loop, so a scoped
+    # engagement planted canaries across all eight surfaces and then verified,
+    # erased and reported only the named ones. `--scope vector_db` wrote 8
+    # markers into each of five other backends at exit 0: against a live stack
+    # that is data Sectum put in the operator's production systems and never came
+    # back for - the tool creating the residue it exists to find.
+    import sectum_ai.adapters as adapters
+
+    writes: dict[str, int] = {}
+    for label, cls, method in (
+        ("search_index", adapters.FakeSearchIndex, "index"),
+        ("eval_set", adapters.FakeEvalSet, "add"),
+        ("backup", adapters.FakeBackup, "add"),
+        ("semantic_cache", adapters.FakeCache, "set"),
+        ("agent_memory", adapters.FakeMemory, "remember"),
+    ):
+        real = getattr(cls, method)
+
+        def _counted(
+            self: object, *args: object, _label: str = label, _real: object = real, **kwargs: object
+        ) -> object:
+            writes[_label] = writes.get(_label, 0) + 1
+            return _real(self, *args, **kwargs)  # type: ignore[operator]
+
+        monkeypatch.setattr(cls, method, _counted)
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+
+    writes.clear()
+    assert _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert writes == {}, f"a scoped run wrote canaries to surfaces it never scans: {writes}"
+
+    # A named surface IS still seeded - the scan needs its baseline.
+    writes.clear()
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db,backup"])
+    assert set(writes) == {"backup"}, writes
+
+    # And an unscoped run is unchanged: every surface seeded, as before.
+    writes.clear()
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert set(writes) == {
+        "search_index",
+        "eval_set",
+        "backup",
+        "semantic_cache",
+        "agent_memory",
+    }, writes

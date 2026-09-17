@@ -1561,7 +1561,11 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
 
 
 def _seed_erasure_surface(
-    unseedable: dict[Surface, str], surface: Surface, write: Callable[[], None]
+    unseedable: dict[Surface, str],
+    surface: Surface,
+    write: Callable[[], None],
+    *,
+    in_scope: frozenset[Surface] | None = None,
 ) -> None:
     """Plant one erasure canary, recording rather than raising when it will not take.
 
@@ -1571,6 +1575,10 @@ def _seed_erasure_surface(
     that refuses the write leaves its surface unseeded, and unseeded is
     NOT_COVERED: the probe finds no markers before, so it attests nothing.
     """
+    # A surface outside `--scope` is not scanned, not erased and not reported, so
+    # writing to it would leave a canary in a live backend nobody comes back for.
+    if in_scope is not None and surface not in in_scope:
+        return
     if surface in unseedable:
         return
     try:
@@ -3160,14 +3168,26 @@ def erasure(
     # Surface.API, so keying by its own surface left the block empty.
     provenance[Surface.VECTOR_DB.value] = surface_provenance_of((store,))[store.surface.value]
     _warn_on_synthetic_surfaces(provenance)
-    for tenant in substrate.tenants:
-        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-        store.upsert(tenant.tenant_id, documents)
+    # `--scope` restricted the SCAN and not the seeding, so a scoped engagement
+    # planted canaries in every one of the eight surfaces and then verified,
+    # erased and reported only the named ones. `--scope vector_db` against a live
+    # stack wrote 8 markers into each of seven other backends and exited 0 -
+    # data Sectum put in the operator's production systems and never came back
+    # for. A surface that is out of scope is not written to.
+    in_scope = None if erasure_scope is None else frozenset(erasure_scope)
+
+    def _seeds(surface: Surface) -> bool:
+        return in_scope is None or surface in in_scope
+
+    if _seeds(Surface.VECTOR_DB):
+        for tenant in substrate.tenants:
+            documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+            store.upsert(tenant.tenant_id, documents)
     unseedable: dict[Surface, str] = {}
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue
-        if isinstance(obs, FakeObservability):
+        if _seeds(Surface.TRACING) and isinstance(obs, FakeObservability):
             obs.record(
                 marker.owner_tenant_id,
                 "sectum-ai-erasure",
@@ -3187,8 +3207,9 @@ def erasure(
         # to prevent, one step earlier.
         _seed_erasure_surface(
             unseedable,
-            Surface.AGENT_MEMORY,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.AGENT_MEMORY,
+            write=functools.partial(
                 memory.remember,
                 marker.owner_tenant_id,
                 f"memory note recording {marker.plaintext}",
@@ -3196,8 +3217,9 @@ def erasure(
         )
         _seed_erasure_surface(
             unseedable,
-            Surface.SEMANTIC_CACHE,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.SEMANTIC_CACHE,
+            write=functools.partial(
                 cache.set,
                 marker.owner_tenant_id,
                 f"sectum-ai-erasure-{marker.marker_id}",
@@ -3216,8 +3238,9 @@ def erasure(
         # `marker` would late-bind (ruff B023).
         _seed_erasure_surface(
             unseedable,
-            Surface.SEARCH_INDEX,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.SEARCH_INDEX,
+            write=functools.partial(
                 search.index,
                 marker.owner_tenant_id,
                 f"search index entry mentioning {marker.plaintext}",
@@ -3225,8 +3248,9 @@ def erasure(
         )
         _seed_erasure_surface(
             unseedable,
-            Surface.EVAL_SET,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.EVAL_SET,
+            write=functools.partial(
                 evalset.add,
                 marker.owner_tenant_id,
                 f"eval set fixture mentioning {marker.plaintext}",
@@ -3234,8 +3258,9 @@ def erasure(
         )
         _seed_erasure_surface(
             unseedable,
-            Surface.BACKUP,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.BACKUP,
+            write=functools.partial(
                 backup.add,
                 marker.owner_tenant_id,
                 f"backup snapshot mentioning {marker.plaintext}",
