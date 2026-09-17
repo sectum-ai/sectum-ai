@@ -64,6 +64,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An unreadable Pinecone namespace count is no longer read as an empty one.**
+  `_namespace_count` backs `delete`'s settle poll, and `hasattr(stats, "get")`
+  turned a stats shape the adapter cannot parse into "the namespace holds
+  nothing" — so the poll settled on its first try and Class 11 attested a
+  namespace that was never read. A summary carrying no `vector_count` escaped as
+  a bare `AttributeError` rather than an `AdapterError`. An *absent* namespace is
+  still a clean purge, which is how Pinecone reports an empty one.
+- **The LangGraph adapter no longer implies `connect` gives per-thread
+  isolation.** `create_react_agent(model, tools)` is built with no checkpointer,
+  and without one LangGraph persists nothing per thread, so the `thread_id` the
+  adapter sets is propagated but holds nothing apart. The mock-backed test's
+  stub keyed its state on `thread_id`, which made it behave like a graph that
+  *does* have a checkpointer — so the test read as proof of state separation
+  while proving a property of the stub. It now says what the adapter is
+  responsible for: that the tenant-scoped id reaches the runtime config.
+
 - **A residual the scan observed is no longer reported as "markers were not
   found".** `genuine_residual` requires `erasure_supported` and
   `attestable_with_caveat` requires `markers_before > 0`, so a backend with no
