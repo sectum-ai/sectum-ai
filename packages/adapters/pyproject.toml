@@ -57,7 +57,7 @@ vllm = ["openai>=1.50"]
 # InferenceClient (not the GPU-heavy text-generation-inference server package).
 tgi = ["huggingface_hub>=1.26.1"]
 openai-assistants = ["openai>=1.50"]
-anthropic-tooluse = ["anthropic>=0.40"]
+anthropic-tooluse = ["anthropic>=1.3.0"]
 rag-langchain = ["langchain-core>=1.5.4"]
 # the S3 backup adapter talks to any S3-compatible store (AWS S3, MinIO, Ceph);
 # langsmith (above) also backs the eval-set adapter (LangSmith Datasets).
