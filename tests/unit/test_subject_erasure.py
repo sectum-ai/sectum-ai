@@ -1,5 +1,8 @@
 """Tests for A3 Phase 0 - the by-id data-subject erasure probe."""
 
+import json
+from collections.abc import Sequence
+from pathlib import Path
 from uuid import UUID
 
 from sectum_ai.adapters import (
@@ -10,8 +13,10 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
+from sectum_ai.adapters.base import Capability, ModelAdapter, TraceHit, VectorHit
 from sectum_ai.probes import SubjectErasureProbe, SubjectManifest
-from sectum_ai.spec import CoverageVerdict, Surface
+from sectum_ai.probes._recall import FINGERPRINT_QUERY_K
+from sectum_ai.spec import AdapterError, CoverageVerdict, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -24,9 +29,15 @@ def _populated_store() -> tuple[FakeVectorStore, UUID, str]:
     return store, tenant, docs[0].doc_id
 
 
-def test_subject_erasure_is_erased_when_every_supplied_id_is_gone() -> None:
+def test_a_clean_subject_check_establishes_absence_and_never_attests_erasure() -> None:
+    # This check runs AFTER the controller's deletion, so nothing establishes the
+    # records were ever there: `markers_before` is what the manifest ASKED about.
+    # Sharing `SurfaceErasure` gave that field a second meaning and defeated the
+    # guard its sibling documents - "a surface with no markers before erasure
+    # yields no baseline, so its erasure cannot be attested; `erased` is False
+    # rather than vacuously True". A manifest of ids that never existed produced
+    # `ERASED` on four surfaces and a signed pack asserting ERASURE VERIFIED.
     store, tenant, _present = _populated_store()
-    # Only ids that were never in the store (the deletion already removed them).
     manifest = SubjectManifest(
         subject_ref="user-1", records={Surface.VECTOR_DB: ("deleted-1", "deleted-2")}
     )
@@ -34,9 +45,53 @@ def test_subject_erasure_is_erased_when_every_supplied_id_is_gone() -> None:
     surfaces = {s.surface: s for s in report.surfaces}
     assert surfaces[Surface.VECTOR_DB].markers_before == 2
     assert surfaces[Surface.VECTOR_DB].residual_after == 0
-    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
-    assert report.erased
+    assert not surfaces[Surface.VECTOR_DB].baseline_observed
+    assert surfaces[Surface.VECTOR_DB].verdict == "ABSENCE CHECKED"
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
     assert report.findings == ()
+
+
+def test_one_unreadable_surface_does_not_cost_the_others_their_verdicts() -> None:
+    # `_refuse_capped` was written FOR this path - "the A3 subject check reads
+    # `fetch_trace(...) is None` as 'the trace is gone'" - so an AdapterError here
+    # is expected, and nothing caught it: one trace backend that could not answer
+    # aborted the whole A3 run and every other surface's verdict went with it. The
+    # Class 11 sibling contains the same failure around both scans and the delete.
+    class _CappedTraces(FakeObservability):
+        def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
+            raise AdapterError("Phoenix listed 1000 traces, its page cap, without this id")
+
+    store, tenant, present = _populated_store()
+    manifest = SubjectManifest(
+        subject_ref="user-3",
+        records={Surface.VECTOR_DB: (present,), Surface.TRACING: ("trace-1",)},
+    )
+    report = SubjectErasureProbe(vector=store, observability=_CappedTraces()).verify(
+        tenant, manifest
+    )
+
+    # The vector surface still reports what it actually found - a residual record.
+    surfaces = {s.surface: s for s in report.surfaces}
+    assert surfaces[Surface.VECTOR_DB].residual_after == 1, surfaces[Surface.VECTOR_DB]
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    assert report.findings, "the residual must still be itemized"
+    # And the surface that could not answer is NOT_COVERED, never ERASED.
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+
+    # It is recorded the way Class 11 records the same failure: a SurfaceErasure
+    # carrying the BACKEND'S OWN words. The first version of this guard dropped the
+    # surface and wrote to `ErasureReport.unverifiable`, whose only other producers
+    # are phrase-level fingerprint shortfalls - so the CLI printed a fabricated
+    # cause ("N supplied fingerprint(s) ... trailing part too short") for a by-id
+    # surface carrying no fingerprints, and the adapter's real reason reached
+    # nothing but a log line.
+    tracing = surfaces[Surface.TRACING]
+    assert tracing.unverifiable_after >= 1, tracing
+    assert "page cap" in (tracing.unverifiable_reason or ""), tracing.unverifiable_reason
+    assert tracing.verdict == "NOT VERIFIED", tracing.verdict
+    assert report.unverifiable == {}, report.unverifiable
 
 
 def test_subject_erasure_is_residual_when_a_record_remains() -> None:
@@ -148,8 +203,11 @@ def test_subject_erasure_fingerprint_erased_when_content_absent() -> None:
         fingerprints={Surface.VECTOR_DB: ("zzxq nonexistent 90218 phrase",)},
     )
     report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
-    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
-    assert report.erased
+    # Absence checked, never an attested erasure: nothing established the
+    # phrase was there before the controller deleted it.
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_combines_id_and_content_into_one_verdict() -> None:
@@ -280,8 +338,10 @@ def test_subject_erasure_model_fingerprint_erased_when_forgotten() -> None:
         subject_ref="u-m2", records={}, fingerprints={Surface.MODEL_ADAPTER: (phrase,)}
     )
     report = SubjectErasureProbe(model=model).verify(tenant, manifest)
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
-    assert report.erased
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion, so nothing establishes the content was ever in the model.
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
 
 
 def test_subject_erasure_model_serving_only_is_not_covered() -> None:
@@ -354,7 +414,7 @@ def test_subject_erasure_model_fingerprint_clean_when_not_regurgitated() -> None
             fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
 
 
 def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only() -> None:
@@ -370,7 +430,7 @@ def test_subject_erasure_model_fingerprint_single_token_uses_whole_phrase_only()
             subject_ref="u-m6", records={}, fingerprints={Surface.MODEL_ADAPTER: ("ZX90210QQ",)}
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
 
 
 _MEMORY_PHRASE = "Maria Chen lives at 12 Elm Street"
@@ -399,7 +459,8 @@ def test_subject_erasure_memory_fingerprint_flags_residual_content() -> None:
 
 def test_subject_erasure_memory_fingerprint_erased_when_purged() -> None:
     # The customer's erasure purged the tenant's memory: a recall surfaces nothing,
-    # so the surface reads ERASED.
+    # so the surface reads ABSENCE CHECKED - not ERASED. This probe never saw the
+    # memory before the deletion, so it cannot attest the deletion happened.
     tenant = UUID(int=8)
     memory = FakeMemory()
     memory.remember(tenant, _MEMORY_PHRASE)
@@ -408,8 +469,9 @@ def test_subject_erasure_memory_fingerprint_erased_when_purged() -> None:
         subject_ref="u-mem2", records={}, fingerprints={Surface.AGENT_MEMORY: (_MEMORY_PHRASE,)}
     )
     report = SubjectErasureProbe(memory=memory).verify(tenant, manifest)
-    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.ERASED
-    assert report.erased
+    assert report.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_memory_soft_delete_leaves_residue() -> None:
@@ -465,7 +527,7 @@ def test_subject_erasure_search_fingerprint_flags_residual_content() -> None:
 
 def test_subject_erasure_search_fingerprint_erased_when_purged() -> None:
     # The customer's erasure dropped the tenant's documents from the index: a search
-    # surfaces nothing, so the surface reads ERASED.
+    # surfaces nothing, so the surface reads ABSENCE CHECKED - never ERASED.
     tenant = UUID(int=9)
     search = FakeSearchIndex()
     search.index(tenant, _SEARCH_PHRASE)
@@ -474,8 +536,9 @@ def test_subject_erasure_search_fingerprint_erased_when_purged() -> None:
         subject_ref="u-si2", records={}, fingerprints={Surface.SEARCH_INDEX: (_SEARCH_PHRASE,)}
     )
     report = SubjectErasureProbe(search_index=search).verify(tenant, manifest)
-    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.ERASED
-    assert report.erased
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.NOT_COVERED
+    assert not report.erased
+    assert report.findings == ()
 
 
 def test_subject_erasure_search_soft_delete_leaves_residue() -> None:
@@ -672,7 +735,7 @@ def test_an_echoing_base_model_is_not_residual_memorization() -> None:
             fingerprints={Surface.MODEL_ADAPTER: (_EXTRACTION_PHRASE,)},
         ),
     )
-    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.ERASED
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
     # ... while a genuine per-tenant echo (the base answers nothing) still counts.
     model, tenant, phrase = _model_with_memorized_phrase()
     assert SubjectErasureProbe._content_recalled(model, tenant, phrase)
@@ -714,7 +777,7 @@ def test_an_echo_on_shared_weights_is_not_recall_either() -> None:
 def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     # The vector fingerprint check was a top-k similarity query: a stored subject
     # document ranked past k read as absent, and the surface attested ERASED.
-    from sectum_ai.probes.subject_erasure.probe import _FINGERPRINT_QUERY_K
+    from sectum_ai.probes._recall import FINGERPRINT_QUERY_K
     from sectum_ai.spec import CorpusDocument
 
     store = FakeVectorStore()
@@ -728,7 +791,7 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
             title="maria chen clinical intake note",
             content="maria chen clinical intake note filler",
         )
-        for i in range(_FINGERPRINT_QUERY_K + 5)
+        for i in range(FINGERPRINT_QUERY_K + 5)
     ]
     docs.append(
         CorpusDocument(
@@ -744,3 +807,344 @@ def test_a_full_similarity_page_without_the_phrase_is_not_erased() -> None:
     )
     assert report.coverage()[Surface.VECTOR_DB] is not CoverageVerdict.ERASED
     assert report.unverifiable.get(Surface.VECTOR_DB, 0) == 1 or report.findings
+
+
+def test_world_knowledge_on_shared_weights_is_unverifiable_not_residual() -> None:
+    # The base-knowledge control is "the same prompt as a tenant that trained
+    # nothing", which a shared-weights model does not have: a model that trained
+    # nothing and completes "Sherlock Holmes" -> "221B Baker Street" signed a
+    # CONFIRMED HIGH residual at confidence 1.0 in a DSR attestation.
+    class _WorldKnowledge(FakeModel):
+        def __init__(self) -> None:
+            super().__init__(adapter_bleed=True)  # SHARED_WEIGHTS
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "221B Baker Street, London" if prompt.startswith("Sherlock") else "no idea"
+
+    report = SubjectErasureProbe(model=_WorldKnowledge()).verify(
+        UUID(int=0xA),
+        SubjectManifest(
+            subject_ref="u-w1",
+            records={},
+            fingerprints={Surface.MODEL_ADAPTER: ("Sherlock Holmes 221B Baker Street",)},
+        ),
+    )
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.NOT_COVERED
+    assert report.findings == ()
+
+
+def test_a_model_rendering_the_phrase_its_own_way_is_still_recall() -> None:
+    # The model is the surface most able to render a memorized string its own
+    # way, and `content_recalled` tested a casefolded `in` where the five sibling
+    # residue checks normalize. A zero-width split inside the continuation suffix
+    # read as "not recalled", so the model surface attested ERASED while still
+    # returning the phrase on the very next prompt.
+    from sectum_ai.probes._recall import content_recalled
+
+    phrase = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    owner = UUID(int=0xA)
+
+    class _Memorized(ModelAdapter):
+        """Continues a prefix of the phrase, as a real per-tenant adapter does."""
+
+        synthetic = True
+
+        def __init__(self, rendering: str) -> None:
+            super().__init__("memorized", frozenset({Capability.PER_TENANT_ADAPTER}))
+            self._rendering = rendering
+
+        def train_adapter(
+            self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+        ) -> None: ...
+
+        def delete(self, tenant: UUID) -> None: ...
+
+        def measure_latency(self, tenant: UUID, prompt: str) -> float:
+            return 0.0
+
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            # Nothing for another tenant, and nothing for an unrelated prompt, so
+            # both of `_reproduced`'s control arms behave as designed.
+            if tenant != owner or not phrase.casefold().startswith(prompt.casefold()):
+                return "no record found"
+            return f"the record reads {self._rendering}"
+
+    for label, rendering in (
+        ("verbatim", phrase),
+        ("re-cased", phrase.lower()),
+        # U+200B ZERO WIDTH SPACE past the continuation cut, and U+FF2D FULLWIDTH
+        # LATIN CAPITAL M; spelled by codepoint so this file stays ASCII.
+        ("zero-width split", phrase[:30] + "\u200b" + phrase[30:]),
+        ("full-width", phrase.replace("M", "\uff2d", 1)),
+    ):
+        assert content_recalled(_Memorized(rendering), owner, phrase), label
+
+    # And a model that reproduces nothing is still not recall.
+    class _Blank(_Memorized):
+        def infer(self, tenant: UUID, prompt: str, *, user: UUID | None = None) -> str:
+            return "no record found"
+
+    assert not content_recalled(_Blank(phrase), owner, phrase)
+
+
+def test_the_cli_never_signs_a_subject_check_as_a_verified_erasure(tmp_path: Path) -> None:
+    # End to end, because the harm was in the artifact: a manifest of record ids
+    # that never existed printed "1 markers before, 0 after -> ERASED" on four
+    # surfaces, "ERASURE VERIFIED" at exit 0, and a SIGNED pack whose coverage
+    # block said ERASED with a residue count of 0. A DPO reading that pack cannot
+    # tell it from the Class 11 attestation, which earns the word.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text(
+        "subject_ref: dsr-1\n"
+        "records:\n"
+        "  vector_db: [an-id-that-never-existed]\n"
+        "  semantic_cache: [another-id-that-never-existed]\n"
+    )
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    result = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--subject", str(manifest)])
+    assert result.exit_code == 0, result.output
+    assert "ERASURE VERIFIED" not in result.output, result.output
+    assert "markers before" not in result.output, result.output
+    assert "NO RESIDUAL FOUND" in result.output, result.output
+    assert "NOT an attested erasure" in result.output, result.output
+
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    metrics = pack["run_result"]["metrics"]
+    assert "ERASED" not in set(metrics["erasure_coverage"].values()), metrics
+    # And no residue COUNT for a surface nothing was established to be on.
+    assert metrics["erasure_residue"] == {}, metrics
+
+
+def test_no_subject_surface_ever_claims_an_observed_baseline() -> None:
+    """Every surface this probe reports, not three of the four.
+
+    `baseline_observed=False` was added to three of the four `SurfaceErasure`
+    constructions and to the `_surface` helper, and the MODEL_ADAPTER branch kept
+    the default `True` - so the exact output the fix removed ("1 markers before,
+    0 after -> ERASED", "ERASURE VERIFIED", a signed `erasure_coverage` of ERASED
+    with a residue count of 0) still shipped for that one surface, and four tests
+    pinned it. This probe runs AFTER the controller's deletion, so it can never
+    observe a baseline on ANY surface; asserting that over the whole report is the
+    rule, where asserting it per surface is how one got missed.
+    """
+    from sectum_ai.adapters import FakeModel
+
+    tenant = UUID(int=77)
+    store, cache = FakeVectorStore(), FakeCache()
+    memory, search = FakeMemory(), FakeSearchIndex()
+    manifest = SubjectManifest(
+        subject_ref="dsr-every-surface",
+        records={Surface.VECTOR_DB: ("r-1",), Surface.SEMANTIC_CACHE: ("k-1",)},
+        fingerprints={
+            Surface.VECTOR_DB: ("Jane Q Doe of 12 Elm Street",),
+            Surface.AGENT_MEMORY: ("Jane Q Doe of 12 Elm Street",),
+            Surface.SEARCH_INDEX: ("Jane Q Doe of 12 Elm Street",),
+            Surface.MODEL_ADAPTER: ("Jane Q Doe of 12 Elm Street",),
+        },
+    )
+    report = SubjectErasureProbe(
+        vector=store, cache=cache, memory=memory, search_index=search, model=FakeModel()
+    ).verify(tenant, manifest)
+
+    assert report.surfaces, "the fixture must produce surfaces to check"
+    claiming = [s.surface.value for s in report.surfaces if s.baseline_observed]
+    assert not claiming, f"A3 surfaces claiming an observed baseline: {claiming}"
+    # And none of them can therefore be attested ERASED.
+    assert CoverageVerdict.ERASED not in set(report.coverage().values())
+
+
+def test_a_residual_already_seen_survives_a_later_failure_on_the_same_surface() -> None:
+    # `_contained`'s own docstring lists three harms the abort-free rewrite fixed,
+    # and this is the third: "a scan that had already OBSERVED residual records
+    # before failing lost them, so a run with two confirmed residuals reported NO
+    # RESIDUAL FOUND at exit 0." The rewrite moved WHERE the failure is recorded -
+    # a `SurfaceErasure` instead of `ErasureReport.unverifiable` - and did not
+    # preserve the residuals.
+    #
+    # The vector surface is the only one that reads twice: by id, then by
+    # fingerprint. A store whose `fetch` answers and whose `query` then raises has
+    # positively found the subject's record still present - an Article 17 FAILURE -
+    # and the handler replaced the whole surface with `residual_after=0`, so the
+    # DPO was told "absence could not be established, re-run" at exit 0 about a
+    # record the tool had looked at and seen.
+    class _FetchOkQueryBroken(FakeVectorStore):
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            raise AdapterError("index unavailable: shard 3 is down")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = _FetchOkQueryBroken()
+    store.upsert(tenant, docs)
+
+    manifest = SubjectManifest(
+        subject_ref="subject-1",
+        records={Surface.VECTOR_DB: (docs[0].doc_id,)},
+        fingerprints={Surface.VECTOR_DB: ("a phrase the broken query cannot check",)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+
+    # The residual it saw is reported as a residual, not as a coverage gap...
+    assert surface.residual_after == 1, surface
+    assert surface.verdict == "RESIDUAL DATA", surface
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.RESIDUAL
+    assert len(report.findings) == 1, report.findings
+    assert not report.erased
+    # ...and what it could NOT check is still declared unverifiable, with the
+    # backend's own words - the residual must not swallow the coverage gap either.
+    assert surface.unverifiable_after == 1, surface
+    assert "shard 3 is down" in (surface.unverifiable_reason or "")
+
+
+def test_a_contained_failure_does_not_double_count_what_it_saw() -> None:
+    # The accumulator is flushed on BOTH paths of `_contained`, so the success path
+    # must not emit its findings twice - the obvious way to get the test above to
+    # pass while breaking every clean run.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    docs = [doc for doc in substrate.documents if doc.tenant_id == tenant]
+    store = FakeVectorStore()
+    store.upsert(tenant, docs)
+
+    manifest = SubjectManifest(
+        subject_ref="subject-1",
+        records={Surface.VECTOR_DB: (docs[0].doc_id, docs[1].doc_id)},
+    )
+    report = SubjectErasureProbe(vector=store).verify(tenant, manifest)
+    assert len(report.findings) == 2, report.findings
+    assert len({f.finding_id for f in report.findings}) == 2, report.findings
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert surface.residual_after == 2, surface
+
+
+def test_a_full_similarity_page_is_not_reported_as_a_badly_shaped_phrase() -> None:
+    # A full page means the phrase may still be stored and ranked below it - a
+    # property of the BACKEND. It was written into `report.unverifiable`, whose
+    # only other producers are phrase-SHAPE shortfalls and whose one CLI rendering
+    # hard-codes their cause, so the operator was told "N supplied fingerprint(s)
+    # could not be checked (trailing part too short, or no control form for the
+    # prefix)" and sent to rewrite a fingerprint that was fine. The per-surface
+    # channel already prints exactly this cause by default and is where every
+    # other surface's inconclusive count goes.
+    class _AlwaysFullPage(FakeVectorStore):
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            hit = VectorHit(doc_id="d", tenant_id=tenant, content="unrelated", score=0.1)
+            return [hit] * max(k, FINGERPRINT_QUERY_K)
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    manifest = SubjectManifest(
+        subject_ref="s",
+        records={},
+        fingerprints={Surface.VECTOR_DB: ("a phrase that is perfectly well formed",)},
+    )
+    report = SubjectErasureProbe(vector=_AlwaysFullPage()).verify(tenant, manifest)
+
+    assert Surface.VECTOR_DB not in report.unverifiable, dict(report.unverifiable)
+    surface = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert surface.unverifiable_after == 1, surface
+    assert surface.verdict == "NOT VERIFIED", surface.verdict
+    assert report.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED
+
+
+def test_every_surface_keeps_the_residual_it_saw_before_a_later_read_failed() -> None:
+    # The previous fix hoisted the by-id findings on the vector surface and its
+    # commit claimed it was "applied to all six contained surfaces". It reached one
+    # PHASE of one surface. Every other scan was a comprehension, which dies WHOLE:
+    # a residual seen on marker 1 is destroyed when marker 2's read raises, so
+    # `_contained` recorded `residual_after=0` and the DPO was told the absence
+    # could not be established over content the tool had looked at and seen - the
+    # exact harm the guard's docstring says it fixed.
+    #
+    # One case per contained surface that can raise mid-scan, because "applied to
+    # all six" is the claim that was false.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+
+    class _SecondKeyRaises(FakeCache):
+        def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+            if key.endswith("-2"):
+                raise AdapterError("redis: connection reset")
+            return "the subject's cached answer"
+
+    class _SecondRecallRaises(FakeMemory):
+        def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+            if "two" in query:
+                raise AdapterError("mem0: 503 upstream")
+            return [query]
+
+    class _SecondSearchRaises(FakeSearchIndex):
+        def search(self, tenant: UUID, query: str) -> list[str]:
+            if "two" in query:
+                raise AdapterError("opensearch: shard failure")
+            return [query]
+
+    phrases = ("the subject phrase one", "the subject phrase two")
+    cases = (
+        (
+            Surface.SEMANTIC_CACHE,
+            {"cache": _SecondKeyRaises()},
+            SubjectManifest(subject_ref="s", records={Surface.SEMANTIC_CACHE: ("k-1", "k-2")}),
+        ),
+        (
+            Surface.AGENT_MEMORY,
+            {"memory": _SecondRecallRaises()},
+            SubjectManifest(
+                subject_ref="s", records={}, fingerprints={Surface.AGENT_MEMORY: phrases}
+            ),
+        ),
+        (
+            Surface.SEARCH_INDEX,
+            {"search_index": _SecondSearchRaises()},
+            SubjectManifest(
+                subject_ref="s", records={}, fingerprints={Surface.SEARCH_INDEX: phrases}
+            ),
+        ),
+    )
+    for surface, adapters, manifest in cases:
+        report = SubjectErasureProbe(**adapters).verify(tenant, manifest)
+        scanned = next(s for s in report.surfaces if s.surface is surface)
+        assert scanned.residual_after == 1, (surface, scanned)
+        assert scanned.verdict == "RESIDUAL DATA", (surface, scanned.verdict)
+        assert len(report.findings) == 1, (surface, report.findings)
+        # ...and what it could not read is still declared unverifiable, with the
+        # backend's own words: a residual must not swallow the coverage gap.
+        assert scanned.unverifiable_after >= 1, (surface, scanned)
+
+
+def test_markers_ruled_absent_are_not_counted_as_a_coverage_gap() -> None:
+    # Two errors in one row. `unverifiable_after` subtracted only what was FOUND,
+    # so a scan that ruled five ids absent and then failed on the sixth reported
+    # "6 marker(s) were neither found nor ruled out" - counting its own five clean
+    # answers as a gap. And the row left `baseline_observed` at its default True,
+    # where every other A3 row sets it False, so the CLI printed the Class 11
+    # wording: "0 markers before, 1 after", a measurement that cannot happen.
+    class _SixthRaises(FakeCache):
+        def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str | None:
+            if key.endswith("-6"):
+                raise AdapterError("redis: connection reset")
+            return None  # the first five are positively ABSENT
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    manifest = SubjectManifest(
+        subject_ref="s",
+        records={Surface.SEMANTIC_CACHE: tuple(f"k-{index}" for index in range(1, 7))},
+    )
+    report = SubjectErasureProbe(cache=_SixthRaises()).verify(tenant, manifest)
+    surface = next(s for s in report.surfaces if s.surface is Surface.SEMANTIC_CACHE)
+
+    assert surface.unverifiable_after == 1, surface
+    assert surface.markers_before == 6, surface
+    assert not surface.baseline_observed, "the A3 path establishes no baseline"
+    assert surface.verdict == "NOT VERIFIED", surface.verdict

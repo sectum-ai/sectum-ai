@@ -168,7 +168,7 @@ def test_a_run_whose_every_class_is_unattributable_refuses_to_grade() -> None:
         probe_versions={"tenant-boundary-fetch": "1.0"},
         surface_provenance=provenance,
     )
-    with pytest.raises(ConfigError, match="nothing to grade"):
+    with pytest.raises(ConfigError, match="can be graded"):
         score_run(run)
 
 

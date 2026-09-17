@@ -277,7 +277,7 @@ def test_cli_calibrate_json_output_is_parseable() -> None:
         app, ["calibrate", "--embedder", "hash-256", "--seed", "7", "--output", "json"]
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["model_name"] == "hash-256"
     assert payload["zero_false_positive"] is True
     assert payload["positives"] > 0
@@ -352,3 +352,127 @@ def test_published_threshold_is_full_precision_and_admits_no_negative() -> None:
     assert recommended.false_positives == 0
     # The published gate (>= comparison, as in detection) must exclude the negative.
     assert 0.730004 < recommended.threshold <= 0.730012
+
+
+def test_the_fallback_threshold_is_scored_and_never_offered_for_application() -> None:
+    # The fallback was published unscored and rendered as "the conservative
+    # default" with an `apply it` block, while admitting 25 of 32 negatives on
+    # the run's own labeled set - and that threshold gates which candidates
+    # become CONFIRMED findings.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    result = CliRunner().invoke(app, ["calibrate", "--embedder", "hash-64", "--seed", "1337"])
+    assert result.exit_code == 3, result.output
+    assert "recommends nothing" in result.output
+    assert "admits 25 of 32 negatives" in result.output
+    assert "apply it in sectum-ai.yaml" not in result.output
+
+
+def test_a_scored_fallback_reports_what_it_admits() -> None:
+    # The fallback carries its own score, so a caller of the library sees what
+    # the shipped default admits on this run rather than a bare number.
+    from sectum_ai.cli.app import _resolve_calibration_embedder
+    from sectum_ai.config import EmbedderConfig
+    from sectum_ai.probes.detection import DEFAULT_SEMANTIC_THRESHOLD
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=1337, corpus_size=24))
+    provider, model_name = _resolve_calibration_embedder("hash-64", EmbedderConfig())
+    outcome = calibrate_threshold(substrate, model_name=model_name, embedder=provider)
+    assert (outcome.fallback_score is None) is (outcome.recommended_score is not None)
+    assert outcome.recommended_score is None, "hash-64 does not separate this substrate"
+    assert outcome.fallback_score is not None
+    assert outcome.fallback_score.threshold == DEFAULT_SEMANTIC_THRESHOLD
+    # The number the CLI refuses on: measured, not assumed.
+    assert outcome.fallback_score.false_positives == 25
+
+
+def test_a_fallback_that_catches_nothing_is_refused_too() -> None:
+    # The guard keyed on false positives alone, so a default that admits no
+    # negative BECAUSE it admits nothing at all (zero recall) still printed the
+    # "apply it" block and exited 0 - recommending a threshold the run measured
+    # as catching none of the known leaks.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import _render_calibration_text
+    from sectum_ai.probes.calibrate import CalibrationExample, CalibrationResult, ThresholdScore
+
+    def _score(threshold: float, tp: int, fp: int, fn: int) -> ThresholdScore:
+        return ThresholdScore(
+            threshold=threshold,
+            precision=0.0,
+            recall=0.0,
+            f1=0.0,
+            true_positives=tp,
+            false_positives=fp,
+            false_negatives=fn,
+        )
+
+    examples = tuple(
+        CalibrationExample(is_positive=positive, similarity=0.30 if positive else 0.31, label="m")
+        for positive in (True, True, False, False)
+    )
+    result = CalibrationResult(
+        model_name="stub",
+        recommended_threshold=0.62,
+        examples=examples,
+        scores=(_score(0.62, 0, 0, 2),),
+        recommended_score=None,
+        fallback_score=_score(0.62, 0, 0, 2),
+    )
+    import typer
+
+    with CliRunner().isolation(), pytest.raises(typer.Exit) as refusal:
+        _render_calibration_text(result)
+    assert refusal.value.exit_code == 3
+
+
+def test_the_threshold_the_text_output_hands_over_is_the_one_it_certified() -> None:
+    # The candidates are midpoints between observed scores, so `:g`'s 6
+    # significant digits almost never render the value being described: the
+    # shipped demo certified 0.8333335 and printed `semantic_threshold: 0.833333`
+    # in the block whose own heading is "apply it in sectum-ai.yaml". Half of
+    # those roundings go DOWN, and a threshold below the certified one admits
+    # scores this run proved were negatives - a calibrated gate that starts
+    # confirming leaks that are not leaks, which is the failure mode the zero-FP
+    # constraint exists to rule out. The sweep resolves candidates 1e-6 apart, so
+    # a 5e-7 error is half the resolution of the measurement, not noise under it.
+    #
+    # Round-tripped, not compared to a literal: the point is that what a reader
+    # pastes parses back to what was certified, on whatever value this seed picks.
+    import json
+
+    text = _runner.invoke(app, ["calibrate", "--embedder", "fake", "--seed", "7"])
+    emitted = _runner.invoke(
+        app, ["calibrate", "--embedder", "fake", "--seed", "7", "--output", "json"]
+    )
+    assert text.exit_code == 0, text.output
+    certified = json.loads(emitted.stdout)["recommended_threshold"]
+    assert certified is not None
+
+    pasted = [
+        line.split(":", 1)[1].strip()
+        for line in text.output.splitlines()
+        if line.strip().startswith("semantic_threshold:")
+        or line.strip().startswith("recommended semantic_threshold:")
+    ]
+    assert len(pasted) == 2, text.output
+    for rendered in pasted:
+        value = float(rendered.split(" ", 1)[0])
+        assert value == certified, f"{rendered!r} is not the certified {certified!r}"
+        # Not merely close: BELOW is the direction that admits a negative, and a
+        # tolerance-based check would pass the exact defect this pins.
+        assert not value < certified, rendered
+
+
+def test_the_rounded_sweep_table_says_it_is_rounded() -> None:
+    # The table pads THRESHOLD to four decimals so the sweep lines up, which puts
+    # a rounded number under a `<- recommended` marker - the same value-below-the-
+    # certified-one defect, in the place a reader's eye lands first. Widening the
+    # column to 0.83333349999999995 would wreck the table, so it says so instead.
+    result = _runner.invoke(app, ["calibrate", "--embedder", "fake", "--seed", "7"])
+    assert result.exit_code == 0, result.output
+    assert "<- recommended" in result.output, result.output
+    assert "rounded for display" in result.output, result.output

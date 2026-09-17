@@ -110,4 +110,9 @@ def test_subject_erasure_fingerprint_against_live_qdrant(store: QdrantVectorStor
             fingerprints={Surface.VECTOR_DB: ("zzxq nonexistent 90218",)},
         ),
     )
-    assert clean.coverage()[Surface.VECTOR_DB] is CoverageVerdict.ERASED
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion, so nothing establishes the content was ever there. The coverage
+    # block records NOT_COVERED - what the published methodology already says a
+    # surface with no pre-erasure baseline is. Only Class 11, which plants its
+    # own canaries and counts them BEFORE the erasure, can attest ERASED.
+    assert clean.coverage()[Surface.VECTOR_DB] is CoverageVerdict.NOT_COVERED

@@ -16,7 +16,7 @@ jobs:
   sectum-ai:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: sectum-ai/sectum-ai@main   # pin to a release tag or SHA for production
         with:
           config: sectum-ai.yaml         # your adapters; omit to run the demo fixture
@@ -35,22 +35,22 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 
 | Input | Default | Description |
 |---|---|---|
-| `version` | `0.11.0` | `sectum-ai` version to install from PyPI. Pin for reproducibility; leave empty for the latest release. |
+| `version` | `0.11.0` | `sectum-ai` version to install from PyPI. Pin for reproducibility; leave empty for the latest release; set `skip` to use a `sectum-ai` already on `PATH` (how this repo's own self-test runs the CLI it just built). |
 | `config` | _(none)_ | Path to your `sectum-ai.yaml`. If omitted, the built-in demo substrate is used. |
 | `workdir` | `.sectum-ai` | Directory for the seeded substrate and run artifacts. |
 | `output` | `json` | Report format written to `output-file`: `text` / `json` / `sarif` / `oscal`. |
 | `output-file` | `sectum-results.json` | Where to write the report. |
 | `python-version` | `3.12` | Python to set up (`sectum-ai` requires ≥ 3.12). |
-| `fail-on-leak` | `true` | Fail the step when the probe confirms a finding — cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). |
+| `fail-on-leak` | `true` | Fail the step when the probe confirms a finding — cross-tenant or cross-user, on any surface, the built-in fakes included (probe exit code 2). Must be exactly `true` or `false`: any other value is refused with an error when a finding is found, rather than silently downgrading the gate to a warning. |
 
 ## Outputs
 
 | Output | Description |
 |---|---|
-| `exit-code` | The probe exit code: `0` no confirmed findings, `2` a confirmed finding (cross-tenant or cross-user, on any surface — check `confirmed-on-live-surfaces` for the ones that describe your stack), `3` config/adapter error. |
+| `exit-code` | The raw probe exit code: `0` no confirmed findings; `2` a confirmed finding (cross-tenant or cross-user, on any surface — check `confirmed-on-live-surfaces` for the ones that describe your stack) **or a CLI usage error, which shares exit 2**; `3` config/adapter error. The gate step tells the two apart: exit 2 with an empty `results-file` means the probe never ran, and always fails the step. |
 | `results-file` | Path to the written report (the `output-file`). |
 | `run-path` | Path to the `run.json` the probe wrote in the workdir. |
-| `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant, cross-user, or residual-data — on every surface, the built-in fakes included (populated when `output: json`). |
+| `confirmed-findings` | Number of confirmed findings of any kind — cross-tenant or cross-user — on every surface, the built-in fakes included (populated when `output: json`). The Action runs `seed` and `probe` only, so residual-data findings, which come from `sectum-ai erasure`, never appear in this count. |
 | `confirmed-on-live-surfaces` | Of those, the confirmed findings on surfaces that ran against a live backend — the ones that describe your stack (populated when `output: json`). |
 | `retrieval-pivot-rate` | Headline Retrieval-Pivot Rate (populated when `output: json` and Class 2 ran). |
 
@@ -58,7 +58,9 @@ exits with a confirmed leak — handy for trying the action out, not a real test
 
 Set `output: sarif` and upload the file with the standard code-scanning action.
 The cross-tenant findings then show up in the repository's **Security → Code
-scanning** view (unverified candidates are capped at SARIF `note`).
+scanning** view (unverified candidates are capped at SARIF `note`, and so are
+confirmed findings whose backing surface ran against a built-in fake — a demo run
+raises no error-level alert).
 
 ```yaml
 jobs:
@@ -68,7 +70,7 @@ jobs:
       contents: read
       security-events: write   # required to upload SARIF
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: sectum-ai/sectum-ai@main
         with:
           config: sectum-ai.yaml
@@ -90,7 +92,7 @@ custom `workdir`, match it in both the `report --workdir` and the upload `path`:
 
 ```yaml
       - run: sectum-ai report --workdir .sectum-ai --config sectum-ai.yaml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sectum-ai-evidence
           path: .sectum-ai/evidence.json

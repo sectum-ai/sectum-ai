@@ -16,8 +16,8 @@ modality.
 
 ## Method
 
-Tenants deliberately share *visual entities*: a chart type, a logo, a product photo, a
-floor plan, a signature card. Each tenant owns a *pivot image* per shared visual entity
+Tenants deliberately share *visual entities*: a chart type, a circuit board, a logo, a
+product photo, a floor plan, a signature card. Each tenant owns a *pivot image* per shared visual entity
 — its own rendered copy of that entity — and the image's caption/payload carries one of
 the tenant's canary markers. The probe issues one benign image query per shared visual
 entity from each principal's session (a tenant, or a user within a tenant — ADR-0006; a
@@ -81,6 +81,8 @@ by its per-model sweep (as Class 2's embedding-strength gradient is a core sweep
 flagship probe), driving the probe's plan/detect over the deterministic image substrate
 or real CLIP. Live multi-modal vector-store adapters and generic-suite / CLI wiring are a
 follow-on. Like Class 6, the probe requires a vector-slot adapter reporting
-`semantic_retrieval` — the pivot it describes happens in a shared embedding space — so a
-programmatic run against the `app` family skips it and scores `NOT_COVERED`. Walkthrough:
+`semantic_retrieval` — the pivot it describes happens in a shared embedding space — so it
+is skipped and scores `NOT_COVERED` against the `app` family and against every live
+vector store the CLI builds (all of which are hashing-embedder backed; see
+[Class 6](class-06-embedding-inversion.md#runs-when)). Walkthrough:
 [`examples/multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed).

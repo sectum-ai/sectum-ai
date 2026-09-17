@@ -3,7 +3,7 @@
 This example reproduces **Attack Class 4**: cross-tenant
 contamination of a semantic or prompt cache (the engineering spec,
 §7). Tenant X primes the cache with a query whose answer contains a
-`HARD_CANARY`; tenant Y issues a semantically-near query. On a
+`HARD_CANARY`; tenant Y issues the identical query. On a
 cache that does not key by tenant, tenant Y receives tenant X's
 cached answer — canary intact.
 
@@ -59,6 +59,8 @@ adapters:
 ```
 
 ```sh
+# Save the YAML block above as `sectum-ai.yaml` in this directory first —
+# the example ships no config file.
 sectum-ai probe --probe semantic-cache-contamination --config sectum-ai.yaml --workdir out
 ```
 
@@ -75,9 +77,9 @@ Each Class 4 finding carries:
   answer text)
 - the surface (`SEMANTIC_CACHE`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure: per-
-  tenant cache namespacing (`tenant_id` in the key derivation),
-  TTL bounds, or disabling the cache for tenant-sensitive paths
+Class 4 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant cache namespacing (`tenant_id` in the key derivation), TTL bounds,
+or disabling the cache for tenant-sensitive paths.
 
 ## What's *not* in this example
 

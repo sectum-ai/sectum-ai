@@ -1,16 +1,18 @@
 """Tests for the ``sectum`` evidence-pipeline CLI commands."""
 
+import hashlib
 import json
 from pathlib import Path
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from sectum_ai.cli.app import _resolve_timestamper, _resolve_transparency_log, app
 from sectum_ai.config import AdapterConfig, EvidenceConfig
 from sectum_ai.evidence import RekorTransparencyLog, Rfc3161Timestamper
-from sectum_ai.spec import RunMetrics, RunResult, SyntheticUserSpec
+from sectum_ai.spec import SCHEMA_VERSION, RunMetrics, RunResult, SyntheticUserSpec
 
 _runner = CliRunner()
 
@@ -300,8 +302,22 @@ def test_baseline_compare_does_not_let_a_record_forge_its_verdict(tmp_path: Path
     (tmp_path / "baseline.json").write_text(clean.model_dump_json())
     forged = "no regression against the baseline"
     leaked = run.findings[0].model_copy(update={"finding_id": f"f00d\n{forged}"})
+    # The counts travel with the findings: `baseline --compare` refuses a record
+    # whose own `confirmed_findings` contradicts what it carries, so keeping the
+    # real run's 229 beside a single planted finding would be refused before the
+    # sanitizer under test here ever ran.
     (tmp_path / "run.json").write_text(
-        run.model_copy(update={"findings": (leaked,)}).model_dump_json()
+        run.model_copy(
+            update={
+                "findings": (leaked,),
+                "metrics": run.metrics.model_copy(
+                    update={
+                        "confirmed_findings": 1,
+                        "per_probe_findings": {leaked.probe_id: 1},
+                    }
+                ),
+            }
+        ).model_dump_json()
     )
     result = _runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 2
@@ -762,7 +778,9 @@ def test_score_grades_the_leaky_demo_run_and_shows_its_coverage(tmp_path: Path) 
     # The rendered numbers ARE the scorecard, and docs/scorecard.md reproduces this block
     # verbatim. Greping only for the letter let a swapped covered/total or
     # weighted/coverage print a plausible, wrong posture, so pin the exact strings.
-    assert "10/11 classes covered" in result.output  # Class 13 needs a multimodal adapter
+    assert (
+        "weighted coverage 0.88 over 10/11 classes" in result.output
+    )  # Class 13 needs a multimodal adapter
     assert "weighted 0.00 over the covered classes; coverage 0.88." in result.output
 
 
@@ -770,10 +788,10 @@ def test_score_output_json_emits_a_parseable_isolation_score(tmp_path: Path) -> 
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["grade"] == "F"
     assert payload["capped_by"] == "critical"
-    assert payload["methodology_version"] == "1.2"  # pinned; see docs/scorecard.md
+    assert payload["methodology_version"] == "1.4"  # pinned; see docs/scorecard.md
     # The demo leaks on every surface it exercised, so the covered classes all fail.
     assert payload["weighted_score"] == 0.0
     assert payload["coverage"] == pytest.approx(36 / 41, abs=5e-3)
@@ -803,7 +821,7 @@ def test_score_on_an_isolated_stack_grades_well(tmp_path: Path) -> None:
     _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--config", str(config_path)])
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["grade"] == "A"
     assert payload["capped_by"] is None
     assert payload["weighted_score"] == 1.0
@@ -826,7 +844,7 @@ def test_score_refuses_a_run_that_exercised_no_catalog_class(tmp_path: Path) -> 
     run_path.write_text(json.dumps(record))
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 3  # a ConfigError, not a ZeroDivisionError traceback
-    assert "nothing to grade" in (result.output + str(result.exception or ""))
+    assert "can be graded" in (result.output + str(result.exception or ""))
 
 
 def test_score_rejects_sarif_and_oscal(tmp_path: Path) -> None:
@@ -1124,8 +1142,8 @@ def test_score_explicit_workdir_overrides_a_config_value(tmp_path: Path) -> None
 def test_score_renders_a_row_per_class_with_its_verdict_and_band(tmp_path: Path) -> None:
     # The breakdown IS the evidence behind the letter, and only the letter was asserted.
     # Dropping every failing row, or rendering every band as a constant, left GRADE F,
-    # "10/11 classes covered" and the capped-by line all intact - a scorecard that reads
-    # whole while the evidence under it is gone.
+    # the confidence header and the capped-by line all intact - a scorecard that
+    # reads whole while the evidence under it is gone.
     _seed_and_probe(tmp_path)
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
     assert result.exit_code == 0
@@ -1166,7 +1184,7 @@ def test_score_renders_the_confidence_of_a_thin_run_as_low(tmp_path: Path) -> No
     assert result.exit_code == 0
     assert "GRADE A" in result.output  # the letter is clean...
     assert "confidence: low" in result.output  # ...and says how little it rests on
-    assert "1/11 classes covered" in result.output
+    assert "weighted coverage 0.12 over 1/11 classes" in result.output
 
 
 def test_score_names_the_pack_when_it_graded_the_pack(tmp_path: Path) -> None:
@@ -1201,7 +1219,7 @@ def test_score_grades_an_evidence_pack_when_only_the_pack_is_present(tmp_path: P
     (tmp_path / "run.json").unlink()  # auditor received the pack only
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    assert json.loads(result.output)["grade"] == "F"
+    assert json.loads(result.stdout)["grade"] == "F"
 
 
 def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) -> None:
@@ -1219,7 +1237,7 @@ def test_score_prefers_a_fresh_run_over_a_stale_evidence_pack(tmp_path: Path) ->
     pack_path.write_text(json.dumps(pack))
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["run_id"] != "run-LAST-GOOD-RELEASE"  # the stale pack was not graded
     assert payload["grade"] == "F"  # today's leaky run governs
 
@@ -1335,7 +1353,7 @@ def test_score_binds_its_grade_to_the_exact_record(tmp_path: Path) -> None:
     run_path = tmp_path / "run.json"
     leaking = json.loads(run_path.read_text())
     result = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
-    leaking_card = json.loads(result.output)
+    leaking_card = json.loads(result.stdout)
     assert leaking_card["grade"] == "F"
 
     doctored = {**leaking, "findings": []}
@@ -1483,6 +1501,25 @@ def test_report_refuses_a_run_recorded_against_a_reseeded_substrate(tmp_path: Pa
 
 
 def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str, object]) -> None:
+    # `per_probe_findings` is derived from the findings a producer recorded, and
+    # the comparing commands refuse a record where the two disagree - so the
+    # findings the counts claim are materialised here rather than left implicit.
+    per_probe = metrics.get("per_probe_findings") or {}
+    assert isinstance(per_probe, dict)
+    findings = [
+        {
+            "finding_id": f"{probe_id}-{index}",
+            "probe_id": probe_id,
+            "severity": "high",
+            "confidence": 1.0,
+            "status": "confirmed",
+            "owner_tenant_id": str(UUID(int=1)),
+            "observed_in_tenant_id": str(UUID(int=2)),
+            "surface": "vector_db",
+        }
+        for probe_id, count in per_probe.items()
+        for index in range(int(count))
+    ]
     path.write_text(
         json.dumps(
             {
@@ -1492,7 +1529,11 @@ def _write_run(path: Path, *, probe_versions: dict[str, str], metrics: dict[str,
                 "started_at": "2026-01-01T00:00:00+00:00",
                 "finished_at": "2026-01-01T00:00:00+00:00",
                 "probe_versions": probe_versions,
-                "metrics": metrics,
+                "findings": findings,
+                "metrics": {**metrics, "confirmed_findings": len(findings)},
+                # A record without a stamp is refused: the field defaults to the
+                # current version, so "missing" cannot read as "current".
+                "schema_version": SCHEMA_VERSION,
             }
         )
     )
@@ -1640,3 +1681,747 @@ def test_the_retrieval_pivot_rate_describes_the_live_surfaces_on_a_mixed_run(
     assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
     assert summary["retrieval_pivot_rate"] == 0.0  # the live pipeline did not
     assert summary["retrieval_pivot_k"] == 0
+
+
+def test_every_headline_rate_describes_the_live_surfaces_on_a_mixed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The cycle-4 filter reached the Retrieval-Pivot Rate only: the same summary
+    # reported 0% pivot on the live pipeline and 100% poisoning bleed, 100%
+    # inversion and 18% extraction from the fake vector store, as the stack's.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"]).stdout
+    )
+    assert summary["surface_provenance"]["rag_pipeline"] == "LIVE"
+    assert summary["confirmed_findings"] > 0  # the demo's fake vector store leaks
+    assert summary["confirmed_on_live_surfaces"] == 0
+    for rate in ("retrieval_pivot_rate", "poisoning_bleed_delta"):
+        assert summary[rate] in (0.0, None), (rate, summary[rate])
+    assert summary["inversion_reconstruction_rate"] in (0.0, None)
+    assert summary["extraction_efficiency"] in (0.0, None)
+    # The live RAG pipeline WAS measured: the filter kept its steps rather than
+    # dropping every one of them, which would read the same in the rate alone.
+    assert summary["retrieval_pivot_n"] > 0, summary
+
+
+def test_an_unexercised_live_adapter_does_not_make_a_run_mixed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "Mixed" keyed on the configured slots, so a live observability adapter no
+    # probe drove emptied the Class 2 rate: the summary said Class 2 did not run
+    # while the scorecard failed it on the same record.
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeObservability
+
+    class _LiveTracing(FakeObservability):
+        synthetic = False
+
+    monkeypatch.setattr(config_module, "build_observability", lambda _cfg: _LiveTracing())
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = json.loads(
+        _runner.invoke(
+            app,
+            [
+                "probe",
+                "--workdir",
+                str(tmp_path),
+                "--probe",
+                "rag-entity-bleed",
+                "--output",
+                "json",
+            ],
+        ).stdout
+    )
+    assert "tracing" not in summary["surface_provenance"]
+    assert summary["retrieval_pivot_n"] > 0
+    assert summary["retrieval_pivot_rate"] is not None
+
+
+def test_the_text_summary_says_how_many_findings_describe_the_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sectum_ai import config as config_module
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+
+    class _LiveCleanRag(FakeRAGPipeline):
+        synthetic = False
+
+    def _live_rag(cfg: AdapterConfig) -> _LiveCleanRag:
+        (cfg.model_extra or {}).get("shared_index")
+        return _LiveCleanRag(shared_index=False)
+
+    monkeypatch.setattr(config_module, "build_rag", _live_rag)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "; 0 on live surfaces" in result.output, result.output
+
+
+def test_verify_on_a_non_utf8_file_exits_cleanly(tmp_path: Path) -> None:
+    # Reading the pack's bytes for the schema stamps moved the read out of the
+    # try that mapped a decode error to exit 3, so a binary file tracebacked.
+    bad = tmp_path / "evidence.json"
+    bad.write_bytes(b"\xff\xfe\x00binary")
+    result = _runner.invoke(app, ["verify", str(bad)])
+    assert result.exit_code == 3, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "not a valid evidence pack" in result.output, result.output
+
+
+def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> None:
+    # The markers, tenants and manifest ARE the schema: a 0.6.x substrate seeded a
+    # run whose own stamp then read as current, so nothing downstream could see it.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    path = tmp_path / "substrate.json"
+    record = json.loads(path.read_text())
+    record["schema_version"] = "0.6.0"
+    path.write_text(json.dumps(record))
+    result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+
+
+def test_a_kv_probe_with_no_resolution_does_not_cover_class_5(tmp_path: Path) -> None:
+    # The run recorded the KV probe as exercised whenever it produced any signal,
+    # so a backend whose latency metric has no resolution (one constant reading)
+    # put the probe in probe_versions and graded Class 5 PASS off a measurement
+    # that could not have found anything.
+    import sectum_ai.cli.app as app_module
+    from sectum_ai.probes.kv_cache_timing.probe import KvCacheTimingProbe, TimingSignal
+
+    def _flat(self: object, owner: object, observer: object, prefixes: object) -> TimingSignal:
+        return TimingSignal(
+            owner_tenant_id=uuid4(),
+            observed_in_tenant_id=uuid4(),
+            primed_mean_ms=100.0,
+            control_mean_ms=100.0,
+            mean_gap_ms=0.0,
+            effect_size=0.0,
+            t_statistic=0.0,
+            degrees_of_freedom=46.0,
+            p_value=1.0,
+            ci_low_ms=0.0,
+            ci_high_ms=0.0,
+            resolved=False,
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(KvCacheTimingProbe, "_measure", _flat)
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+        _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    finally:
+        monkeypatch.undo()
+    run = json.loads((tmp_path / "run.json").read_text())
+    assert KvCacheTimingProbe.id not in run["probe_versions"], run["probe_versions"]
+    assert "kv_cache" not in run["surface_provenance"]
+    assert app_module is not None
+
+
+def test_verify_names_the_files_beside_the_pack_it_does_not_speak_for(tmp_path: Path) -> None:
+    # `verify` checked only the pack's OWN expected siblings and said nothing
+    # about anything else in the folder, so a forged `erasure-attestation.pdf`
+    # delivered beside a genuine `evidence.json` produced an all-`[ok]` verdict
+    # that read as "everything here checks out".
+    #
+    # It cannot be CHECKED: one workdir routinely holds both the probe's and the
+    # erasure run's artifacts, each pack binding only its own, so hashing the
+    # other against this pack's `pdf_ref` would call a genuine document altered -
+    # the worst false alarm a tamper-evidence product can raise. So it is named.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "erasure-attestation.pdf").write_bytes(b"%PDF-1.4 forged\n")
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert "unclaimed-siblings" in result.output, result.output
+    assert "erasure-attestation.pdf" in result.output
+    assert "says nothing about it" in result.output, result.output
+    # Still a pass: the pack itself is intact, and the extra file is not its
+    # business to judge.
+    assert result.exit_code == 0
+
+
+def test_several_unclaimed_siblings_are_named_in_the_plural(tmp_path: Path) -> None:
+    # The sentence has two forms and the singular one is now the common case
+    # (an erasure pack's neighbouring `run.json` is unclaimed on its own), so
+    # both are pinned - a list rendered "run.json sit beside this pack" is the
+    # kind of sloppiness that costs an audit document its authority.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    (tmp_path / "erasure-attestation.pdf").write_bytes(b"%PDF-1.4 someone else's\n")
+    (tmp_path / "erasure-attestation.intoto.json").write_text("{}")
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert "says nothing about them" in result.output, result.output
+    assert "erasure-attestation.intoto.json, erasure-attestation.pdf sit beside" in result.output
+    assert result.exit_code == 0
+
+
+def test_the_documented_verify_check_count_is_what_verify_prints(tmp_path: Path) -> None:
+    # `examples/retrieval-pivot/RECORDING.md` tells the reader how many checks
+    # today's `verify` prints, to date the committed cast. That number has been
+    # wrong three times running (7, then 8, then 9), each time counted from a
+    # `Check(...)` grep rather than from a run - and `manifest-hash` needs
+    # `--manifest`, `unclaimed-siblings` needs an unbound sibling, and
+    # `independent-anchor` needs the anchored path, so none of them appears here.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    result = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    printed = [line for line in result.output.splitlines() if line.startswith(("[ok]", "[FAIL]"))]
+    documented = (
+        Path(__file__).resolve().parents[2] / "examples/retrieval-pivot/RECORDING.md"
+    ).read_text()
+    words = {8: "eight", 9: "nine", 7: "seven", 10: "ten"}
+    assert f"there are {words[len(printed)]}." in documented, (
+        f"verify prints {len(printed)} checks; RECORDING.md says otherwise: "
+        f"{[line.split(':')[0] for line in printed]}"
+    )
+
+
+def _full_workdir(workdir: Path) -> None:
+    _seed_and_probe(workdir)
+    _runner.invoke(app, ["report", "--workdir", str(workdir)])
+    _runner.invoke(app, ["erasure", "--workdir", str(workdir), "--target-tenant", "Acme Robotics"])
+
+
+def _verify(pack: Path) -> Result:
+    return _runner.invoke(app, ["verify", str(pack), "--allow-unanchored", "--allow-synthetic"])
+
+
+def test_a_renamed_pack_checks_the_document_it_binds_and_names_the_other(tmp_path: Path) -> None:
+    # A pack whose filename is not in `_PACK_SIBLINGS` has BOTH pdf names as
+    # candidates and the first that existed was the one re-hashed, so a folder
+    # holding both documents had one checked and the other neither checked nor
+    # named. Which is which is decidable: exactly one hashes to `pdf_ref`.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "delivered-to-the-auditor.json"
+    renamed.write_bytes((tmp_path / "evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[ok] audit-pdf: the audit PDF matches" in result.output, result.output
+    assert "erasure-attestation.pdf" in result.output, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+
+def test_a_renamed_erasure_pack_does_not_accuse_the_probe_runs_artifacts(tmp_path: Path) -> None:
+    # The same fallback ran the probe run's genuine `audit-pack.pdf`,
+    # `attestation.intoto.json` and `run.json` against the erasure pack, printing
+    # "altered or replaced after signing" and VERIFICATION FAILED over an
+    # untampered folder - the worst false alarm a tamper-evidence product can
+    # raise, and the reason `_unclaimed_siblings` exists at all.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "erasure-for-the-auditor.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    for other in ("audit-pack.pdf", "attestation.intoto.json", "evidence.dsse.json", "run.json"):
+        assert other in result.output, (other, result.output)
+
+
+def test_a_renamed_pack_alone_with_a_tampered_sidecar_still_fails(tmp_path: Path) -> None:
+    # The guard on the rule above. "Somebody else's file" is only an answer when
+    # somebody else is actually there; with no other pack in the folder to claim
+    # it, a sidecar that binds nothing is judged, not excused.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "alone"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "evidence.dsse.json").write_text('{"payload": "e30="}')
+    result = _verify(delivered / "mypack.json")
+    assert result.exit_code == 4, result.output
+    assert "[FAIL] dsse-envelope" in result.output, result.output
+
+
+def test_a_forged_owner_does_not_excuse_a_tampered_document(tmp_path: Path) -> None:
+    # The guard on "somebody else's file" is only as strong as what the claim
+    # costs. Requiring the claimant to PARSE and to BIND the file left a one-field
+    # forgery: copy the pack under verification, point `pdf_ref` at the tampered
+    # pdf, save it under the owner's name. No key needed - and `verify` went from
+    # exit 4 with "altered or replaced after signing" to exit 0 and INTEGRITY OK.
+    # The claimant now has to verify, so the digest it attests must cover the
+    # `pdf_ref` it claims with.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "forged"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    pdf = delivered / "audit-pack.pdf"
+    pdf.write_bytes((tmp_path / "audit-pack.pdf").read_bytes() + b"TAMPERED")
+
+    without_decoy = _verify(delivered / "mypack.json")
+    assert without_decoy.exit_code == 4, without_decoy.output
+    assert "[FAIL] audit-pdf" in without_decoy.output, without_decoy.output
+
+    decoy = json.loads((tmp_path / "evidence.json").read_text())
+    decoy["pdf_ref"] = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    (delivered / "evidence.json").write_text(json.dumps(decoy))
+
+    result = _verify(delivered / "mypack.json")
+    assert result.exit_code == 4, result.output
+    assert "[FAIL] audit-pdf" in result.output, result.output
+
+
+def _bundle_with_rag(rag: Any) -> Any:
+    """An `AdapterBundle` whose rag slot is the adapter under test."""
+    from sectum_ai.adapters import (
+        FakeAgent,
+        FakeCache,
+        FakeMCP,
+        FakeMemory,
+        FakeModel,
+        FakeObservability,
+        FakeVectorStore,
+    )
+    from sectum_ai.config import AdapterBundle
+
+    return AdapterBundle(
+        vector=FakeVectorStore(),
+        cache=FakeCache(),
+        model=FakeModel(),
+        mcp=FakeMCP(),
+        memory=FakeMemory(),
+        rag=rag,
+        observability=FakeObservability(),
+        agent=FakeAgent(),
+    )
+
+
+def test_a_live_backend_sectum_cannot_seed_is_not_graded_as_passing(tmp_path: Path) -> None:
+    # Three slots carry a canary Sectum PUTS THERE, and their adapter protocols
+    # expose only `ask`/`invoke`/`run` - no write primitive - so the seeding is
+    # guarded by `isinstance(..., Fake...)` and a live backend never receives the
+    # marker. The probes ran anyway: planned, queried, found nothing (there was
+    # nothing to find), entered `probe_versions` and graded PASS. Pointing Sectum
+    # at a live pipeline produced `Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)`
+    # - a well-powered answer to a question that could never have had one, which
+    # `docs/scorecard.md` names as the dangerous shape this guard must prevent.
+    from sectum_ai.adapters import FakeRAGPipeline
+    from sectum_ai.cli.app import _skip_unseedable
+    from sectum_ai.probes import RagPipelineBleedProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = (RagPipelineBleedProbe(),)
+
+    class _Unseedable(FakeRAGPipeline):
+        """A live pipeline that does not read the store this command seeded."""
+
+        synthetic = False
+
+    class _ReadsTheSeededStore(FakeRAGPipeline):
+        """A live pipeline that DOES - the common case, and a true positive."""
+
+        synthetic = False
+
+        def ask(self, tenant: UUID, query: str) -> Any:
+            answer = super().ask(tenant, query)
+            return answer.model_copy(update={"answer": f"retrieved: {query}"})
+
+    starved, skipped = _skip_unseedable(suite, _bundle_with_rag(_Unseedable()), substrate)
+    assert starved == (), skipped
+    assert skipped and "cannot reach the configured rag backend" in skipped[0][1], skipped
+
+    # The backend is ASKED rather than assumed, so a pipeline reading the seeded
+    # store still runs: skipping it would lose a real finding.
+    runnable, none_skipped = _skip_unseedable(
+        suite, _bundle_with_rag(_ReadsTheSeededStore()), substrate
+    )
+    assert len(runnable) == 1, none_skipped
+    assert none_skipped == []
+    # And the built-in fake, which the command does seed, is untouched.
+    kept, _ = _skip_unseedable(suite, _bundle_with_rag(FakeRAGPipeline()), substrate)
+    assert len(kept) == 1
+
+    # End to end, because the guard is only worth what the command does with it.
+    module = tmp_path / "unseedable_rag.py"
+    module.write_text(
+        "class _Chain:\n"
+        "    def invoke(self, payload):\n"
+        '        return {"answer": "", "context": []}\n\n'
+        "def make_chain():\n"
+        "    return _Chain()\n"
+    )
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text(
+        "adapters:\n  rag:\n    kind: langchain\n    factory: unseedable_rag:make_chain\n"
+    )
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        _runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+        probed = _runner.invoke(
+            app,
+            [
+                "probe",
+                "--workdir",
+                str(tmp_path),
+                "--config",
+                str(config),
+                "--probe",
+                "rag-pipeline-bleed",
+            ],
+        )
+    finally:
+        monkeypatch.undo()
+    assert "skipping rag-pipeline-bleed" in probed.output, probed.output
+    assert "NOT_COVERED rather than passed" in probed.output, probed.output
+    # Nothing is attested: the only selected probe could not be run.
+    assert not (tmp_path / "run.json").exists(), "a starved run must not be recorded"
+
+
+def test_an_under_anchored_claimant_is_not_an_accusation(tmp_path: Path) -> None:
+    # The ownership rule may DECLINE a claim - an unanchored claimant cannot excuse
+    # an anchored pack's sibling - but declining is not tampering, and reporting it
+    # as "altered or replaced after signing" is the worst false alarm this product
+    # can raise. It is not exotic either: `erasure` has no `--tsa`/`--rekor` flag at
+    # all, so `report --tsa` beside `erasure` in one workdir produces an anchored
+    # pack next to a genuine unanchored one as a matter of course.
+    from sectum_ai.cli.app import _NO_ROOTS, _binds_pdf, _Claim, _owned_elsewhere
+    from sectum_ai.spec import EvidencePack
+
+    _full_workdir(tmp_path)
+    delivered = tmp_path / "deliver"
+    delivered.mkdir()
+    # The erasure pack, delivered without its own PDF, beside the probe run's
+    # genuine pack and genuine PDF.
+    (delivered / "handed-over.json").write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    (delivered / "evidence.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "audit-pack.pdf").write_bytes((tmp_path / "audit-pack.pdf").read_bytes())
+    pack = EvidencePack.model_validate_json((delivered / "handed-over.json").read_bytes())
+
+    claim = _owned_elsewhere(
+        delivered / "handed-over.json", "audit-pack.pdf", 0, pack, _binds_pdf, _NO_ROOTS
+    )
+    assert claim is _Claim.OWNED, claim
+    result = _verify(delivered / "handed-over.json")
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+    # The same untampered folder, with only the pack under verification anchored.
+    anchored = pack.model_copy(update={"anchored_with_timestamp": True})
+    assert (
+        _owned_elsewhere(
+            delivered / "handed-over.json", "audit-pack.pdf", 0, anchored, _binds_pdf, _NO_ROOTS
+        )
+        is _Claim.UNDER_ANCHORED
+    ), "a real claim this verification cannot accept is neither owned nor unowned"
+
+    # The under-anchored case end to end: not verified, not accused, exit 3 - the
+    # code an erasure whose absence could not be established already uses. `[ok]`
+    # let an unanchored decoy excuse a tampered PDF at exit 0; `[FAIL]` accused this
+    # untampered folder. Neither is what this verification knows.
+    # Setting the anchor flag by hand would break the pack's own digest and fail it
+    # for a different reason, so the branch is driven through the real CLI tail with
+    # the claim forced - which is what a genuinely anchored pack produces here.
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "sectum_ai.cli.app._owned_elsewhere",
+        lambda *_args, **_kwargs: _Claim.UNDER_ANCHORED,
+    )
+    try:
+        third = _verify(delivered / "handed-over.json")
+    finally:
+        monkeypatch.undo()
+    assert third.exit_code == 3, third.output
+    assert "[INDETERMINATE] unexcused-siblings" in third.output, third.output
+    assert "VERIFICATION INDETERMINATE" in third.output, third.output
+    assert "VERIFICATION FAILED" not in third.output, third.output
+    assert "INTEGRITY OK" not in third.output and "VERIFIED" not in third.output, third.output
+
+    # And a file no present pack claims is still judged, so the guard still bites.
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    (lone / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (lone / "audit-pack.pdf").write_bytes(b"not the signed pdf")
+    failed = _verify(lone / "mypack.json")
+    assert failed.exit_code == 4, failed.output
+    assert "[FAIL] audit-pdf" in failed.output, failed.output
+
+
+def test_a_renamed_pack_states_the_run_record_delivered_with_it(tmp_path: Path) -> None:
+    # Exempting `run.json` on an unrecognised filename re-opened the hole the check
+    # was written to close: a pack delivered under another name, next to a gutted
+    # `run.json`, verified at exit 0 with no line about it - and `score`, which
+    # prefers `run.json`, then graded that record. Now that the line states rather
+    # than accuses, it is safe to print for every pack name.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "delivered"
+    delivered.mkdir()
+    (delivered / "for-the-auditor.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    gutted = json.loads((tmp_path / "run.json").read_text())
+    assert gutted["findings"], "the demo run must have findings to delete"
+    gutted["findings"] = []
+    (delivered / "run.json").write_text(json.dumps(gutted))
+
+    result = _verify(delivered / "for-the-auditor.json")
+    assert "is NOT the run this pack attests" in result.output, result.output
+    assert "[FAIL]" not in result.output, result.output
+
+
+def test_a_run_record_another_present_pack_binds_is_that_packs(tmp_path: Path) -> None:
+    # The `run.json` beside an erasure attestation is the PROBE run's, and the
+    # probe's pack is right there binding it - so it is that pack's business, not
+    # this one's, and it is listed rather than described.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "erasure-delivered.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "run-record" not in result.output, result.output
+    assert "unclaimed-siblings" in result.output and "run.json" in result.output, result.output
+
+
+def test_a_file_merely_named_like_another_pack_does_not_excuse_a_tampered_one(
+    tmp_path: Path,
+) -> None:
+    # "Somebody else's document" is a claim about a BINDING, and the ownership test
+    # was `.exists()`. Sixteen bytes of garbage named `evidence.json` turned a
+    # `[FAIL] audit-pdf: altered or replaced after signing` on a renamed pack into
+    # `[ok]` at exit 0 - a decoy that disarms the tamper check.
+    _seed_and_probe(tmp_path)
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    delivered = tmp_path / "delivered"
+    delivered.mkdir()
+    (delivered / "mypack.json").write_bytes((tmp_path / "evidence.json").read_bytes())
+    (delivered / "audit-pack.pdf").write_bytes(b"%PDF-1.4 forged\n")
+
+    alone = _verify(delivered / "mypack.json")
+    assert alone.exit_code == 4, alone.output
+    assert "[FAIL] audit-pdf" in alone.output, alone.output
+
+    (delivered / "evidence.json").write_text("not even a pack")
+    decoyed = _verify(delivered / "mypack.json")
+    assert decoyed.exit_code == 4, decoyed.output
+    assert "[FAIL] audit-pdf" in decoyed.output, decoyed.output
+
+
+def test_a_genuine_other_pack_still_claims_its_own_document(tmp_path: Path) -> None:
+    # The guard on the rule above: ownership must still work when the owner is real.
+    # A renamed erasure pack beside a genuine `evidence.json` must not judge that
+    # pack's `audit-pack.pdf` - the false alarm the whole table exists to avoid.
+    _full_workdir(tmp_path)
+    renamed = tmp_path / "erasure-delivered.json"
+    renamed.write_bytes((tmp_path / "erasure-evidence.json").read_bytes())
+    result = _verify(renamed)
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "audit-pack.pdf" in result.output, result.output
+
+
+def test_report_and_pack_refuse_the_record_diff_refuses(tmp_path: Path) -> None:
+    # The guard was left off the shared loaders on the reasoning that "`score`,
+    # `report` and `pack` recount the findings". True of what they RENDER, false
+    # of what `report` SIGNS: `intoto.py` embeds `run.metrics` verbatim into the
+    # attested predicate - "the part a downstream policy engine reads" - so a
+    # record whose counts contradict its findings became a DSSE-signed
+    # attestation asserting `confirmed_findings: 0` beside its own
+    # `finding_count: 280`, over 229 confirmed cross-tenant leaks, while `diff`
+    # refused that very file.
+    _seed_and_probe(tmp_path)
+    run = json.loads((tmp_path / "run.json").read_text())
+    carried = sum(1 for f in run["findings"] if f["status"] == "confirmed")
+    assert carried, "the demo run must confirm something for this to mean anything"
+    run["metrics"]["confirmed_findings"] = 0
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    report = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert report.exit_code == 3, report.output
+    assert "contradicts itself" in report.output, report.output
+    assert not (tmp_path / "evidence.json").exists(), "nothing may be signed"
+
+
+def test_pack_names_a_contradicting_record_for_what_it_is(tmp_path: Path) -> None:
+    # `pack` reaches its self-contradiction guard only when a pack already exists,
+    # so the record has to be doctored AFTER a clean `report` - otherwise `pack`
+    # stops at "no evidence pack" and the guard is never exercised. The
+    # run-vs-pack digest check would also refuse this file; what this pins is
+    # that the operator is told WHICH thing is wrong, rather than being sent to
+    # re-run `report` over a record no re-run will fix.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    run = json.loads((tmp_path / "run.json").read_text())
+    run["metrics"]["confirmed_findings"] = 0
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    pack = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert pack.exit_code == 3, pack.output
+    assert "contradicts itself" in pack.output, pack.output
+
+
+def test_pack_refuses_a_run_that_is_not_the_one_the_evidence_attests(tmp_path: Path) -> None:
+    # `pack` is the only writer that puts run.json INTO a bundle, and `verify`'s
+    # bundle path judges it against the pack's attested run. So the ordinary
+    # `probe; report; probe; pack` workflow - whose second run legitimately
+    # rewrites run.json - shipped a deliverable whose own PACK-README tells the
+    # auditor to run a command answering "[FAIL] bundled-run: ... altered or
+    # replaced after signing" at exit 4. The directory path of `verify`
+    # deliberately refuses to make that accusation because it cannot tell a later
+    # run from an altered one; a bundle IS a closed container, so the mismatch is
+    # refused where it is created rather than accused where it is read.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["pack", "--workdir", str(tmp_path)]).exit_code == 0
+
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    again = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert again.exit_code == 3, again.output
+    assert "is not the run" in again.output, again.output
+    # By digest, not by run_id: run_id is stable across runs of one scenario, so
+    # naming it printed the same string on both sides of "vs".
+    assert "record " in again.output, again.output
+
+
+def test_a_vector_store_that_swallows_the_corpus_is_not_graded_as_passing() -> None:
+    # The fourth seeded slot, and the one the most classes stand on. `upsert` IS a
+    # write primitive, so the corpus goes into a live store unconditionally - and
+    # nothing read it back. A store that acknowledges the bulk load and serves
+    # none of it (a quota, the wrong namespace, a read-side ACL, an index that
+    # never settles; `pinecone.upsert` settles on the last id of a batch only,
+    # `weaviate.upsert` settles not at all) left Classes 1, 2, 6 and 10 querying
+    # an empty index and grading PASS off it, printing `0.0% reconstruction` and
+    # `0.0% extraction efficiency` as measurements.
+    #
+    # The planting probes were guarded all along: their bait is a `ProbeStep` that
+    # `_plant_landed` reads back. The corpus is a direct adapter call, which
+    # `_plant_landed` never sees - one sibling of the same rule, unguarded.
+    from dataclasses import replace
+
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.adapters.fakes import FakeRAGPipeline
+    from sectum_ai.cli.app import _skip_unseedable
+    from sectum_ai.config import AdapterBundle
+    from sectum_ai.probes import IkeaExtractionProbe, RagEntityBleedProbe, TenantBoundaryProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = (TenantBoundaryProbe(), RagEntityBleedProbe(), IkeaExtractionProbe())
+
+    def _bundle(store: FakeVectorStore) -> AdapterBundle:
+        # Seeded exactly as `probe` seeds it, then handed to the guard: the guard
+        # runs AFTER the corpus load and asks what actually landed.
+        for tenant in substrate.tenants:
+            documents = [d for d in substrate.documents if d.tenant_id == tenant.tenant_id]
+            store.upsert(tenant.tenant_id, documents)
+        base = _bundle_with_rag(FakeRAGPipeline())
+        bundle: AdapterBundle = replace(base, vector=store)
+        return bundle
+
+    class _Swallows(FakeVectorStore):
+        """Live, ACKs every write, stores nothing."""
+
+        synthetic = False
+
+        def upsert(self, tenant: UUID, documents: Any) -> None:
+            return None
+
+    class _Works(FakeVectorStore):
+        """Live, and the corpus lands - the common case."""
+
+        synthetic = False
+
+    seeded = _bundle(_Swallows())
+    runnable, skipped = _skip_unseedable(suite, seeded, substrate)
+    assert runnable == (), skipped
+    assert len(skipped) == 3, skipped
+    for _, reason in skipped:
+        assert "cannot reach the configured vector backend" in reason, reason
+
+    # The direction that matters more: a live store the corpus DID reach must not
+    # be starved, or the fix trades a false pass for a false NOT_COVERED across
+    # five classes. Starved only when the corpus is WHOLLY unreadable, which is
+    # `_plant_landed`'s own all-or-nothing rule.
+    healthy = _bundle(_Works())
+    kept, none_skipped = _skip_unseedable(suite, healthy, substrate)
+    assert len(kept) == 3, none_skipped
+    assert none_skipped == []
+
+    # And the built-in fake is never interrogated at all.
+    fake = _bundle(FakeVectorStore())
+    untouched, _ = _skip_unseedable(suite, fake, substrate)
+    assert len(untouched) == 3
+
+
+def test_pack_refuses_a_malformed_evidence_pack_with_a_typed_error(tmp_path: Path) -> None:
+    # `pack` was the one pack-reader with neither a schema-stamp check nor typed
+    # error handling: pydantic's ValidationError is a ValueError, not a
+    # SectumError, so it escaped `_handle_typed_errors` and exited 1 - outside the
+    # documented 0/2/3/4 contract - with a raw traceback. `verify` runs
+    # `check_raw_schema_stamps` then catches ValueError; `_load_run_artifact`
+    # checks both stamps; `_load_run` checks the run stamp.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack_path = tmp_path / "evidence.json"
+    payload = json.loads(pack_path.read_text())
+    del payload["run_result"]  # valid JSON, not a pack
+    pack_path.write_text(json.dumps(payload))
+
+    result = _runner.invoke(app, ["pack", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "not a sectum evidence pack" in result.output, result.output
+    assert not (tmp_path / "run-pack.zip").exists()
+
+
+def test_the_json_scorecard_carries_the_unaccounted_surfaces_the_text_prints(
+    tmp_path: Path,
+) -> None:
+    # `evidence/labels.py` records that three renderers answered "was this run
+    # live?" from the provenance block alone and were each fixed - the audit PDF,
+    # `verify`'s run-scope gate, and the scorecard's scope LINE. The
+    # machine-readable scorecard is the fourth consumer of the same fact and was
+    # not: it emitted `"scope": "configured_stack"` with nothing on the subject,
+    # while the text beside it printed "plus N surface(s) this run's findings rest
+    # on that its provenance never recorded".
+    _seed_and_probe(tmp_path)
+    run = json.loads((tmp_path / "run.json").read_text())
+    # Records SOME surface, but not the one the findings rest on.
+    run["surface_provenance"] = {"semantic_cache": "LIVE"}
+    (tmp_path / "run.json").write_text(json.dumps(run))
+
+    text = _runner.invoke(app, ["score", "--workdir", str(tmp_path)])
+    assert "provenance never recorded" in text.output, text.output
+
+    emitted = _runner.invoke(app, ["score", "--workdir", str(tmp_path), "--output", "json"])
+    card = json.loads(emitted.stdout)
+    assert card["scope"] == "configured_stack"
+    assert "vector_db" in card["unaccounted_surfaces"], card["unaccounted_surfaces"]
+
+
+def test_the_recorded_extraction_efficiency_is_the_sequence_rate(tmp_path: Path) -> None:
+    # The unit test beside `confirmed_sequence_rate` proves the function; this one
+    # proves the CLI USES it. On the shipped demo the two units are far apart -
+    # 13 of 72 turns (18.1%) against 7 of 24 sequences (29.2%) - because the probe
+    # plans three benign follow-ups per (shared entity, principal) and a sequence
+    # that leaks only on its third turn scored 1/3.
+    _seed_and_probe(tmp_path)
+    recorded = json.loads((tmp_path / "run.json").read_text())["metrics"]["extraction_efficiency"]
+    assert recorded == pytest.approx(7 / 24), recorded
+    assert recorded != pytest.approx(13 / 72), "that is the turn-based rate this replaced"

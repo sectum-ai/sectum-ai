@@ -102,6 +102,20 @@ def test_load_config_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
         load_config(path)
 
 
+def test_a_cache_kind_that_cannot_soft_delete_refuses_the_knob() -> None:
+    # `FakeCache` and the Redis MEMORY adapter both honour `soft_delete`; the Redis
+    # CACHE does not have it, and the resolver accepted the key and dropped it. An
+    # operator validating that Sectum catches cache residue then got a clean run
+    # from a setting that never took effect. The resolver's one precedent for a knob
+    # a kind cannot honour is mem0 + `user_scoped`, which raises.
+    from sectum_ai.config import build_cache
+
+    with pytest.raises(ConfigError, match="does not support soft_delete"):
+        build_cache(AdapterConfig(kind="redis", soft_delete=True))
+    # The knob the fake DOES honour is still accepted.
+    assert build_cache(AdapterConfig(kind="fake", soft_delete=True)) is not None
+
+
 def test_load_config_raises_when_the_file_is_missing(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="not found"):
         load_config(tmp_path / "missing.yaml")

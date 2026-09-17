@@ -11,8 +11,11 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter
 from sectum_ai.adapters.observability.langsmith import LangSmithObservability
+from sectum_ai.spec import AdapterError
 
 _PREFIX = "sectum-ai"
 _TENANT_A = UUID(int=0xA)
@@ -130,3 +133,63 @@ def test_langsmith_search_tolerates_a_run_missing_fields() -> None:
     # a sparse run with no name/inputs/outputs attributes must not crash
     client.add(_project(_TENANT_A), SimpleNamespace(id="sparse-1"))
     assert LangSmithObservability(client).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
+
+
+def test_a_marker_in_the_run_metadata_is_found() -> None:
+    # This was the one trace backend that read only `name`/`inputs`/`outputs`.
+    # `@traceable(metadata=...)` lands in `extra`, and every sibling reads its own
+    # bag - Langfuse takes `metadata`, Datadog takes `custom` AND `meta` with a
+    # comment saying missing it "would be a false erasure PASS", and
+    # helicone/phoenix/otel each read their attribute map. So a marker carried in
+    # metadata was invisible: the surface signed `TRACING: ERASED` over content
+    # the read path never looked at, and reported no cross-tenant leak for the
+    # same reason.
+    #
+    # The double modelled only id/name/inputs/outputs, which is why no test could
+    # have caught it - so it models the whole shape now.
+    client = _FakeLangSmith()
+    adapter = LangSmithObservability(client)
+    cases: tuple[tuple[str, dict[str, Any], str], ...] = (
+        (
+            "extra",
+            {"extra": {"metadata": {"account": "SECTUM-CANARY-EXTRA"}}},
+            "SECTUM-CANARY-EXTRA",
+        ),
+        ("tags", {"tags": ["tenant:SECTUM-CANARY-TAG"]}, "SECTUM-CANARY-TAG"),
+        ("error", {"error": "failed resolving SECTUM-CANARY-ERR"}, "SECTUM-CANARY-ERR"),
+    )
+    for index, (field, extra_fields, marker) in enumerate(cases):
+        client.add(
+            _project(_TENANT_A),
+            SimpleNamespace(id=f"r-{index}", name="n", inputs={}, outputs={}, **extra_fields),
+        )
+        assert adapter.search_traces(_TENANT_A, marker), f"a marker in `{field}` must be found"
+
+
+def test_delete_confirms_the_project_is_gone_before_returning(monkeypatch: Any) -> None:
+    # Every other trace backend verifies its own purge: Langfuse polls until the
+    # traces are no longer listed and RAISES on the timeout, with a comment
+    # recording that "returning silently on the timeout let the re-scan confirm a
+    # residual"; Phoenix and OTel re-check on a 404. This one returned the moment
+    # the API accepted the call - and `search_traces` then reports absence from the
+    # project row alone, without reading a run, so a delete the backend accepted
+    # and did not apply read back as `TRACING: ERASED`.
+    monkeypatch.setattr("sectum_ai.adapters.observability.langsmith.time.sleep", lambda _: None)
+
+    class _IgnoresTheDelete(_FakeLangSmith):
+        def delete_project(self, *, project_name: str) -> None:
+            return None  # accepted, not applied
+
+    client = _IgnoresTheDelete()
+    _seed(client, _TENANT_A, "a trace mentioning SECTUM-CANARY-AAA")
+    adapter = LangSmithObservability(client)
+    with pytest.raises(AdapterError, match="purge cannot be confirmed"):
+        adapter.delete(_TENANT_A)
+
+    # A backend that applies the delete returns cleanly, and a tenant that never
+    # accumulated traces stays a no-op.
+    working = _FakeLangSmith()
+    _seed(working, _TENANT_A, "a trace mentioning SECTUM-CANARY-AAA")
+    LangSmithObservability(working).delete(_TENANT_A)
+    assert LangSmithObservability(working).search_traces(_TENANT_A, "SECTUM-CANARY-AAA") == []
+    LangSmithObservability(_FakeLangSmith()).delete(_TENANT_A)

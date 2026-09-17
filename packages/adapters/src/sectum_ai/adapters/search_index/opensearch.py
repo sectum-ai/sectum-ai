@@ -14,7 +14,7 @@ Requires the ``opensearch`` optional dependency:
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, SearchIndexAdapter
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 # OpenSearch's default index.max_result_window; a tenant with more matching
 # documents than this is refused rather than silently truncated.
@@ -92,13 +92,22 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         rows = hits.get("hits", [])
         total = hits.get("total", {})
         total_count = int(total.get("value", 0)) if isinstance(total, dict) else int(total or 0)
-        if total_count > len(rows):
-            # A truncated page is not a scan: a document ranked past it read as absent.
+        contents = [str(hit.get("_source", {}).get("content", "")) for hit in rows]
+        # A truncated page is not a scan: a document ranked past it read as absent.
+        # But both callers ask "is this phrase still here", and a page that already
+        # holds it answers that - refusing would lose a definite residual. So only
+        # a MISS on a truncated page is refused, as on the eval-set and trace
+        # backends.
+        # `residual_present` is the caller's own residual test, not a lookalike:
+        # a suppression predicate LOOSER than the caller's fails open (the adapter
+        # says "found it, no refusal" over a hit the caller will not count, and the
+        # marker past the cap reads absent), so the two must be one function.
+        if total_count > len(rows) and not any(residual_present(query, text) for text in contents):
             raise AdapterError(
                 f"OpenSearch matched {total_count} documents for the tenant but returned "
-                f"{len(rows)}; the search-index scan would be incomplete"
+                f"{len(rows)}; a search-index scan that found nothing would be incomplete"
             )
-        return [str(hit.get("_source", {}).get("content", "")) for hit in rows]
+        return contents
 
     def delete(self, tenant: UUID) -> None:
         # A soft-delete index acknowledges the request but keeps the documents

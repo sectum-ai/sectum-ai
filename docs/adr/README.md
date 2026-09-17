@@ -3,7 +3,8 @@
 This directory records significant architectural decisions for Sectum AI.
 
 Each ADR is a numbered Markdown file (`NNNN-short-title.md`) with the sections
-**Status**, **Context**, **Decision**, and **Consequences**. Once accepted, an
+**Context**, **Decision**, and **Consequences**, and a status: a `## Status`
+section in 0001-0009, a `- Status:` front-matter line in 0016-0022. Once accepted, an
 ADR's decision is immutable — supersede it with a new ADR rather than rewriting
 it. Dated **Update** appendices recording how the code has since moved relative
 to the decision are the one permitted edit, and several ADRs carry them.
@@ -26,3 +27,7 @@ to the decision are the one permitted edit, and several ADRs carry them.
 | [0020](0020-structured-logging.md) | Structured logging with redaction, to stderr, DEBUG off by default | Accepted |
 | [0021](0021-canonical-float-determinism.md) | Canonical hashing relies on deterministic float repr, not rounding | Accepted |
 | [0022](0022-marker-substrate-depth.md) | Substrate depth: model-scoped embedding refs, multi-field planting, realistic secret shapes + format detector | Accepted |
+
+(0010–0015 are unused: the numbers were reserved for a proprietary-scope split
+that was never written down as ADRs. The gap is deliberate, not a set of missing
+files.)

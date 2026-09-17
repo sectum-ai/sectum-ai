@@ -15,9 +15,11 @@ different thing from infrastructure verification.
 ## The difference in one line
 
 DeepTeam asks a model *"did this one answer leak?"* and judges the text. Sectum
-AI provisions a multi-tenant substrate, runs a catalog of probes across every
-surface, and proves — with ground-truth markers and a tamper-evident,
-control-mapped evidence pack — *whether the system isolates tenants at all*.
+AI provisions a multi-tenant substrate, runs a catalog of probes across the
+surfaces your adapters reach, and produces — with ground-truth markers and a
+tamper-evident, control-mapped evidence pack — evidence of *which cross-tenant
+leaks it found, and which checks it was able to perform*. The surfaces it could
+not reach are recorded `NOT_COVERED`, never as a pass.
 
 ## Side by side
 
@@ -29,7 +31,7 @@ control-mapped evidence pack — *whether the system isolates tenants at all*.
 | **Boundary** | Tenant or user, per the prompt | Principal boundary — tenant *and* user within a tenant — verified default-deny ([ADR-0006](adr/0006-principal-isolation-model.md)) |
 | **Surfaces** | The model response | Vector DB, RAG, semantic & KV caches, agent memory, MCP tool calls, fine-tunes/adapters, tracing — across the catalog |
 | **Catalog** | One retrieval check | 12 probe classes incl. side-channel (KV-cache timing), embedding inversion, MCP confused-deputy/token-passthrough, persistent-memory contamination, LoRA bleed, multi-modal RAG entity-bleed, and the GDPR Art. 17 erasure wedge |
-| **Output** | A score in an eval report | A signed, timestamped (RFC 3161 + Sigstore Rekor), in-toto-wrapped evidence pack with control mappings (SOC 2, ISO 27001, ISO/IEC 42001, GDPR, CCPA/CPRA, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM08), independently checkable via `sectum-ai verify` |
+| **Output** | A score in an eval report | A hash-bound, in-toto-wrapped evidence pack, independently checkable via `sectum-ai verify`. `report --tsa <url> --rekor` anchors it in an RFC 3161 timestamp authority and a Sigstore Rekor log; a run against configured live adapters earns control mappings (SOC 2, ISO 27001, ISO/IEC 42001, GDPR, CCPA/CPRA, EU AI Act, HIPAA, NIST AI RMF, OWASP LLM08), and a run against the built-in fakes asserts none |
 | **Reproducibility** | Prompt- and judge-dependent | Byte-identical from a seed ([ADR-0003](adr/0003-deterministic-substrate.md)); regression baselines flag drift |
 
 ## Why the substrate matters

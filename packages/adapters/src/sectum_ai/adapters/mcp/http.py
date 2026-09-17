@@ -16,6 +16,9 @@ Requires the ``mcp`` optional dependency: ``pip install sectum-ai-adapters[mcp]`
 """
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
+from urllib.parse import urlparse
 from uuid import UUID
 
 from mcp import ClientSession
@@ -44,6 +47,12 @@ class HttpMCPClient(MCPAdapter):
         tenant_argument: str | None = None,
         user_argument: str | None = None,
     ) -> None:
+        # The third HTTP adapter, and the one that took any string: `file:///...`,
+        # `ftp://...` and a bare word were all accepted, to fail later inside the
+        # transport as an opaque error rather than at the point the operator made
+        # the typo. Both siblings refuse at construction.
+        if urlparse(url).scheme not in ("http", "https"):
+            raise AdapterError(f"url must be an http(s) URL: {url!r}")
         super().__init__(name, frozenset({Capability.TOOL_INVOCATION}))
         # A generic MCP call carries no user identity; the probes' user-level
         # steps used to run as the tenant and be judged as the user. Only with a
@@ -56,12 +65,19 @@ class HttpMCPClient(MCPAdapter):
         self._tenant_argument = tenant_argument
 
     def list_tools(self) -> list[str]:
-        return asyncio.run(self._list_tools())
+        # Only the TOOL-level `isError` became an `AdapterError`; a transport or
+        # protocol failure - a refused connection, a TLS error, a malformed frame -
+        # came out as whatever the MCP SDK raised. That is not this contract's error
+        # type, so it escapes the runner's handling of an adapter failure and takes
+        # the whole run with it, where every agent adapter wraps instead.
+        with _as_adapter_error(f"MCP server at {self._url}"):
+            return asyncio.run(self._list_tools())
 
     def invoke(
         self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
     ) -> McpResult:
-        return asyncio.run(self._invoke(tenant, tool, arguments, user))
+        with _as_adapter_error(f"MCP server at {self._url}"):
+            return asyncio.run(self._invoke(tenant, tool, arguments, user))
 
     async def _list_tools(self) -> list[str]:
         async with (
@@ -98,3 +114,14 @@ class HttpMCPClient(MCPAdapter):
         if result.isError:
             raise AdapterError(f"MCP tool {tool!r} failed: {output}")
         return McpResult(tool=tool, output=output)
+
+
+@contextmanager
+def _as_adapter_error(what: str) -> Iterator[None]:
+    """Re-raise anything the MCP SDK throws as the adapter contract's error."""
+    try:
+        yield
+    except AdapterError:
+        raise
+    except Exception as error:
+        raise AdapterError(f"{what} failed: {error}") from error

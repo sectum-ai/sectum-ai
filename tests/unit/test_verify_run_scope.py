@@ -13,6 +13,7 @@ the library reports, the command line sets policy.
 
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from typer.testing import CliRunner
@@ -23,8 +24,11 @@ from sectum_ai.evidence.pdf import provenance_statement
 from sectum_ai.evidence.verify import Check, VerificationResult
 from sectum_ai.spec import (
     EvidencePack,
+    Finding,
+    FindingStatus,
     GroundTruthManifest,
     RunResult,
+    Severity,
     Surface,
     SurfaceProvenance,
     canonical_hash,
@@ -174,3 +178,317 @@ def test_a_live_slot_no_probe_drove_cannot_pass_the_scope_gate(
     refused = _runner.invoke(app, ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored"])
     assert refused.exit_code == 4, refused.output
     assert "NO surface was live" in refused.output
+
+
+def test_a_stale_run_record_inside_a_current_pack_is_refused() -> None:
+    # `report` accepted a 0.6.x run.json (which recorded every adapter slot,
+    # including a live one no probe drove), stamped the pack 0.7.0, and `verify`
+    # passed run-scope on that phantom LIVE slot.
+    from sectum_ai.spec import SCHEMA_VERSION
+
+    pack = _pack(_LIVE)
+    stale_run = pack.run_result.model_copy(update={"schema_version": "0.6.0"})
+    stale = pack.model_copy(update={"run_result": stale_run})
+    result = verify_pack(stale, require_live=True)
+    assert not result.passed
+    check = next(c for c in result.checks if c.name == "schema-version")
+    assert not check.ok
+    assert "0.6.0" in check.detail and SCHEMA_VERSION in check.detail
+
+
+def test_report_refuses_a_run_from_another_schema_line(tmp_path: Path) -> None:
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    run_path = tmp_path / "run.json"
+    run = json.loads(run_path.read_text())
+    run["schema_version"] = "0.6.0"
+    run_path.write_text(json.dumps(run))
+    result = _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "schema '0.6.0'" in result.output
+    assert not (tmp_path / "evidence.json").exists()
+
+
+def test_a_pack_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    # Deleting `run_result.schema_version` leaves the PARSED model - and therefore
+    # the attested digest - byte-identical, so every check passed: the stamp has
+    # to be read off the bytes. This is the ordinary upgrade path's failure mode.
+    import json
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path)])
+    evidence = tmp_path / "evidence.json"
+    pack = json.loads(evidence.read_text())
+    del pack["run_result"]["schema_version"]
+    evidence.write_text(json.dumps(pack))
+    result = _runner.invoke(
+        app, ["verify", str(evidence), "--allow-unanchored", "--allow-synthetic"]
+    )
+    assert result.exit_code == 4, result.output
+    assert "run record's schema_version is None" in result.output
+
+
+def test_a_bundle_whose_run_record_carries_no_stamp_is_refused(tmp_path: Path) -> None:
+    import io
+    import json
+    import zipfile
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"])
+    bundle = tmp_path / "evidence-bundle.zip"
+    with zipfile.ZipFile(bundle) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    pack = json.loads(members["evidence.json"])
+    del pack["run_result"]["schema_version"]
+    members["evidence.json"] = json.dumps(pack).encode("utf-8")
+    manifest = json.loads(members["bundle-manifest.json"])
+    import hashlib
+
+    manifest["members"]["evidence.json"] = hashlib.sha256(members["evidence.json"]).hexdigest()
+    members["bundle-manifest.json"] = json.dumps(manifest).encode("utf-8")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    bundle.write_bytes(out.getvalue())
+    result = _runner.invoke(app, ["verify", str(bundle), "--allow-unanchored", "--allow-synthetic"])
+    assert result.exit_code == 4, result.output
+    assert "schema_version" in result.output
+
+
+def test_a_pack_binding_a_pdf_that_was_not_supplied_says_so() -> None:
+    # `verify_pack` checked the binding only when a PDF was handed to it and was
+    # otherwise SILENT: every line `[ok]`, exit 0, and a reader concluding the
+    # bound PDF had been matched. A standalone pack legitimately verifies without
+    # its companion, so this is not a failure - but the verdict has to say what it
+    # did not check, the way the unanchored-timestamp check states its limitation.
+    pack = _pack({"vector_db": "LIVE"}).model_copy(update={"pdf_ref": "0" * 64})
+    result = verify_pack(pack, require_anchored=False, require_live=False)
+    audit = next(check for check in result.checks if check.name == "audit-pdf")
+    assert audit.ok
+    assert "not supplied" in audit.detail
+    # Not a failure in itself: a standalone pack verifies without its companion.
+    assert "audit-pdf" not in {check.name for check in result.checks if not check.ok}
+
+
+def test_verify_binds_the_ground_truth_manifest_when_given_one(tmp_path: Path) -> None:
+    # The `manifest-hash` check existed and NO CLI path reached it: `verify`
+    # passed no manifest, so the check never ran - while the command's own
+    # closing note, and ADR-0016, both told the reader to "re-run with the
+    # original ground-truth manifest". The capability is real now.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    pack = str(tmp_path / "evidence.json")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    # A manifest from another run must FAIL, not be quietly ignored.
+    other = json.loads(good.read_text())
+    other["manifest_id"] = "some-other-run"
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+    bad = _runner.invoke(app, ["verify", pack, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # Without the flag the command says how to get the binding, and does not
+    # claim to have checked it.
+    plain = _runner.invoke(app, ["verify", pack, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output
+
+
+def test_verify_binds_the_manifest_on_a_bundle_too(tmp_path: Path) -> None:
+    # The flag was parsed AFTER the `.zip` branch returned, so `--manifest` on a
+    # bundle was accepted and silently dropped: exit 0, no `manifest-hash` line,
+    # and no note saying the binding went unchecked - on the artifact ADR-0016
+    # calls the deliverable. A flag a path accepts and drops is worse than one it
+    # rejects, because the operator reads the pass as an answer to their question.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path), "--bundle"]).exit_code == 0
+
+    substrate = json.loads((tmp_path / "substrate.json").read_text())
+    good = tmp_path / "manifest.json"
+    good.write_text(json.dumps(substrate["manifest"]))
+    other = dict(substrate["manifest"], manifest_id="some-other-run")
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps(other))
+
+    bundle = str(tmp_path / "evidence-bundle.zip")
+    flags = ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(good)])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] manifest-hash: the supplied manifest matches the pack" in ok.output, ok.output
+
+    bad = _runner.invoke(app, ["verify", bundle, *flags, "--manifest", str(wrong)])
+    assert bad.exit_code == 4, bad.output
+    assert "[FAIL] manifest-hash" in bad.output, bad.output
+
+    # And without it the bundle path says how to get the binding, as the pack
+    # path does - it used to say nothing at all.
+    plain = _runner.invoke(app, ["verify", bundle, *flags])
+    assert plain.exit_code == 0, plain.output
+    assert "manifest-hash" not in plain.output, plain.output
+    assert "--manifest <manifest.json>" in plain.output, plain.output
+
+
+def test_verify_states_whether_the_run_record_beside_the_pack_is_the_attested_one(
+    tmp_path: Path,
+) -> None:
+    # `verify_bundle` BINDS `run.json` because a bundle is a closed container that
+    # lists it. A directory is not, so here it is STATED and never judged: judged,
+    # it accused the ordinary `probe; report; probe` workflow - whose second run
+    # legitimately rewrites the file - of tampering. Silence was the original
+    # defect (`score` prefers `run.json`, so an emptied one graded A while `verify`
+    # said nothing); an accusation is the wrong cure, because `verify` cannot tell
+    # a later run from an edited one - neither is anchored.
+    import json
+
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    pack, flags = str(tmp_path / "evidence.json"), ["--allow-unanchored", "--allow-synthetic"]
+
+    ok = _runner.invoke(app, ["verify", pack, *flags])
+    assert ok.exit_code == 0, ok.output
+    assert "[ok] run-record: run.json matches the attested run" in ok.output, ok.output
+
+    run_path = tmp_path / "run.json"
+    emptied = json.loads(run_path.read_text())
+    assert emptied["findings"], "the demo run must have findings to delete"
+    emptied["findings"] = []
+    run_path.write_text(json.dumps(emptied))
+
+    edited = _runner.invoke(app, ["verify", pack, *flags])
+    # The PACK is intact, so verification passes - and says what it does not vouch
+    # for, naming the consequence a reader would otherwise meet only in `score`.
+    assert edited.exit_code == 0, edited.output
+    assert "is NOT the run this pack attests" in edited.output, edited.output
+    assert "`sectum-ai score` reads that file in preference to this pack" in edited.output
+    assert "[FAIL]" not in edited.output, edited.output
+
+
+def test_a_second_probe_run_is_not_called_tampering(tmp_path: Path) -> None:
+    # `seed; probe; report; probe` is the documented workflow, and the second run
+    # rewrites `run.json` by design - `score`'s own comment says preferring the
+    # pack "would silently grade a stale record". Judging that file made `verify`
+    # print "altered or replaced after signing" and exit 4 over an untampered
+    # folder: the worst false alarm a tamper-evidence product can raise.
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    result = _runner.invoke(
+        app,
+        ["verify", str(tmp_path / "evidence.json"), "--allow-unanchored", "--allow-synthetic"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "altered or replaced after signing" not in result.output, result.output
+    assert "is NOT the run this pack attests" in result.output, result.output
+
+
+def test_the_erasure_pack_does_not_bind_the_probe_runs_record(tmp_path: Path) -> None:
+    # The `run.json` beside an erasure attestation is the PROBE run's; the erasure
+    # run's record lives only inside the attestation. It is stated, not judged -
+    # binding it would report a genuine file as altered, the false alarm the
+    # per-pack sibling table exists to avoid.
+    assert _runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert _runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    assert _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", "Acme Robotics"]
+    ).exit_code in (0, 2, 3)
+    result = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "erasure-evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "[FAIL]" not in result.output, result.output
+    assert "run.json" in result.output, result.output
+
+
+def _finding_on(surface: Surface) -> Finding:
+    return Finding(
+        finding_id=f"f-{surface.value}",
+        probe_id="cross-tenant-retrieval",
+        severity=Severity.CRITICAL,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=uuid4(),
+        observed_in_tenant_id=uuid4(),
+        surface=surface,
+    )
+
+
+def _run_with(provenance: dict[str, str], *findings: Finding) -> RunResult:
+    return _run(provenance).model_copy(update={"findings": findings})
+
+
+def test_a_surface_the_findings_rest_on_but_the_block_omits_is_not_live() -> None:
+    # The block records the surfaces a run ACCOUNTED for, and this gate read it
+    # alone: a pack recording only its live surfaces passed `--require-live` over
+    # confirmed findings on an unrecorded one. Unknown is not live.
+    run = _run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE))
+    result = verify_pack(build_evidence_pack(run, _MANIFEST), require_live=True)
+    assert not result.passed
+    check = _scope(result)
+    assert not check.ok
+    assert Surface.SEMANTIC_CACHE.value in check.detail, check.detail
+    assert "never recorded" in check.detail, check.detail
+
+
+def test_the_unaccounted_surface_is_still_reported_when_synthetic_is_allowed() -> None:
+    # Same policy split as every other scope verdict: the library reports, the CLI
+    # decides. Silence under `--allow-synthetic` would drop the only line saying
+    # the pack cannot account for where some of its findings came from.
+    run = _run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE))
+    result = verify_pack(build_evidence_pack(run, _MANIFEST))
+    assert result.passed
+    assert Surface.SEMANTIC_CACHE.value in _scope(result).detail
+
+
+def test_a_kv_cache_finding_is_accounted_for_by_the_model_adapter() -> None:
+    # The one finding surface that is deliberately not its own provenance key: the
+    # KV timing probe names the cache while the model adapter is what ran. Reading
+    # `finding.surface` here would report every KV run as unaccounted.
+    run = _run_with(
+        {Surface.MODEL_ADAPTER.value: SurfaceProvenance.LIVE.value},
+        _finding_on(Surface.KV_CACHE),
+    )
+    check = _scope(verify_pack(build_evidence_pack(run, _MANIFEST), require_live=True))
+    assert check.ok, check.detail
+    assert check.detail == "every surface this run exercised was a live backend"
+
+
+def test_the_audit_pdf_names_a_surface_its_provenance_block_omits() -> None:
+    # "These findings describe those systems" was false for the findings resting on
+    # a surface the block never listed - in the paragraph that fixes the whole
+    # document's subject.
+    statement = provenance_statement(_run_with(_LIVE, _finding_on(Surface.SEMANTIC_CACHE)))
+    assert "every surface exercised by this run" not in statement, statement
+    assert Surface.SEMANTIC_CACHE.value in statement, statement
+    assert "never recorded" in statement, statement

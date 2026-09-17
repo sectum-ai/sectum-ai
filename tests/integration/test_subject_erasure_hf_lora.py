@@ -74,14 +74,17 @@ def _coverage(model: HuggingFaceLoraModel) -> CoverageVerdict:
     return report.coverage()[Surface.MODEL_ADAPTER]
 
 
-def test_model_fingerprint_residual_then_erased(model: HuggingFaceLoraModel) -> None:
-    # Untrained: the base model cannot know the unguessable content -> ERASED.
-    assert _coverage(model) is CoverageVerdict.ERASED
+def test_model_fingerprint_residual_then_absent(model: HuggingFaceLoraModel) -> None:
+    # Untrained: the base model cannot know the unguessable content -> nothing
+    # surfaces. That is ABSENCE CHECKED (NOT_COVERED), not ERASED: this probe runs
+    # after the controller's deletion and never saw a pre-erasure baseline, so it
+    # establishes absence and cannot attest an erasure.
+    assert _coverage(model) is CoverageVerdict.NOT_COVERED
     # Fine-tune a per-tenant LoRA on the subject's content -> the model regurgitates
-    # it under a prefix prompt, caught as RESIDUAL.
+    # it under a prefix prompt, caught as RESIDUAL. A hit is a hit either way.
     model.train_adapter(_TENANT, [_CONTENT] * 8)
     assert _coverage(model) is CoverageVerdict.RESIDUAL
-    # Delete the tenant's adapter -> base inference is clean again -> ERASED, proving
-    # the delete actually removed the memorized residue (per-tenant isolation).
+    # Delete the tenant's adapter -> base inference is clean again, so the content
+    # no longer surfaces. Still absence, not an attested erasure.
     model.delete(_TENANT)
-    assert _coverage(model) is CoverageVerdict.ERASED
+    assert _coverage(model) is CoverageVerdict.NOT_COVERED

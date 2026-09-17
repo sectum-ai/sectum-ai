@@ -71,3 +71,41 @@ def test_no_stale_allowlist_entries() -> None:
     # it documents the live catalog footprint, not historical cruft.
     unused = set(_VERIFIED_ATLAS_IDS) - _used_atlas_ids()
     assert not unused, f"verified ATLAS ids no longer used by any probe: {sorted(unused)}"
+
+
+def test_every_atlas_id_a_probe_declares_is_published_on_its_class_page() -> None:
+    # The offline half of ADR-0009's release gate, run per commit instead of per
+    # release: ten releases shipped with no entry in the ADR's validation log
+    # because the release PR description was the only place it was written down
+    # and nothing reads that back. This cannot judge an upstream rename - the ADR
+    # is explicit that only the manual mirror sweep can - but it does hold the
+    # probe, the catalog page and the pinned set to one answer, which is the half
+    # that can drift silently between releases.
+    import re
+    from pathlib import Path
+
+    import sectum_ai.probes as probes_module
+
+    catalog = Path(__file__).resolve().parents[2] / "docs" / "attack-catalog"
+    pages = {path: path.read_text() for path in catalog.glob("class-*.md")}
+    assert pages, catalog
+
+    declared = {
+        cls.id: tuple(cls.atlas_techniques)
+        for cls in (getattr(probes_module, name) for name in dir(probes_module))
+        if isinstance(cls, type) and hasattr(cls, "atlas_techniques") and hasattr(cls, "id")
+    }
+    assert declared, "no probes discovered - the introspection broke"
+
+    # A page TALKS about a probe in its prose; a markdown link target that happens
+    # to contain the probe id (`class-06-embedding-inversion.md`) is navigation, not
+    # a claim about technique mapping - and reading one as the other demanded Class
+    # 6's `AML.T0024.001` be published on Class 13's page, where it would be false.
+    # Link TEXT is prose and stays.
+    prose = {page: re.sub(r"\]\([^)]*\)", "]", text) for page, text in pages.items()}
+    for probe_id, ids in declared.items():
+        for page, text in prose.items():
+            if not re.search(rf"\b{re.escape(probe_id)}\b", text):
+                continue
+            missing = [atlas for atlas in ids if atlas not in text]
+            assert not missing, f"{probe_id} declares {missing}, absent from {page.name}"

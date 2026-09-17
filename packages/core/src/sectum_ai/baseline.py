@@ -7,7 +7,7 @@ confirmed findings after an embedding-model or prompt change (the engineering
 spec, sections 10 and 14).
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from sectum_ai.spec import (
@@ -17,6 +17,7 @@ from sectum_ai.spec import (
     RunResult,
     Severity,
     SurfaceProvenance,
+    rate_from_counts,
 )
 
 
@@ -33,6 +34,32 @@ class MetricDelta:
     # failure. It is kept distinct from erasure *residue*, which is a real
     # failure and does regress.
     informational: bool = False
+    # The later run's map had no entry for this key, so its `current` is a filled
+    # 0.0, not a measurement. Every one of these maps is keyed by something the
+    # probe-id lookup cannot reach - a surface, a tenant pair, an embedding model
+    # - and each one had to be wired up separately as it was noticed. Recording it
+    # HERE, where the 0.0 is filled in, covers every map including the next one.
+    key_lost: bool = False
+    # Which SIDE of the arrow is a fill rather than a value. `key_lost` above
+    # drives the verdict and gates CI; these two only decide how the pair is
+    # rendered, and they cover the cases it does not: the EARLIER run having no
+    # value (`[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader it used
+    # to be clean, when it was never measured), and NEITHER run having one
+    # (`[ok] extraction_efficiency: 0 -> 0`, an "ok" about nothing).
+    #
+    # The regression itself stands where the baseline is absent: dropping it would
+    # let a doctored earlier record suppress the signal by omitting the metric.
+    # This is a rendering fix, not a gate change.
+    baseline_absent: bool = False
+    current_absent: bool = False
+    # Either side's number is a BOUND, not a measurement: a Class 5 effect size
+    # whose control or primed arm had less spread than the timer can resolve, so
+    # the 1 us floor stood in for it. The finding's evidence span has said so since
+    # the floor existed; the metric line said `[ok] 146.7 -> 5.2` and read as an
+    # enormous improvement in a number that was never measured. Rendering only,
+    # like the two flags above: a bound becoming a measurement is a better timer,
+    # not a product regression.
+    bounded: bool = False
 
     @property
     def regressed(self) -> bool:
@@ -59,6 +86,19 @@ class BaselineComparison:
         """True when any compared metric regressed."""
         return any(delta.regressed for delta in self.deltas)
 
+    @property
+    def headline_unmeasured(self) -> tuple[str, ...]:
+        """The headline rates the earlier run measured and this one did not.
+
+        Only the four scalar rates, deliberately. The expanded MAPS gate through
+        their own loss tuples where a loss is real, and the embedding-model
+        gradient's keys change legitimately whenever the operator edits
+        `embedding_models` - gating that would fail CI on a config change.
+        """
+        return tuple(
+            delta.name for delta in self.deltas if delta.key_lost and "[" not in delta.name
+        )
+
 
 def _dict_deltas(
     label: str,
@@ -66,17 +106,66 @@ def _dict_deltas(
     current: Mapping[str, float],
     *,
     informational: bool = False,
+    absent_when_clean: bool = False,
+    bounded_keys: Collection[str] = (),
 ) -> list[MetricDelta]:
-    """A MetricDelta per key across both mappings; a key absent on a side is 0.0."""
+    """A MetricDelta per key across both mappings; a key absent on a side is 0.0.
+
+    A key the CURRENT run does not carry is marked ``key_lost``: its 0.0 is the
+    fill, not a measurement, and reading it as an improvement is what let a
+    dropped side-channel pair, an unscanned erasure surface and a vanished
+    embedding model each read `[ok] ... -> 0` in turn.
+
+    ``absent_when_clean`` exempts a map that omits a key precisely BECAUSE it
+    measured zero. ``per_probe_findings`` counts findings, so a probe that ran
+    and found nothing is absent from it - as ``_exercised_probes`` says in as many
+    words - and marking that key lost labelled a genuinely clean probe "not
+    measured". Its real coverage loss is not lost with it: the key names a probe
+    id, so ``coverage_lost`` reaches it through the probe-id lookup, which is the
+    stricter signal of the two. A label that fires on a clean result teaches the
+    reader to ignore it.
+    """
     return [
         MetricDelta(
             name=f"{label}[{key}]",
             baseline=float(baseline.get(key, 0.0)),
             current=float(current.get(key, 0.0)),
             informational=informational,
+            key_lost=not absent_when_clean and key in baseline and key not in current,
+            # `absent_when_clean` gates these too: rendering a probe that ran
+            # and found nothing as "(not measured)" is the same false signal the
+            # flag exists to remove, one column to the right.
+            baseline_absent=not absent_when_clean and key not in baseline,
+            current_absent=not absent_when_clean and key not in current,
+            bounded=key in bounded_keys,
         )
         for key in sorted(set(baseline) | set(current))
     ]
+
+
+def _rate_delta(name: str, baseline: float | None, current: float | None) -> MetricDelta:
+    """A headline-rate delta whose filled 0.0 is marked as the fill it is."""
+    return MetricDelta(
+        name=name,
+        baseline=baseline or 0.0,
+        current=current or 0.0,
+        key_lost=baseline is not None and current is None,
+        baseline_absent=baseline is None,
+        current_absent=current is None,
+    )
+
+
+def _pivot_rate(metrics: RunMetrics) -> float | None:
+    """Class 2's rate as the record's own counts give it.
+
+    `diff` and `baseline --compare` RELAYED this where `score` and both PDF
+    engines RECOMPUTE it, so one record read 0.0% in CI and 95.4% in the audit
+    PDF bound to the same pack. Comparing a pack you did not produce is `diff`'s
+    documented use, which is precisely when relaying matters.
+    """
+    return rate_from_counts(
+        metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
+    )
 
 
 def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineComparison:
@@ -105,32 +194,38 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             baseline=float(baseline.confirmed_findings),
             current=float(current.confirmed_findings),
         ),
-        MetricDelta(
-            name="retrieval_pivot_rate",
-            baseline=baseline.retrieval_pivot_rate or 0.0,
-            current=current.retrieval_pivot_rate or 0.0,
-        ),
+        # The four headline rates fill an absent measurement with 0.0 exactly as
+        # the expanded maps do, so they need the same flag: configuring one live
+        # adapter leaves the other probes no live step, and all four went `None`
+        # while `confirmed_findings` held at 229. Both gates printed `[ok] 0.125
+        # -> 0` four times over and exited 0 on "no regression" - every leak rate
+        # "fixed" by not being measured.
+        _rate_delta("retrieval_pivot_rate", _pivot_rate(baseline), _pivot_rate(current)),
         # Class 3/6/10 headline rates: higher means more cross-tenant leakage, so
         # an increase regresses exactly like the retrieval-pivot rate above.
-        MetricDelta(
-            name="poisoning_bleed_delta",
-            baseline=baseline.poisoning_bleed_delta or 0.0,
-            current=current.poisoning_bleed_delta or 0.0,
+        _rate_delta(
+            "poisoning_bleed_delta", baseline.poisoning_bleed_delta, current.poisoning_bleed_delta
         ),
-        MetricDelta(
-            name="inversion_reconstruction_rate",
-            baseline=baseline.inversion_reconstruction_rate or 0.0,
-            current=current.inversion_reconstruction_rate or 0.0,
+        _rate_delta(
+            "inversion_reconstruction_rate",
+            baseline.inversion_reconstruction_rate,
+            current.inversion_reconstruction_rate,
         ),
-        MetricDelta(
-            name="extraction_efficiency",
-            baseline=baseline.extraction_efficiency or 0.0,
-            current=current.extraction_efficiency or 0.0,
+        _rate_delta(
+            "extraction_efficiency", baseline.extraction_efficiency, current.extraction_efficiency
         ),
     ]
     deltas.extend(
+        # Labelled MODELLED in the metric NAME, because that is all three of this
+        # layer's renderers carry. `RunMetrics.retrieval_pivot_rate_by_model` says
+        # the gradient "is bypassed by construction ... every renderer must label
+        # this one as modelled", and `probe` does in both of its own; the diff text,
+        # the diff JSON and the `baseline --compare` block printed it bare, one line
+        # below the measured rate and in identical formatting. It also GATES: a
+        # gradient moving 0.1 -> 0.9 with nothing else changed exits 2, a CI failure
+        # indistinguishable from a measured cross-tenant leak-rate regression.
         _dict_deltas(
-            "retrieval_pivot_rate_by_model",
+            "retrieval_pivot_rate_by_model (modelled)",
             baseline.retrieval_pivot_rate_by_model,
             current.retrieval_pivot_rate_by_model,
         )
@@ -140,6 +235,7 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             "per_probe_findings",
             {key: float(value) for key, value in baseline.per_probe_findings.items()},
             {key: float(value) for key, value in current.per_probe_findings.items()},
+            absent_when_clean=True,
         )
     )
     deltas.extend(
@@ -150,6 +246,11 @@ def compare_metrics(baseline: RunMetrics, current: RunMetrics) -> BaselineCompar
             "side_channel_effect_sizes",
             baseline.side_channel_effect_sizes,
             current.side_channel_effect_sizes,
+            # Either run's floor makes the PAIR incomparable, so both sides count.
+            bounded_keys={
+                *baseline.side_channel_variance_floored,
+                *current.side_channel_variance_floored,
+            },
         )
     )
     deltas.extend(
@@ -265,6 +366,24 @@ class RunDiff:
     # cannot carry the user) where the earlier run did. Twelve resolved
     # cross-user leaks used to read as a fix.
     boundary_lost: tuple[str, ...] = ()
+    #: Probe ids whose plants the backend began swallowing between the two runs.
+    #: `boundary_lost`'s shape exactly: the probe still runs and still grades, on
+    #: less setup than it planned, and nothing else in the diff moves.
+    plants_lost: tuple[str, ...] = ()
+    # Surfaces the earlier run scanned to a definite erasure verdict that the
+    # later run did not (out of scope, or scanned but its absence never
+    # established). Not a leak - but the later run measured no residue there, so
+    # `erasure_residue[<surface>]: 2 -> 0` and the two residual findings that go
+    # with it read as an erasure that succeeded. The wedge SKU's own diff.
+    erasure_lost: tuple[str, ...] = ()
+    # Tenant pairs the earlier run measured a side-channel effect size for that
+    # the later run did not. The map is keyed by PAIR, so it matches no probe id,
+    # no surface and no headline-metric name: none of the three signals above can
+    # reach it, and a dropped key becomes `0.0` in the diff. Keeping an unmeasured
+    # pair OUT of the signed record was only half the fix - the diff still read
+    # the absence as a drop to zero, and both CI gates passed at exit 0 on a
+    # side channel the later run could not measure.
+    side_channel_lost: tuple[str, ...] = ()
     # The two runs used different scenarios (a re-seed, other tenants or users).
     # Finding ids embed markers and principals, so every finding "resolves"; a
     # later run with no users read every cross-user leak as fixed.
@@ -283,6 +402,11 @@ class RunDiff:
         known leak growing more severe (low -> critical) is a worse posture the
         counts do not see at all.
 
+        A headline rate the baseline measured and this run did not fails the gate
+        too. Labelling it `[not measured]` without gating meant `diff` printed
+        that four times and still exited 0 - saying plainly it could not compare,
+        then greenlighting the pipeline anyway.
+
         A probe the baseline exercised and this run did not also fails the gate.
         Nothing got worse, but every metric that probe fed reads as an improvement
         to zero - ``per_probe_findings[rag-poisoning]: 24 -> 0`` - so a gate that
@@ -297,6 +421,10 @@ class RunDiff:
             or bool(self.coverage_lost)
             or bool(self.scope_lost)
             or bool(self.boundary_lost)
+            or bool(self.plants_lost)
+            or bool(self.erasure_lost)
+            or bool(self.side_channel_lost)
+            or bool(self.metrics.headline_unmeasured)
             or self.scenario_changed
         )
 
@@ -373,8 +501,76 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
                 if count and not earlier.metrics.user_steps_dropped.get(probe_id)
             )
         ),
+        plants_lost=tuple(
+            sorted(
+                probe_id
+                for probe_id, count in later.metrics.unconfirmed_plants.items()
+                if count and not earlier.metrics.unconfirmed_plants.get(probe_id)
+            )
+        ),
+        erasure_lost=_erasure_lost(earlier, later),
+        side_channel_lost=tuple(
+            sorted(
+                set(earlier.metrics.side_channel_effect_sizes)
+                - set(later.metrics.side_channel_effect_sizes)
+            )
+        ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
     )
+
+
+def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:
+    """Surfaces the earlier run scanned to a residue count and the later one did not.
+
+    A surface whose post-erasure absence could not be established carries no
+    residue count (`cli.app` omits it rather than writing a 0 it never measured),
+    and its coverage verdict is NOT_COVERED. Without this the drop read as an
+    erasure that had succeeded.
+
+    Two ways to stop counting, and the union below caught only one. A surface can
+    also cross from `erasure_residue` into `erasure_caveats` - the backend was
+    swapped for one with no per-tenant delete API, so `delete` raises
+    `ErasureUnsupported` and the data is *presumed retained*. It is still
+    "scanned", so the union saw no loss, and the caveat findings are deliberately
+    UNVERIFIED so `newly_confirmed` could not fire either: two confirmed residual
+    leaks read as `[ok] confirmed_findings: 2 -> 0` under `RESULT: no regression`
+    at exit 0, over a run that never asked the backend to erase anything. That is
+    verbatim the harm this function was written to stop, fixed for the
+    `unverifiable_after` shape and not for its `erasure_supported` sibling.
+    """
+    earlier_scanned = set(earlier.metrics.erasure_residue) | set(earlier.metrics.erasure_caveats)
+    later_scanned = set(later.metrics.erasure_residue) | set(later.metrics.erasure_caveats)
+    lost = earlier_scanned - later_scanned
+    # The COUNT is the measurement; a caveat is the absence of one. Only this
+    # direction: caveat -> residue is a surface that gained a delete API.
+    lost |= set(earlier.metrics.erasure_residue) - set(later.metrics.erasure_residue)
+    # A THIRD way to stop scanning, and the only one the wedge SKU can take. Both
+    # dicts above are written only for a surface with `baseline_observed`, and the
+    # A3 `--subject` probe sets that False on every surface it builds - it scans
+    # after the controller's deletion, so nothing establishes a baseline. So no
+    # `erasure --subject` run writes a key into either, and this function was
+    # structurally unable to fire on the paid path: a run that found residue
+    # followed by one that could not scan at all printed `[ok] confirmed_findings:
+    # 2 -> 0` under `RESULT: no regression` at exit 0, with the two confirmed
+    # residual findings listed as RESOLVED.
+    #
+    # Keyed on WAS IT SCANNED, not on the verdict. Reading `erasure_coverage`'s
+    # verdict was the obvious move and it is wrong in the worst direction: with no
+    # baseline the only reachable verdicts are RESIDUAL (found something) and
+    # NOT_COVERED (found nothing), so `RESIDUAL -> NOT_COVERED` is the SUCCESSFUL
+    # DELETION - and gating on it failed the very run that proves the remediation
+    # worked. `surface_provenance` is the field that answers the real question:
+    # the erasure commands record a row only for a surface actually in
+    # `report.surfaces`, so a clean scan has one and an unscanned surface does
+    # not. Restricted to records that scanned at all (`erasure_coverage` is empty
+    # on a `probe` run), so two probe runs are judged by `_scope_lost` as before.
+    if earlier.metrics.erasure_coverage:
+        lost |= {
+            surface
+            for surface in earlier.metrics.erasure_coverage
+            if surface in earlier.surface_provenance and surface not in later.surface_provenance
+        }
+    return tuple(sorted(lost))
 
 
 def _scope_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:

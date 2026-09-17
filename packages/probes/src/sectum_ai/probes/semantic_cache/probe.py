@@ -11,7 +11,15 @@ shared entry is assumed, not modelled by the in-memory fake.
 """
 
 from sectum_ai.probes.detection import DetectingProbe, is_cross_principal
-from sectum_ai.spec import Finding, MarkerType, Observation, ProbeStep, Substrate, Surface
+from sectum_ai.spec import (
+    AccessOutcome,
+    Finding,
+    MarkerType,
+    Observation,
+    ProbeStep,
+    Substrate,
+    Surface,
+)
 
 
 class SemanticCacheProbe(DetectingProbe):
@@ -78,7 +86,7 @@ class SemanticCacheProbe(DetectingProbe):
     ) -> list[Finding]:
         """Scan a fetched cache value for a foreign-principal canary via the pipeline."""
         pipeline = self._providers.pipeline(substrate)
-        return pipeline.detect(
+        findings = pipeline.detect(
             step.actor_tenant_id,
             observation.raw_response,
             observation.surface,
@@ -89,3 +97,17 @@ class SemanticCacheProbe(DetectingProbe):
             nist=self.nist_rmf,
             owasp_secondary=self.owasp_secondary,
         )
+        # Class 1's 200-empty rule: a foreign `cache.get` that comes back empty is
+        # not an enforced deny either. The rule lived only on the vector fetch, so
+        # this class passed with an empty note over the same evidence.
+        if not findings and observation.access_outcome is AccessOutcome.EMPTY:
+            key = step.payload.get("key", "")
+            ambiguity = self._empty_ambiguity_finding(
+                step,
+                observation,
+                substrate,
+                marker=self._marker_by_id(substrate, key.removeprefix("cache-probe:")),
+            )
+            if ambiguity is not None:
+                findings.append(ambiguity)
+        return findings

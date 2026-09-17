@@ -7,15 +7,2079 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
+  findings rest on that its provenance never recorded, so the machine-readable
+  scorecard carries the disclosure the text one prints.
+
+
+- **`RunResult.detection`** records which detector actually graded a run — the
+  embedder kind and model, the judge kind and model, and the *resolved* semantic
+  threshold (never the literal `"auto"`). Schema **0.7.0**; `None` on a record
+  from a path that runs no detector, which is what `erasure` is.
+
+
+- **The user boundary is stated once**, in the attack catalog's index, and the
+  class pages point at it: a probe plans cross-user steps only where its adapter
+  carries the caller's user, a tenant-scoped backend fails there, and where the
+  adapter cannot carry a user those steps are DROPPED rather than failed — a pass
+  that says the boundary was not tested, never that it held. Eight class pages
+  either asserted a clean per-tenant verdict with no user caveat at all, or (in
+  the two corrected an entry ago) over-stated it as a guaranteed failure.
+- **`sectum-ai verify --manifest <manifest.json>`** binds which marker belonged
+  to which tenant. The `manifest-hash` check existed and no CLI path reached it,
+  while the command's own closing note and ADR-0016 both told the reader to
+  "re-run with the original ground-truth manifest".
+
 ### Changed
 
-- **Schema 0.7.0.** `RunMetrics.user_steps_dropped` (probe id → count) records the
-  user-level steps the runner did not run because the adapter cannot carry a user
-  identity to its backend, inside the canonical hash. Packs stamped 0.6.x are no
-  longer accepted by `verify` (the usual minor-bump rule); regenerate them.
+- **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something
+  a run did *less* of than it planned, both inside the canonical hash.
+  `user_steps_dropped` (probe id → count) records the user-level steps the runner
+  did not run because the adapter cannot carry a user identity to its backend.
+  `unconfirmed_plants` (probe id → count) records the plants the backend
+  acknowledged and did not serve back. A third, `side_channel_variance_floored`,
+  names the Class 5 tenant pairs whose effect sizes are bounds rather than
+  measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
+  minor-bump rule); regenerate them.
+- **Scorecard methodology `1.3`.** What counts as evidence is part of the
+  methodology, not only the weights: `1.2` graded a class on findings whose
+  backing surface was the built-in fake, `1.3` withholds them. A run that graded
+  `F` under `1.2` can grade differently here, so the stamp moves with the rule
+  that a given version always recomputes to the same letter.
+- **The Action's output strings changed.** The step summary now reads
+  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
+  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
+  built-in fakes too. A workflow grepping the old text needs updating.
+- **`surface_provenance` keys must be surfaces.** The values were validated and
+  the keys were not, so a hand-edited record could name anything — and `score`
+  printed it verbatim, letting a record forge its own scorecard lines. A key that
+  is not a `Surface` is now a validation error.
+- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
+  the same "modelled shared index, not the configured store" caveat the text
+  renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
 
+- **A Class 9 routing failure is no longer stamped as membership inference.**
+  `AML.T0024.000` is Infer Training Data Membership, and the routing finding
+  evidences that a *foreign adapter served the step* — it infers nothing about what
+  that adapter was trained on. ADR-0009 settled this rule for Class 7's sub-probes;
+  this is the same rule in the sibling class, which the Class 7 fix did not reach.
+  The recall path keeps the full tuple: scanning inference output for a memorized
+  foreign canary *is* the membership claim.
+
+
+- **A contained A3 scan no longer counts its own clean answers as a coverage gap,
+  or reports an impossible measurement.** `unverifiable_after` subtracted only what
+  was *found*, so a scan that ruled five ids absent and then failed on the sixth
+  reported "6 marker(s) were neither found nor ruled out". The same row also left
+  `baseline_observed` at its default, where every other A3 row sets it `False`, so
+  the CLI printed the Class 11 wording — "0 markers before, 1 after".
+- **A confirmed leak never quotes text the run did not see.** `present` confirms a
+  marker whose tokens appear in order with one interposed word, so for `Project
+  (internal) Onyx-00002` the plaintext is not a substring of the observation — and
+  quoting it put a phrase in the signed pack that the run never saw, which is the
+  defect `quotable` was narrowed to prevent one branch over.
+- **The scorecard header states the basis it actually uses.** `confidence` is
+  derived from *weighted* coverage, and the header offered the class count as its
+  basis: "high - 10/11 classes covered" (0.909) where the figure behind the word
+  was 0.878.
+- Two behaviours that could be reverted with the whole suite green now have tests:
+  the 200-empty caveat's default ATLAS stamp (revertable to `()`, stripping it from
+  three probes' caveats) and the weasyprint engine's anchor paragraph.
+
+
+- **A live cache and agent memory are seeded, so their erasure can be verified.**
+  The search index, eval set and backup seed on any backend; the cache and memory
+  were `isinstance(..., Fake…)`-guarded, though `set` and `remember` *are* write
+  primitives on their protocols. A customer who configured a live Redis or mem0
+  therefore got a permanent `NOT_COVERED` on two of the seven surfaces however
+  well their erasure worked — and `_warn_on_synthetic_surfaces` warns only about
+  the opposite case, so nothing said so. The model stays guarded deliberately:
+  `train_adapter` on a live HuggingFace backend fits a real LoRA, which is not a
+  side effect an erasure scan should take on its own. Observability has no write
+  primitive at all.
+- **A backend that refuses the canary costs only its own surface.** The seeding
+  runs *before* the probe, so an exception there aborted the whole command and
+  lost every other surface's verdict — the harm `_erase_surface`'s containment
+  prevents one step later. An unseeded surface is disclosed and reads
+  `NOT_COVERED`; the run ends `ERASURE INCONCLUSIVE` instead of crashing.
+- **LangSmith's `delete` confirms the purge.** Every other trace backend verifies
+  its own: Langfuse polls until the traces are gone and raises on the timeout,
+  with a comment recording that "returning silently on the timeout let the re-scan
+  confirm a residual". This returned the moment the API accepted the call, and
+  `search_traces` reports absence from the project row alone — so a delete the
+  backend accepted and did not apply read back as `TRACING: ERASED`. What no call
+  can establish through that API is whether runs are retained after the row
+  disappears; `docs/coverage.md` records the limit rather than papering over it.
+
+
+- **Class 10's headline counted turns where its label counts sequences.** The
+  probe plans three benign follow-ups per (shared entity, principal) and its own
+  criterion is "the extraction is confirmed when the **sequence** surfaces a
+  foreign canary" — so a sequence that leaks only on its third follow-up scored
+  1/3, and the signed metric understated the extraction by up to 3×, always in the
+  direction that makes the stack look safer. The demo run reads **29.2%**, not
+  18.1%. It is the only headline rate whose unit is not the step; the other three
+  plan one step per attempt and are unchanged.
+- **`score --output json` dropped the unaccounted-surface disclosure.**
+  `evidence/labels.py` records three renderers that answered "was this run live?"
+  from the provenance block alone and were each fixed; the machine-readable
+  scorecard was the fourth consumer and was not. It emitted `"scope":
+  "configured_stack"` with nothing on the subject while the text beside it printed
+  "plus N surface(s) this run's findings rest on that its provenance never
+  recorded".
+- **`pack` exited 1 on a malformed pack.** It was the one pack-reader with neither
+  a schema-stamp check nor typed-error handling, and pydantic's `ValidationError`
+  is a `ValueError` — not a `SectumError` — so it escaped the typed-error handler
+  and exited outside the documented `0/2/3/4` contract with a raw traceback.
+
+
+- **One unreachable backend no longer costs the other seven surfaces their
+  verdicts.** The erasure containment caught `AdapterError` only. Translating a
+  client failure is the *adapter's* contract, and the erasure surfaces keep it
+  unevenly — `backup/s3` and `otel` translate at every call site, `cache/redis` and
+  `memory/redis` have no `except` at all — so a `redis.ConnectionError` walked
+  straight past the guard and aborted the whole run, *after* it had seeded canaries
+  into the operator's live backends. Contracting the guarantee on a contract half
+  the adapters do not keep made it untrue for most of them. Any exception is
+  contained now; the surface reads `NOT_COVERED` carrying the exception's own text,
+  so nothing is silenced.
+- **The AutoGen adapter returned Sectum's own prompt as the agent's answer.**
+  `ChatResult.chat_history` is the *initiator's* view, and the adapter initiates
+  from the user proxy — so in pyautogen 0.2.x the messages the proxy **sent** are
+  stored `role="assistant"` and the replies received are `role="user"`. Verified
+  against a real `ConversableAgent`. Taking the last `role == "assistant"`
+  therefore handed the hijack probe a string that structurally cannot carry a
+  leak, and the run recorded "the agent answered and surfaced no foreign canary" —
+  the caveat written to keep the class honest making a false statement. Selected by
+  `name` now, which carries the real speaker on both sides of the flip.
+
+
+- **The GCS backup's one guard against a false `ERASED` failed open.** A non-zero
+  soft-delete retention is what makes the adapter refuse to attest a purge — a
+  deleted object stays restorable for the window, and `_blobs` lists
+  `versions=True` but never `soft_deleted=True`, so nothing downstream can catch
+  it. It was read with `getattr(..., 0) or 0`, so every way of *failing* to read
+  the policy collapsed into "there is no policy" and the purge proceeded. Buckets
+  created since 2024 default to a 7-day policy, so that is the common case. An
+  unreadable policy now raises; a policy the client can read and that is genuinely
+  disabled still purges.
+- **LangSmith was the only trace backend that never read the run's metadata bag.**
+  `@traceable(metadata=...)` lands in `extra`, and every sibling reads its own —
+  Langfuse takes `metadata`, Datadog takes `custom` *and* `meta` with a comment
+  saying missing it "would be a false erasure PASS". A marker carried in metadata
+  was invisible, so the surface signed `TRACING: ERASED` over content the read path
+  never looked at. `extra`, `tags` and `error` are read now, and the test double —
+  which modelled only `id`/`name`/`inputs`/`outputs`, so no test could have caught
+  it — models the whole shape.
+- **Class 7's 200-empty caveat was silenced by a server that words its miss.** The
+  caveat gated on `AccessOutcome.EMPTY`, which the runner derives from
+  `bool(result.output)`. That holds for the two *typed* by-id reads, whose `None`
+  genuinely means nothing came back; `McpResult.output` is free-form tool text, so
+  a correctly tenant-scoped server answering "No resource found for that key." read
+  as `RETURNED` and the caveat vanished — 96 findings against a server returning
+  `""`, 0 against one that narrates. The agent-framework sibling was made
+  unconditional for exactly this reason and the reasoning was not carried over.
+  `sectum-ai probe` skips this probe against a live MCP server, so the CLI cannot
+  reach it today; the SDK path can.
+
+
+- **A leak no longer borrows a technique from an attempt that found nothing.**
+  `dedupe_findings` unioned techniques across *any* two duplicates, so a
+  `CONFIRMED` leak found by a `lookup` sub-probe, merged with the injection
+  sub-probe's `UNVERIFIED` non-finding for the same resource, came out stamped
+  `AML.T0051.001` — "the tool-description injection worked here" — over an attempt
+  that found nothing. The union is restricted to duplicates that reached the same
+  verdict; the caveat merge, where all four attempts are `UNVERIFIED` and the note
+  records what was *tried*, is unaffected.
+- **The containment fix reached one phase of one surface.** Every other scan was a
+  comprehension, which dies whole: a residual seen on marker 1 was destroyed when
+  marker 2's read raised, so the DPO was told the absence could not be established
+  over content the tool had looked at and seen. All six surfaces now record each
+  positive as it is found, through one shared scanner, with a test per surface —
+  because "applied to all six" was the claim that was false.
+- **An anchored `erasure` attestation said it had no anchor.** `erasure` never
+  passed the anchor intent, so it took the unanchored default: an
+  `evidence.timestamper: rfc3161` pack bound a PDF reading "Independent anchor:
+  NONE … reproducible by anyone over any digest". An AST sweep now pins that every
+  caller passes it, since the default is the conservative one and a missing
+  argument is therefore silent.
+- **The erasure methodology paragraph attested on an all-synthetic pack.** The
+  provenance narrowing added an entry ago reached the isolation arms only, so both
+  shipped erasure samples said "This pack **attests** whether those markers are
+  still retrievable" directly beneath "This pack is a demonstration, not an
+  attestation."
+- **A mixed detector config claimed both tiers were real.** `offline_only` was an
+  `and`, so one real provider flipped the whole paragraph: a run with a real
+  embedder and the default `judge.kind: fake` told an auditor "then the configured
+  judge" over a token-order string matcher. The sentence is composed per tier.
+
+
+- **The A3 erasure gate failed the run that proves the deletion worked.** The term
+  added an entry ago keyed on the coverage *verdict*, and with no baseline the only
+  verdicts an A3 surface can reach are `RESIDUAL` (the scan found the subject's
+  data) and `NOT_COVERED` (it found nothing) — so `RESIDUAL → NOT_COVERED` is the
+  **successful deletion**, and gating on it turned a clean remediation into
+  `RESULT: REGRESSION` at exit `2`. It is keyed on *was it scanned* now: the
+  erasure commands record a `surface_provenance` row only for a surface actually in
+  `report.surfaces`, so a clean scan has one and an unscanned surface does not. The
+  test that pinned the false alarm as intended behaviour is corrected, and the
+  direction it never checked is pinned beside it.
+
+
+- **The RAG probe never saw the retrieved context.** `_rag_ask` scanned
+  `RagAnswer.answer` and discarded `RagAnswer.retrieved`, while its sibling
+  `_vector_query` has always scanned every hit — so the flagship Class 2 verdict
+  was a property of the *model's wording*. A shared-index retriever that hands
+  another tenant's documents to the model, the exact pivot the probe exists to
+  detect, graded `PASS` at `0.0% RPR` stamped `rag_pipeline: LIVE` whenever the
+  model paraphrased instead of quoting the canary. Measured on one shared-index
+  pipeline with 24 markers served cross-tenant: **15 confirmed** with the answer
+  shaped like the fake's, **0** with the answer shaped like a real LLM's. It hid
+  because `FakeRAGPipeline.ask` returns the retrieved chunks *as* the answer, so
+  every test and the demo exercise the one shape where the two agree.
+- **An eighth PASS note: a class half-backed by the built-in fake says so.** Rule 5
+  withholds a class only when *every* probe's backing surface is synthetic, so a
+  two-probe class with one live surface graded at full band weight with nothing on
+  the line about the other half. A live MCP server with no agent adapter configured
+  produced `Class 7 PASS critical` and `GRADE A`, note-free. Neither existing note
+  reaches it — `withheld` needs the fake to have *confirmed* something, `missing`
+  needs the probe not to have *run*.
+
+
+- **Docs: the reasoning the previous entry repudiated was still on the page.**
+  `docs/quickstart.md` said "`score`, `report` and `pack` read `findings` directly
+  and are unaffected" — written when that was true, and false the moment `report`
+  and `pack` began refusing a self-contradicting record. The exit-3 list gains both
+  refusals, including `pack`'s run-vs-pack mismatch.
+- **Docs: two walkthroughs still told the reader to run a Class 7 probe the CLI
+  now skips.** `docs/coverage.md` and the Class 7 catalog page were corrected when
+  the seeding guard landed; the two examples that actually instruct the reader to
+  point `agent.kind` at LangGraph/CrewAI and run `--probe agent-framework-hijack`
+  were not — and with a live backend that command now exits `3` with "no probe
+  interrogated the stack". Both say so, and name the SDK as the path that drives a
+  live backend.
+- **Docs: the samples' finding count drifted under a regeneration.**
+  `docs/samples/README.md` said 343; the committed sidecar and PDF say 367. The
+  page's own warning that the retrieval-pivot artifacts "can drift silently"
+  (nothing renders them from a committed pack) was accurate.
+- **Docs: five smaller gaps.** `data-models.md` never learned about
+  `RunResult.detection`; the Class 11 page stated attestable-with-caveat
+  unconditionally, where it now needs an observed baseline; the Class 7 page and
+  ADR-0009 described per-sub-probe ATLAS stamping without the union that dedupe
+  now performs; `adapters.md` gave the skip consequence for the model family and
+  not for the agent and MCP families that now have a stronger one; and
+  `quickstart.md`'s `[ERASURE NOT RESCANNED]` clause named one of three channels —
+  not the one an `erasure --subject` run takes — and its SARIF properties list
+  omitted the two new disclosures.
+
+
+- **A narrowed user boundary is recorded even when the setup also failed.** The
+  all-plants-unconfirmed branch returns early and `if dropped:` sat below it, so a
+  probe that both dropped its user-level steps and lost every plant recorded only
+  the second fact — under-reporting `user_steps_dropped` in the signed record, the
+  audit PDF and `diff`'s `[BOUNDARY LOST]` signal on exactly the runs where the
+  setup also failed.
+- **A full similarity page is no longer reported as a badly shaped phrase.** The
+  A3 vector scan wrote its inconclusive count into `ErasureReport.unverifiable`,
+  whose only other producers are phrase-*shape* shortfalls and whose one CLI
+  rendering hard-codes their cause — so an operator whose backend returned a full
+  page (meaning the phrase may still be stored, ranked below it) was told "N
+  supplied fingerprint(s) could not be checked (trailing part too short, or no
+  control form for the prefix)" and sent to rewrite a fingerprint that was fine.
+  It goes to the per-surface channel, which already prints exactly this cause and
+  is where every other surface's inconclusive count goes.
+
+
+- **A pack that calls itself a demonstration no longer attests in the next
+  paragraph.** `provenance_statement` ends "This pack is a demonstration, not an
+  attestation." for an all-synthetic run, and the scope paragraph rendered
+  directly beneath it said "this pack attests the isolation of those surfaces".
+  `scope_methodology` conditioned that paragraph on erasure-vs-isolation and never
+  on provenance. With no live surface it now records what the probes observed
+  instead of attesting isolation.
+- **A retrieval-pivot rate with no sample is no longer rendered as a
+  measurement.** With `n = 0` the rate was printed bare — byte-identical to a
+  measured rate, which everywhere else in the PDF carries its interval and its
+  `n`. It is labelled as asserted by the record, the same treatment the
+  incoherent-counts branch already gets for the same reason.
+- **SARIF discloses setup that did not land.** It was the one projection carrying
+  neither `unconfirmed_plants` nor `user_steps_dropped`, so a probe whose every
+  plant the backend swallowed appeared in `probesExercised` and raised no alert —
+  which in a Security tab reads as "this class is clean". The PDF, OSCAL, the JSON
+  summary and `score` all disclose both.
+- **`report` and `pack` warn about them too.** Each warning had exactly one caller,
+  `probe`, so an operator who ran `probe` in CI and `report` by hand signed and
+  shipped a pack whose own audit PDF discloses a narrowed user boundary and
+  half-landed setup they were never told about.
+
+
+- **A surface with no delete API and no baseline is no longer a claim about the
+  tenant's data.** Three properties tested the same five fields three ways:
+  `verdict` and `coverage_verdict` asked "no delete API and a baseline was
+  observed", while `attestable_with_caveat` also required `markers_before > 0`. A
+  backend that raises `ErasureUnsupported` unconditionally (Helicone, Datadog APM)
+  on a tenant whose traces had already aged out landed in the gap, so the coverage
+  matrix asserted "no per-tenant erasure API — data presumed retained" — a
+  positive claim about the tenant's data — on a surface where the scan observed
+  nothing, and the surface fell out of `caveats` *and* out of `not_covered`, so
+  nothing disclosed it. All three now key on one predicate; the truthful verdict
+  is `NO BASELINE` / `NOT_COVERED`.
+- **A leak one token apart no longer needs the judge's permission.** The verbatim
+  bypass exists because a judge answering "no" — cautious, flaky, or hostile —
+  silently downgrades a real cross-tenant leak to a candidate. It asked with
+  `residual_present`, whose token arm is *contiguous*, while this module's own bar
+  for "the text carries that marker" allows one interposed token — the bar
+  `FakeJudge` and `_span_traceable` branch 1 both use to confirm. The canonical
+  leak shape the module documents, `Project (internal) Onyx-00002`, therefore
+  failed the bypass written for exactly it. Kept separate from `verbatim` rather
+  than widening it: `verbatim` also writes confidence `1.0`, and a paraphrase is
+  not certainty in a signed field.
+- **The quoted proof of a leak has to be about that leak.** `_span_traceable`
+  branch 1 confirms on the marker being present, whatever the judge quoted, so it
+  cannot decide what to *quote* — and `quotable` asked only whether the span was
+  somewhere in the observation, which any other sentence in the same response
+  passes. A confirmed cross-tenant leak of `Project Onyx-00002` shipped evidenced
+  by "the quarterly roadmap was also reviewed", sharing no token with the marker,
+  in the field the PDF renderer's own docstring calls "the proof". A span is now
+  quotable only when it also ties to the marker; a genuine paraphrase is still
+  preferred over the bare plaintext.
+
+
+- **The ATLAS stamp is a per-sub-probe fact, and was written and keyed as if it
+  were per-probe.** Both halves of ADR-0009's contract broke. *Over-claim:*
+  `_empty_ambiguity_finding` hard-coded the probe's whole footprint, so the
+  200-empty caveat escaped the narrowing its own leak path applies — the three
+  `lookup` sub-probes, which name the resource outright and inject nothing,
+  carried `AML.T0051.001` (LLM Prompt Injection: Indirect) in signed evidence. The
+  ADR says stamping them "would claim an attack the probe never performed, in a
+  field that ships as signed evidence". *Under-claim:* the finding id encodes
+  marker, principals and surface but not the sub-probe, and all four tie on
+  status, severity and confidence — so first-seen won and the injection step,
+  planned last, always lost. Against a server exploitable **both** ways the pack
+  reported the leak and never recorded that ingested tool metadata also reached
+  it, which is a different remediation. Techniques are now unioned onto the kept
+  finding, so one leak stays one finding carrying every technique that reached it.
+
+
+- **The audit PDF says whether this pack has an independent anchor.** It told
+  every reader "any edit to the attested content changes the attested digest and
+  fails verification" and never said whether *this* pack was anchored. Without an
+  external anchor the timestamp is `LocalTimestamper`'s, which its own docstring
+  calls "reproducible by anyone over any digest — an attacker who edits a pack can
+  simply re-stamp it", so the sentence was an over-claim. It also mis-instructed
+  the reader in the other direction: running `sectum-ai verify` on a default pack
+  exactly as the PDF says produces `[FAIL] independent-anchor` and `VERIFICATION
+  FAILED` at exit `4` over a pack nobody touched, with no hint that
+  `--allow-unanchored` is what the pack needs. Every sibling renderer already made
+  the distinction — `_echo_verdict`, the `independent-anchor` check, the in-toto
+  `anchors` block, and `PACK-README.md` inside the same deliverable — and the
+  audit PDF, the artifact an auditor actually reads, was the one that did not. The
+  statement is derived from the pack where one exists and passed as the *intent*
+  from `report`, which renders the PDF before the token that would prove it.
+
+
+- **The audit PDF no longer promises an auditor two detection tiers that did not
+  run.** "Each observation passes a layered detector — exact canary match, then
+  semantic similarity, then a calibrated judge" was stated on every pack, and the
+  record carried nothing that could condition it — while both tiers past the first
+  are off by default: `sectum-ai init` scaffolds `embedder.kind: fake` and
+  `judge.kind: fake`, which resolve to a hashing vector whose own docstring calls
+  it "not semantically meaningful beyond lexical overlap" and a token-order string
+  matcher. Worse on the wedge SKU: the `erasure` workflow invokes **no** embedder
+  and **no** judge at all — it matches by exact substring — and the branch that
+  already swaps the scope paragraph for an erasure run left this one verbatim, so
+  the Article 17 deliverable described two tiers that structurally cannot have
+  run. The paragraph is now a function of `RunResult.detection`, with three
+  wordings: the tiers that ran, the offline stubs named as stubs, and exact-match
+  only. A record written before the field existed asserts neither.
+
+
+- **A data-subject residual the scan had already seen no longer disappears.**
+  `_contained`'s own docstring lists three harms the abort-free rewrite fixed, and
+  the third — "a scan that had already OBSERVED residual records before failing
+  lost them" — was the one the rewrite did not. The vector surface is the only one
+  that reads twice, by id and then by fingerprint: a store whose `fetch` answered
+  and whose `query` then raised had positively found the subject's record still
+  present, and the handler replaced the whole surface with `residual_after=0`. A
+  GDPR Article 17 *failure* therefore reached the DPO as "absence could not be
+  established, re-run" at exit `0`, over a record the tool had looked at and seen.
+  What a block observes is now recorded as it is observed and survives a later
+  failure on the same surface, across all six contained surfaces; what went
+  unchecked is still declared unverifiable, with the backend's own words.
+- **The erasure gate could not fire on the data-subject path at all.**
+  `_erasure_lost` was computed from `erasure_residue` and `erasure_caveats`, and
+  the CLI writes a key into either only for a surface with `baseline_observed` —
+  which the A3 `--subject` probe sets `False` on every surface, because it scans
+  after the controller's deletion. So no `erasure --subject` run writes into
+  either dict, and the gate was structurally blind on the wedge SKU's own path: a
+  run that found residue followed by one that could not scan printed
+  `[ok] confirmed_findings: 2 -> 0` under `RESULT: no regression` at exit `0`,
+  with the confirmed residual findings listed as *resolved*. `erasure_coverage` —
+  the one field that records an A3 scan — had no reader in `baseline.py`; a
+  definite verdict degrading to `NOT_COVERED` now gates, and the reverse does not.
+
+
+- **A vector store that swallows the corpus no longer grades `PASS`.** The seeding
+  guard added two entries ago asked three slots whether the canary reached them and
+  skipped the fourth — the vector store, which the most classes stand on. `upsert`
+  *is* a write primitive, so the corpus goes into a live store unconditionally, and
+  nothing read it back. A store that acknowledges the bulk load and serves none of
+  it (a quota, the wrong namespace, a read-side ACL, an index that never settles —
+  `pinecone.upsert` settles on the last id of a batch only, `weaviate.upsert` settles
+  not at all) left Classes 1, 2, 6 and 10 querying an empty index and grading `PASS`
+  off it, printing `0.0% reconstruction` and `0.0% extraction efficiency` as
+  measurements. The planting probes were guarded all along, because their bait is a
+  `ProbeStep` that `_plant_landed` reads back; the corpus is a direct adapter call,
+  which `_plant_landed` never sees — the same rule, one sibling over. Asked with
+  `fetch` rather than `query`, so the answer does not depend on ranking, and starved
+  only when the corpus is *wholly* unreadable — `_plant_landed`'s own all-or-nothing
+  rule — so a store slow to settle one tenant does not flip five classes to
+  `NOT_COVERED`.
+
+
+- **`report` signed the record `diff` refuses.** The self-contradiction guard was
+  left off the shared loaders on the reasoning that "`score`, `report` and `pack`
+  recount the findings" — true of what they *render*, false of what `report`
+  *signs*. `intoto.py` embeds `run.metrics` verbatim into the attested predicate,
+  "the part a downstream policy engine reads", so a record with its counts zeroed
+  produced a DSSE-signed, timestamped attestation asserting `confirmed_findings: 0`
+  beside its own `finding_count: 280`, over 229 confirmed cross-tenant leaks —
+  and `verify` called the pack internally consistent. `report` and `pack` now
+  refuse it, as `diff` and `baseline --compare` do.
+- **Deleting a per-probe key bypassed the same guard.** Checking only the keys the
+  record still carried let `[ok] per_probe_findings[rag-poisoning]: 24 -> 0` through
+  under `RESULT: no regression` at exit `0`, with `confirmed_findings` left truthful
+  so the total agreed — the hole one granularity down, still open after the fix that
+  closed it for the total. The map is compared over the union of what it records and
+  what the findings count. The `erasure` exemption is keyed on the two erasure
+  workflow probes rather than on the map being empty, because "empty" is also what a
+  gutted probe record looks like.
+- **`pack` shipped a bundle its own README tells the auditor to reject.** Nothing
+  checked that the workdir's `run.json` is the run `evidence.json` attests, though
+  `pack` bundles both — so the ordinary `probe; report; probe; pack` workflow, whose
+  second run legitimately rewrites `run.json`, produced a run-pack that answers
+  `[FAIL] bundled-run: … altered or replaced after signing` at exit `4`: a tamper
+  accusation against files the tool wrote minutes earlier. The directory path of
+  `verify` deliberately declines to make that accusation because it cannot tell a
+  later run from an altered one; a bundle *is* a closed container, so the mismatch is
+  refused where it is created instead. Keyed on the record digest, not `run_id`,
+  which is stable across runs of one scenario.
+
+
+- **Docs: Class 7 is not covered against a live MCP server or a live agent.** Both
+  halves of the class read back a canary *Sectum plants* — an MCP resource under a
+  key it invents, an agent lookup for an id it invents — and neither protocol has a
+  write primitive, so only the built-in fakes ever receive it. The previous entry
+  taught the CLI to skip those probes rather than grade the empty answer `PASS`,
+  and left `docs/coverage.md` telling the reader the opposite: that pointing
+  Sectum at a live MCP server or CrewAI *adds* Class 7 to a run, when it removes
+  it. The two coverage rows, the worked example's class list, the Class 7 catalog
+  page and the previous changelog entry (which generalised "asked of the backend"
+  from the `rag` slot to all three) are corrected, and the gap is stated beside the
+  Class 6/13 one.
+- **Docs: `erasure --subject` cannot reach `ERASED`, and the example said it did.**
+  Every A3 surface is built with `baseline_observed=False` — the scan runs only
+  after the controller's deletion — so the verdict is `ABSENCE CHECKED`. The
+  example's README said so correctly while `run.sh` and its `sectum-ai.yaml`, the
+  text the operator actually sees, promised the product's strongest erasure claim.
+- **Docs: rule 1's plant check is conditional now, and four statements still read
+  as absolute.** A probe whose every plant vanished is `NOT_COVERED` only when it
+  also confirmed nothing — a leak it saw regardless is no longer suppressed for
+  want of its own setup — so `docs/scorecard.md` (twice), `docs/data-models.md` and
+  the operator-facing CLI warning are qualified to match. `scorecard.md`'s closed
+  list of why a class is uncovered gains the canary-cannot-reach-the-backend
+  reason the same change introduced.
+- **Docs: three smaller over-claims.** The Class 5 walkthrough offered `huggingface`
+  as a real-engagement target without the caveat its own coverage page carries (HF +
+  PEFT loads per tenant and declares no shared prefix cache, so the probe runs and
+  can find nothing by construction). The Class 13 walkthrough said a real CLIP sweep
+  "reflects a production multi-modal retriever" — CLIP changes the embedder, never
+  the index, and the class reads `NOT_COVERED` against every live store. And
+  `docs/quickstart.md`'s exit-code list was missing `calibrate`'s "no threshold
+  separated the classes", while `docs/configuration.md` promised unknown top-level
+  keys are rejected — true only of keys that carry a value, since a
+  commented-out section parses as `null` and is dropped before the check.
+
+
+- **A record whose headline counts contradict its own findings is no longer
+  compared.** `diff` and `baseline --compare` are the only readers that take
+  `confirmed_findings` / `per_probe_findings` off a *loaded* record as fact;
+  `score`, `report` and `pack` recount the findings. So zeroing the counts in a
+  baseline printed `[ok] confirmed_findings: 229 -> 0` under `RESULT: no
+  regression` at exit `0` — the CI-facing command asserting a fix — while `score`
+  graded the same file `F` off the 229 confirmed findings still in it. Inflating
+  the other side is the same hole reversed: a `REGRESSED` at exit `2` no finding
+  supports. Both producers derive the counts from the findings they record, so a
+  disagreement means the file was edited or written partially; it is now refused
+  at exit `3` rather than recounted, because which half is wrong is not knowable
+  from the file. Checked on all four sides (both records of `diff`, and the saved
+  baseline and current run of `baseline --compare`, which load by different
+  routes). Per-probe counts are compared key by key, so `erasure` — which records
+  findings and leaves `per_probe_findings` empty — is not turned into a false
+  alarm.
+- **`calibrate` hands over the threshold it certified.** The text renderer printed
+  it with `:g` (6 significant digits) while the candidates are midpoints between
+  observed scores, so it almost never rendered the value it was describing: the
+  shipped demo certified `0.8333335` and printed `semantic_threshold: 0.833333`
+  under the heading "apply it in sectum-ai.yaml". Half of those roundings go
+  *down*, and a threshold below the certified one admits scores the run proved
+  were negatives — a calibrated gate that starts confirming leaks that are not
+  leaks. The sweep resolves candidates `1e-6` apart, so the error is half the
+  resolution of the measurement. The recommendation line, the paste block and the
+  fallback now print the exact value; the padded sweep table says it is rounded.
+
+
+- **A live `rag`, `mcp` or `agent` backend was graded `PASS` on a check it could not
+  have answered.** Those three slots carry a canary Sectum *puts there*, and their
+  adapter protocols expose only `ask` / `invoke` / `run` — no write primitive — so the
+  seeding is guarded by `isinstance(..., Fake…)` and a live backend never receives the
+  marker. The probes ran anyway: planned, queried, found nothing (there was nothing to
+  find), entered `probe_versions` and graded. Pointing Sectum at a live pipeline produced
+  `Class 2 PASS 0.0% RPR (95% CI 0.0%-13.8%, n=24)` under "scope: your configured stack
+  (every recorded surface live)" — a well-powered answer to a question that could never
+  have had one, which is the exact shape `docs/scorecard.md` names as the dangerous case
+  and rests on a guard to prevent; that guard asks whether *any* marker is foreign to
+  anybody, which the substrate always satisfies while one class sits starved. The
+  question is now asked of the `rag` backend rather than assumed: after seeding, a
+  same-tenant read decides it. The `mcp` and `agent` slots hold resource keys and
+  lookup targets Sectum *invents*, and neither protocol has a write primitive, so
+  there is nothing to ask — a live backend cannot be holding them, and those probes
+  are skipped outright. A live pipeline reading the store this command just seeded still runs
+  — skipping it blindly would have lost a real finding — while one that cannot see the
+  canary is skipped with the reason stated and its class reads `NOT_COVERED`.
+
+- **The runner deleted confirmed cross-tenant leaks it had already observed.** When
+  every plant read back unconfirmed, the probe's whole result list was dropped on the
+  reasoning that "every read below it looked for something that was never there". That
+  is false when those reads surface the *corpus* markers `seed` planted: a backend with
+  no by-id lookup (where the plant check fails closed) or one that takes the bulk load
+  and drops the probe's own writes produced 24 confirmed CRITICAL findings and recorded
+  none of them — and told the operator the backend "acknowledged the write and did not
+  serve it", which in the first case is false. A leak the probe saw is never suppressed
+  for want of its own setup.
+
+- **The A3 containment fabricated a cause and discarded the backend's own.** The guard
+  added last cycle claimed to behave "as Class 11 does" and did not: Class 11 records a
+  `SurfaceErasure` carrying the adapter's reason, while this dropped the surface from the
+  report and wrote to a channel whose only other producers are phrase-level fingerprint
+  shortfalls — so the CLI printed "N supplied fingerprint(s) could not be checked
+  (trailing part too short…)" for a by-id surface carrying no fingerprints, the real
+  reason reached nothing but a log line, and the run exited 0. It records what Class 11
+  records now. `SurfaceErasure.verdict` also tests the unverifiable case first: a scan
+  that could not run reports zero markers by arithmetic, and both branches below it are
+  positive claims that it looked.
+
+- **`verify` swung from a false clean to a false alarm; it now says the third thing.**
+  Printing `[ok]` let an unanchored decoy excuse a tampered PDF at exit 0; failing the
+  run accused an untampered folder, since `report --tsa` beside `erasure` puts an
+  anchored pack next to a genuine unanchored one as a matter of course. The honest answer
+  is neither: `[INDETERMINATE] unexcused-siblings` and `VERIFICATION INDETERMINATE` at
+  exit 3 — "the run could not be completed", the code an erasure whose absence could not
+  be established already uses.
+
+- **Smaller corrections to this cycle's own work.** `UnicodeDecodeError` is a *sibling*
+  of `JSONDecodeError`, not a subclass, so the non-UTF-8 body the last entry claimed to
+  have fixed still escaped — the broad wrap starts after the decode. The backup adapters'
+  `search` — the path Class 11 calls twice per surface — let raw client failures escape
+  where `delete` had just been translated. `docs/coverage.md` gained a "Classes 6 and 13
+  do not run against any live vector store" gap while its own table and worked example
+  still said Class 6 runs on "any live vector backend". And the manifest parity test
+  checked the ungated direction for one probe of twelve where it claimed both directions.
+
+- **The manifests omitted the field that decides whether a probe runs at all.**
+  `requires_any_capability` is what gates Classes 6, 9 and 13 — without it the CLI skips
+  the probe and the class scores `NOT_COVERED` — and it appeared in no `probe.yaml`. A
+  catalog consumer therefore read `requires_adapters`, which any vector store satisfies,
+  and concluded those classes were covered on a stack where they never run. The three
+  gated probes now declare it, and the parity test pins both directions.
+
+- **An MCP transport failure was not an adapter error.** Both MCP members translated
+  only the tool-level `isError`; a refused connection, a TLS error or a malformed frame
+  came out as whatever the SDK raised — an `ExceptionGroup`, in practice — which is not
+  the adapter contract's type, so it escaped the runner's handling of an adapter failure
+  and took the whole run with it. Every agent adapter wraps instead; these two now do,
+  naming the endpoint.
+
+- **A truncated agent answer was returned as the agent's answer.** The Anthropic
+  tool-use loop exited on "no more tool-use blocks" and never read `stop_reason`, so a
+  run that hit `max_tokens` handed back a cut-off response — the 200-empty shape one
+  layer up, because the probe then scans a partial answer, finds no canary, and a leak
+  the full answer would have carried reads as a clean pass. It refuses now. Its
+  Assistants sibling was missing `incomplete` from its terminal set, which is how that
+  API reports the same truncation, so the loop treated it as still-working and spun to
+  the timeout.
+
+- **The HTTP agent and RAG adapters crashed where their six siblings raise an adapter
+  error.** The catch named three *transport* failures, so a `200` carrying well-formed
+  JSON of the wrong shape — `"tool_calls": null`, a non-UTF-8 body — escaped as a bare
+  `TypeError` or `UnicodeDecodeError`. That is not the adapter contract's error type, so
+  it escapes the runner's handling of an adapter failure and takes the whole run with
+  it. Both now wrap the shaping step, as every other agent adapter does.
+
+- **A3's shipped manifest declared three of the six surfaces it scans.** The generator
+  sourced the by-id set alone, while the probe also fingerprint-scans the model adapter,
+  agent memory and the search index and emits HIGH findings on them — so a catalog
+  consumer reading `probe.yaml` concluded those were out of scope while a residual there
+  is reported. Both halves are sourced now, and the parity test asserts against the same
+  union rather than the generator's own table.
+
+- **The grade cap exempted findings the verdict had never withheld.** Rule 5 is
+  deliberately switched off on a run with nothing live, so the demo still grades — the
+  verdict gets a scope-adjusted set and the cap was handed the raw one. In that scope
+  the inversion came straight back: the same record graded `F` with a provenance key
+  present and `A` with it deleted. Both now read the same set.
+
+- **Four more places where one renderer said less than the record holds.** OSCAL's
+  unplaceable disclosure reached only the live branch, so a synthetic-only run carrying
+  a confirmed finding on an unrecorded surface asserted "the observations describe that
+  synthetic stack" about evidence the record places nowhere — both sibling renderers
+  already narrow that sentence. `verify` listed an unexcused file as *unclaimed* as
+  well, saying two different things about one file. OSCAL's user-boundary qualifier
+  fired on a dict of zeroes where the PDF and the scorecard both correctly stay silent.
+  And the published recipe named two of the three paths to `NOT_COVERED`.
+
+- **A knob the Redis cache cannot honour was accepted and dropped.** `FakeCache` and
+  the Redis *memory* adapter both implement `soft_delete`; the Redis cache does not, so
+  an operator validating that Sectum catches cache residue got a clean run from a
+  setting that never took effect. Refused now, like mem0's `user_scoped` — the
+  resolver's one precedent for exactly this.
+
+- **Smaller corrections.** A Class 11 surface whose pre-scan *raised* reported
+  `NO BASELINE`, which the neighbouring branch defines as "the scan looked and found
+  none"; the unverifiable case is tested first now. `providers.py` claimed the LLM judge
+  is never primed while `detection.py` states the opposite and builds the semantic
+  tier's false-positive control on it being primed — the judge does see the marker
+  plaintext, and the module now says so. Milvus was missing from three enumerations of
+  "every live vector store the CLI builds".
+
+- **A `verify` that declined to judge a file also declined to fail.** The previous
+  entry's fix for the false accusation moved an unacceptable ownership claim out of the
+  judged set and printed it as `[ok]`, so nothing re-hashed the file and the run passed
+  at exit 0 under `VERIFIED (independently anchored)` — an unanchored decoy needing no
+  key could excuse a tampered audit PDF, or a gutted `run.json` that `score` reads in
+  preference to the pack. Refusing to accuse is not the same as vouching: the line is a
+  `[FAIL]` now, saying nothing is called altered and that this verification declines to
+  certify a folder it could not judge.
+
+- **A GCS backup bucket whose versioning was turned off was attested `ERASED` over
+  retained data.** The adapter listed every generation only while `versioning_enabled`
+  was true. GCS has no "suspended" state — turning Object Versioning off flips that flag
+  to `False` while every noncurrent generation stays restorable until a lifecycle rule
+  removes it — so the scan saw none of them, the purge removed none of them, and the
+  signed Article 17 attestation said the surface was erased. The S3 sibling counts a
+  bucket as versioned when its status is `Enabled` **or** `Suspended`, for exactly this
+  reason. The listing is unconditional now; on a bucket that was never versioned it is
+  the same set. The test fake had encoded the wrong semantics too — an unversioned
+  delete cleared *every* generation — which is why no existing test could see this.
+
+- **Two more siblings of this cycle's own repairs.** `S3Backup.delete` let the boto3
+  client's exception escape, so a denied bucket aborted the whole erasure run rather
+  than marking one surface unestablished — the defect the GCS sibling's comment
+  describes, in the adapter it was written next to. And the A3 subject-erasure probe had
+  no per-surface containment at all, though `_refuse_capped` was written for that path:
+  one trace backend that could not answer cost every other surface its verdict. Both now
+  behave as Class 11 does.
+
+- **The Class 7 caveat said "the agent answered" over a response the same observation
+  records as empty.** Its wording was taken from the caller precisely so it would
+  describe what was observed — and then written unconditionally, so the sentence added to
+  keep the caveat honest was the one making a false statement. Two adapters wired into
+  the CLI produce an empty output: LangGraph returns `""` when a graph hits its recursion
+  limit mid tool-loop, and the HTTP agent returns `""` for any `200` whose body carries
+  no `output` key. The wording now branches on the response, so an agent that produced
+  nothing is described as having produced nothing. `FakeAgent` pads a miss into
+  `tool returned: `, so no fixture built on it could reach this — only a real backend.
+
+- **`verify` accused two genuine, untampered documents.** The ownership rule's new
+  claimant checks turned two ordinary situations into `[FAIL] audit-pdf: altered or
+  replaced after signing`, which is the worst false alarm a tamper-evidence product can
+  raise. Declining a claim is not an accusation, and both paths now say what is
+  actually true. First, the anchor-strength rule: `erasure` carries no `--tsa`/`--rekor`
+  flag at all, so `report --tsa` beside `erasure` in one workdir produces an anchored
+  pack next to a genuine unanchored one as a matter of course — and that genuine
+  claimant was rejected, then its document judged against the wrong pack. A real claim
+  this verification cannot accept is a third outcome, reported as `unexcused-siblings`.
+  Second, the operator's own trust roots: `verify` passed `--tsa-cert`, `--tsa-root` and
+  `--rekor-key` to the pack under test but not to the claimant, so pinning a customer
+  TSA or a private Rekor instance made your own genuine sibling fail to verify and its
+  document be reported as tampered. Both verifications now take the same roots, built
+  once so they cannot drift apart again.
+
+- **The withheld OSCAL document was not schema-valid, so the disclosure never
+  arrived.** `findings` is optional in OSCAL AR 1.1.2 and `minItems: 1` when present,
+  and `include-controls` likewise; withholding every control emitted `[]` for both, so a
+  GRC platform that validates on ingest rejected exactly the pack whose disclosure it
+  needed to read. Both are now omitted rather than empty. Three more corrections to that
+  disclosure: it asserted "Confirmed findings rest on …" over a status-blind surface
+  list, naming surfaces that carry only unverified candidates; it was gated on a control
+  having been withheld, so it went silent precisely when none was (an erasure run
+  carrying an unplaceable cross-tenant leak said nothing at all); and an erasure control
+  could be withheld over a finding on a surface no erasure scan reaches, which is the
+  narrowing the coverage block already applies.
+
+- **The scorecard said "probe did not run" over a record holding that probe's
+  findings.** "Did this probe run?" is answered by any finding; `score` asked the
+  confirmed-only set, which answers a different question — "did this probe prove a
+  leak?" — as `baseline._exercised_probes` states in as many words while taking the
+  broader one. So a record carrying 24 unverified candidates from a probe, listed as
+  exercised by the audit PDF on the same run, had the scorecard assert the probe never
+  ran and drop the class from coverage entirely. An unverified candidate is exactly the
+  evidence a class passes *with a caveat* on, which is the note it now carries. The
+  published recipe's step 1 is corrected with it.
+
+- **Moving a confirmed critical leak onto a LIVE surface improved the grade from `F`
+  to `A`.** Rule 7 caps the letter at a withheld class's band so that "this is not
+  evidence about your stack" cannot also mean "and therefore you passed" — but the cap
+  asked a different question from the verdict. Rules 5 and 6 decide per class *slot*
+  (`PROBE_SURFACES[probe] & exercised`); the cap asked per *finding* (is this finding's
+  surface recorded?). Where the two disagreed the class was withheld and nothing capped:
+  a class whose slot the run cannot place, holding 24 confirmed CRITICAL cross-tenant
+  findings the record says were observed on a LIVE surface, graded `A` — while the
+  byte-identical record with those findings on an *unrecorded* surface graded `F`. The
+  cap now keys on the verdict the scorer actually reached: every withheld class holding
+  a confirmed finding caps, unless the record positively states that finding's surface
+  was Sectum's own fake, which is rule 5's exemption and the only one.
+
+- **The audit PDF's coverage matrix silently dropped a live erasure surface.** A
+  surface the block never mentions defaults to `NOT_COVERED` in OSCAL and in the control
+  assertion — `controls._erasure_assertion`'s own comment records why: "it was neither
+  verified nor unestablished, it simply vanished". The DPO-facing matrix, whose caveat
+  promises coverage "surface by surface", was the copy that still vanished it: the row
+  disappeared while the assertion two pages later said absence could not be established
+  on that very surface. It is total over live erasure surfaces now, and the module's
+  third copy of the erasure-surface list is derived from the canonical one rather than
+  transcribed.
+
+- **A `PASS` did not say the run had tested only half the boundary.** `user_steps_dropped`
+  and `unconfirmed_plants` record that a run did *less* than it planned, and the audit PDF
+  was the only renderer that read either. So a scorecard `PASS` line was identical whether
+  the user boundary had been exercised or never run, and OSCAL filed "confirmed no
+  cross-principal leakage" — a claim that spans the user boundary — over a run that never
+  crossed it. Both now carry the qualifier: two more of the scorecard's `PASS` notes (now
+  seven), and a sentence on the OSCAL control verdict naming which boundary was exercised
+  and whether the setup landed.
+
+- **Three docs pages claimed coverage the code had just withdrawn.** Class 6's "Runs
+  when" said the probe runs against "every vector store Sectum ships" — true until live
+  stores stopped declaring `semantic_retrieval`, and now the opposite of true: Class 6
+  and Class 13 report `NOT_COVERED` against Qdrant, pgvector, Weaviate, Chroma,
+  OpenSearch, Pinecone and Azure AI Search, and only the built-in fake runs them. Both
+  class pages and `configuration.md` say so, with the reason (no config path reaches a
+  real embedding model for a vector store). Separately, the adapter table described
+  `adapter_bleed` as merging every tenant's LoRA into every inference; it does not — each
+  completion is correctly scoped and the harness joins them — so the entry now says it
+  *models* the condition and that findings under it are marked `synthetic`. The same
+  correction went into the code comment that had been asserting the merge. Two example
+  walkthroughs carried the same two claims and are corrected with them: Class 6's told
+  the reader to "point it at a real embedding-backed store before reading the rate as
+  inversion" — which the CLI cannot do, and which now reports `NOT_COVERED` — and Class
+  9's called `adapter_bleed` the way to "reproduce the leak condition".
+
+- **One surface's failed purge aborted the whole Article 17 attestation.**
+  `_erase_surface` catches `AdapterError` around *both* scans — an inconclusive listing
+  on one surface must not cost the other seven their verdicts — and caught nothing
+  around the `delete` call between them. So an S3 bulk delete reporting per-key
+  failures, or a denied object, ended the erasure run with no attestation at all
+  instead of one surface unestablished. It is contained now, and a surface whose purge
+  errored can never read `ERASED` whatever the post-scan happens to see: an erase that
+  did not complete establishes no absence. Two adapter-side siblings of the same rule
+  came with it. The OTel post-delete re-scan accepted a page the backend itself flagged
+  as *partial* as proof the spans were gone — the one thing that module exists to
+  refuse, and where its sibling refuses for a weaker consequence (a lost residual
+  finding, versus a signed `ERASED`). And `GCSBackup.delete` let its client's exception
+  escape untranslated — not the adapter contract's type, so it slipped past the new
+  containment too — after stopping the loop at the first failure, leaving later objects
+  neither deleted nor named. It now attempts every object and reports them all, as the
+  S3 sibling's `Errors` list does.
+
+- **A floored effect size entered the signed record as a measurement.** When an arm's
+  spread falls below the timer's resolution the 1 µs variance floor stands in for it, so
+  Cohen's d, t and p become *bounds* — "at least this distinguishable". The finding's
+  evidence span has said so since the floor existed; `side_channel_effect_sizes` carried
+  the same number bare. That map is what `score` reads for Class 5's headline and what
+  `baseline --compare` and `diff` compare between runs, so a floored `d=146.7` against a
+  later genuinely measured `d=5.2` printed as an enormous improvement in a quantity that
+  was never measured. `RunMetrics.side_channel_variance_floored` now names those pairs,
+  and the metric line and the `diff` JSON both say "bounds, not measurements". Labelled
+  rather than dropped, unlike an *unresolved* pair: a 0.0 by arithmetic is not evidence,
+  while a bounded d is real evidence of a real side channel.
+
+- **A probe that lost only *some* of its plants disclosed it nowhere.** The runner
+  counts the writes a backend acknowledged and did not serve back, and a probe whose
+  every plant vanished is already refused a vacuous pass. The PARTIAL case — some
+  landed, so the probe did interrogate the stack and stays graded — reached the signed
+  pack with nothing said, because the count lived on the runner object and only the CLI
+  warning read it. A class graded on half its setup was indistinguishable from one
+  graded on all of it, which is the over-claim the plant check exists to prevent. It is
+  `RunMetrics.unconfirmed_plants` now, beside `user_steps_dropped`, whose treatment it
+  should have had from the start: inside the canonical hash, printed on the audit PDF's
+  probes line, carried in the JSON summary, warned from the record rather than from
+  memory, and gated by `diff` as `[PLANTS LOST]` — with the metric lines of an affected
+  probe reading `not measured` instead of `[ok] 1 -> 0`, exactly as a lost user boundary
+  does. No version bump: 0.7.0 has not shipped, so the field joins it.
+
+- **The erasure-surface set was two copies, and its two sibling metric blocks were
+  unvalidated.** Which surfaces a Class 11 scan can reach was listed in `probes` and
+  transcribed into `evidence`, held together by a parity test — and a copy kept honest
+  by a test is still a copy. It is canonical in `spec` now, below both, with each end
+  deriving from it; the parity test stays, because it pins the constant against what
+  the probe actually scans, which no import can guarantee. That single set makes the
+  record checkable at the point where it enters: `erasure_coverage` keys must be
+  *erasure* surfaces, not merely surfaces. A key naming `mcp` had consumers disagreeing
+  — the renderers narrow to the erasure set and read it as "not an erasure surface",
+  `erasure_scanned_surfaces` does not, so `isolation_surfaces` subtracted the invented
+  key and dropped a live surface the isolation probes really drove from the pack's own
+  "Live surfaces:" line. `erasure_residue` and `erasure_caveats`, written by the same
+  scan over the same eight surfaces and printed into the same PDF matrix, validated
+  nothing at all; they do now. The first thing the new rule caught was a test fixture
+  asserting on `prompt_logs`, a surface no erasure scan reaches.
+
+- **The fourth by-id read passed in silence.** Class 1's 200-empty rule reached the
+  vector fetch, the cache get and the MCP invoke; `agent.run` plans
+  `lookup <marker_id>` across a principal boundary, which is the same read, and graded
+  a bare PASS over exactly Class 1's evidence. The caveat there is **unconditional**
+  rather than gated on `AccessOutcome.EMPTY` like its three siblings: for them a
+  returned-but-clean read is real evidence — the backend handed back a *different*
+  object, so it resolved the id in the caller's own scope — whereas an agent framework
+  narrates a refusal, a miss and a tool error identically, and Sectum's own fake pads a
+  miss into `tool returned: `, itself a 200 with an empty body. Gating on the outcome
+  would have left the caveat silent on every live agent, the case it exists for. The
+  finding stays shared on `DetectingProbe`, now with class-accurate wording, because a
+  caveat that misstates what was observed is the over-claim it exists to prevent. A
+  clean scoped agent run yields 24 informational findings where it used to say nothing.
+  The caveat is silent for any *pair* whose leak is proven, so a run is caveat-free when
+  every step leaks (the confused-deputy flaw); under token passthrough alone, where only
+  the token-bearing step of each pair leaks, a pair carries both its confirmed finding
+  and the caveat for its scoped step — the same shape the sibling `agent-tool-hijack`
+  already produces, and it moves no verdict.
+
+- **The OSCAL export read `satisfied` over a confirmed critical leak.** Its control
+  verdicts came from findings whose surface the provenance block records as LIVE, and
+  the `synthetic` exclusion covered the ones it records as a fake — so a confirmed
+  finding on a surface the block never recorded at all fell in neither set and simply
+  vanished. A run whose only confirmed findings were 90 cross-tenant leaks on an
+  unrecorded surface exported all twenty controls as `satisfied`, while the audit PDF
+  named them ("placed on no stack at all"), `verify`'s run-scope gate flagged them and
+  `score` graded `F` capped at critical. A GRC platform reads `status.state`, so the
+  machine-readable export was the one that mattered and the one that lied. This is not
+  the built-in-fake case, where the record positively states the surface was Sectum's
+  own: here it states nothing, so the leak may well be on the operator's stack — and
+  `not-satisfied` would assert a failure the run cannot place either. So the control is
+  not asserted at all, as it already is for a synthetic-only run, and the result names
+  every withheld control. A control already failing on placeable evidence keeps its
+  `not-satisfied`: an unplaceable finding must never earn a pass, and never erase a fail.
+
+- **A forged ownership claim excused a tampered audit PDF.** `verify` excludes a
+  candidate sibling from judgment when another pack in the folder declares and binds
+  it — the rule that stops a genuine erasure PDF being reported as a renamed probe
+  pack's tampered one. The claimant had only to parse and to bind, so the claim cost
+  nothing to forge: copy the pack under verification, set `pdf_ref` to the hash of the
+  TAMPERED PDF, save it under the owner's filename. No key, one edited field, and
+  `verify` went from exit 4 with `[FAIL] audit-pdf: altered or replaced after signing`
+  to exit 0 and `INTEGRITY OK`. Excluding a file is the one move here that can hide a
+  tamper, so it now costs more: the claimant must **verify** — the digest it attests has
+  to cover the `pdf_ref` it claims with — and must be anchored at least as strongly as
+  the pack it would excuse, so nothing weaker than a verified independent anchor can
+  excuse an *anchored* pack. Against an unanchored pack a decoy rebuilt from scratch
+  with a local-dev token still verifies and still excuses, which is what that
+  verification says of itself: "NOT independent tamper evidence". A claimant that does
+  not bind, or does not verify, no longer excuses anything — the file drops back into
+  the judged set and the tamper is reported — while a claim that is real but
+  under-anchored is reported as exactly that, never as tampering.
+
+- **The seventh honesty rule was cited five times and never stated.** `v1.4` added the
+  rule that a withheld class caps the letter at its own band, and both the published
+  methodology and `score`'s own module docstring still enumerated six and titled the
+  section "The six honesty rules" — while five sentences elsewhere on the page referred
+  the reader to "rule 7". The list now has seven items, so a recompute by hand follows
+  the same rules the code applies.
+
+- **Live vector stores declared a semantic ranking they do not have.** There is no
+  config path from `AdapterConfig` to a real embedding model for a vector store, so
+  every live kind the resolver builds is backed by `_hashing_embed` — a token
+  counter where synonyms score 0.000. `semantic_retrieval` nonetheless defaulted
+  `True`, which is the case the capability's own docstring says must declare
+  `False`: Class 6 queries a strict token subset of its canary, retrieved it
+  lexically, and shipped the finding stamped `AML.T0024.001 Invert ML Model`.
+  Classes 6 and 13 now report NOT_COVERED against live stores — the honest verdict
+  for a check that could not be performed. The capability is withdrawn as well as
+  the flag, since `supports()` is computed at construction and is what gates the
+  probe; setting the flag alone looks like a fix and changes nothing.
+
+- **The detector and the erasure scan answered the same question with different
+  bytes.** All three detection tiers re-spelled the residue arms inline instead of
+  calling `residual_present`, so a rendering one accepted the other rejected: the
+  scan reported a surface clean while the detector confirmed a finding on the same
+  text. Every tier now calls the shared predicate, and a new invariant runs both
+  paths across five renderings of one marker and requires the same verdict.
+
+- **A marker of only zero-width characters confirmed a leak on every
+  observation.** `residual_present` guarded the RAW needle, and a plaintext of
+  `\u200b\u200b` is truthy raw and normalizes to empty — so the substring arm
+  evaluated `"" in anything` and returned `True` for any text at all. The detector
+  carried its own `if needle and ...` against exactly this and the shared predicate
+  did not; the guard now runs on the normalized needle, where the emptiness
+  actually is.
+
+- **The A3 model-adapter surface attested `ERASED` without ever observing a
+  baseline.** Four of the five `SurfaceErasure` sites recorded
+  `baseline_observed=False` when the marker was never seen before the delete; the
+  model-adapter one did not, so a run where the fingerprint never planted printed
+  `1 markers before, 0 after -> ERASED` and `ERASURE VERIFIED` at exit 0, with
+  `erasure_coverage: {'model_adapter': 'ERASED'}` signed into the pack. Nothing was
+  erased — nothing was there. It now reads `1 checked, 0 still present -> ABSENCE
+  CHECKED` / `NO RESIDUAL FOUND` and the surface is `NOT_COVERED`. The new test
+  asserts over the whole report rather than one surface, so the next site added
+  cannot repeat it.
+
+- **Class 9's LoRA leak was manufactured by Sectum and signed as LIVE.** The
+  HuggingFace adapter's `adapter_bleed` knob does not make a model bleed: `infer`
+  runs one correctly-isolated completion per scope and `" ".join`s them, so the
+  cross-tenant content in the answer is fabricated by the harness and the weights
+  produced none of it. The adapter did not set `synthetic`, so CRITICAL
+  cross-tenant findings Sectum wrote itself entered the signed pack tagged
+  `model_adapter: LIVE`, counted in "confirmed on live surfaces" and graded against
+  the operator's model. It is `synthetic` now, like the fakes. The Redis knobs are
+  deliberately not: `tenant_scoped=False` really does drop the tenant from the key,
+  so that leak is a real leak of a genuinely shared resource.
+
+- **An isolation-only surface was reported as an unverified *erasure* surface.** Both
+  erasure renderers keyed on every LIVE surface, so a record whose provenance also named
+  `mcp`, `api`, `rag_pipeline` or `agent_framework` said "absence could not be established
+  on mcp" and flipped GDPR Article 17 to `not-satisfied`. No erasure probe scans `mcp`: it
+  is not an unverified erasure surface, it is not an erasure surface. Both now narrow to
+  `controls.ERASURE_SURFACES`, mirroring the probe's own plan — and a surface the scan
+  really can reach, left unscanned, still fails closed, so the narrowing cannot launder a
+  gap. A parity test pins the constant against the probe, since `evidence` sits below
+  `probes` and has to keep a copy.
+
+- **A planting probe whose write the backend dropped graded `PASS`.** Classes 3, 4 and 8
+  plant data and then read it back across a principal boundary, and nothing checked the
+  *write*. A store that acknowledges it and drops it — a zero TTL, a read-only replica, a
+  quota — left the probe reading for something that was never there: it ran, found
+  nothing, entered `probe_versions`, and `score` graded the class `PASS`. That is rule 1's
+  vacuous pass reached from the other side, and Class 11 never had it because it counts
+  markers *before* acting. The runner now reads each plant back as the principal that
+  made it; a probe whose every plant vanished leaves `probe_versions`, so the class reads
+  `NOT_COVERED`, and the operator is told which backend swallowed the write.
+
+  No retry, deliberately: reflecting a write is the **adapter's** contract, and every
+  store that needs help already keeps it — Pinecone and Azure AI Search poll
+  `vector._settle`, OpenSearch indexes with `refresh=True`, Qdrant upserts with
+  `wait=True`, Milvus reads at `consistency_level="Strong"`. A backend that returns from
+  a write it cannot yet serve is an adapter bug, and `settle` is where it gets fixed;
+  a retry loop in the runner would paper over that everywhere at once.
+
+  `model.train` (Class 9) is **exempt**, and the exemption is pinned by its own test:
+  reading a LoRA back means asking the model to regurgitate, which is probabilistic and
+  is exactly what the probe measures, so a model that trained correctly and declined to
+  echo would be recorded as an unplanted probe — a false `NOT_COVERED`, the direction
+  this tool must never err in. Training that fails raises instead.
+
+- **An unplaceable finding was reported as one on a fake.** "on live surfaces 0" reads as
+  "we placed them, on Sectum's own store". A finding whose backing surface the provenance
+  block never records was not placed *at all* — a different claim — and the two rendered
+  byte-identically in the audit PDF's summary row and in the CLI's, the same conflation
+  the provenance paragraph one section above exists to break.
+- **A SARIF rule advertised a leak for a probe that found only candidates.** The rule's
+  `level` and `security-severity` have tracked status since they were written; its title
+  did not, so a probe producing only `UNVERIFIED` findings showed "Cross-principal leak
+  finding" on its GitHub rule page while every result underneath read "candidate". The
+  noun keys on status alone — a confirmed finding on a synthetic surface is still
+  confirmed, and the result's own `[synthetic surface …]` prefix is what says whose stack
+  it describes.
+
+- **The KV probe printed the variance floor's outputs as measurements.** A jitter-free
+  backend has zero observed spread, and the 1 µs floor stands in so Welch's t is finite
+  rather than degenerate — which is right. Rendering the results as observations is not:
+  `d=60000.0`, `t=207846`, `p=0.0` and a 95% interval of `[60.00, 60.00]` — a zero-width
+  confidence interval claims the gap is known *exactly*, from a spread the run never
+  measured, in a signed evidence pack. The signal now carries `variance_floored` and the
+  evidence span says those four numbers are bounds, not measurements. A backend with real
+  jitter is unchanged.
+
+- **`CONTRIBUTING.md`'s extras recipe matched nothing when copied.** The alternation
+  lived in a table cell, where a literal `|` must be escaped as `\|` — which POSIX ERE
+  does not read as alternation. Copied from the raw file it matched nothing, exited `0`
+  through the pipe, installed nothing, and the contract tests all skipped while the job
+  passed: verbatim the failure the CI step's own guard exists to catch. Moved into a
+  fenced block, where no escaping is needed.
+- **A dozen documentation claims the code does not back**, each verified against the
+  tool before changing: `docs/RELEASING.md` counted seven guard tests where six exist;
+  the Class 7 catalog header and index row attributed `AML.T0051.001` to both probes when
+  only `agent-tool-hijack`'s injection sub-probe declares it; `docs/configuration.md` said
+  two knobs "apply to every `fake` adapter" and contradicted itself thirteen lines later
+  (`rag` and `agent` read neither, and passing one is a `ConfigError`), listed embedding
+  providers as adapter `kind:` values under names the CLI does not accept (they are
+  `embedding_models:` entries spelled `st:`/`openai:`/…), omitted the `rag-langchain`
+  extra from the one live kind that needs it, and named four of its six config models;
+  the attack-catalog index opened on a subject/verb mismatch; the README's twelve-class
+  list ran out of the catalog order it cited, so a reader mapping it positionally read
+  Class 3 as semantic-cache contamination; `docs/adr/README.md` described a section every
+  ADR has where 0016–0022 use front-matter; ADR-0016 named v0.1.1 as the first public
+  release (it is v0.1.0; the `SCHEMA_VERSION` half was right); ADR-0005's positive half
+  did not hold for two of eighteen example directories; and the embedding-inversion
+  example's quotation of the adapter contract opened mid-clause and rendered an ASCII
+  hyphen as an em dash inside what presents as verbatim.
+
+- **`baseline --save --compare` silently discarded a regression at exit 0.** `--save`
+  returned before `--compare` was ever read, so on a documented CI gate the flag was
+  ignored — and the run it ignored was the *regressing* one, which then overwrote the
+  baseline. The regression was neither reported nor recoverable: the reference it would
+  have failed against was gone. An ignored flag earns a warning elsewhere in the CLI;
+  this one destroys the evidence the gate exists to produce, so it now fails closed and
+  names the two-step form that does what the operator meant.
+- **The modelled embedding gradient was rendered as a measured leak rate.**
+  `RunMetrics.retrieval_pivot_rate_by_model` says the gradient is bypassed by
+  construction and that "every renderer must label this one as modelled"; `probe` does in
+  both of its renderers, and the diff text, the diff JSON and the `baseline --compare`
+  block printed it bare, one line below the measured rate, in identical formatting. It
+  also *gates*: a gradient moving on its own exits 2, a CI failure indistinguishable from
+  a measured cross-tenant leak-rate regression. The label now rides on the metric name,
+  which is the one string all three renderers share.
+- **`diff --help` listed six of the ten causes of its own exit 2.** The `baseline
+  --compare` banner records why an enumeration is the wrong shape here — it went stale
+  three times — and was rewritten as a non-enumeration; `diff`'s help, the only prose the
+  `diff` path shows, kept the closed list, so a reader hunting an unrescanned erasure
+  surface, an unremeasured side channel or a changed scenario found a list without it.
+
+- **The ATLAS release gate had no record for ten releases.** ADR-0009 makes a per-release
+  sweep a gate and says its offline tripwire "cannot judge renames or fit"; the validation
+  log nevertheless ends at 2026-07-20, with v0.7.1–v0.11.0 shipped since. The log now
+  carries a dated entry stating exactly what was verified — every id in use is pinned, and
+  every probe's `atlas_techniques` matches its own catalog page and `index.md` in both
+  directions across all 15 probes — and, explicitly, that the upstream MISP-mirror
+  comparison was **not** performed and remains a release blocker. A test runs that offline
+  half per commit, since it is the half that can drift silently between releases, and
+  `docs/RELEASING.md` now says the durable record is the log, not the PR description that
+  nothing reads back.
+- **The Class 11 model scan's "same recall test as the subject check" was false** — and
+  the two reviewers who flagged the missing `has_base_control` gate were proposing a fix
+  that loses a true positive. A3's needles are natural-language fingerprints a base model
+  may already know, so it needs an untrained-tenant control; every needle here is a hard
+  canary (`SECTUM-CANARY-` plus 26 base32 characters) that no base model produces by
+  chance. Gating would turn a shared-weights model that really did memorize the canary
+  from `RESIDUAL` into `NOT_COVERED`. The comment now states the reason, and a test fails
+  if the gate is ever added.
+
+- **The documented `user_steps_dropped` disclosure never fired for the two contracts it
+  was written for.** `docs/attack-catalog/index.md` names the RAG-pipeline and
+  agent-framework contracts specifically and promises three things where an adapter
+  cannot carry a user: the steps are "DROPPED rather than failed", the run records
+  `user_steps_dropped`, and `diff` reports `[BOUNDARY LOST]` — "a pass which says the
+  user boundary was not tested, never that it held". Both probes filtered the user
+  principals out at *plan* time instead, so the runner's drop path — built for exactly
+  this case — never ran: the metric stayed `{}`, the audit PDF's clause never printed,
+  and the diff signal was always empty. Not planning a step silently is a pass that says
+  nothing at all. They are planned and dropped now; no user step reaches an adapter that
+  cannot carry one, which is the false positive the plan-time filter existed to avoid.
+- **The reported "Cohen's d" was inflated.** `_cohens_d` used the *population* variance
+  while `_welch`, twenty lines down, used the *sample* variance — two estimators of one
+  quantity in a single file. Cohen's d is defined on the pooled sample SD, so the figure
+  was high by √(n/(n−1)): 2.15% at the default 24 trials, 11.8% at 5. It is printed in
+  the finding's evidence span, signed into `side_channel_effect_sizes`, and compared
+  against the large-effect threshold, so a true 4.95 shipped as 5.05 and read HIGH.
+- **`docs/configuration.md` documented the wrong factory contract** for
+  `openai-assistants` (the resolver requires a `(client, assistant_id)` pair and raises
+  otherwise) and for `anthropic-tooluse`. Two KV docstrings likewise described behaviour
+  the code does not have (`>=` described as "above"; a degenerate Welch case described as
+  always infinite when it returns `0.0` for equal means).
+
+- **The KV-timing probe measured one warmed prefix with every observer.** Its docstring
+  states the invariant — "the owner warms one prefix per trial and each is measured
+  exactly once, by one observer arm" — and explains the bug that sentence exists to
+  prevent. One prefix set was built per *owner* and handed to every observer in turn, so
+  on a backend whose latency call runs inference (HuggingFace's `measure_latency_ms`
+  calls `infer`) observer 1's own measurement primed the prefix that observers 2..n then
+  read as a hit — and the probe attributed that warmth to the **owner**, emitting a
+  `CONFIRMED`, confidence-`1.0` finding naming a principal the measurement never
+  established. The *control* prefix already carried exactly this fix, with the reason
+  written beside it; the primed prefix never got it. It is now keyed on the (owner,
+  observer, trial) triple and warmed inside the observer loop, with the pair kept inside
+  the leading 20 characters the fake and the serving doubles key on.
+
+- **Class 1's 200-empty rule reached one by-id read and not its two siblings.**
+  `AccessOutcome.DENIED` is produced by no code path — the runner emits only `RETURNED`
+  or `EMPTY` — so "nothing came back" can never mean "the deny was enforced", and the
+  vector fetch says so on the line. A foreign `cache.get` and a foreign `mcp.invoke` of
+  another principal's resource key are the same by-id read, and both threw the identical
+  `str | None` away: on an isolated stack Classes 4 and 7 passed with an empty note over
+  exactly Class 1's evidence, while Class 1 carried "the probe could not establish the
+  negative". The runner now records the outcome for all three, and the finding itself
+  moved onto `DetectingProbe` so the three cannot word it differently — each probe still
+  addresses its own marker (a planted doc id, a cache key, a resource key), which is the
+  part that legitimately differs.
+
+- **A data-subject check signed `ERASED` over a surface nothing was ever found on.**
+  The A3 `erasure --subject` probe shares `SurfaceErasure` with Class 11, whose `erased`
+  guard keys on `markers_before > 0` and whose docstring says a surface with no baseline
+  "cannot be attested — `erased` is `False` rather than **vacuously `True`**". Class 11
+  plants canaries and counts what it finds; A3 runs *after* the controller's deletion and
+  put the count of ids and phrases the manifest **asked about** in the same field. A
+  manifest of record ids that never existed printed `1 markers before, 0 after -> ERASED`
+  on four surfaces, `ERASURE VERIFIED` at exit 0, and a signed pack whose coverage block
+  said `ERASED` with a residue count of `0` — indistinguishable, to the DPO it is built
+  for, from the attestation that earns the word. A supplied count is now marked as such:
+  the surface reads `ABSENCE CHECKED`, the coverage block records `NOT_COVERED`, no
+  residue count is written, and the summary says plainly that this establishes absence
+  and is not an attested erasure. A surviving id or a phrase that still surfaces is still
+  `RESIDUAL DATA` — a hit is a hit either way.
+
+- **The leak detector missed a canary split inside its own body.** `residual_present`
+  recovered a re-punctuated canary only where the split landed on a separator — four of a
+  40-character canary's 39 positions — while its docstring, the Class 11 page and the
+  CHANGELOG all claimed it caught one "wrapped across a log line", which is where an
+  80-column log almost always breaks it. This is the primary leak detector *and* the
+  erasure scan: a leaked canary read as a clean PASS, and a surviving one was signed
+  `ERASED`. A third arm matches the alphanumeric projection, scoped to a needle carrying
+  a 16-character-or-longer opaque token so that dropping every separator cannot
+  manufacture a match; every one of the predicate's false-positive guards still holds,
+  and a name, an SSN or an entity codename keeps the two-arm behaviour exactly.
+- **`probe --output json` wrote two warnings to stdout.** They were the only two of the
+  CLI's warnings that omitted `err=True`, so the JSON report began with prose and `jq`
+  read nothing from it — which is the shipped Action's own pipeline: all three of its
+  outputs went empty and the step summary printed "unknown" for a run that confirmed
+  findings, while the gate step's emptiness guard passed because the file was not empty.
+  An AST sweep over the CLI now fails the build if any warning is written to stdout.
+- **An erasure surface that lost its delete API read as an erasure that succeeded.**
+  `_erasure_lost` unioned residue with caveats on both sides, so a surface crossing from
+  `erasure_residue` into `erasure_caveats` — a backend swapped for one with no per-tenant
+  delete API, whose data is *presumed retained* — still counted as scanned. Its caveat
+  findings are deliberately `UNVERIFIED`, so `newly_confirmed` could not fire either:
+  two confirmed residual leaks read `[ok] confirmed_findings: 2 -> 0` under `RESULT: no
+  regression` at exit 0. That is verbatim the harm this signal was written to stop, fixed
+  for the `unverifiable_after` shape and not for its `erasure_supported` sibling.
+- **`[SCENARIO CHANGED]` gated the run and never reached the metric verdicts.** Across a
+  re-seed nothing is comparable — different tenants, markers and corpus — yet every
+  metric line still read `[ok] confirmed_findings: 3 -> 0` and `[ok]
+  retrieval_pivot_rate: 0.4 -> 0`, two lines above a banner saying the comparison is not
+  meaningful. Both renderers now read `not measured`.
+
+- **Deleting one provenance key turned GRADE F into GRADE A.** Withholding an
+  unattributable confirmed finding from the letter (the entry below) made the class
+  `NOT_COVERED` — and a `NOT_COVERED` class leaves the weighted *denominator*, so the
+  letter improved. The same record graded `F` with a key present as `LIVE` and `A` with
+  the key deleted, which is exactly what the withholding was written to prevent.
+  Withholding says "this is not evidence about your stack"; it must not also say "and
+  therefore you passed". Rule 7 now caps the letter at that class's band, the mechanism
+  rule 3 already uses for a failing class. **Methodology `1.4`** — what counts as
+  evidence is part of the methodology, so the stamp moves with it.
+- **A file merely NAMED like another pack excused a tampered one.** The rule that a
+  candidate sibling belonging to another *present* pack is that pack's business tested
+  only `.exists()`. Sixteen bytes of garbage named `evidence.json` turned a `[FAIL]
+  audit-pdf: altered or replaced after signing` on a renamed pack into `[ok]` at exit 0
+  — a decoy that disarms the tamper check. "Somebody else's document" is a claim about a
+  binding, and a binding is checkable: the owner must now parse as a pack that actually
+  binds the file.
+- **`verify` called the ordinary workflow tampering.** `seed; probe; report; probe`
+  rewrites `run.json` by design — `score`'s own comment says preferring the pack "would
+  silently grade a stale record" — and the new `run-record` check reported that genuine
+  file as "altered or replaced after signing", failing verification of an intact pack at
+  exit 4. No verifier can tell a later run from an edited one: neither is anchored. The
+  check now STATES which of the two it is and names the consequence (`score` reads that
+  file in preference to the pack), and never fails on it. Because it no longer accuses,
+  it applies to every pack name — closing the hole a renamed pack had re-opened, where a
+  gutted `run.json` delivered beside one drew no line at all.
+
+- **"Every surface was live" was answered from a block the findings contradict.**
+  `surface_provenance` records the surfaces a run ACCOUNTED for, not the ones its
+  findings name, and three renderers read it as if the two were the same. A record
+  listing seven live surfaces whose findings also rest on an eighth put "every
+  surface exercised by this run was a live, configured backend … These findings
+  describe those systems" into the audit PDF, passed `verify --require-live`, and
+  printed `scope: your configured stack (every surface live)` directly above four
+  scorecard class lines reading "none of which this run's provenance records". All
+  three now call one predicate (`labels.unaccounted_surfaces`), name the surfaces,
+  and `verify` fails closed on them like every other unknown.
+- **OSCAL stated `satisfied` for a live surface its coverage block never mentions.**
+  The residual scan iterated the coverage block's own keys, so a live surface with
+  no key at all was never looked at — and the finding's `status.state` came back
+  `satisfied` inside a `description` carrying `_erasure_assertion`'s own words,
+  "absence could not be established on semantic_cache. This run is not an
+  attestation." A GRC platform reads the state. `controls.py` already defaulted the
+  missing key to `NOT_COVERED`; this is the same hole, fixed there and not here.
+  A parity test now pins the two modules to the same answer over 25 coverage
+  shapes, and the erasure verdict no longer says "markers remaining, or presumed
+  retained" over a surface whose absence was merely unestablished.
+- **The scorecard graded an unattributable finding as certainly the operator's.**
+  Rule 5 withholds a confirmed leak on a KNOWN fake because "a leak is not their
+  fault"; a leak on a surface the provenance block never recorded was the one case
+  treated as certainly theirs. The same record, class and finding scored `A` with a
+  note when the key read `SYNTHETIC` and `F` with `note=None` when the key was
+  simply absent. It is now `NOT_COVERED` with the count named — never a `PASS`,
+  which would let deleting one provenance key turn a confirmed leak into assurance
+  — and a class with attributable findings still FAILs on those.
+- **`verify` judged another pack's genuine artifacts.** A pack whose filename
+  Sectum does not generate had every candidate sibling name in each slot and judged
+  all of them, so `verify` on a renamed erasure pack reported the probe run's
+  `audit-pack.pdf`, `attestation.intoto.json` and `run.json` as "altered or
+  replaced after signing" and exited 4 over an untampered folder. Which file
+  belongs to a pack is now decided by content — exactly one binds its run digest —
+  with another present pack's declared sibling attributed to that pack when nothing
+  binds, and everything else listed under `unclaimed-siblings`. A candidate no
+  present pack claims is still judged, so a tampered sidecar remains a failure. The
+  second audit PDF beside a renamed pack, previously neither checked nor named, is
+  now one or the other.
+- **`verify` said nothing about the `run.json` beside a pack.** `verify_bundle` has
+  bound it since the bundle existed; the standalone path neither bound it nor named
+  it, so deleting every finding from `run.json` left `verify` at exit 0 — and
+  `score`, which prefers `run.json` over the pack, graded the emptied record `A`.
+  A `run-record` check binds it for the pack names Sectum generates. The `run.json`
+  beside an erasure attestation is the PROBE run's and is named, not judged.
+- **An erasure-only pack claimed to attest isolation.** The methodology paragraph
+  asserted "this pack attests the isolation of those surfaces" on every pack,
+  including one whose only probe was `gdpr-erasure-verification` — verbatim the
+  claim `controls._run_supports` exists to refuse. The mapping table was fixed and
+  the prose above it was not, so both shipped erasure samples carried it.
+- **The coverage matrix said "verified clean" over Sectum's own fake.** Every other
+  per-row artifact prefixes a synthetic surface; the matrix an auditor tabulates
+  was the last one that did not.
+- **An empty timestamp token counted as an external anchor.** The in-toto sidecar's
+  shape test is "not JSON, therefore a real TSA's binary token", and `json.loads("")`
+  raises — so a pack carrying no timestamp announced `anchors.timestamp: true`.
+  `rekor_proof` had the same empty-claim bug one line down.
+- **OSCAL dropped the erasure residue when a leak was also confirmed.** First-match,
+  not composed: a record carrying both took the isolation branch and the residue
+  vanished from the description of the very result reporting it.
+- **SARIF could not tell a clean scan from an absent one.** A run with no findings
+  and a run in which nothing executed both projected as `results: []` — identical
+  in a code-scanning tab, where an empty tab reads as assurance. The projection now
+  carries `probesExercised` and a `no-probe-executed` notification.
+- **Every bundle `audit-pdf` line names its member.** The first present PDF's
+  verdict came back under the bare name, so on a bundle carrying two documents the
+  failure a reader most needs placed was the one that named nothing.
+- **An unverified residue read as a confirmed one.** `leak_label` gave every
+  residual finding the same phrase whatever its status, so a surface with no
+  per-tenant erasure API — whose absence was never established — read "residual-data
+  finding" beside a marker that really was still retrievable. The cross-principal
+  labels have said leak-vs-candidate all along. `is_cross_principal` now answers the
+  question OSCAL was asking by comparing that label's prose.
+- **The synthetic-surface warning was silent on a record with no provenance.**
+  Two-valued where `verify`'s run-scope, `score`'s `UNRECORDED` scope and the audit
+  PDF are all three-valued: the one run whose subject cannot be established was the
+  one the operator heard nothing about.
+
+- **The "Live surfaces:" suffix named a surface the control was not granted on.**
+  The rule that an isolation control needs a surface THIS run's probes drove went
+  into the predicate and not into the suffix beside it — whose own comment says it
+  "has to name the same set, or the assertion cites evidence it was not granted".
+  A run whose only probe drives `vector_db`/`api` signed `Live surfaces:
+  semantic_cache, vector_db`, and that string rides into the PDF and every OSCAL
+  control finding, with `verify` recomputing it identically. Both now call one
+  `isolation_surfaces`.
+- **The auditor PDF understated what the attested digest binds** — naming four of
+  its six members and omitting the two anchor flags, which are the downgrade
+  guards ADR-0016 exists to establish. Four prose siblings already named five.
+- **The integration gate could not tell a healthy run from a mostly-skipped one.**
+  Its guard asserts that *some* test ran, and measured, `12 passed, 39 skipped`
+  and `42 passed, 9 skipped` both satisfy it at exit 0. The readiness poll covers
+  the five HTTP backends, but pgvector and redis come up under a compose
+  healthcheck and can still refuse the connection — wrong credentials, say --
+  which skips their tests with no other signal. The step now fails when any
+  backend other than the deliberately profile-gated Milvus reports unreachable.
+- **Eight compliance frameworks asserted off a live surface no probe drove.**
+  `_run_supports` tested `live` as a run-wide existential: subtracting the erasure
+  surfaces left a live surface *nothing* touched still satisfying it. A record
+  whose isolation probe ran against a fake `vector_db`, beside an untouched live
+  `semantic_cache`, shipped eight control mappings and 19 OSCAL `satisfied` — while
+  `score` refused to grade the identical record. The module's own comment already
+  stated the rule ("the live surface has to be one an ISOLATION probe drove") and
+  only half of it was implemented; the test named for that rule exercised only the
+  half that was.
+- **`verify` was silent about an auditor PDF the pack does not bind.** It had a
+  branch for "binds a PDF, got one" and "binds a PDF, got none", and none for the
+  complement — so a PDF sitting beside a pack that binds no `pdf_ref` produced no
+  `audit-pdf` line at all, every check `[ok]`, exit 0. `verify_bundle` FAILS the
+  identical bytes.
+- **`pack --include-manifest` sealed another substrate's ground truth at exit 0.**
+  `report` refuses a run recorded against a re-seeded workdir; `pack` loaded the
+  substrate for the same purpose with no such check, and the sealed
+  marker-to-tenant table is the only ground truth an auditor has for re-deriving
+  who owned which canary. Nothing in the pack revealed it: `manifest-consistency`
+  compares the run to the pack, both stale.
+- **A live surface absent from `erasure_coverage` entirely was neither verified nor
+  unestablished — it vanished**, while the assertion still said verified. The
+  producer defaults exactly that case to `NOT_COVERED`; the consumer read `.get()`
+  as `None`.
+- **The audit PDF said "Probes exercised: none recorded"** in the same signed pack
+  that graded a probe's class `FAIL`. A finding is proof its probe ran — the rule
+  `score`, `baseline` and `controls` all apply, and this renderer did not.
+- **`baseline --save` was the one command that never disclosed a synthetic run**,
+  returning before the call its `--compare` sibling makes. An all-fake run is
+  enshrined as the reference every later comparison measures against.
+- **One of the six trace backends could not refuse a truncated answer.** The
+  other five count rows against a known page cap; the generic OTel adapter reads
+  a caller-supplied store through a contract with no cap to count, so a partial
+  page that no longer held the marker read as "erased" — verbatim the failure
+  the sibling adapters' own comments describe. The contract now names a
+  truncation signal (`truncated` / `nextPageToken` / `next_page_token` /
+  `nextLink`), a miss on a flagged page is refused, and the docstring states that
+  a store which does not answer the question cannot be caught here.
+- **A Class 5 `PASS` read identically with and without a timing measurement.**
+  Its measurement is a map rather than a scalar, so it never reached the
+  headline renderer and the note added for exactly this shape skipped it, while
+  `diff` prints `[SIDE CHANNEL NOT REMEASURED]` for the same absence.
+- **The residue sweep saw one of thirteen shapes and two of five package roots.**
+  It required a bare name or attribute on the left of the `in`, so
+  `row["plaintext"] in body` and `marker.plaintext.lower() in body` were
+  invisible, and a residue test added to core, spec or evidence was never walked
+  at all. It now sees through subscripts and string methods, walks all five
+  roots, and refuses to pass vacuously when run from the wrong directory.
+- **The OSCAL export signed `satisfied` over a run the CLI exits 3 on.** An
+  earlier entry gave the pack's prose a third failure mode — a surface the run
+  scanned and could not clear — and left the OSCAL projection reading the same
+  coverage block through `erasure_scanned_surfaces`, which drops `NOT_COVERED`.
+  One signed artifact then contradicted itself inside a single string: a
+  description reading "absence could not be established on search_index. This run
+  is not an attestation." carrying a target state of `satisfied` and "Sectum AI
+  verified the erasure on every live surface it scanned".
+- **`verify --manifest` was accepted and silently dropped on a `.zip` bundle.**
+  The flag was parsed after the bundle branch returned, so the marker-to-tenant
+  binding went unchecked with no `manifest-hash` line and no note saying so — on
+  the artifact ADR-0016 calls the deliverable. A flag a path accepts and drops is
+  worse than one it rejects.
+- **A class graded on half its probes rendered as a full-weight `PASS` with an
+  empty detail column**, while every class that ran *no* probe says "probe did
+  not run". For Class 2 the omission also moves the number: counting the vector
+  probe alone understates the Retrieval-Pivot Rate when a leak manifests only at
+  the pipeline surface, and that understated rate is what the line printed.
+- **A tool the agent adapters could not execute was dropped silently.** An
+  unregistered tool answers every invocation with an empty string, so Class 7
+  graded the agent surface clean over a tool that was never wired. Both live
+  adapters now refuse it, and the six prose sites that still taught the
+  callable-as-a-dict-key shape (which `getattr` cannot see) describe the one that
+  works.
+- **The shared residue predicate was weaker than the detector it was shared to
+  agree with.** `residual_present` tested a normalized substring where every
+  detection tier tests a substring **or** the marker's tokens contiguous and in
+  order. So a trace holding a re-punctuated canary — a hyphen rendered as a
+  space, as U+2011, or wrapped across a log line — was a CONFIRMED CRITICAL leak
+  on the detection path and *absent* on the erasure path, and the surface read
+  `ERASED` and signed "Erasure across the AI surfaces verified" over it. Two
+  paths, one question, opposite answers on the same bytes. The recovery arm now
+  lives in the predicate, at `max_interposed=0`: a canary is one opaque token and
+  nothing may sit inside it, so out-of-order, altered and interposed text all
+  stay clean.
+- **The deletion assertion stated only the FIRST way the erasure failed.** A run
+  with residue on one surface and no erasure API on another asserted "residual
+  data remains and is itemized in this pack" while naming the caveat surface in
+  its own live-surface list — whose data is presumed retained and is *not*
+  itemized. Every failure mode composes now.
+- **`diff --output json` omitted the seventh gate reason.** `headline_unmeasured`
+  reached both text renderers and not the JSON, so a consumer recomputing the
+  verdict from the reason arrays read six empty lists over a run that exits 2.
+- **A class whose headline rate was never measured passed with an empty detail
+  column**, indistinguishable on the page from one that measured 0.0% — same
+  grade, same confidence, same coverage. It says so now.
+- **The residue sweep was blind to the family it exists to protect.** It required
+  a bare name on the left of the `in`, so `marker.plaintext` — the shape every
+  Class 11 scan uses — was invisible: it caught the adapter family it had been
+  calibrated against and missed all six probe-side residue tests.
+- **A run the tool refused to attest still signed "Erasure ... verified".** The
+  previous entry made the deletion assertion depend on the outcome for `RESIDUAL`
+  and for a caveat surface, and missed the third way to fail: a surface the run
+  SCANNED but could not clear is `NOT_COVERED`, which `erasure_scanned_surfaces`
+  drops — so it vanished from the assertion entirely. A run with one clean
+  surface beside one inconclusive one asserted erasure verified while the command
+  itself exited 3 with `ERASURE INCONCLUSIVE`, and `verify` shares the function so
+  it did not catch it either. A scanned-but-unestablished surface is
+  distinguishable from one nobody scanned — `erasure` records provenance only for
+  the surfaces in its report — and now blocks the claim by name.
+- **Three payload reads outside the runner were untyped.** `payload_required` was
+  private while its `payload_int` twin was public, so `sweep.py` and
+  `multimodal.py` indexed `step.payload` raw and a missing key escaped the
+  `SectumError` exit-code mapping as a bare `KeyError` — exit 1 where the typed
+  path gives 3. It is public now, and no reader indexes the payload directly.
+- **`baseline --compare`'s failure banner enumerated the gate's causes, and named
+  seven of ten.** An unrescanned erasure surface, an unremeasured side channel
+  and an unremeasured headline rate each gated at exit 2 with no matching reason
+  in the sentence, so a reader hunting the cause found a closed list that did not
+  contain it. The banner now points at the bracketed lines, which are printed
+  from the same result and cannot drift from it.
+- **`diff` printed `[not measured]` four times and still exited 0.** An earlier
+  entry in this section fixed the label and left the gate: the command said plainly it could
+  not compare four headline leak rates, then greenlit the pipeline. Configuring
+  one live adapter leaves the other probes no live step, so all four go at once
+  while `probe_versions` still lists every probe and no other loss signal can
+  fire. A seventh signal, `[RATE NOT REMEASURED]`, now names them and gates at
+  exit 2. It keys on the four scalar rates deliberately: the embedding-model
+  gradient's keys change whenever the operator edits `embedding_models`, and
+  gating that would fail CI on an ordinary config change — it is still labelled,
+  just not gated.
+- **A Class 1 `PASS` could not mean what a reader takes it to mean.**
+  `AccessOutcome.DENIED` is produced by no code path — the runner emits only
+  `RETURNED` or `EMPTY` — so on every isolated stack, live or fake, a Class 1
+  pass means "no canary came back", never "the deny was enforced". The class page
+  says the probe does not treat a 200-empty as a clean pass; the scorecard did,
+  with `note: None` and full critical-band weight into the letter. An unverified
+  finding still must not flip a class, so the line now carries the count instead.
+- **A run whose purge FAILED signed "Erasure across the AI surfaces verified".**
+  The deletion controls are gated on a surface having been scanned and
+  *answered* — which is the right test for whether the control has evidence at
+  all, and the wrong one for the word "verified". A Class 11 run that left three
+  canaries behind produced a signed pack, an audit PDF and a DSSE predicate
+  asserting GDPR Article 17 and CCPA 1798.105 verified, byte-identical to a clean
+  run — while the same run's OSCAL marked the control not-satisfied and its own
+  PDF printed `RESIDUAL` two lines above. A surface with no per-tenant erasure
+  API, whose data is *presumed retained*, was folded into the same claim. The
+  rows now state what the run found; only an all-`ERASED` run says verified, and
+  the row is never dropped, because evidence of a failed erasure is still
+  evidence about Article 17. This is the wedge SKU's headline claim, in the
+  artifact a DPO hands a regulator.
+- **The TRACING surface asked the residue question with a raw case-sensitive
+  `in`.** The shared-predicate commit unified three adapter families and skipped
+  the fourth — and `_scan_observability` applies no predicate of its own, so the
+  adapter's `in` *was* the residue test. Six live trace adapters and the built-in
+  fake all matched literally, so the same bytes and the same partial purge gave
+  `search_index: RESIDUAL` and `tracing: ERASED` on one run. All seven now share
+  `residual_present`, and the invariant test gained an AST sweep that fails on any
+  raw `<marker> in <text>` in the adapters or probes — the previous check listed
+  modules, so it structurally could not see a sibling that never imported the
+  predicate, which is exactly how this family stayed behind for twelve cycles.
+- **`diff` stated a filled zero as a measurement on the OTHER side of the arrow.**
+  An earlier entry in this section taught it that an absent CURRENT value is not a
+  measurement; `baseline` fills an absent value the same way, so
+  `[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader the earlier run
+  had measured a clean zero, and `[ok] extraction_efficiency: 0 -> 0` called two
+  runs that both measured nothing "ok". Each side now renders as
+  `(not measured)` when it is a fill, both runs unmeasured reads
+  `[not measured]`, and the JSON carries `baseline_measured` /
+  `current_measured`. The regression itself still stands where the baseline is
+  absent: dropping it would let a doctored earlier record suppress the signal by
+  omitting the metric.
+- **The MODEL surface attested `ERASED` while still returning the canary.**
+  `content_recalled` — the sixth place that asks "is this string still there",
+  and the one an earlier entry's unification missed — tested a casefolded
+  `in` where the other five normalize. A model that reproduced the canary with a
+  zero-width split past the continuation cut read as "not recalled", so the
+  surface most able to re-render a memorized string was the one surface still
+  matching it literally. Both control arms move with it, or the predicates
+  diverge again. The invariant test that pins one function object now sweeps
+  `_recall` too, which is why it is a sweep and not a list.
+- **CI installed whatever resolved, not what the lockfile pins.** All three
+  `uv sync --all-packages` steps are now `--locked`, and nothing else asserted
+  the committed `uv.lock` matches the pyprojects — while the extras job depends
+  on it being authoritative ("what the LOCKFILE resolves, not the newest on
+  PyPI"). A PR that edited a dependency without re-locking went green.
+- **`fail-on-leak` accepted any string and only `true` meant true.** The Action
+  validates `output` up front for exactly this reason; `fail-on-leak` did not, so
+  `yes`, `1` or `TRUE` silently downgraded the security gate to a `::warning::`
+  at exit 0. It now refuses anything but `true` or `false` rather than guessing.
+- **The gitleaks archive was version-pinned but not byte-pinned.** It is unpacked
+  and RUN over the whole worktree, so a swapped release asset executes in CI. Its
+  SHA-256 is now checked against the vendor's published checksum.
+- **The Action's three JSON outputs were only asserted against the PUBLISHED
+  release.** The one self-test job that runs this checkout's CLI asserts the exit
+  code and a non-empty report, and nothing else — so renaming a report field
+  shipped an Action whose outputs are all empty strings, silently, on the user's
+  first run (`jq` emits `null`, and the `// ""` beside it makes that an empty
+  output rather than an error). A unit test now pins the jq paths to the report's
+  keys, and it runs on every PR.
+- **Sixteen of eighteen runner payload reads were untyped.** `vector.fetch`,
+  `vector.upsert`, `cache.get`/`set` and eight other step actions indexed `step.payload`
+  directly, so a missing key raised a bare `KeyError` that escaped the
+  `SectumError` exit-code mapping and exited 1 instead of 3.
+- **The reportlab PDF left a bare "Compliance control coverage" heading** where
+  the weasyprint engine says "No control mappings were recorded." An empty
+  section reads as "not rendered"; the other reads as "none". The two shipped
+  erasure samples are regenerated accordingly.
+- **The in-toto sidecar's anchor flags are shape-only, and said otherwise.** The
+  docstring claimed they "must match `verify_pack`"; the test has no trust roots
+  and verifies no signature, so a binary token `verify_pack` REJECTS still
+  reports `anchors.timestamp: true`. It now says the flag means an anchor was
+  claimed, not that one held. Also, `verify`'s unanchored message asserted "the
+  only timestamp is a local-dev token" for a pack whose token is a real one this
+  verifier could not check.
+- **A pack could assert a compliance control its own run never earned, and
+  `verify` said `[ok]` on every line.** The attested digest binds
+  `control_mappings`, so nobody can edit them after signing — and that was the
+  whole of the guarantee. Nothing asked whether the run SUPPORTS them, so a clean
+  isolation run over an empty `erasure_coverage`, packed with the unfiltered
+  table, asserted GDPR Article 17 "Erasure across the AI surfaces verified" and
+  CCPA 1798.105 into a signed pack, its audit PDF and its DSSE predicate, at
+  exit 0. That is the exact over-claim `controls.control_mappings`' filter exists
+  to prevent — it just ran only at build time. `verify` now recomputes the table
+  from the run and refuses any mapping the evidence does not support, including
+  one naming live surfaces the run never exercised. A subset, not an equality:
+  asserting fewer controls than the evidence earns is honest under-claiming.
+- **A confirmed CRITICAL could be hidden by deleting one provenance key.** The
+  scorecard's rule 6 declines to grade a class whose backing surface the run does
+  not account for, and omitted the class's finding count entirely — so the class
+  line positively asserted `0`, which reads as "nothing was found here" rather
+  than "found, but not attributable". Rule 5 fifteen lines below counts and names
+  the same findings. Both now share one counter.
+- **The "N findings withheld" note never reached the text scorecard.** It is set
+  only on a PASS/FAIL class, and the renderer showed a note only for
+  `NOT_COVERED` ones, so the count existed in `--output json` and nowhere in the
+  text an auditor reads — under a scope block whose wording implies the class was
+  unaffected. A class with a headline rate swallowed its note as well.
+- **Four headline leak rates read `[ok] ... -> 0` in both CI gates on a run that
+  never measured them.** `diff` and `baseline --compare` fill an absent rate with
+  `0.0`, and an earlier entry in this section taught only the expanded metric MAPS that such
+  a fill is not a measurement — the scalars kept relaying it. Configuring a
+  single live adapter leaves the other probes no live step, so all four go
+  unmeasured at once while `confirmed_findings` holds steady: the gates printed
+  every leak rate as "fixed" and exited 0. They now read `[not measured]`.
+- **`diff` relayed a Retrieval-Pivot Rate that `score` and both PDF engines
+  recompute.** Where a record states both a rate and the counts behind it, the
+  counts win — the rule `docs/scorecard.md` already stated, which the diff path
+  did not follow. A record whose counts say 95.4% while its rate field says 0.0
+  gated CI green at `[ok] 0 -> 0` and printed 95.4% in the audit PDF bound to the
+  same pack. All three now share one `rate_from_counts` in `sectum_ai.spec`.
+  Comparing a pack you did not produce is `diff`'s documented use, which is
+  exactly when relaying matters.
+- **A Class 5 effect size whose backing surface fell back to the fake read
+  `[ok] 0.8 -> 0`.** `side_channel_effect_sizes` is keyed by tenant PAIR, so it
+  names neither a probe id nor a surface and matched neither lookup — printing
+  `[ok]` directly beside that surface's own `[SCOPE LOST]` line, and beside two
+  sibling maps on the same record that both read `[not measured]`.
+- **A probe that ran and found nothing read `[not measured]`.** The opposite
+  error, from the same release: `per_probe_findings` counts findings, so a clean
+  probe is absent from it by design, and flagging that key as lost labelled a
+  genuinely clean result unmeasured. Its real coverage loss is still caught, by
+  the stricter probe-id signal. A label that fires on a clean result teaches the
+  reader to ignore it on a real one.
+- **A surface still holding a re-cased copy of the tenant's canary was signed
+  `ERASURE VERIFIED`.** The Class 11 scans tested residue with a raw
+  case-sensitive `in`, so an ordinary partial purge — the backend's delete walks
+  the documents matching the canary as written, and a derived copy that re-cased
+  it survives — attested clean over a marker the tenant's own search index still
+  returns. Its A3 sibling casefolded and called the same bytes `RESIDUAL`, and
+  `detection.py` states the rule both were meant to follow: a backend that
+  re-cased, NFKC-normalized or zero-width-split a canary slips past a raw `in`.
+  Worse, the capped-listing adapters guarding those scans had been made
+  case-INSENSITIVE one commit earlier, so the adapter suppressed its "this page
+  was truncated" refusal on a hit the scan would then not count, and the marker
+  past the cap read as absent. A suppression predicate looser than the caller's
+  count is a fail-open by construction. There is now one `residual_present` in
+  `sectum_ai.spec`, shared by both erasure probes and all three capped adapters
+  (the detector shares its normalizer), and an invariant test pins that every one
+  of them resolves to the same function object — matching two predicates by hand is what failed, and behavioural
+  equality today does not survive the next normalization added to one of them.
+- **A re-punctuated foreign credential was a dropped CRITICAL.** `_secret_format`
+  was the one detection tier without the ordered-token recovery arm — while
+  `_exact`'s own comment asserted it already had one. Its two branches fail
+  together on a secret whose hyphens the surface rendered as spaces, U+2011 or an
+  en dash: the normalized substring is gone, and `_SECRET_PATTERNS` need the
+  ASCII hyphen too, so the credential shape is gone with it. The HARD_CANARY
+  beside it was caught the whole time.
+- **Every metric map `diff` expands treats a lost key as unmeasured**, except
+  `per_probe_findings`, which omits a key precisely because it measured zero (see
+  the entry above), and
+  the flag is set where the filled `0.0` is produced rather than wired up map by
+  map. Three of the five maps had to be noticed separately over three cycles —
+  the erasure surfaces, the side-channel pairs, and the per-embedding-model
+  gradient, which still read `[ok] 0.9 -> 0` at exit 0. The next map added is
+  covered without anyone remembering to.
+- The four flagship example READMEs quoted the leak headline with the
+  live-surface qualifier stripped off — the exact sentence that qualifier exists
+  to prevent, on the pages a first-time reader sees.
+- `calibrate` refuses `--output sarif|oscal` at exit 3, as `diff` does, and only
+  `diff` said so. `CONTRIBUTING.md`'s coverage-floor command could not run after
+  the setup the same table documents, because plain `pytest` writes no coverage
+  data — and its failure is indistinguishable from a real regression. Its
+  required-check list named four of six checks by a string GitHub never reports,
+  and its pre-commit claim implied protection two of the thirteen hooks do not
+  give under `--all-files`.
+- The timestamp-authority override is documented as needing both flags: a leaf
+  supplied alone must still be issued by the pinned root. Three `[Unreleased]`
+  entries described behaviour a later commit in the same section had already
+  changed, and two described defects that never shipped.
+- **The CI gate passed at exit 0 on a Class 5 side channel the later run could
+  not measure.** `side_channel_effect_sizes` is keyed by tenant *pair*, so it
+  matches no probe id, no surface and no headline-metric name — none of the four
+  lost-coverage signals could reach it, and a dropped key became `0.0` in the
+  diff. Keeping an unmeasured pair out of the signed record was only half the
+  fix: `diff` and `baseline --compare` still read the absence as a drop to zero
+  and reported no regression, one line below their own coverage-loss notice. A
+  fifth signal, `[SIDE CHANNEL NOT REMEASURED]`, now covers it.
+- Two more metrics keyed by something other than a probe id read `[ok]` where
+  every headline metric on the same run read `[not measured]`: the pooled
+  `confirmed_findings` did not see an erasure loss, and `erasure_residue` did not
+  see a surface that had fallen back to the built-in fake — so a residual count
+  from a scan against the fake read as data that had been cleared.
+- **The live-surface count was two-valued where every label beside it is
+  three-valued.** A record that states no provenance rendered identically to an
+  all-synthetic one, so the PDF's summary row asserted that none of its confirmed
+  leaks touched a live surface while the scope paragraph below it said that
+  cannot be established. The count now says so, and the JSON's
+  `confirmed_on_live_surfaces` is `null` rather than `0`.
+- An inconclusive erasure surface reported the vector store's reason — "a full
+  similarity page" — whatever the backend actually said, and threw away the
+  adapter's own message naming the real cap. A caveat surface whose post-scan
+  also failed now keeps its itemized caveat findings, which its own coverage
+  verdict promises. And the cap-refusal suppression is case-insensitive, so a
+  full page carrying the phrase in another case was refused instead of returned,
+  turning a genuine residual into an error. (The reason given for that last
+  change was wrong — the eval-set adapter has one caller, not two, and it is
+  case-sensitive. See the residue-predicate entry below, which supersedes it.)
+- Docs caught up with this branch's behaviour changes: the scorecard page said
+  `score` refuses an all-fake run when rule 5 on the same page says it is still
+  graded; the Class 5 page listed three conditions for a confirmed finding where
+  the code applies four, and did not mention the shuffled arm order; the erasure
+  exit-3 prose said "nothing could be verified" when one inconclusive surface is
+  enough; the comparison page presented two opt-in anchors and the control
+  mappings as unconditional output. Plus the search-index refusal being
+  miss-only, four adapter families missing from the adapters package README, two
+  agent-factory return contracts, the subject-erasure example's missing caveat
+  about a real vector store, three config keys the template omitted, and two
+  `diff` loss signals the quickstart did not name.
+- An unmeasured Class 5 pair entered the signed metrics as an effect size of
+  `0.0` — a number the run never established, which `diff` then read as an
+  improvement, printing `[ok]` directly above its own coverage-loss line. The map
+  is gated on `resolved` now, like the probe-version and exercised-surface sets.
+- An `erasure` run configured with an `app` adapter recorded an **empty**
+  provenance block: the app fills the vector slot but declares the API surface,
+  so the "only what this run scanned" filter dropped it, and `verify` reported a
+  0.7.0 pack as one that predates the block.
+- **`diff --output json` stated as fact what the text renderer refuses to call
+  `[ok]`** — it carried `regressed` and `informational` but not the verdict. And
+  `diff` and `baseline --compare`, the two CI-facing commands, were the only ones
+  that said nothing about a run describing the built-in fakes.
+- The SARIF, OSCAL and PDF banners stayed two-valued after the labels beside them
+  went three-valued, so a surface the record does not describe was told it
+  "describes Sectum's built-in fake".
+- **The auditor's PDF rendered a finding from the built-in fake identically to a
+  live one.** SARIF floors such a finding's severity and OSCAL prefixes its
+  observation; the PDF — the document an auditor actually reads — said nothing,
+  in both engines. And the "on live surfaces N" qualifier was withheld exactly
+  when N is zero: an all-synthetic pack read `Confirmed findings: 229
+  (cross-tenant 229)`, the sentence that line exists to prevent. Every sample is
+  regenerated.
+- **`erasure --soft-delete` stopped reaching the vector store** — a regression
+  from the previous cycle's own fix. The shared vector-slot builder made its own
+  flagless default, so the surface the whole demo is about attested ERASED on a
+  run explicitly modelling a store that fails erasure, and the shipped
+  residual-data sample could no longer be regenerated from its documented recipe.
+  Both erasure sample sets are regenerated, and a test now renders each committed
+  sample PDF from its committed pack, so the artifact an auditor reads cannot
+  drift from the renderer again.
+- **A no-baseline erasure surface wrote `erasure_residue: 0`** — the other way to
+  establish nothing, beside the inconclusive scan the previous cycle guarded. The
+  same `diff` misreading followed: a prior run's 2 residuals "resolved" at exit 0.
+  The caveat block needed the same guard, and `diff`'s lost-erasure signal reads
+  both blocks now, not just the residue one.
+- **The isolation control's assertion still named a surface only the erasure scan
+  touched.** The previous cycle narrowed the *gate* and not the suffix that gets
+  written into the pack, printed in the PDF, and repeated in every OSCAL control
+  finding — so the assertion cited evidence it was not granted.
+- **`verify` said nothing about the other files in the folder.** A forged
+  `erasure-attestation.pdf` beside a genuine `evidence.json` produced an
+  all-`[ok]` verdict that read as "everything here checks out". It cannot be
+  *checked* — one workdir routinely holds both packs' artifacts, each binding only
+  its own, so hashing the other would call a genuine document altered — so it is
+  named: the verdict lists what it does not speak for.
+- **The RFC 3161 verifier lost its root pin to half an override.** The library
+  puts the supplied leaf and the roots in one flat trust store, so `--tsa-cert`
+  alone let a self-signed certificate anchor its own token; the leaf must now be
+  issued by the pinned root. A one-byte edit to a token's *unsigned* certificate
+  bag crashed the CLI with a traceback at exit 1 instead of refusing the token at
+  exit 4, nondeterministically. And `.cert_request()` takes a keyword-only flag
+  defaulting to `False`, so the bare call turned it off: every token this tool
+  minted carried no signer certificate, and an archived pack could only ever be
+  verified against Sectum's own shipped PEM.
+- The canonical form raised a bare `UnicodeEncodeError` from outside the block
+  that exists to type these failures, so a lone surrogate — which the stdlib JSON
+  parser accepts — killed `report` with a traceback. And a non-string mapping key
+  canonicalized to its string form, so `{1: "a"}` and `{"1": "a"}` shared a
+  digest, against the module's own injectivity claim.
+- The OTel scan read `{"resourceSpans": [], "error": ...}` as "no traces": the
+  guard checked for the key's absence, not for an error envelope beside it.
+- The e2e CI step reported success with zero tests run — both its sibling steps
+  already assert that tests ran. Docs: `shared_index` is a fake-only knob and a
+  live kind refuses it with exit 3, which one example still recommended; six of
+  eleven adapter families carry no user, not three.
+- **One inconclusive scan aborted the whole erasure run.** The vector scan
+  degrades to "absence not established" on its own; every other surface's adapter
+  *raises* when it cannot trust its listing, and nothing caught it — so a capped
+  trace, memory, eval-set or search listing ended the run instead of marking that
+  one surface uncovered. Each surface now records it and the rest still scan.
+- The OTel post-delete re-scan read a 200 carrying an error envelope as "the
+  spans are gone", so a 404 from a router with no delete route was recorded as a
+  purge. Its own `search_traces` already refuses that exact shape.
+- Documented: the subject-erasure vector fingerprint rarely reaches `ERASED`
+  against a real approximate-nearest-neighbour store, because such a store
+  returns a full page whenever the tenant holds that many vectors and a full page
+  without the phrase is inconclusive by design. That is the honest answer for
+  what the method can see; the tenant-level Class 11 scan is unaffected.
+- Three adapter families whose methods take no `user` inherited
+  `carries_user = True`, the flag the runner reads to decide whether a user-level
+  step can be judged — the default that once produced twelve false CRITICAL
+  cross-user leaks on a store never asked about a user. A test now pins the whole
+  set, so a new family cannot inherit the wrong answer silently.
+- The log redactor and the config redactor answered the same question about the
+  same shapes and disagreed: `secret_key`, `tsa_token`, `db_dsn` and
+  `application_key` were redacted by one and logged in the clear by the other.
+  They share one pattern now.
+- **`erasure` ignored a configured `app` adapter.** `probe` resolves the vector
+  slot from `app` or `vector_store`; the erasure command read `vector_store`
+  directly, so a config carrying only `app` built a clean *default fake* — the
+  adapter's `soft_delete` knob went with it, and the run attested ERASURE
+  VERIFIED against a backend the operator never configured. Both erasure paths
+  now share the `app`-aware builder.
+- Every OSCAL observation says which stack it describes. OSCAL states provenance
+  once for the run and gates its *control* findings on it, but a GRC platform
+  tabulates the observations, and a row from the built-in fake tabulated
+  identically to one from production — the same gap the SARIF projection had.
+  Both labels are three-valued now: a surface the record does not describe reads
+  `UNRECORDED`, not `SYNTHETIC`, matching `verify`, `score` and the PDF.
+- `verify` was silent about a binding it never checked: a pack that names an
+  audit PDF but is verified without one printed every line `[ok]` and exited 0,
+  so a reader concluded the PDF had been matched. A standalone pack legitimately
+  verifies without its companion, so this is not a failure — it now says which
+  part of the pack the verdict does not speak for, the way the unanchored
+  timestamp already states its own limitation. A hostile Rekor checkpoint whose
+  root hash is not valid base64 is refused with exit 4 rather than crashing out
+  with a traceback, which a caller keying on the exit code read as the tool
+  breaking rather than as a rejected proof.
+- **Eight frameworks' worth of isolation controls were asserted off a deletion
+  check.** The isolation requirement asked only whether *some* surface was live,
+  so a run whose isolation probes every one ran against a built-in fake, beside
+  one live surface that only the erasure scan touched, asserted SOC 2 CC6.1/6.6/
+  6.7, EU AI Act 15 and HIPAA. The live surface must now be one an isolation
+  probe actually drove.
+- **Class 5 graded PASS off a measurement with no resolution.** A backend whose
+  latency metric returns one constant gives Cohen's d = 0.0 and p = 1.0 —
+  arithmetically indistinguishable, downstream, from a careful null result — and
+  the run recorded the probe as exercised. Such a pair is now marked unresolved,
+  so the class reads NOT_COVERED rather than passing a check that could not have
+  found anything.
+- **A canary the backend re-punctuated slipped past the detector.** The
+  HARD_CANARY tier matched by substring alone while both sibling tiers already
+  had an ordered-token recovery arm, so a marker rendered with spaces or a
+  non-breaking hyphen instead of its own was missed — and a missed hard canary is
+  an over-claimed PASS on Classes 1, 3, 4, 7, 8 and 9.
+- Phoenix's `delete` swallowed every 404, so a deployment with no delete route
+  was recorded erasure-supported and its residue read as the customer's flow
+  failing rather than as a backend limitation; it re-checks first, as the OTel
+  sibling already did. The HTTP RAG and agent adapters turned a 200 carrying an
+  error envelope into a clean empty answer — and the Retrieval-Pivot Rate counts
+  steps, so a query the backend never answered still sat in the denominator as a
+  query that did not leak.
+- **The Class 5 timing probe manufactured 12 confirmed cross-tenant findings
+  against a model with no cache.** The ABBA schedule derived arm order from
+  `trial % 2`, which pins each arm to a fixed pair of residues mod 4 — primed at
+  call indices {0,3}, control at {1,2}. Behind a four-way round-robin dispatcher,
+  where the replica *is* the call index mod 4, the arms sit on disjoint replica
+  sets, so any spread across the pool lands entirely on one arm: a pool with two
+  fast replicas where the primed arm falls gave Cohen's d = 19.5 and 12 CONFIRMED
+  HIGH findings. ABBA cancels a linear drift; a period-4 systematic it does not
+  touch. The order is now shuffled from a seed derived from the tenant pair —
+  still reproducible, still balanced 12/12.
+- **A Weaviate read created the tenant's collection.** A post-erasure re-scan
+  therefore recreated the namespace it was attesting purged, so `list_namespaces`
+  showed the tenant again — and a cross-tenant Class 1 fetch did the same for a
+  tenant the operator never provisioned: a read that WRITES to the customer's
+  production store. Chroma, Qdrant, Milvus and Azure AI Search all guard their
+  reads; this was the one that did not.
+- **The auditor's PDF relayed the rate and confidence interval the record asserts
+  about itself.** A record whose own counts said 334 of 350 printed `2.0% (95% CI
+  1.9%-2.1%, n=350)` into the signed pack, while `score` — which recomputes from
+  the counts — read the same record as 95.4%. The PDF now recomputes too, shows a
+  bare rate when there are no counts rather than dressing it in an uncheckable
+  interval, and states nothing at all when the counts contradict themselves.
+- **`erasure_coverage` accepted any key and any verdict string**, while its
+  identical-shaped sibling `surface_provenance` validates both — and the PDF
+  prints the block verbatim into the "Coverage & caveats" matrix an auditor
+  reads, so a record could invent a surface and give it the verdict
+  "FULLY ERASED" and still verify clean.
+- The weasyprint engine dropped the flagship Retrieval-Pivot Rate row, so two
+  packs of the same run asserted different things depending on an optional
+  dependency; a test now pins both engines to the same summary rows. The PDF's
+  `NOT_COVERED` caveat names the fourth cause (a scan that could not establish
+  the markers' absence), which the previous cycle added to the code and not to
+  the artifact.
+- **A capped listing attested ERASED because the refusal was gated on a hit the
+  caller never counts.** The eval-set and memory adapters report hits by token
+  overlap; the Class 11 probe counts an exact substring. Every hard canary shares
+  the tokens `sectum` and `canary`, and the default scenario plants two per
+  tenant, so scanning for one always "hit" the other's fixture — the guard was
+  dead on every over-cap dataset, and a marker past the cap read as absent. The
+  refusal is now suppressed only by a hit the caller would also count, in all
+  three adapters (the search index's test was also laxer than its caller's).
+- **`diff` read an erasure that could not be re-scanned as one that succeeded.**
+  A run whose own CLI printed `ERASURE INCONCLUSIVE` and exited 3 wrote
+  `erasure_residue: 0`, so two confirmed residual findings "resolved", every
+  delta printed `[ok]`, and the wedge SKU's own diff said `no regression` at exit
+  0. A surface whose absence was never established now carries no residue count
+  at all — writing 0 asserts a number the run did not measure — and `diff` and
+  `baseline --compare` report `[ERASURE NOT RESCANNED]`, mark the metric not
+  measured, and fail the gate. This is the fourth lost-coverage signal beside the
+  three the earlier cycles added.
+- **`docs/coverage.md` promised Class 9 coverage against vLLM and TGI, which the
+  CLI skips.** Both declare a shared prefix cache and neither per-tenant adapters
+  nor shared weights, so the LoRA probe never runs there — the same page said the
+  opposite twice, and the sentence that did not was added by the previous cycle.
+- **Six ADRs shipped as literal pipe text.** The previous cycle's note about the
+  0010-0015 numbering gap sat between two table rows, which ends a Markdown table,
+  so ADRs 0017-0022 rendered unformatted on the docs site and on GitHub.
+  `mkdocs build --strict` does not catch it. The note now follows the table.
+- `sectum-ai.yaml.example` said `corpus_profile` is in the manifest hash, so
+  changing it invalidates a baseline. Nothing reads the value: `seed` never
+  forwards it and the substrate always records `demo`, so two runs differing only
+  in that string produce the same hash.
+- **The PyPI landing page's quickstart ended in `VERIFICATION FAILED`.** Its
+  `verify` line omitted the two flags the demo pack needs, and called the pack
+  "signed, control-mapped" when the default path signs nothing and an
+  all-synthetic run earns no mapping.
+- `exit-code` was documented as "2 = a confirmed finding". Exit 2 is also the
+  CLI's usage-error code — the Action's own gate distinguishes them, and the docs
+  did not, so a dashboard would record a confirmed leak from a run that never ran.
+- The BYOC bullet in the threat model and the SKU page still promised the narrow
+  egress the previous cycle corrected two sections above. The SARIF cap is
+  documented as covering fake-backed confirmed findings, not only unverified
+  candidates. The Class 11 coverage table and the quickstart's phrase rule now
+  match the code. The HIPAA row claimed "PHI tenant segregation verified", a
+  health-specific claim no pack makes, and ISO 42001 dropped "AI system"; a test
+  now pins that table to the shipped assertions.
+- Smaller: `CONTRIBUTING.md` gave a docs-build command that cannot work after the
+  setup it documents (mkdocs is in a non-default group); the recording page
+  described the seeding bug the previous cycle fixed, and its committed cast
+  predates the current substrate; the Redis example used a port compose does not
+  publish; Milvus was listed as running in CI when it is profile-gated; the
+  README's 12-class list had 11 entries; four vector kinds omitted `user_scoped`
+  from their field lists while the page says an unread field is rejected; the
+  evidence package's README presented two opt-in anchors as unconditional steps.
+- **Every SARIF alert from a demo run looked like a production one.** GitHub
+  renders one alert per *result*, so the run-level provenance property was
+  invisible where it counts: an all-synthetic run raised 229 `error` alerts (177
+  of them at `security-severity: 9.5`), indistinguishable from a real scan's. Every other
+  renderer says so inline — the text summary warns, the JSON carries
+  `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
+  demonstration. A fake-backed finding is now floored to `note` at the
+  informational bucket, its message says which stack it describes, and each
+  result carries its `backingSurface` and `surfaceProvenance` — the same cap the
+  projection already applied to unverified candidates. The cap keys on an
+  explicit `LIVE`, like `confirmed_on_live_surfaces` and the control mappings do:
+  a run that records no provenance for a surface is not evidence that it was
+  live.
+- **The pre-commit ruff hooks were green on a tree CI's own `ruff format --check`
+  rejects.** They pinned `v0.15.13`, older than the `ruff>=0.16.3` this repo
+  installs, and filtered to Python files, so they never saw the code inside the
+  repo's Markdown — which the CI step does check. Both hooks now run the
+  workspace's own ruff, the way the mypy hook already did.
+- The `Extras API contract` job could pass having installed nothing: its
+  `grep | tee` exits 0 on no match under GitHub's default shell, and the contract
+  tests then skip for the missing imports while the job reports success. It now
+  runs under `pipefail` and asserts the tests ran, like the integration job.
+- `report` and `pack` say when every surface was the built-in fake; only `probe`
+  and `erasure` did. The erasure diagnostic for an unverifiable fingerprint named
+  its two phrase-level causes and not the model-level one, so an operator edited
+  a phrase that was already fine when the fix was a per-tenant adapter.
+- Docs: the quickstart said a shared-weights model is checked for subject
+  erasure, which it never is (there is no untrained tenant to use as a control);
+  the release workflow's own comment claimed a manual run cannot publish, which
+  it can, and `RELEASING.md` said the workflow triggers only on tags; the release
+  recipe stages every file it tells you to bump except `SECURITY.md`, and never
+  says to re-run `uv lock`; `CONTRIBUTING.md` omitted three gates CI enforces, and
+  its required-check list — which the file calls the source of truth — omitted the
+  `Docs` workflow and named four of the six checks by a string GitHub never
+  reports (the job key, not the `name:` branch protection matches on); the
+  extras list omitted `azure-search`. `docs/data-models.md` states the schema
+  version in prose and is now pinned by a test.
+- **A renamed CLI flag would have shipped a broken Action.** `action.yml` shells
+  out to `sectum-ai seed` and `probe` with a fixed set of flags and a second copy
+  of the `--output` allow-list, and the self-test that would catch a break runs
+  only when `action.yml` itself changes. A test now pins both against the Typer
+  app, the way the version guard pins the install pin.
+- **The fifth trace backend still discarded a hit it had already found.** Cycle
+  6 taught Datadog, Helicone, LangSmith and Phoenix to refuse only a *miss* on a
+  capped listing, because a marker found on a partial page is a definite
+  residual. Langfuse raised from inside its pager, before `search_traces` could
+  report what it held — so a canary sitting in the scanned pages of a
+  >1000-trace tenant became an error rather than the erasure failure it is. It
+  now follows the same rule: `search_traces` refuses a miss, `fetch_trace`
+  refuses an absence it cannot establish, and `delete` refuses either way,
+  because a purge over a partial listing leaves the rest. The OpenSearch
+  search-index scan had the same unconditional refusal, and no unit test at all
+  (only integration tests, which skip without a cluster).
+- **The wedge SKU signed `ERASURE VERIFIED` over a canary it could still
+  retrieve.** Class 11's vector scan read a full `k=10` similarity page as
+  absence — a marker still stored but ranked below the page looks exactly like a
+  purged one — so a partial purge attested ERASED under GDPR Article 17 and CCPA
+  1798.105. The A3 sibling had already moved to `k=50` with an inconclusive
+  verdict; Class 11 now has the same contract, and a surface whose absence was
+  never established reads NOT_COVERED, never ERASED.
+- **A run record could forge its own scorecard.** `surface_provenance` validated
+  its values and not its keys, and `score` printed the keys verbatim while every
+  sibling renderer escapes them — so a record carrying a multi-line key wrote a
+  fake "every surface live" scope line and fake `PASS` class rows above the real
+  table. Keys must now be surfaces, and the renderer escapes like its siblings.
+- **`pre-commit run --all-files` — the gate CONTRIBUTING tells a contributor to
+  run — was red on a clean checkout**, and the hook that failed rewrote five
+  checked-in evidence packs and a captured TSA token. Those are artefacts, not
+  source; the whitespace hooks skip them. CI now runs the whole hook set rather
+  than the one hook (`codespell`) the previous cycle wired up, so the next hook
+  to go red fails the build instead of the next contributor's first commit.
+- Docs: the storefront said Sectum AI *proves* no user can read another's data;
+  the evidence chain promised "every run produces a tamper-evident,
+  control-mapped bundle" on a path that produces neither and that `verify`
+  refuses; Class 1 claimed the evidence distinguishes an enforced `403` from a
+  200-empty (nothing produces `AccessOutcome.DENIED`); Class 11 and three other
+  pages claimed to *prove* a tenant's data "has actually left every configured AI
+  surface". ADR-0008 listed the MCP clients among the adapters that report
+  `USER_SCOPED`, which they never do; ADR-0007 gave a digest formula `verify_pack`
+  does not use, so a third party implementing it would reject every genuine pack.
+  The recording script seeded without the example config, so its cast shows 12.5%
+  while `RECORDING.md` sells it as proof of the 81.2% headline. The run pack's own
+  README gave a `verify` recipe that exits 4 on a synthetic-stack pack, and said
+  the pack carries the ground-truth manifest when it carries it only with
+  `--include-manifest`. Also: the unread-field guard is per adapter *kind*, not
+  per family; `pgvector` reads neither `shared_index` nor `soft_delete`; AutoGen's
+  `max_turns` defaults to null, not `0` (a literal `0` runs no turns); the extras
+  list omitted every backend client; Class 5 on HuggingFace can only ever pass;
+  Class 4 measures cache-*key* tenancy, not semantic collapse; and BYOC egress
+  includes unverified findings' judge rationales.
+- `SECURITY.md` and `docs/index.md` state the shipped version and drifted
+  unguarded; both are now pinned by `tests/unit/test_action_version.py`.
+- Smaller docs corrections: a prose paragraph had run into the `rag` kinds table
+  and terminated it; the compose backend list in `PHASES.md` omitted Qdrant and
+  OpenSearch; the ADR index left the 0010-0015 gap unexplained; ADR-0016's
+  decision omitted `anchored_with_timestamp`, which its own update adds;
+  ADR-0018's prefix list predates `cohere:`, `voyage:` and `bedrock:`; the live
+  search-index, eval-set and backup adapters key on `tenant.hex`, not a dashed
+  UUID; the MCP example put a command's arguments in `command` rather than
+  `args`; the Phoenix example used the container port, not the published one;
+  five nested models have no standalone schema file, not one; Class 9 accepts
+  shared weights, which is the posture it exists to catch; and Class 11's
+  unverifiable-phrase rule is a six-character floor, not "a bare two-word
+  name".
+- **A lost live surface still printed `[ok]` for the metrics that matter most.**
+  The cycle-6 rule marked a probe unmeasured only when *every* surface it lists
+  was lost, but `PROBE_SURFACES` lists alternatives and a run drives one of them,
+  so the rule could never fire for the six two-surface probes — the ones feeding
+  three of the four headline rates. A vector store that fell back to the fake
+  still reported `[ok] poisoning_bleed_delta: 1 -> 0`.
+- **`calibrate` still offered a threshold that catches nothing.** The new guard
+  keyed on false positives alone, so a default admitting no negative *because it
+  admits nothing at all* (zero recall) printed the "apply it" block and exited 0.
+  And the fix had landed only on the text renderer: `--output json` still
+  published the unusable default as `recommended_threshold` with exit 0, which a
+  CI pipeline pipes straight into its config. Both renderers now refuse, the JSON
+  nulls the recommendation and carries what the fallback scored.
+- **`_load_substrate` was the one loader without the schema-line gate**, so a
+  0.6.x `substrate.json` seeded a run whose own stamp then read as current and
+  nothing downstream could see where the markers and manifest came from.
+- Reading the pack's bytes for the schema stamps moved that read out of the `try`
+  that mapped a decode error to exit 3, so `verify` on a non-UTF-8 file
+  tracebacked. The runner's dropped-step count counts user-level steps, as the
+  field documents — an earlier commit in this section counted every planned step.
+- **Repository gates**: `codespell` — the pre-commit hook CONTRIBUTING tells a
+  contributor to run — failed on a clean checkout (59 hits, 46 of them in-toto's
+  own spelling) and ran nowhere in CI; it now runs in CI with the `toml` extra
+  that lets it read the repo's own ignore list. The Action self-test installed
+  the *latest published* CLI in both jobs, so the composite wiring was never
+  exercised against the checkout; a third job builds the workspace and runs the
+  Action against it (`version: skip`). The integration job passed while every
+  test skipped for an unreachable backend; it now asserts that tests ran. The
+  release recipe stages `docs/index.md`, which step 1 tells you to bump. Core's
+  modules ship a `py.typed` marker, so `sectum_ai.config` and its neighbours are
+  typed for downstream users as CONTRIBUTING promises.
+- **`calibrate` published a threshold its own run measured as admitting 25 of 32
+  negatives, and called it "conservative".** When no threshold separated the
+  classes, the shipped default was printed as the recommendation with an
+  "apply it in sectum-ai.yaml" block, unscored — and that threshold gates which
+  semantic candidates become CONFIRMED findings. The fallback is now scored on
+  the run's own labeled set, the output says how many negatives it admits, and
+  the command exits 3 without an apply block whenever no threshold separated the
+  classes. (The
+  message also blamed "the offline fake embedder" for a run that used a real
+  hashing embedder.)
+- **The GitHub Action reported a confirmed leak for a probe that never ran.**
+  Exit 2 is both "confirmed finding" and Click's usage-error code, so a `version`
+  input pinning an older CLI that lacks a flag this Action passes produced
+  `::error::sectum-ai confirmed a finding` over a zero-byte report. Exit 2 with
+  no report is now reported as a probe that did not run.
+- `untrusted()`'s escaping is injective for astral codepoints (`\uXXXX` is a
+  minimum width, so U+E0001 and U+E000 followed by "1" rendered identically —
+  the property the module argues for at length). The `jobs` docstring no longer
+  claims concurrent probes share no mutable state (they share the adapter
+  bundle, which is what the plant/read flow needs), and the synthetic-surface
+  warning points at the configuration reference rather than at `sectum-ai
+  adapters`, which lists only the built-in fakes.
+- Docs: the JSON summary's per-model gradient is modelled, not a breakdown of
+  the measured rate; the sample PDF's findings carry OWASP and NIST ids, with
+  ATLAS ids and remediation pointers only where the probe declares them; the
+  threat model, glossary, and substrate reference state that the user boundary
+  is verified only where the adapter carries the user; ADR-0008 has an update
+  appendix; Class 2's `n` is live-only on a mixed run; the release checklist
+  names `docs/index.md`; the compliance table splits the isolation and erasure
+  rows and restores "tested" to the EU AI Act row; the scorecard names both
+  exit-3 refusals; the evidence-chain PDF section list matches the renderer; the
+  extras list includes `gcs`; PHASES states its real vintage; and the README
+  counts twelve attack classes, as the catalog index already did.
+- **`verify` could not see an unstamped run record.** Deleting
+  `run_result.schema_version` leaves the parsed pack — and therefore the attested
+  digest — byte-identical, so the cycle-5 check (which reads the parsed model,
+  where the field has already defaulted to the current version) passed it, and so
+  did every other check. `verify` and the bundle path now read both stamps off the
+  bytes; the ordinary upgrade path was the way in.
+- **A plant on a user-carrying adapter still ran when no judged step survived.**
+  The cycle-5 guard was applied inside the droppable branch, so a probe planting
+  on one adapter and reading on another executed its plant, landed in
+  `probe_versions`, and graded its class off zero observations. The whole probe is
+  now dropped when nothing it would have judged can run.
+- **mem0's shape guard fired in the wrong places.** It caught a renamed *row* key
+  but not a renamed or re-nested `results` envelope (which came back as an empty
+  tenant — an attested erasure); it aborted on a legitimately empty memory value;
+  and its truncation refusal counted texts rather than rows, so a full page
+  holding any blank row read as a complete listing. The envelope is validated, the
+  guard keys on the `memory` key rather than its truthiness, and the cap counts
+  rows.
+- **A listing refusal must not discard a hit it already found.** mem0's recall and
+  the LangSmith eval-set search raised on a full page that *contained* the canary,
+  turning a confirmed residual into an aborted run (the trace backends were fixed
+  the same way). Only a miss is refused.
+- `diff` and `baseline --compare` no longer print `[not measured]` over a pooled
+  count that *rose*: a run that measured more, not less, is still a regression.
+- **A probe left with only plants graded its class PASS off zero observations.**
+  On one tenant whose users are the only foreign principals, with an adapter that
+  carries no user, every judged read was dropped and the plants alone ran — which
+  put the probe in `probe_versions` and graded Classes 3, 4, 8 and 9 PASS (grade
+  A) having asked the stack nothing. When the filter leaves a probe no judged
+  step, the plants go too and the probe runs nothing.
+- **`report` signed a stale run record under a current pack stamp.** A 0.6.x
+  `run.json` (which recorded every adapter slot, including a live one no probe
+  drove) was accepted, wrapped in a pack stamped 0.7.0, and `verify` passed
+  run-scope on that phantom LIVE slot. Every loader now refuses a record from
+  another `major.minor` line — an absent stamp included, since the field defaults
+  to the current version — `verify` checks the run record's stamp as well as the
+  pack's, and `baseline --compare` is covered like `diff` (the CHANGELOG said it
+  already was).
+- **Three of the four headline rates still pooled the fakes' hits.** The cycle-4
+  fix reached the Retrieval-Pivot Rate only, so the same summary reported 0%
+  pivot on the live pipeline beside 100% poisoning bleed, 100% inversion, and 18%
+  extraction from the fake vector store, as the configured stack's. All four are
+  live-only on a mixed run, and "mixed" is decided by the surfaces the run's steps
+  drove (a live adapter no probe touched used to empty the Class 2 rate while the
+  scorecard failed Class 2 on the same record).
+- **The audit PDF and the CLI summary carried no live/fake split.** An auditor
+  read "226 confirmed cross-tenant findings" beside asserted SOC 2 controls while
+  the same record's OSCAL said none was confirmed on a live surface. Both now say
+  how many describe the operator's systems.
+- **The Class 11 trace scan read a capped page as "no trace".** Cycle 4 guarded
+  the by-id `fetch_trace`; `search_traces` — what the erasure probe actually scans
+  with — read the same single page of 1000 on Datadog, Helicone, LangSmith and
+  Phoenix, so a retained canary past the cap attested ERASED. A *miss* on a full
+  page is refused on the same rule; a marker found there is a definite residual
+  and is still reported.
+- **A shared-weights model's world knowledge signed a CONFIRMED residual.** The
+  base-knowledge control is "the same prompt as a tenant that trained nothing",
+  which a model merging every tenant's weights does not have: one that trained
+  nothing and completes "Sherlock Holmes" → "221B Baker Street" produced a
+  CONFIRMED HIGH finding at confidence 1.0 in a DSR attestation. Those
+  fingerprints are unverifiable and the surface reads NOT_COVERED.
+- `diff` and `baseline --compare` no longer print `[ok]` above a `[BOUNDARY LOST]`
+  or `[SCOPE LOST]` line: a metric whose probe lost its boundary, or whose backing
+  surface fell back to the fake, reads `[not measured]`, and the pooled counts do
+  too. A mem0 response whose rows carry no `memory` text is a shape mismatch, not
+  an empty tenant (read as empty it became "not recalled" — an attested erasure).
+  `score`'s refusal says which case it is: nothing ran, or everything that ran was
+  backed only by the fakes.
 - **Every live vector store, both Redis adapters, and the HuggingFace model
   claimed to carry the user while discarding it.** With `user_scoped: false`
   (the default) nothing user-specific reaches the backend, yet the adapters
@@ -68,7 +2132,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conditions"*, on the strength of a deletion check. The isolation requirement now
   excludes the two erasure probe ids (pinned in `controls.py`, since the evidence
   package cannot import the probes, and held to the probes' declarations by a
-  test). An erasure-only run asserts exactly GDPR Article 17 and CCPA 1798.105.
+  test). An erasure-only run asserts **at most** GDPR Article 17 and CCPA
+  1798.105, and only for a surface scanned on a live backend — the two shipped
+  sample packs, being all-synthetic, assert nothing at all.
   The sample packs are regenerated.
 - **The erasure attestation recorded no surface provenance.** v0.9.0 said a run
   "now records what it actually interrogated" and that the fix "closes that at
@@ -140,7 +2206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surface scanned to `ERASED` or `RESIDUAL`.
 - **A phoenix / langfuse / langsmith observability kind without its extra was a
   raw traceback**, not the typed exit-3 error every other family gives — the
-  sibling of the v0.11.0 `mcp` defect.
+  sibling of the `mcp` extra defect fixed above in this same section.
 - **The in-toto verifier accepted a statement with a foreign subject beside the
   genuine one**; a statement now attests exactly one subject.
 - **`verify` reported the Rekor integration time as a verified fact.** The
@@ -366,7 +2432,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   over-stated their inputs; the rag-poisoning plan queries from principals foreign
   to a planted poison; Langfuse pages where the other four read one page; the
   samples table no longer carries sizes that drift on every regeneration.
-
 
 ## [0.11.0] - 2026-09-01
 
@@ -2305,8 +4370,8 @@ semantic detector. A config carrying such a value will fail to load until correc
   contract states completion-only explicitly.
 - **The Anthropic judge is deterministic and fence-tolerant.** It now pins
   `temperature: 0` (matching the OpenAI judge) so identical runs judge
-  identically, and the verdict parser tolerates a fenced ```json response
-  instead of aborting the run.
+  identically, and the verdict parser tolerates a fenced `json` code block instead
+  of aborting the run.
 - **`hash-<dim>` embedding specs with a non-positive dimension are rejected at
   config time** instead of failing later when the sweep instantiates the
   embedder.

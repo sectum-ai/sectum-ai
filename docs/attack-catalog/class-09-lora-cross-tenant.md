@@ -16,12 +16,25 @@ runs inference from every other tenant's session.
 
 A foreign canary reproduced in another tenant's inference is weight bleed — a
 confirmed cross-tenant leak. With per-tenant-isolated adapters, inference draws
-only on the calling tenant's own adapter and nothing surfaces.
+only on the calling tenant's own adapter and nothing surfaces cross-tenant. The
+probe also runs cross-USER where the model adapter carries a user (the built-in
+fake always; HuggingFace only with `user_scoped: true`; a vLLM/TGI serving
+backend never, because the user never reaches the server) — there, an adapter
+scoped to the tenant alone still leaks a sibling user's memorized content. Where
+the user cannot reach the backend those steps are dropped, not failed, and the
+run records `user_steps_dropped`.
 
 The probe also asserts **routing**: when the adapter reports which tenant's weights
 served an inference (`served_by_tenant`), an answer served by a foreign tenant's
 adapter is a HIGH finding even if no canary text surfaced — the request reached the
 wrong model.
+
+That finding carries `AML.T0024` and `AML.T0057` but **not** `AML.T0024.000` (Infer
+Training Data Membership): it evidences that a foreign adapter served the step, and
+infers nothing about what the adapter was trained on. The class tuple above is the
+probe's full footprint; each finding carries the subset its own sub-probe
+demonstrates, as [Class 7](class-07-agent-tool-hijack.md) does and for the reason
+[ADR-0009](../adr/0009-atlas-technique-review-process.md) gives.
 
 ## Runs when
 
