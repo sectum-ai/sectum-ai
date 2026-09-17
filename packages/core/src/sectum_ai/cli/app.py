@@ -598,12 +598,26 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
             )
             raise typer.Exit(code=3)
         try:
-            substrate = Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+            raw_sealed = json.loads(unseal_bytes(sealed.read_bytes(), key))
         except ValueError as error:
             typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
-        _refuse_other_schema_line(substrate.schema_version, str(sealed))
-        return substrate
+        # Read the stamp off the PAYLOAD, not off the parsed model: `schema_version`
+        # defaults to SCHEMA_VERSION, so a sealed substrate that carries no stamp
+        # parsed cleanly and then reported the current one to its own guard. The
+        # plaintext sibling ten lines down already reads the raw JSON, and its
+        # comment states the rule this path was breaking. Reproduced end to end:
+        # the same payload was refused at exit 3 as plaintext and accepted at exit
+        # 0 sealed - the permissive path being the one with at-rest protection on.
+        _refuse_other_schema_line(
+            raw_sealed.get("schema_version") if isinstance(raw_sealed, dict) else None,
+            str(sealed),
+        )
+        try:
+            return Substrate.model_validate(raw_sealed)
+        except ValueError as error:
+            typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
     if plain.exists():
         try:
             raw = json.loads(plain.read_text())
