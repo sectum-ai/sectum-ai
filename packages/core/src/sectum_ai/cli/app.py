@@ -3170,9 +3170,41 @@ def erasure(
         )
         if isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
-        search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
-        evalset.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
-        backup.add(marker.owner_tenant_id, f"backup snapshot mentioning {marker.plaintext}")
+        # The three the comment above already names as siblings. They were left
+        # bare when the containment landed on `remember` and `set`, so a live
+        # search index, eval set or backup that refused the write raised out of
+        # the seeding loop and aborted the whole command - after canaries had
+        # already been planted in every live backend seeded before it. No verdict
+        # for any surface, exit 1, and markers left behind in the operator's
+        # systems. `functools.partial` rather than a lambda: the loop variable
+        # `marker` would late-bind (ruff B023).
+        _seed_erasure_surface(
+            unseedable,
+            Surface.SEARCH_INDEX,
+            functools.partial(
+                search.index,
+                marker.owner_tenant_id,
+                f"search index entry mentioning {marker.plaintext}",
+            ),
+        )
+        _seed_erasure_surface(
+            unseedable,
+            Surface.EVAL_SET,
+            functools.partial(
+                evalset.add,
+                marker.owner_tenant_id,
+                f"eval set fixture mentioning {marker.plaintext}",
+            ),
+        )
+        _seed_erasure_surface(
+            unseedable,
+            Surface.BACKUP,
+            functools.partial(
+                backup.add,
+                marker.owner_tenant_id,
+                f"backup snapshot mentioning {marker.plaintext}",
+            ),
+        )
 
     for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
         # Said out loud: an unseeded surface has no markers before, so the probe

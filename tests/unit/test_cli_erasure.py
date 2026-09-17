@@ -630,3 +630,52 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.
     assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+
+
+@pytest.mark.parametrize(
+    ("builder", "fake", "method", "surface"),
+    [
+        ("build_cache", "FakeCache", "set", "semantic_cache"),
+        ("build_memory", "FakeMemory", "remember", "agent_memory"),
+        ("build_search_index", "FakeSearchIndex", "index", "search_index"),
+        ("build_eval_set", "FakeEvalSet", "add", "eval_set"),
+        ("build_backup", "FakeBackup", "add", "backup"),
+    ],
+)
+def test_every_seeded_surface_costs_only_itself_when_its_backend_refuses(
+    monkeypatch: pytest.MonkeyPatch, builder: str, fake: str, method: str, surface: str
+) -> None:
+    # The containment landed on `cache.set` and `memory.remember` and the three
+    # the comment beside them already NAMES as siblings - search index, eval set,
+    # backup - stayed bare. A live one of those refusing the write raised out of
+    # the seeding loop and killed the whole command AFTER canaries had been
+    # planted in every live backend seeded before it: no verdict for any surface,
+    # exit 1, markers left behind in the operator's systems.
+    #
+    # Parameterised over all five, because the original guard and its test each
+    # covered one member of the family - which is how the gap survived.
+    import sectum_ai.adapters as adapters
+
+    base = getattr(adapters, fake)
+
+    class _RefusesTheWrite(base):  # type: ignore[valid-type,misc]
+        pass
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionError(f"{surface}: connection refused")
+
+    setattr(_RefusesTheWrite, method, _refuse)
+    monkeypatch.setattr(f"sectum_ai.cli.app.{builder}", lambda _cfg: _RefusesTheWrite())
+
+    with TemporaryDirectory() as directory:
+        workdir = Path(directory)
+        _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
+
+    # Exit 3 - the run COMPLETED and could not establish one surface - never a
+    # crash, and never exit 0 either.
+    assert result.exit_code == 3, result.output
+    assert f"could not seed the {surface} canary" in result.output, result.output
+    assert "connection refused" in result.output, result.output
+    # ...and every other surface still got its verdict.
+    assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
