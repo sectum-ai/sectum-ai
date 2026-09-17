@@ -1,6 +1,7 @@
 """Tests for the ``sectum-ai erasure`` CLI command (Class 11, the wedge)."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
@@ -679,3 +680,45 @@ def test_every_seeded_surface_costs_only_itself_when_its_backend_refuses(
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.
     assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+
+
+def test_a_residual_the_scan_observed_is_never_reported_as_markers_not_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `genuine_residual` requires `erasure_supported`; `attestable_with_caveat`
+    # requires `markers_before > 0`. A backend with no per-tenant erasure API
+    # whose pre-scan saw nothing and whose post-scan found markers - an
+    # eventually-consistent index settling between the two scans - satisfies
+    # neither, so it fell past every branch to the summary that says the target
+    # tenant's markers "were not found on those surfaces".
+    #
+    # The per-surface line printed RESIDUAL DATA for that same record. One run,
+    # two verdicts, and the headline - the line a DPO reads - was the one denying
+    # an observation the run actually made, at exit 3 rather than 2.
+    from sectum_ai.probes.erasure.probe import ErasureProbe, ErasureReport, SurfaceErasure
+    from sectum_ai.spec import Surface
+
+    observed = SurfaceErasure(
+        surface=Surface.SEARCH_INDEX,
+        markers_before=0,
+        residual_after=2,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert observed.verdict == "RESIDUAL DATA", "the per-surface renderer already agreed"
+    assert not observed.attestable_with_caveat
+    assert not observed.erased
+
+    real_run = ErasureProbe.run
+
+    def _run(self: ErasureProbe, target: object, **kwargs: object) -> ErasureReport:
+        report = real_run(self, target, **kwargs)  # type: ignore[arg-type]
+        return replace(report, surfaces=(observed,))
+
+    monkeypatch.setattr(ErasureProbe, "run", _run)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+
+    assert "were not found on those surfaces" not in result.output, result.output
+    assert "residual data remains on search_index" in result.output, result.output
+    assert result.exit_code == 2, result.output

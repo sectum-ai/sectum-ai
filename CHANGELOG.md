@@ -64,6 +64,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A residual the scan observed is no longer reported as "markers were not
+  found".** `genuine_residual` requires `erasure_supported` and
+  `attestable_with_caveat` requires `markers_before > 0`, so a backend with no
+  per-tenant erasure API whose pre-scan saw nothing and whose post-scan found
+  markers — an eventually-consistent index settling between the two — satisfied
+  neither and fell through to the "no baseline" summary. The per-surface line
+  printed `RESIDUAL DATA` for the same record: one run, two verdicts, and the
+  headline a DPO reads was the one denying an observation the run made, at exit 3
+  rather than 2.
+- **The erasure seeding is contained on all five live-write surfaces.** It
+  covered `cache.set` and `memory.remember`; the comment beside them names
+  `search_index`, `eval_set` and `backup` as siblings and all three stayed bare,
+  so a live backend refusing the write aborted the whole command at exit 1 —
+  after canaries had been planted in every backend seeded before it, with no
+  verdict for any surface and markers left in the operator's systems.
+- **A sealed substrate's schema stamp is read off the payload.**
+  `Substrate.schema_version` defaults to the current version, so a sealed payload
+  carrying no stamp parsed cleanly and reported the current one to its own guard.
+  The same payload was refused at exit 3 as plaintext and accepted at exit 0
+  sealed — the permissive path being the one with at-rest encryption configured.
+- **`HttpAgent` refuses an unreadable answer instead of reading it as an empty
+  one.** `{"output": null}` became the truthy string `"None"`, so Class 7 graded a
+  manufactured string as "the agent answered and surfaced no foreign canary"; and
+  a body whose answer sat under another key was dropped whole — including one
+  carrying a foreign canary, recorded as a clean agent surface.
+
 - **Class 9's routing assertion is disclosed as inert against every live model
   adapter.** It reads `ModelAdapter.served_by`, whose base implementation returns
   `None` and which only the built-in fake overrides — and `None` is never a

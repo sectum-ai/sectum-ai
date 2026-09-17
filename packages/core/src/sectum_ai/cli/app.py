@@ -2899,6 +2899,28 @@ def _emit_erasure_attestation(
             err=True,
         )
         return
+    # A residual the scan OBSERVED, on a surface none of the branches above claim.
+    # `genuine_residual` requires `erasure_supported` and `attestable_with_caveat`
+    # requires `markers_before > 0`, so a backend with no per-tenant erasure API
+    # whose pre-scan saw nothing and whose post-scan found markers - an
+    # eventually-consistent index settling between the two - satisfied neither and
+    # fell through to a message saying its markers "were not found". The
+    # per-surface line printed RESIDUAL DATA for the same record: one run, two
+    # verdicts, and the headline a DPO reads was the one under-reporting an
+    # observed residual, at exit 3 rather than 2. `SurfaceErasure.verdict` already
+    # has this arm; the summary did not.
+    observed_residual = [
+        surface.surface.value for surface in report.surfaces if surface.residual_after > 0
+    ]
+    if observed_residual:
+        typer.echo(
+            f"ERASURE FAILED: residual data remains on {', '.join(observed_residual)} - "
+            "the scan found the target tenant's markers after erasure. No baseline was "
+            "established there, so this is not a measured before/after delta; it is a "
+            "positive observation that the data is still present.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]
