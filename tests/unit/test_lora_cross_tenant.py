@@ -7,6 +7,7 @@ from sectum_ai.probes import LoraCrossTenantProbe, confirmed_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
     FindingStatus,
+    ProbeStep,
     Scenario,
     SharedEntity,
     Substrate,
@@ -145,3 +146,28 @@ def test_user_scoped_adapters_have_no_cross_user_influence() -> None:
     model = FakeModel(user_scoped=True)
     findings = Runner(substrate, model=model).run(LoraCrossTenantProbe())
     assert confirmed_findings(findings) == []
+
+
+def test_a_routing_failure_is_not_stamped_as_membership_inference() -> None:
+    # `AML.T0024.000` is Infer Training Data Membership. A routing finding
+    # evidences that a FOREIGN ADAPTER SERVED THE STEP and infers nothing about
+    # training-data membership, so carrying the probe's full footprint claimed an
+    # attack it never performed - in a field that ships as signed evidence.
+    # ADR-0009 settled exactly this rule for Class 7's sub-probes; this is the same
+    # rule in the sibling class.
+    #
+    # The RECALL path keeps the full tuple: scanning the inference output for a
+    # memorized foreign canary is the membership claim.
+    probe = LoraCrossTenantProbe()
+    step = ProbeStep(
+        step_id="s",
+        probe_id=probe.id,
+        actor_tenant_id=UUID(int=1),
+        action="model.infer",
+        payload={"prompt": "recall the memorized adapter fact reference"},
+    )
+    routing = probe._routing_finding(step, str(UUID(int=2)))
+    assert "AML.T0024.000" not in routing.atlas, routing.atlas
+    assert "AML.T0024.000" in probe.atlas_techniques, "the class footprint is unchanged"
+    # What it does demonstrate is still stamped.
+    assert "AML.T0024" in routing.atlas and "AML.T0057" in routing.atlas, routing.atlas

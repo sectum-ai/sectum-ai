@@ -29,6 +29,13 @@ served an inference (`served_by_tenant`), an answer served by a foreign tenant's
 adapter is a HIGH finding even if no canary text surfaced — the request reached the
 wrong model.
 
+That finding carries `AML.T0024` and `AML.T0057` but **not** `AML.T0024.000` (Infer
+Training Data Membership): it evidences that a foreign adapter served the step, and
+infers nothing about what the adapter was trained on. The class tuple above is the
+probe's full footprint; each finding carries the subset its own sub-probe
+demonstrates, as [Class 7](class-07-agent-tool-hijack.md) does and for the reason
+[ADR-0009](../adr/0009-atlas-technique-review-process.md) gives.
+
 ## Runs when
 
 The probe needs a model adapter that trains per-tenant adapters, reporting either

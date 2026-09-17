@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A Class 9 routing failure is no longer stamped as membership inference.**
+  `AML.T0024.000` is Infer Training Data Membership, and the routing finding
+  evidences that a *foreign adapter served the step* — it infers nothing about what
+  that adapter was trained on. ADR-0009 settled this rule for Class 7's sub-probes;
+  this is the same rule in the sibling class, which the Class 7 fix did not reach.
+  The recall path keeps the full tuple: scanning inference output for a memorized
+  foreign canary *is* the membership claim.
+
+
 - **A contained A3 scan no longer counts its own clean answers as a coverage gap,
   or reports an impossible measurement.** `unverifiable_after` subtracted only what
   was *found*, so a scan that ruled five ids absent and then failed on the sixth

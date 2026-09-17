@@ -850,18 +850,6 @@ class DetectionPipeline:
             # "no" downgraded it - while the fake judge confirmed it. An entity has
             # no 16-character opaque token, so the projection arm never fires here
             # and this tier keeps exactly the two arms it had.
-            #
-            # `residual_present`'s token arm is CONTIGUOUS, while this module's own
-            # bar for "the text carries that marker" allows one interposed token -
-            # `_MAX_INTERPOSED_TOKENS`, which `FakeJudge` and `_span_traceable`
-            # branch 1 both use to CONFIRM. So the canonical leak this file
-            # documents at the top, "Project (internal) Onyx-00002", failed the
-            # bypass it was written for: with a real judge that declines - the
-            # cautious, flaky or hostile model the bypass exists to defend against -
-            # a foreign entity plainly present in the observation was recorded
-            # UNVERIFIED and dropped out of `confirmed_findings` and the headline.
-            # Asking the same question with the same predicate, rather than a
-            # stricter one on this path only.
             verbatim = residual_present(marker.plaintext, text)
             # CONFIRMATION and CONFIDENCE are different claims, and one predicate
             # was answering both. `residual_present`'s token arm is CONTIGUOUS,

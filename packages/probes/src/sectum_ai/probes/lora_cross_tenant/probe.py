@@ -31,6 +31,14 @@ class LoraCrossTenantProbe(DetectingProbe):
     # T0024.000 Infer Training Data Membership captures the adapter-memorization
     # angle, alongside T0024 exfiltration and T0057 LLM Data Leakage.
     atlas_techniques: tuple[str, ...] = ("AML.T0024", "AML.T0024.000", "AML.T0057")
+    # The routing sub-probe's own footprint. `AML.T0024.000` is Infer Training Data
+    # Membership, and a routing finding evidences that a FOREIGN ADAPTER SERVED THE
+    # STEP - it infers nothing about training-data membership. ADR-0009 settled
+    # this rule for Class 7 ("stamping them with it would claim an attack the probe
+    # never performed, in a field that ships as signed evidence"); the same rule,
+    # the same file's sibling class. The recall path keeps the full tuple: scanning
+    # the inference output for a memorized foreign canary IS the membership claim.
+    _ROUTING_ATLAS: tuple[str, ...] = ("AML.T0024", "AML.T0057")
     nist_rmf: tuple[str, ...] = ("MEASURE 2.7",)
     surfaces: tuple[Surface, ...] = (Surface.MODEL_ADAPTER,)
     requires_adapters: tuple[str, ...] = ("model",)
@@ -126,6 +134,6 @@ class LoraCrossTenantProbe(DetectingProbe):
             evidence_span="inference mis-routed to a foreign tenant's adapter",
             owasp_llm=self.owasp_llm,
             owasp_secondary=self.owasp_secondary,
-            atlas=self.atlas_techniques,
+            atlas=self._ROUTING_ATLAS,
             nist=self.nist_rmf,
         )
