@@ -64,6 +64,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A CONFIRMED finding no longer quotes a span the observation lacks.**
+  `_span_ties_to_marker`'s docstring says the cited span "is in the observation
+  AND ties to `marker`", but its presence test was `ordered_within_span`, which
+  allows interposed tokens — the right test for *is the marker present*, the wrong
+  one for *may we put this in quotation marks*. A confirmation on
+  `Project (internal) Zephyr 00002` therefore put the plaintext
+  `Project Zephyr 00002` into `evidence_span`, which the PDF renders inside
+  quotation marks as what its own docstring calls "the proof". It also kept the
+  honest branch below it unreachable — the one that describes the match rather
+  than showing text that was never observed. Presence for a quote is now exact
+  containment; a span that *is* there is still quoted, so no evidence is lost.
+
 - **`ERASURE VERIFIED` names its subject on its own stream.** The provenance
   disclosure went to stderr, so `sectum-ai erasure 2>/dev/null` — a DPO piping
   the verdict into a regulator ticket — read a clean eight-surface Article 17
