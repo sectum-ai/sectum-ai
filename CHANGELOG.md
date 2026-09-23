@@ -43,11 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the Class 5 tenant pairs whose effect sizes are bounds rather than
   measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
   minor-bump rule); regenerate them.
-- **Scorecard methodology `1.3`.** What counts as evidence is part of the
+- **Scorecard methodology `1.4`.** What counts as evidence is part of the
   methodology, not only the weights: `1.2` graded a class on findings whose
-  backing surface was the built-in fake, `1.3` withholds them. A run that graded
-  `F` under `1.2` can grade differently here, so the stamp moves with the rule
-  that a given version always recomputes to the same letter.
+  backing surface was the built-in fake, `1.3` withholds them, and `1.4` caps a
+  withheld class's letter at that class's band so the withholding cannot read as
+  a pass (the rule-7 entry below). A run that graded `F` under `1.2` can grade
+  differently here, so the stamp moves with the rule that a given version always
+  recomputes to the same letter. This release ships `1.4`.
 - **The Action's output strings changed.** The step summary now reads
   `Confirmed findings: N (on live surfaces: M)`, the console annotations read
   "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
@@ -61,6 +63,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **`ERASURE VERIFIED` names its subject on its own stream.** The provenance
+  disclosure went to stderr, so `sectum-ai erasure 2>/dev/null` — a DPO piping
+  the verdict into a regulator ticket — read a clean eight-surface Article 17
+  attestation with nothing saying the eight backends were Sectum's own in-memory
+  fakes. `probe` and `score` both put their subject on stdout; this is the wedge
+  command, and it reused the word `scope` for coverage alone. Three-valued like
+  every sibling: a record that does not say is not a record that says live.
+- **The TGI backend pins `return_full_text=False`.** `huggingface_hub` declares
+  it `bool | None = None` and forwards it verbatim, so the server's default
+  applied — and on the compat route that default prepends the prompt for a
+  `text-generation` model. `ModelAdapter.infer` states the consequence: the
+  erasure probe prompts with the canary it scans for, so an echo would fabricate
+  a confirmed residual about data that was never stored. Both sibling backends
+  already pinned it.
+
+- **`--scope` now restricts the seeding, not only the scan.** It reached the
+  probe and never the seeding loop, so a scoped engagement planted canaries
+  across all eight erasure surfaces and then verified, erased and reported only
+  the named ones. `sectum-ai erasure --scope vector_db` wrote 8 markers into each
+  of five other backends and exited 0 — against a live stack, data Sectum put in
+  the operator's production systems and never came back for. A named surface is
+  still seeded, because the scan needs its baseline, and an unscoped run is
+  unchanged.
+- **`CrewAIAgent` no longer launders an unreadable `CrewOutput` into an answer.**
+  `str(output)` yielded the object's repr — truthy — so the runner recorded
+  `RETURNED` and Class 7 graded a memory address as the agent's answer. Both
+  sibling adapters return `""` on the same shape.
+
+- **An unreadable Pinecone namespace count is no longer read as an empty one.**
+  `_namespace_count` backs `delete`'s settle poll, and `hasattr(stats, "get")`
+  turned a stats shape the adapter cannot parse into "the namespace holds
+  nothing" — so the poll settled on its first try and Class 11 attested a
+  namespace that was never read. A summary carrying no `vector_count` escaped as
+  a bare `AttributeError` rather than an `AdapterError`. An *absent* namespace is
+  still a clean purge, which is how Pinecone reports an empty one.
+- **The LangGraph adapter no longer implies `connect` gives per-thread
+  isolation.** `create_react_agent(model, tools)` is built with no checkpointer,
+  and without one LangGraph persists nothing per thread, so the `thread_id` the
+  adapter sets is propagated but holds nothing apart. The mock-backed test's
+  stub keyed its state on `thread_id`, which made it behave like a graph that
+  *does* have a checkpointer — so the test read as proof of state separation
+  while proving a property of the stub. It now says what the adapter is
+  responsible for: that the tenant-scoped id reaches the runtime config.
+
+- **A residual the scan observed is no longer reported as "markers were not
+  found".** `genuine_residual` requires `erasure_supported` and
+  `attestable_with_caveat` requires `markers_before > 0`, so a backend with no
+  per-tenant erasure API whose pre-scan saw nothing and whose post-scan found
+  markers — an eventually-consistent index settling between the two — satisfied
+  neither and fell through to the "no baseline" summary. The per-surface line
+  printed `RESIDUAL DATA` for the same record: one run, two verdicts, and the
+  headline a DPO reads was the one denying an observation the run made, at exit 3
+  rather than 2.
+- **The erasure seeding is contained on all five live-write surfaces.** It
+  covered `cache.set` and `memory.remember`; the comment beside them names
+  `search_index`, `eval_set` and `backup` as siblings and all three stayed bare,
+  so a live backend refusing the write aborted the whole command at exit 1 —
+  after canaries had been planted in every backend seeded before it, with no
+  verdict for any surface and markers left in the operator's systems.
+- **A sealed substrate's schema stamp is read off the payload.**
+  `Substrate.schema_version` defaults to the current version, so a sealed payload
+  carrying no stamp parsed cleanly and reported the current one to its own guard.
+  The same payload was refused at exit 3 as plaintext and accepted at exit 0
+  sealed — the permissive path being the one with at-rest encryption configured.
+- **`HttpAgent` refuses an unreadable answer instead of reading it as an empty
+  one.** `{"output": null}` became the truthy string `"None"`, so Class 7 graded a
+  manufactured string as "the agent answered and surfaced no foreign canary"; and
+  a body whose answer sat under another key was dropped whole — including one
+  carrying a foreign canary, recorded as a clean agent surface.
+
+- **Class 9's routing assertion is disclosed as inert against every live model
+  adapter.** It reads `ModelAdapter.served_by`, whose base implementation returns
+  `None` and which only the built-in fake overrides — and `None` is never a
+  finding, so on a live adapter the assertion emits neither a finding nor a
+  `NOT_COVERED`. Unlike every other coverage gap it is *silent*: the class reads
+  as though routing had been checked and found correct. The recall half does run
+  live (a HuggingFace adapter reports `per_tenant_adapter`/`shared_weights`), so a
+  clean Class 9 there is evidence about memorization only. The class page also
+  named the method `served_by_tenant`; it is `served_by`.
+- **`AgentResult.tool_calls` is produced by all six agent adapters and read by
+  nothing.** `Runner._agent_run` builds the observation from `result.output`
+  alone, so a confused-deputy invocation that returns no text is invisible end to
+  end. Nine sites across the six adapters said the Class 7 probes "need to see
+  which tool was invoked — which is what `run()` surfaces"; they now say the names
+  serve SDK callers and the live integration tests.
+- **Two family enumerations that drifted when the family grew, now pinned.**
+  `docs/data-models.md` listed four inline-only nested models and
+  `DetectionProvenance` is a fifth; `labels.unaccounted_surfaces` counted "three
+  renderers" and the OSCAL export is a fourth. `docs/scorecard.md`'s counts were
+  already pinned, which is the whole of why they did not drift.
+- **Smaller corrections.** `docs/configuration.md` said the resolver reads eight
+  families; `ADAPTER_FAMILIES` has twelve. Both MCP client docstrings said `user`
+  is "accepted for interface conformance but not yet enforced" while `_invoke`
+  forwards it under `user_argument`. A comment in `pdf.py` said its branch asserts
+  "the first tier always runs"; the branch says nothing about tiers, which is the
+  honest choice for a record that cannot report them.
+
+- **The Class 7 walkthroughs no longer promise a measurement the CLI skips.**
+  `sectum-ai probe` marks the agent and MCP surfaces unreachable when they are
+  not synthetic — the lookup target is an id Sectum invents and no agent adapter
+  has a write primitive — so pointing `agent.kind` at a live backend *removes*
+  Class 7 from the run and it reads `NOT_COVERED`. Four sites said the opposite:
+  that the probe "runs against every shipped v1 agent backend", that "only the
+  `agent.kind` in `sectum-ai.yaml` changes", and that "the same leak shows up
+  regardless of which agent framework a customer uses" — read as a template for
+  measuring your own framework, swapping the kind takes the class out of the run.
+  `docs/coverage.md` already had it right, and the correct blockquote landed in
+  the README three lines below the paragraph contradicting it, without touching
+  either `run.sh`. Now pinned against the CLI's own reachability rule, in both
+  directions.
 
 - **A Class 9 routing failure is no longer stamped as membership inference.**
   `AML.T0024.000` is Infer Training Data Membership, and the routing finding

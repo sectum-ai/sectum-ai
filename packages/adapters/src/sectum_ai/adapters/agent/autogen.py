@@ -13,9 +13,11 @@ This adapter scopes per tenant by prefixing the user-proxy message with a
 tenant id from the call arguments the assistant forwards. The substrate verifies
 agent-level isolation (the engineering spec, section 7, Class 7): a tool call
 in tenant Y's session that resolves a resource in tenant X's scope is a
-confused-deputy leak, and the cross-tenant agent tool-call hijack probes need
-to see *which* tool was invoked in each tenant's session - which is what
-``run()`` surfaces in ``AgentResult.tool_calls``.
+confused-deputy leak. ``run()`` surfaces the name of every tool invoked
+in ``AgentResult.tool_calls`` - but the probe pipeline does NOT read it today:
+`Runner._agent_run` records the agent's TEXT output as the observation, so a
+hijacked call that returns no text is invisible to a `sectum-ai probe` run. The
+names are surfaced for SDK callers and the live integration tests.
 
 The ``autogen-agentchat`` / ``autogen-core`` package is imported only on the
 live ``connect`` path, so the adapter and its mock-backed contract test need no
@@ -46,8 +48,9 @@ class AutoGenAgent(AgentAdapter):
     ``[tenant:<tenant.hex>]`` so a tool wired with tenant-aware routing can
     read the tenant identity from the call arguments. The conversation result's
     ``chat_history`` is walked to surface every tool call the assistant made
-    during the run - not just the final state - so the Class 7 probes can see
-    which tool fired in each tenant's session.
+    during the run - not just the final state. `Runner._agent_run` does not read
+    them, so they serve SDK callers and the live integration tests rather than a
+    `sectum-ai probe` run.
     """
 
     def __init__(
@@ -308,9 +311,10 @@ def _tool_calls(messages: list[Any]) -> tuple[str, ...]:
     """Walk every message and surface each tool call's name in order.
 
     Surfaces both modern ``tool_calls`` entries (OpenAI tool-calling shape, one
-    message may carry several) and the legacy single ``function_call`` entry,
-    so a Class 7 probe sees every tool that fired regardless of the AutoGen
-    version on the live path.
+    message may carry several) and the legacy single ``function_call`` entry, so
+    an SDK caller reads every tool that fired regardless of the AutoGen version
+    on the live path. The probe pipeline records the agent's text output, not
+    these names.
     """
     names: list[str] = []
     for message in messages:

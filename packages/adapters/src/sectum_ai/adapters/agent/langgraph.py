@@ -11,8 +11,10 @@ mechanism the substrate verifies (the engineering spec, section 7, Class 7).
 tenant-scoped config, then extracts the final assistant text plus the **names
 of every tool the graph called during the run** by walking the messages in the
 returned state. Tool-call records are surfaced on every run - not just the
-final state - so the Class 7 (agent tool-call hijack) probes can see which
-tools fired (the engineering spec, section 7).
+final state - but the probe pipeline does NOT read them today:
+`Runner._agent_run` records the agent's TEXT output as the observation, so a
+hijacked call that returns no text is invisible to a `sectum-ai probe` run. The
+names are surfaced for SDK callers and the live integration tests.
 
 The ``langgraph`` package is imported only on the live ``connect`` path, so the
 adapter and its mock-backed contract test need no extra dependency. The live
@@ -40,7 +42,9 @@ class LangGraphAgent(AgentAdapter):
     Scopes by tenant: every ``run`` passes ``configurable.thread_id`` equal to
     the tenant's hex id (matching the substrate's per-tenant scoping convention).
     A graph wired to a per-thread checkpointer therefore keeps each tenant's
-    state in its own checkpoint namespace.
+    state in its own checkpoint namespace - and a graph with no checkpointer,
+    which is what :meth:`connect` builds, persists nothing at all, so there the
+    id is propagated but holds nothing apart.
     """
 
     def __init__(
@@ -67,6 +71,15 @@ class LangGraphAgent(AgentAdapter):
 
         The ``langgraph`` package is imported here, on the live path only, so
         the adapter module and its mock-backed test do not require it.
+
+        NOTE: this builds the prebuilt agent with **no checkpointer**, and
+        without one LangGraph persists nothing per thread - so the ``thread_id``
+        this adapter sets is inert on the graph ``connect`` returns. Each run
+        starts from empty state, which means the per-tenant scoping described
+        above is a property of a graph the CALLER compiles with a checkpointer,
+        not of this convenience constructor. Pass such a graph to
+        ``LangGraphAgent(...)`` directly when the isolation of persisted
+        per-thread state is what you mean to exercise.
         """
         from langgraph.prebuilt import create_react_agent
 

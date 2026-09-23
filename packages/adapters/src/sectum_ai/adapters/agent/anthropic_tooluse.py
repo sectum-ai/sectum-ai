@@ -14,10 +14,13 @@ A second tenant gets its own conversation, so a tool that scopes by
 the message thread cannot bleed across tenants — the isolation
 property the substrate verifies (the engineering spec, section 7,
 Class 7): a tool call in tenant Y's session that resolves a resource
-in tenant X's scope is a confused-deputy leak, and the cross-tenant
-agent tool-call hijack probes need to see *which* tool was invoked
-in each tenant's session — what ``run()`` surfaces in
-``AgentResult.tool_calls``.
+in tenant X's scope is a confused-deputy leak.
+``run()`` surfaces the name of every tool invoked in
+``AgentResult.tool_calls`` — but the probe pipeline does NOT read it
+today: `Runner._agent_run` records the agent's TEXT output as the
+observation, so a hijacked call that returns no text is invisible to a
+`sectum-ai probe` run. The names are surfaced for SDK callers and the
+live integration tests.
 
 The ``anthropic`` package is imported only on the live ``connect``
 path, so the adapter and its mock-backed contract test need no extra

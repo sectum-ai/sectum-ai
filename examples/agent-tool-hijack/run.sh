@@ -11,9 +11,11 @@
 # engineering spec, section 7). The story this example tells is the
 # agent-adapter half of that surface: who *calls* the MCP server, and how to
 # swap that caller between the seven shipped agent kinds (fake, http,
-# langgraph, autogen, crewai, openai-assistants, anthropic-tooluse) so the same
-# leak shows up regardless of which agent framework a customer uses. The wiring
-# snippets and connect-time
+# langgraph, autogen, crewai, openai-assistants, anthropic-tooluse) in SDK
+# code, where the caller provisions the lookup target itself. Under
+# `sectum-ai probe`, configuring a live agent kind REMOVES Class 7 from the run
+# (NOT_COVERED) rather than carrying the leak over to it - see
+# docs/coverage.md#known-coverage-gaps. The wiring snippets and connect-time
 # factory functions live alongside this script in factories.py.
 set -euo pipefail
 

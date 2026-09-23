@@ -1,6 +1,7 @@
 """Tests for the ``sectum-ai erasure`` CLI command (Class 11, the wedge)."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
@@ -630,3 +631,163 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.
     assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+
+
+@pytest.mark.parametrize(
+    ("builder", "fake", "method", "surface"),
+    [
+        ("build_cache", "FakeCache", "set", "semantic_cache"),
+        ("build_memory", "FakeMemory", "remember", "agent_memory"),
+        ("build_search_index", "FakeSearchIndex", "index", "search_index"),
+        ("build_eval_set", "FakeEvalSet", "add", "eval_set"),
+        ("build_backup", "FakeBackup", "add", "backup"),
+    ],
+)
+def test_every_seeded_surface_costs_only_itself_when_its_backend_refuses(
+    monkeypatch: pytest.MonkeyPatch, builder: str, fake: str, method: str, surface: str
+) -> None:
+    # The containment landed on `cache.set` and `memory.remember` and the three
+    # the comment beside them already NAMES as siblings - search index, eval set,
+    # backup - stayed bare. A live one of those refusing the write raised out of
+    # the seeding loop and killed the whole command AFTER canaries had been
+    # planted in every live backend seeded before it: no verdict for any surface,
+    # exit 1, markers left behind in the operator's systems.
+    #
+    # Parameterised over all five, because the original guard and its test each
+    # covered one member of the family - which is how the gap survived.
+    import sectum_ai.adapters as adapters
+
+    base = getattr(adapters, fake)
+
+    class _RefusesTheWrite(base):  # type: ignore[valid-type,misc]
+        pass
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionError(f"{surface}: connection refused")
+
+    setattr(_RefusesTheWrite, method, _refuse)
+    monkeypatch.setattr(f"sectum_ai.cli.app.{builder}", lambda _cfg: _RefusesTheWrite())
+
+    with TemporaryDirectory() as directory:
+        workdir = Path(directory)
+        _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
+
+    # Exit 3 - the run COMPLETED and could not establish one surface - never a
+    # crash, and never exit 0 either.
+    assert result.exit_code == 3, result.output
+    assert f"could not seed the {surface} canary" in result.output, result.output
+    assert "connection refused" in result.output, result.output
+    # ...and every other surface still got its verdict.
+    assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+
+
+def test_a_residual_the_scan_observed_is_never_reported_as_markers_not_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `genuine_residual` requires `erasure_supported`; `attestable_with_caveat`
+    # requires `markers_before > 0`. A backend with no per-tenant erasure API
+    # whose pre-scan saw nothing and whose post-scan found markers - an
+    # eventually-consistent index settling between the two scans - satisfies
+    # neither, so it fell past every branch to the summary that says the target
+    # tenant's markers "were not found on those surfaces".
+    #
+    # The per-surface line printed RESIDUAL DATA for that same record. One run,
+    # two verdicts, and the headline - the line a DPO reads - was the one denying
+    # an observation the run actually made, at exit 3 rather than 2.
+    from sectum_ai.probes.erasure.probe import ErasureProbe, ErasureReport, SurfaceErasure
+    from sectum_ai.spec import Surface
+
+    observed = SurfaceErasure(
+        surface=Surface.SEARCH_INDEX,
+        markers_before=0,
+        residual_after=2,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert observed.verdict == "RESIDUAL DATA", "the per-surface renderer already agreed"
+    assert not observed.attestable_with_caveat
+    assert not observed.erased
+
+    real_run = ErasureProbe.run
+
+    def _run(self: ErasureProbe, target: object, **kwargs: object) -> ErasureReport:
+        report = real_run(self, target, **kwargs)  # type: ignore[arg-type]
+        return replace(report, surfaces=(observed,))
+
+    monkeypatch.setattr(ErasureProbe, "run", _run)
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+
+    assert "were not found on those surfaces" not in result.output, result.output
+    assert "residual data remains on search_index" in result.output, result.output
+    assert result.exit_code == 2, result.output
+
+
+def test_scope_restricts_the_seeding_and_not_only_the_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `--scope` reached the probe and never the seeding loop, so a scoped
+    # engagement planted canaries across all eight surfaces and then verified,
+    # erased and reported only the named ones. `--scope vector_db` wrote 8
+    # markers into each of five other backends at exit 0: against a live stack
+    # that is data Sectum put in the operator's production systems and never came
+    # back for - the tool creating the residue it exists to find.
+    import sectum_ai.adapters as adapters
+
+    writes: dict[str, int] = {}
+    for label, cls, method in (
+        ("search_index", adapters.FakeSearchIndex, "index"),
+        ("eval_set", adapters.FakeEvalSet, "add"),
+        ("backup", adapters.FakeBackup, "add"),
+        ("semantic_cache", adapters.FakeCache, "set"),
+        ("agent_memory", adapters.FakeMemory, "remember"),
+    ):
+        real = getattr(cls, method)
+
+        def _counted(
+            self: object, *args: object, _label: str = label, _real: object = real, **kwargs: object
+        ) -> object:
+            writes[_label] = writes.get(_label, 0) + 1
+            return _real(self, *args, **kwargs)  # type: ignore[operator]
+
+        monkeypatch.setattr(cls, method, _counted)
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+
+    writes.clear()
+    assert _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert writes == {}, f"a scoped run wrote canaries to surfaces it never scans: {writes}"
+
+    # A named surface IS still seeded - the scan needs its baseline.
+    writes.clear()
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db,backup"])
+    assert set(writes) == {"backup"}, writes
+
+    # And an unscoped run is unchanged: every surface seeded, as before.
+    writes.clear()
+    _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert set(writes) == {
+        "search_index",
+        "eval_set",
+        "backup",
+        "semantic_cache",
+        "agent_memory",
+    }, writes
+
+
+def test_the_verified_verdict_names_its_subject_on_its_own_stream(tmp_path: Path) -> None:
+    # `_warn_on_synthetic_surfaces` says this on STDERR, so `sectum-ai erasure
+    # 2>/dev/null` - a DPO piping the verdict into a regulator ticket - read a
+    # clean eight-surface Article 17 attestation with nothing anywhere saying the
+    # eight backends were Sectum's own in-memory fakes. `probe` and `score` both
+    # put their subject on stdout; this is the wedge command, and it reused the
+    # word `scope` for coverage alone.
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "ERASURE VERIFIED" in result.stdout, result.stdout
+    assert "SYNTHETIC" in result.stdout, (
+        "the verified verdict does not name its subject on the stream it is printed on"
+    )
+    assert "attests no production system" in result.stdout, result.stdout

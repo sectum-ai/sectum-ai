@@ -286,3 +286,24 @@ def test_crewai_returns_empty_output_when_kickoff_returns_none_like() -> None:
     result = CrewAIAgent(_NoneCrew()).run(_TENANT_A, "anything")
     assert result.output == ""
     assert result.tool_calls == ()
+
+
+def test_an_unreadable_crew_output_is_empty_not_its_repr() -> None:
+    # `str(output)` on a CrewOutput this adapter cannot read yields the object's
+    # repr - "<CrewOutput object at 0x...>" - which is TRUTHY, so
+    # `Runner._agent_run` recorded AccessOutcome.RETURNED and Class 7 graded a
+    # memory address as the agent's answer. Both siblings return "" on the same
+    # shape and the runner records EMPTY; CrewAI was the one still laundering it.
+    from sectum_ai.adapters.agent.autogen import _final_text as autogen_final
+    from sectum_ai.adapters.agent.crewai import _final_text as crewai_final
+    from sectum_ai.adapters.agent.langgraph import _final_text as langgraph_final
+
+    class _UnreadableCrewOutput:
+        """No `raw`, no usable `tasks_output` - nothing this adapter can read."""
+
+    unreadable = crewai_final(_UnreadableCrewOutput(), [])
+    assert unreadable == "", unreadable
+    assert not unreadable, "a truthy value here is recorded as RETURNED"
+    # Stated against the siblings, because the defect was the divergence.
+    assert langgraph_final([]) == ""
+    assert autogen_final([], "assistant") == ""

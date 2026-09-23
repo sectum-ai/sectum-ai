@@ -26,8 +26,9 @@ def backing_surface(finding: Finding) -> str:
 def unaccounted_surfaces(run: RunResult) -> tuple[str, ...]:
     """Surfaces this run's findings rest on that its provenance block never recorded.
 
-    Three renderers - the audit PDF, `verify`'s run-scope gate and the scorecard's
-    scope line - answered "was this run live?" from the provenance block alone,
+    Four renderers - the audit PDF, `verify`'s run-scope gate, the scorecard's
+    scope line and the OSCAL export - answered "was this run live?" from the
+    provenance block alone,
     and the block is a record of the surfaces the run ACCOUNTED for, not of the
     surfaces its findings name. A record whose block lists seven live surfaces and
     whose findings also rest on an eighth rendered "every surface exercised by this

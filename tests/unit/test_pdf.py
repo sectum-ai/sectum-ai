@@ -27,6 +27,7 @@ from sectum_ai.spec import (
     RunResult,
     Severity,
     Surface,
+    SurfaceProvenance,
     canonical_hash,
 )
 
@@ -805,3 +806,74 @@ def test_a_pivot_rate_with_no_sample_is_not_rendered_as_a_measurement() -> None:
     assert measured_summary is not None
     assert "95% CI" in measured_summary and "n=48" in measured_summary, measured_summary
     assert "asserted by the record" not in measured_summary, measured_summary
+
+
+def test_the_anchor_statement_names_every_flag_verify_will_demand() -> None:
+    # The unanchored branch named `--allow-unanchored` and stopped. On an
+    # all-synthetic pack - the default for a scaffolded config, and what both
+    # shipped sample erasure PDFs carry - `verify` ALSO gates on run-scope, so an
+    # auditor following the bolded instruction in the document they were handed
+    # got `[FAIL] run-scope` and `VERIFICATION FAILED` at exit 4 over a genuine,
+    # untampered artifact. A false alarm on a real pack is the same class of harm
+    # as a missed leak. The anchored branch named no flag at all and fails the
+    # same way, so the note belongs to BOTH branches: liveness is a separate axis
+    # from the anchor, and `verify` gates on it separately.
+    from sectum_ai.evidence.pdf import anchor_statement
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    synthetic = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"tenant-boundary-fetch": "1"},
+        surface_provenance={Surface.VECTOR_DB.value: SurfaceProvenance.SYNTHETIC.value},
+    )
+    local = EvidencePack(run_result=synthetic, manifest_hash="m" * 64, tsa_token='{"digest": "x"}')
+    anchored = local.model_copy(
+        update={"tsa_token": "MIIFbinary", "rekor_proof": '{"logIndex": 42}'}
+    )
+    for statement in (anchor_statement(local), anchor_statement(anchored)):
+        assert "--allow-synthetic" in statement, statement
+
+    # And it must NOT be appended when a surface WAS live, or the document tells
+    # an auditor to pass a flag that would make `verify` accept a demo pack.
+    live = synthetic.model_copy(
+        update={"surface_provenance": {Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}}
+    )
+    for statement in (
+        anchor_statement(local.model_copy(update={"run_result": live})),
+        anchor_statement(anchored.model_copy(update={"run_result": live})),
+    ):
+        assert "--allow-synthetic" not in statement, statement
+
+
+def test_the_anchored_statement_does_not_promise_self_contained_tamper_evidence() -> None:
+    # `docs/threat-model.md` is explicit that an anchor "does not stop an
+    # adversary from editing a pack, recomputing the digest, and obtaining a
+    # fresh anchor - that pack will also verify", and that the evidence is
+    # comparative. The PDF - the artifact an auditor actually reads - asserted
+    # the opposite, in the bolded closing line of its integrity section, while
+    # its own sibling constant in the same block was scrupulously hedged.
+    from sectum_ai.evidence.pdf import anchor_statement
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"tenant-boundary-fetch": "1"},
+    )
+    anchored = EvidencePack(
+        run_result=run,
+        manifest_hash="m" * 64,
+        tsa_token="MIIFbinary",
+        rekor_proof='{"logIndex": 42}',
+    )
+    statement = anchor_statement(anchored)
+    assert "cannot be covered up" not in statement, statement
+    assert "comparative" in statement, statement
+    assert "will also verify" in statement, statement

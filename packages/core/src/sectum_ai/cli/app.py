@@ -598,12 +598,26 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
             )
             raise typer.Exit(code=3)
         try:
-            substrate = Substrate.model_validate_json(unseal_bytes(sealed.read_bytes(), key))
+            raw_sealed = json.loads(unseal_bytes(sealed.read_bytes(), key))
         except ValueError as error:
             typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
             raise typer.Exit(code=3) from error
-        _refuse_other_schema_line(substrate.schema_version, str(sealed))
-        return substrate
+        # Read the stamp off the PAYLOAD, not off the parsed model: `schema_version`
+        # defaults to SCHEMA_VERSION, so a sealed substrate that carries no stamp
+        # parsed cleanly and then reported the current one to its own guard. The
+        # plaintext sibling ten lines down already reads the raw JSON, and its
+        # comment states the rule this path was breaking. Reproduced end to end:
+        # the same payload was refused at exit 3 as plaintext and accepted at exit
+        # 0 sealed - the permissive path being the one with at-rest protection on.
+        _refuse_other_schema_line(
+            raw_sealed.get("schema_version") if isinstance(raw_sealed, dict) else None,
+            str(sealed),
+        )
+        try:
+            return Substrate.model_validate(raw_sealed)
+        except ValueError as error:
+            typer.echo(f"the substrate at {sealed} is malformed: {error}", err=True)
+            raise typer.Exit(code=3) from error
     if plain.exists():
         try:
             raw = json.loads(plain.read_text())
@@ -1511,6 +1525,43 @@ def _warn_on_dropped_user_steps(dropped: dict[str, int]) -> None:
     )
 
 
+def _erasure_provenance_lines(
+    report: ErasureReport, surface_provenance: dict[str, str]
+) -> list[str]:
+    """What the attested surfaces actually were, for the verdict's own stream.
+
+    Three-valued like every sibling disclosure (`verify`'s run-scope, `score`'s
+    scope line, the audit PDF's "Surface provenance: not recorded"): a record that
+    does not say is not a record that says live.
+    """
+    attested = [surface.surface.value for surface in report.surfaces]
+    if not attested:
+        return []
+    recorded = {name: surface_provenance.get(name) for name in attested}
+    unrecorded = sorted(name for name, value in recorded.items() if value is None)
+    synthetic = sorted(
+        name for name, value in recorded.items() if value == SurfaceProvenance.SYNTHETIC.value
+    )
+    if unrecorded:
+        return [
+            f"  provenance: not recorded for {', '.join(unrecorded)}, so whether this "
+            "attestation describes production systems cannot be established from it.",
+        ]
+    if not synthetic:
+        return []
+    if len(synthetic) == len(attested):
+        return [
+            "  provenance: every surface above is Sectum's built-in SYNTHETIC store - "
+            "this attests no production system, and is a demonstration rather than "
+            "an Article 17 attestation.",
+        ]
+    return [
+        f"  provenance: {', '.join(synthetic)} {'is' if len(synthetic) == 1 else 'are'} "
+        "Sectum's built-in SYNTHETIC store, not a configured backend; those surfaces "
+        "attest no production system.",
+    ]
+
+
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     """Tell the operator which surfaces this run never touched for real.
 
@@ -1547,7 +1598,11 @@ def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
 
 
 def _seed_erasure_surface(
-    unseedable: dict[Surface, str], surface: Surface, write: Callable[[], None]
+    unseedable: dict[Surface, str],
+    surface: Surface,
+    write: Callable[[], None],
+    *,
+    in_scope: frozenset[Surface] | None = None,
 ) -> None:
     """Plant one erasure canary, recording rather than raising when it will not take.
 
@@ -1557,6 +1612,10 @@ def _seed_erasure_surface(
     that refuses the write leaves its surface unseeded, and unseeded is
     NOT_COVERED: the probe finds no markers before, so it attests nothing.
     """
+    # A surface outside `--scope` is not scanned, not erased and not reported, so
+    # writing to it would leave a canary in a live backend nobody comes back for.
+    if in_scope is not None and surface not in in_scope:
+        return
     if surface in unseedable:
         return
     try:
@@ -2853,6 +2912,14 @@ def _emit_erasure_attestation(
                 f"  scope: this attests {scanned} only; NOT_COVERED (not verified): "
                 f"{not_covered_names}.",
             )
+        # On STDOUT, beside the verdict. `_warn_on_synthetic_surfaces` says this on
+        # stderr, so `erasure ... 2>/dev/null` - a DPO piping the verdict into a
+        # ticket - read a clean eight-surface Article 17 attestation with nothing
+        # anywhere saying the eight backends were Sectum's own in-memory fakes.
+        # `probe` and `score` both put their subject on stdout; this is the wedge
+        # command, and it reused the word `scope` for coverage alone.
+        for line in _erasure_provenance_lines(report, surface_provenance):
+            typer.echo(line)
         return
     unverified = [
         surface.surface.value for surface in report.surfaces if surface.unverifiable_after
@@ -2885,6 +2952,28 @@ def _emit_erasure_attestation(
             err=True,
         )
         return
+    # A residual the scan OBSERVED, on a surface none of the branches above claim.
+    # `genuine_residual` requires `erasure_supported` and `attestable_with_caveat`
+    # requires `markers_before > 0`, so a backend with no per-tenant erasure API
+    # whose pre-scan saw nothing and whose post-scan found markers - an
+    # eventually-consistent index settling between the two - satisfied neither and
+    # fell through to a message saying its markers "were not found". The
+    # per-surface line printed RESIDUAL DATA for the same record: one run, two
+    # verdicts, and the headline a DPO reads was the one under-reporting an
+    # observed residual, at exit 3 rather than 2. `SurfaceErasure.verdict` already
+    # has this arm; the summary did not.
+    observed_residual = [
+        surface.surface.value for surface in report.surfaces if surface.residual_after > 0
+    ]
+    if observed_residual:
+        typer.echo(
+            f"ERASURE FAILED: residual data remains on {', '.join(observed_residual)} - "
+            "the scan found the target tenant's markers after erasure. No baseline was "
+            "established there, so this is not a measured before/after delta; it is a "
+            "positive observation that the data is still present.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     no_baseline = [
         surface.surface.value for surface in report.surfaces if surface.markers_before == 0
     ]
@@ -3124,14 +3213,26 @@ def erasure(
     # Surface.API, so keying by its own surface left the block empty.
     provenance[Surface.VECTOR_DB.value] = surface_provenance_of((store,))[store.surface.value]
     _warn_on_synthetic_surfaces(provenance)
-    for tenant in substrate.tenants:
-        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-        store.upsert(tenant.tenant_id, documents)
+    # `--scope` restricted the SCAN and not the seeding, so a scoped engagement
+    # planted canaries in every one of the eight surfaces and then verified,
+    # erased and reported only the named ones. `--scope vector_db` against a live
+    # stack wrote 8 markers into each of seven other backends and exited 0 -
+    # data Sectum put in the operator's production systems and never came back
+    # for. A surface that is out of scope is not written to.
+    in_scope = None if erasure_scope is None else frozenset(erasure_scope)
+
+    def _seeds(surface: Surface) -> bool:
+        return in_scope is None or surface in in_scope
+
+    if _seeds(Surface.VECTOR_DB):
+        for tenant in substrate.tenants:
+            documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+            store.upsert(tenant.tenant_id, documents)
     unseedable: dict[Surface, str] = {}
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue
-        if isinstance(obs, FakeObservability):
+        if _seeds(Surface.TRACING) and isinstance(obs, FakeObservability):
             obs.record(
                 marker.owner_tenant_id,
                 "sectum-ai-erasure",
@@ -3151,8 +3252,9 @@ def erasure(
         # to prevent, one step earlier.
         _seed_erasure_surface(
             unseedable,
-            Surface.AGENT_MEMORY,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.AGENT_MEMORY,
+            write=functools.partial(
                 memory.remember,
                 marker.owner_tenant_id,
                 f"memory note recording {marker.plaintext}",
@@ -3160,8 +3262,9 @@ def erasure(
         )
         _seed_erasure_surface(
             unseedable,
-            Surface.SEMANTIC_CACHE,
-            functools.partial(
+            in_scope=in_scope,
+            surface=Surface.SEMANTIC_CACHE,
+            write=functools.partial(
                 cache.set,
                 marker.owner_tenant_id,
                 f"sectum-ai-erasure-{marker.marker_id}",
@@ -3170,9 +3273,44 @@ def erasure(
         )
         if isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
-        search.index(marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}")
-        evalset.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
-        backup.add(marker.owner_tenant_id, f"backup snapshot mentioning {marker.plaintext}")
+        # The three the comment above already names as siblings. They were left
+        # bare when the containment landed on `remember` and `set`, so a live
+        # search index, eval set or backup that refused the write raised out of
+        # the seeding loop and aborted the whole command - after canaries had
+        # already been planted in every live backend seeded before it. No verdict
+        # for any surface, exit 1, and markers left behind in the operator's
+        # systems. `functools.partial` rather than a lambda: the loop variable
+        # `marker` would late-bind (ruff B023).
+        _seed_erasure_surface(
+            unseedable,
+            in_scope=in_scope,
+            surface=Surface.SEARCH_INDEX,
+            write=functools.partial(
+                search.index,
+                marker.owner_tenant_id,
+                f"search index entry mentioning {marker.plaintext}",
+            ),
+        )
+        _seed_erasure_surface(
+            unseedable,
+            in_scope=in_scope,
+            surface=Surface.EVAL_SET,
+            write=functools.partial(
+                evalset.add,
+                marker.owner_tenant_id,
+                f"eval set fixture mentioning {marker.plaintext}",
+            ),
+        )
+        _seed_erasure_surface(
+            unseedable,
+            in_scope=in_scope,
+            surface=Surface.BACKUP,
+            write=functools.partial(
+                backup.add,
+                marker.owner_tenant_id,
+                f"backup snapshot mentioning {marker.plaintext}",
+            ),
+        )
 
     for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
         # Said out loud: an unseeded surface has no markers before, so the probe
