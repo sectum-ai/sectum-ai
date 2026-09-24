@@ -2,6 +2,7 @@
 
 from sectum_ai.spec._logging import configure_logging, get_logger, redact_sensitive
 from sectum_ai.spec.enums import (
+    ERASURE_SURFACES,
     AccessOutcome,
     ClassVerdict,
     Confidence,
@@ -29,6 +30,7 @@ from sectum_ai.spec.models import (
     ClassScore,
     ControlMapping,
     CorpusDocument,
+    DetectionProvenance,
     EvidencePack,
     Finding,
     GroundTruthManifest,
@@ -48,10 +50,17 @@ from sectum_ai.spec.models import (
     SyntheticUserSpec,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
-from sectum_ai.spec.stats import normal_quantile, wilson_interval
-from sectum_ai.spec.text import untrusted
+from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
+from sectum_ai.spec.text import (
+    normalize_for_match,
+    ordered_within_span,
+    residual_present,
+    tokenize,
+    untrusted,
+)
 
 __all__ = [
+    "ERASURE_SURFACES",
     "SCHEMA_VERSION",
     "AccessOutcome",
     "AdapterError",
@@ -63,6 +72,7 @@ __all__ = [
     "CorpusDocument",
     "CoverageVerdict",
     "DetectionError",
+    "DetectionProvenance",
     "ErasureUnsupported",
     "EvidenceError",
     "EvidencePack",
@@ -96,9 +106,14 @@ __all__ = [
     "get_logger",
     "json_schemas",
     "normal_quantile",
+    "normalize_for_match",
+    "ordered_within_span",
+    "rate_from_counts",
     "redact_sensitive",
+    "residual_present",
     "sha256_hex",
     "to_canonical_json",
+    "tokenize",
     "untrusted",
     "wilson_interval",
     "write_json_schemas",

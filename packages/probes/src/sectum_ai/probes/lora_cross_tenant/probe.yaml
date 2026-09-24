@@ -17,4 +17,7 @@ surfaces:
 - model_adapter
 requires_adapters:
 - model
+requires_any_capability:
+- per_tenant_adapter
+- shared_weights
 example: examples/lora-cross-tenant

@@ -20,7 +20,7 @@ from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
 from sectum_ai.adapters.vector._settle import settle
-from sectum_ai.spec import CorpusDocument
+from sectum_ai.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""
@@ -182,11 +182,41 @@ class PineconeVectorStore(VectorStoreAdapter):
         )
 
     def _namespace_count(self, tenant: UUID) -> int:
+        """How many vectors the tenant's namespace still holds.
+
+        This backs `delete`'s settle poll, so a 0 it returns is read as "the
+        purge landed". An UNREADABLE stats response must therefore not return 0:
+        it did, via `hasattr(stats, "get")`, so a shape this adapter cannot parse
+        settled the poll on its first try and the erasure was attested without
+        the namespace ever having been read. `GCSBackup._soft_delete_retention_s`
+        states the rule for the sibling surface - an answer that could not be
+        established is not a clean one.
+
+        An ABSENT namespace is different, and is still 0: Pinecone drops a
+        namespace from the stats once it holds nothing, so that is the shape of a
+        successful delete.
+        """
         stats = self._index.describe_index_stats().namespaces
-        summary = stats.get(tenant.hex) if hasattr(stats, "get") else None
+        if not hasattr(stats, "get"):
+            raise AdapterError(
+                f"Pinecone returned index stats this adapter cannot read "
+                f"({type(stats).__name__}), so whether namespace {tenant.hex} still "
+                "holds vectors cannot be established and this surface cannot be "
+                "attested erased"
+            )
+        summary = stats.get(tenant.hex)
         if summary is None:
             return 0
-        return int(getattr(summary, "vector_count", None) or summary.get("vector_count", 0))
+        count = getattr(summary, "vector_count", None)
+        if count is None and hasattr(summary, "get"):
+            count = summary.get("vector_count")
+        if count is None:
+            raise AdapterError(
+                f"Pinecone's summary for namespace {tenant.hex} carries no "
+                "vector_count, so whether the purge landed cannot be established "
+                "and this surface cannot be attested erased"
+            )
+        return int(count)
 
     def list_namespaces(self) -> list[str]:
         stats = self._index.describe_index_stats()

@@ -6,7 +6,12 @@ from typing import Any
 from uuid import UUID
 
 from sectum_ai.evidence import OSCAL_VERSION, run_to_oscal
-from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, control_mappings
+from sectum_ai.evidence.controls import (
+    COVERAGE_DISCLAIMER,
+    ERASURE,
+    control_mappings,
+    mapping_requirement,
+)
 from sectum_ai.spec import (
     Finding,
     FindingStatus,
@@ -200,7 +205,9 @@ def test_a_synthetic_only_run_states_no_control_finding() -> None:
     for provenance in ({"vector_db": "SYNTHETIC"}, {}):
         run = _run().model_copy(update={"surface_provenance": provenance})
         result = run_to_oscal(run)["assessment-results"]["results"][0]
-        assert result["findings"] == [], provenance
+        # Omitted, not empty: `findings` is `minItems: 1` when present in OSCAL AR
+        # 1.1.2, so `[]` made the document schema-invalid.
+        assert "findings" not in result, provenance
         assert "no control objective was assessed" in result["description"]
     live = _run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
     assert run_to_oscal(live)["assessment-results"]["results"][0]["findings"]
@@ -224,6 +231,121 @@ def test_a_confirmed_leak_on_a_fake_surface_moves_no_control() -> None:
     assert {f["target"]["status"]["state"] for f in moved["findings"]} == {"not-satisfied"}
 
 
+def test_an_unplaceable_leak_earns_no_satisfied_control() -> None:
+    # `attested` keeps LIVE-surface findings and the `synthetic` exclusion covers
+    # the recorded fakes; a confirmed finding on a surface the block never recorded
+    # was in neither set and simply vanished. Every control read `satisfied` over a
+    # confirmed cross-tenant leak - while the audit PDF named it, `verify`'s
+    # run-scope gate flagged it and `score` graded F. A GRC platform reads
+    # `status.state`, so this was the export that mattered.
+    unrecorded = _finding("f").model_copy(update={"surface": Surface.AGENT_MEMORY})
+    run = _run(unrecorded).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert "findings" not in result, result
+    assert "never recorded" in result["description"], result["description"]
+    assert "CC6.1" in result["description"], result["description"]
+
+    # Neither does it erase a fail: the same leak on the RECORDED live surface
+    # still flips the controls, and withholding must not launder that away.
+    placed = _run(_finding("f")).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    states = {
+        f["target"]["status"]["state"]
+        for f in run_to_oscal(placed)["assessment-results"]["results"][0]["findings"]
+    }
+    assert states == {"not-satisfied"}, states
+
+
+def test_the_withheld_document_stays_schema_valid_and_says_only_what_it_measured() -> None:
+    # Four things the withholding got wrong, all in the disclosure a GRC platform
+    # reads. OSCAL AR 1.1.2 makes `findings` optional but `minItems: 1` when
+    # present, and the same for `include-controls`, so emitting `[]` for either made
+    # the document schema-INVALID - the platform rejects exactly the pack whose
+    # disclosure it needed.
+    unplaceable = _finding("f").model_copy(update={"surface": Surface.AGENT_MEMORY})
+    candidate = _finding("g").model_copy(
+        update={"surface": Surface.SEARCH_INDEX, "status": FindingStatus.UNVERIFIED}
+    )
+    run = _run(unplaceable, candidate).model_copy(
+        update={"surface_provenance": {"vector_db": "LIVE"}}
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert "findings" not in result, "an empty findings array is schema-invalid"
+    assert result["reviewed-controls"]["control-selections"] == [{}], result["reviewed-controls"]
+
+    # And the sentence asserts CONFIRMED findings, so it must name only the surfaces
+    # that carry one: `unaccounted_surfaces` is status-blind, and prefixing its list
+    # with "Confirmed" changed the claim's truth conditions.
+    description = result["description"]
+    assert "agent_memory" in description, description
+    assert "search_index" not in description, description
+
+
+def test_an_unplaceable_leak_is_disclosed_even_when_no_control_is_withheld() -> None:
+    # The disclosure was gated on a control having been withheld, so it vanished
+    # exactly when nothing was: an erasure run carrying a confirmed cross-tenant
+    # leak on an unrecorded surface said nothing at all. The `satisfied` states are
+    # right there - a cross-principal leak is not erasure evidence - the silence was
+    # not. And an erasure control must not be withheld over a surface no erasure
+    # scan reaches, which is the narrowing `coverage` already applies.
+    leak = _finding("f").model_copy(update={"surface": Surface.MCP})
+    run = _run(leak).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert "never recorded" in result["description"], result["description"]
+    assert "mcp" in result["description"], result["description"]
+    # It must not claim a control was withheld when none was.
+    assert "no verdict is stated" not in result["description"].lower(), result["description"]
+
+
+def test_a_run_in_which_nothing_executed_is_not_narrated_as_a_clean_scan() -> None:
+    # "provisioned tenants ... and ran benign and adversarial probes ... No
+    # cross-principal leakage was confirmed" over a run in which nothing ran: an
+    # ABSENT scan rendered as a clean one. SARIF refuses the same record with
+    # `sectum.no-probe-executed` and the PDF prints "none recorded".
+    empty = _run().model_copy(
+        update={"probe_versions": {}, "findings": (), "surface_provenance": {"vector_db": "LIVE"}}
+    )
+    description = run_to_oscal(empty)["assessment-results"]["results"][0]["description"]
+    assert "No Sectum AI probe executed" in description, description
+    assert "ABSENT scan, not a clean one" in description, description
+    assert "No cross-principal leakage was confirmed" not in description, description
+
+
+def test_a_control_verdict_says_which_boundary_the_run_actually_exercised() -> None:
+    # "Cross-principal" spans the USER boundary as well as the tenant one, and the
+    # catalog is explicit that a run whose adapter cannot carry a user identity
+    # yields "a pass which says the user boundary was not tested - never that it
+    # held." The audit PDF was the only renderer reading `user_steps_dropped`, so
+    # this control verdict - what a GRC platform files - asserted the whole of what
+    # the run had tested half of.
+    run = _run().model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(
+                user_steps_dropped={"tenant-boundary-fetch": 12},
+                unconfirmed_plants={"rag-poisoning": 4},
+            ),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    isolation = next(f for f in result["findings"] if "isolation" in f["title"])
+    verdict = isolation["target"]["description"]
+    assert "states the tenant boundary" in verdict, verdict
+    assert "did not land" in verdict, verdict
+    # A run that narrowed nothing says neither.
+    plain = run_to_oscal(_run().model_copy(update={"surface_provenance": {"vector_db": "LIVE"}}))
+    plain_verdict = next(
+        f
+        for f in plain["assessment-results"]["results"][0]["findings"]
+        if "isolation" in f["title"]
+    )["target"]["description"]
+    assert "states the tenant boundary" not in plain_verdict, plain_verdict
+
+
 def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
     # A live erasure run with residual markers said "confirmed at least one
     # manifest-grounded cross-tenant leak; the tested isolation objective is not
@@ -244,9 +366,9 @@ def test_a_residual_after_erasure_is_not_a_cross_tenant_leak() -> None:
         "CCPA/CPRA 1798.105 — erasure verification",
     }
     verdicts = {f["target"]["description"] for f in result["findings"]}
-    assert all("markers remaining" in v and "cross" not in v for v in verdicts)
+    assert all("could not verify the erasure" in v and "cross" not in v for v in verdicts)
     assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
-    assert "presumed retained, on vector_db" in result["description"]
+    assert "unverified on vector_db" in result["description"]
 
 
 def test_metadata_carries_the_surface_provenance() -> None:
@@ -286,7 +408,7 @@ def test_a_caveat_surface_does_not_verify_the_erasure() -> None:
     assert all("presumed retained" in f["target"]["description"] for f in result["findings"])
     assert "scanned an erasure" in result["description"]
     assert "verified an erasure" not in result["description"]
-    assert "presumed retained, on backup" in result["description"]
+    assert "unverified on backup" in result["description"]
     assert "cross-principal" not in result["description"]
 
 
@@ -338,4 +460,190 @@ def test_the_live_surface_suffix_and_the_erasure_verdict_agree() -> None:
     )
     finding = run_to_oscal(run)["assessment-results"]["results"][0]["findings"][0]
     assert "Live surfaces: tracing, vector_db." in finding["description"]
-    assert "presumed retained, after the erasure on tracing" in finding["target"]["description"]
+    assert "could not verify the erasure on tracing" in finding["target"]["description"]
+
+
+def test_every_observation_says_which_stack_it_describes() -> None:
+    # OSCAL states provenance once for the run and gates its CONTROL findings on
+    # it, but a GRC platform tabulates the observations - and a row from the
+    # built-in fake tabulated identically to one from production. The SARIF
+    # projection carries it per result for the same reason.
+    doc = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "SYNTHETIC"}})
+    )
+    observation = doc["results"][0]["observations"][0]
+    props = {p["name"]: p["value"] for p in observation["props"]}
+    assert props["sectum-surface-provenance"] == "SYNTHETIC"
+    assert props["sectum-backing-surface"] == "vector_db"
+    assert observation["description"].startswith("[synthetic surface")
+
+    live = _doc(
+        _run(_finding("f-1")).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    live_observation = live["results"][0]["observations"][0]
+    live_props = {p["name"]: p["value"] for p in live_observation["props"]}
+    assert live_props["sectum-surface-provenance"] == "LIVE"
+    assert not live_observation["description"].startswith("[synthetic surface")
+
+    # A surface the record does not describe reads UNRECORDED, not SYNTHETIC.
+    unstated = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    unstated_props = {
+        p["name"]: p["value"] for p in unstated["results"][0]["observations"][0]["props"]
+    }
+    assert unstated_props["sectum-surface-provenance"] == "UNRECORDED"
+
+
+def test_an_unrecorded_surface_observation_is_not_told_it_describes_a_fake() -> None:
+    # Same two-valued prose beside a three-valued property, in the projection a
+    # GRC platform tabulates.
+    doc = _doc(_run(_finding("f-1")).model_copy(update={"surface_provenance": {}}))
+    description = doc["results"][0]["observations"][0]["description"]
+    assert description.startswith("[surface provenance not recorded"), description
+    assert "built-in fake" not in description
+
+
+def _erasure_states(coverage: dict[str, str], **metrics: Any) -> dict[str, str]:
+    """The OSCAL state of each deletion control for an erasure run."""
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance=dict.fromkeys(coverage, "LIVE"),
+        metrics=RunMetrics(erasure_coverage=coverage, **metrics),
+    )
+    return {
+        finding["title"]: finding["target"]["status"]["state"]
+        for result in run_to_oscal(run)["assessment-results"]["results"]
+        for finding in result.get("findings", [])
+        if "erasure verification" in finding["title"]
+    }
+
+
+def test_oscal_marks_an_inconclusive_erasure_not_satisfied() -> None:
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so a surface the run SCANNED
+    # and could not clear was invisible here - the same hole the pack's prose
+    # assertion had, fixed there and not here. The signed pack then contradicted
+    # itself inside one string: a description reading "absence could not be
+    # established on search_index. This run is not an attestation." carrying a
+    # target state of `satisfied` and "verified the erasure on every live surface
+    # it scanned". The CLI exits 3 on that same run.
+    inconclusive = _erasure_states(
+        {"vector_db": "ERASED", "search_index": "NOT_COVERED"},
+        erasure_residue={"vector_db": 0},
+    )
+    assert inconclusive, "the deletion controls must still appear"
+    assert set(inconclusive.values()) == {"not-satisfied"}, inconclusive
+
+    # An all-ERASED run still attests, and a surface nobody scanned (no
+    # provenance) must not drag it down.
+    clean = _erasure_states({"vector_db": "ERASED"}, erasure_residue={"vector_db": 0})
+    assert set(clean.values()) == {"satisfied"}, clean
+
+
+def test_a_live_surface_absent_from_the_coverage_block_is_not_satisfied() -> None:
+    # The residual scan iterated the coverage block's OWN keys, so a live surface
+    # with no key at all was never looked at: `status.state` came back `satisfied`
+    # with "verified the erasure on every live surface it scanned" - inside a
+    # finding whose `description` carried `_erasure_assertion`'s own words,
+    # "absence could not be established on semantic_cache. This run is not an
+    # attestation." A GRC platform reads the state. `ErasureReport.coverage()`
+    # defaults this case to NOT_COVERED and `controls.py` already did too; this is
+    # the same hole, fixed there and not here.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "semantic_cache": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    result = run_to_oscal(run)["assessment-results"]["results"][0]
+    assert {f["target"]["status"]["state"] for f in result["findings"]} == {"not-satisfied"}
+    assert all("semantic_cache" in f["target"]["description"] for f in result["findings"])
+    assert "unverified on semantic_cache" in result["description"]
+
+
+def test_the_oscal_state_and_the_control_assertion_never_disagree() -> None:
+    # The structural guard, not another instance: `controls._erasure_assertion`
+    # and this module both decide "did the erasure verify?", from the same run,
+    # and have now diverged twice - once on a scanned-but-unestablished surface,
+    # once on a live surface missing from the block entirely. A `satisfied` state
+    # whose own description says "This run is not an attestation" is the artifact
+    # that ships when they disagree.
+    surfaces = ("vector_db", "semantic_cache", "backup")
+    verdicts = ("ERASED", "RESIDUAL", "ATTESTABLE_WITH_CAVEAT", "NOT_COVERED", None)
+    checked = 0
+    for first in verdicts:
+        for second in verdicts:
+            coverage = {
+                surface: verdict
+                for surface, verdict in zip(surfaces, (first, second, "ERASED"), strict=False)
+                if verdict is not None
+            }
+            if not coverage:
+                continue
+            run = _run().model_copy(
+                update={
+                    "probe_versions": {"gdpr-erasure-verification": "1"},
+                    "surface_provenance": dict.fromkeys(surfaces, "LIVE"),
+                    "metrics": RunMetrics(erasure_coverage=coverage),
+                }
+            )
+            erasure = [
+                mapping
+                for mapping in control_mappings(run)
+                if mapping_requirement(mapping) == ERASURE
+            ]
+            if not erasure:
+                continue
+            checked += 1
+            claims_verified = all("not an attestation" not in m.assertion for m in erasure)
+            states = {
+                f["target"]["status"]["state"]
+                for f in run_to_oscal(run)["assessment-results"]["results"][0]["findings"]
+                if "erasure" in f["title"]
+            }
+            assert states, coverage
+            assert (states == {"satisfied"}) == claims_verified, (
+                coverage,
+                states,
+                erasure[0].assertion,
+            )
+    assert checked >= 15, checked
+
+
+def test_a_residual_erasure_and_a_confirmed_leak_are_both_stated() -> None:
+    # First-match, not composed: a record carrying BOTH took the isolation branch
+    # and the residue vanished from the description of the very result reporting
+    # it - the same defect `_erasure_assertion` fixed one module over by composing
+    # its clauses instead of returning on the first failure.
+    leak = _finding("f-leak", probe_id="cross-tenant-retrieval")
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1", "cross-tenant-retrieval": "1"},
+            "surface_provenance": {"vector_db": "LIVE", "backup": "LIVE"},
+            "findings": (leak,),
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED", "backup": "RESIDUAL"}),
+        }
+    )
+    described = run_to_oscal(run)["assessment-results"]["results"][0]["description"]
+    assert "unverified on backup" in described, described
+    assert "cross-principal leak was confirmed" in described, described
+
+
+def test_an_erasure_run_still_claims_nothing_about_isolation() -> None:
+    # The guard: an erasure run did not test isolation, so composing must not add
+    # "no cross-principal leakage was confirmed" to a run that never looked.
+    run = _run().model_copy(
+        update={
+            "probe_versions": {"gdpr-erasure-verification": "1"},
+            "surface_provenance": {"vector_db": "LIVE"},
+            "metrics": RunMetrics(erasure_coverage={"vector_db": "ERASED"}),
+        }
+    )
+    described = run_to_oscal(run)["assessment-results"]["results"][0]["description"]
+    assert "scanned an erasure" in described, described
+    assert "cross-principal" not in described, described

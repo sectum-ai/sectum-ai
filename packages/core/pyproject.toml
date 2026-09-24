@@ -73,5 +73,9 @@ sectum-ai-probes = { workspace = true }
 sectum-ai-evidence = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
+# `sectum_ai` is a namespace shared by five distributions, but only THIS one
+# ships modules directly in it (config, runner, score, baseline, ...), so its
+# py.typed lives here and collides with nothing. Without it those modules were
+# untyped downstream while CONTRIBUTING promised typed public APIs.
 only-include = ["src/sectum_ai"]
 sources = ["src"]

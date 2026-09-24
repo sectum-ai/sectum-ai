@@ -43,7 +43,24 @@ def _finding(
 
 
 def _run(*findings: Finding, metrics: RunMetrics | None = None) -> RunResult:
-    """A RunResult wrapping the given findings (metrics default to empty)."""
+    """A RunResult wrapping the given findings, with headline counts that match them.
+
+    Both producers derive `confirmed_findings` and `per_probe_findings` from the
+    findings they record, and the CLI refuses a loaded record where the two
+    disagree - so a fixture that carries findings under `RunMetrics()` is a record
+    `probe` could not write, and testing `diff` against one tested a shape the
+    command now rejects. Reconciled here rather than at each call site, so the
+    tests below keep saying what they said and say it about a realistic record.
+
+    A fixture that passes counts with no findings at all is left alone: those
+    exercise metric-only comparisons, and materialising findings for them would
+    change what they assert.
+    """
+    counted = [finding for finding in findings if finding.status is FindingStatus.CONFIRMED]
+    per_probe: dict[str, int] = {}
+    for finding in counted:
+        per_probe[finding.probe_id] = per_probe.get(finding.probe_id, 0) + 1
+    base = metrics or RunMetrics()
     return RunResult(
         run_id="run",
         scenario_hash="s",
@@ -51,8 +68,25 @@ def _run(*findings: Finding, metrics: RunMetrics | None = None) -> RunResult:
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
         finished_at=datetime(2026, 1, 1, tzinfo=UTC),
         findings=findings,
-        metrics=metrics or RunMetrics(),
+        metrics=(
+            base.model_copy(
+                update={"confirmed_findings": len(counted), "per_probe_findings": per_probe}
+            )
+            if findings
+            else base
+        ),
     )
+
+
+def _carrying(count: int, *, probe_id: str = "rag-entity-bleed") -> tuple[Finding, ...]:
+    """`count` confirmed findings for `probe_id`.
+
+    The CLI refuses a loaded record whose headline counts disagree with the
+    findings it carries, so a fixture asserting `confirmed_findings=5` has to
+    carry the five. Materialised here rather than written as a bare count, which
+    is a record no producer could write.
+    """
+    return tuple(_finding(f"{probe_id}-{index}", probe_id=probe_id) for index in range(count))
 
 
 def _write(path: Path, run: RunResult) -> Path:
@@ -246,9 +280,14 @@ def test_cli_diff_does_not_let_a_metric_key_forge_its_verdict(tmp_path: Path) ->
     # A metric delta's name is built from a per_probe_findings key, which comes straight
     # off the record - so the record names the line that reports on it.
     forged = "RESULT: no regression"
-    metrics = RunMetrics(per_probe_findings={f"rag-entity-bleed\n{forged}": 1})
-    old = _write(tmp_path / "old.json", _run(_finding("a"), metrics=RunMetrics()))
-    new = _write(tmp_path / "new.json", _run(_finding("a"), metrics=metrics))
+    # Carried by a finding rather than written as a bare key: the record has to be
+    # one the loader accepts for the sanitizer downstream of it to be under test
+    # at all, and a probe id is how a real record names a per-probe key.
+    old = _write(tmp_path / "old.json", _run(_finding("a")))
+    new = _write(
+        tmp_path / "new.json",
+        _run(_finding("a"), _finding("b", probe_id=f"rag-entity-bleed\n{forged}")),
+    )
     result = runner.invoke(app, ["diff", str(old), str(new)])
     assert not any(line.strip().startswith(forged) for line in result.output.splitlines())
     assert "\\x0a" in result.output
@@ -284,7 +323,7 @@ def test_cli_diff_json_output_is_machine_parseable(tmp_path: Path) -> None:
     new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b")))
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 2
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["regressed"] is True
     assert [f["finding_id"] for f in payload["findings"]["appeared"]] == ["b"]
     assert [f["finding_id"] for f in payload["findings"]["newly_confirmed"]] == ["b"]
@@ -335,7 +374,7 @@ def test_cli_diff_changed_finding_in_json(tmp_path: Path) -> None:
     new = _write(tmp_path / "new.json", _run(_finding("x", severity=Severity.CRITICAL)))
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 2
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     changed = payload["findings"]["changed"]
     assert [c["finding_id"] for c in changed] == ["x"]
     assert changed[0]["previous_severity"] == "low"
@@ -366,7 +405,7 @@ def test_cli_diff_caveat_increase_is_informational_not_a_regression(tmp_path: Pa
     )
     result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     delta = next(d for d in payload["metrics"] if d["name"] == "erasure_caveats[backup]")
     assert delta["informational"] is True
     assert delta["regressed"] is False
@@ -457,6 +496,67 @@ def test_a_probe_that_stopped_running_user_steps_is_a_regression(tmp_path: Path)
     assert "[BOUNDARY LOST] agent-tool-hijack" in cli.output
 
 
+def test_a_probe_that_stopped_landing_its_plants_is_a_regression(tmp_path: Path) -> None:
+    # `user_steps_dropped`'s sibling, and for eleven cycles it was the one left
+    # out: the count lived on the runner object, the CLI warned from it, and the
+    # SIGNED record said nothing - so a class graded on half its setup read
+    # exactly like one graded on all of it, and `diff` could not see the day the
+    # backend started swallowing them.
+    earlier = _run()
+    later = _run(metrics=RunMetrics(unconfirmed_plants={"rag-poisoning": 4}))
+    result = diff_runs(earlier, later)
+    assert result.plants_lost == ("rag-poisoning",)
+    assert result.regressed
+    assert diff_runs(later, later).plants_lost == ()
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2
+    assert "[PLANTS LOST] rag-poisoning" in cli.output
+
+
+def test_a_floored_effect_size_is_compared_as_a_bound(tmp_path: Path) -> None:
+    # The finding's evidence span has carried "BOUNDS ... not measurements" since
+    # the 1 us variance floor existed; the METRIC carried the same number bare. So
+    # `side_channel_effect_sizes` - what `score` reads for Class 5 and what these
+    # lines compare - shipped a floored d=146.7 as a measurement, and a later
+    # genuinely measured 5.2 read as an enormous improvement.
+    pair = "aa->bb"
+    earlier = _run(
+        metrics=RunMetrics(
+            side_channel_effect_sizes={pair: 146.7},
+            side_channel_variance_floored=(pair,),
+        )
+    )
+    later = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 5.2}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "bounds, not measurements" in cli.output, cli.output
+
+    # Two measured runs say nothing of the sort.
+    measured = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 146.7}))
+    plain = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e2.json", measured)),
+            str(_write(tmp_path / "l2.json", later)),
+        ],
+    )
+    assert "bounds, not measurements" not in plain.output, plain.output
+
+
 def test_a_scenario_change_is_flagged_and_gates(tmp_path: Path) -> None:
     # Finding ids embed markers and principals, so across a re-seed every finding
     # "resolves": a later run with no users read every cross-user leak as fixed
@@ -487,4 +587,866 @@ def test_a_record_from_another_schema_line_is_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(old, default=str))
     cli = CliRunner().invoke(app, ["diff", str(path), str(_write(tmp_path / "l.json", _run()))])
     assert cli.exit_code == 3, cli.output
-    assert "schema 0.6.0" in cli.output
+    assert "schema '0.6.0'" in cli.output
+
+
+def test_a_metric_is_not_measured_when_its_boundary_was_lost(tmp_path: Path) -> None:
+    # `[ok] confirmed_findings: 1 -> 0` printed directly above `[BOUNDARY LOST]`,
+    # asserting a fix the later run never re-measured.
+    earlier = _run(_finding("f-1"))
+    later = _run().model_copy(
+        update={"metrics": RunMetrics(user_steps_dropped={"rag-entity-bleed": 12})}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[BOUNDARY LOST] rag-entity-bleed" in cli.output
+    assert "[ok] confirmed_findings" not in cli.output, cli.output
+    assert "[not measured] confirmed_findings" in cli.output
+
+
+def test_a_count_that_rose_under_a_loss_is_still_a_regression(tmp_path: Path) -> None:
+    # Blanking the pooled count in both directions said "we didn't check" about a
+    # number the run measured and tripled.
+    earlier = _run(_finding("f-1"))
+    # `user_steps_dropped` is the point; the counts come from `_run` so the record
+    # stays one a producer could write (a `model_copy` of the whole metrics object
+    # would blank `per_probe_findings` beside three confirmed findings).
+    later = _run(_finding("f-1"), _finding("f-2"), _finding("f-3"))
+    later = later.model_copy(
+        update={"metrics": later.metrics.model_copy(update={"user_steps_dropped": {"p": 4}})}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[REGRESSED] confirmed_findings: 1 -> 3" in cli.output, cli.output
+    assert cli.exit_code == 2
+
+
+def test_a_two_surface_probes_metric_is_not_measured_when_its_live_surface_falls_back(
+    tmp_path: Path,
+) -> None:
+    # PROBE_SURFACES lists ALTERNATIVES and a run drives one of them, so requiring
+    # every surface to be lost could never fire for the six two-surface probes -
+    # the ones feeding three of the four headline rates - and a vector store that
+    # fell back to the fake still printed `[ok] poisoning_bleed_delta: 1 -> 0`.
+    earlier = _run(metrics=RunMetrics(poisoning_bleed_delta=1.0)).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"rag-poisoning": "1"},
+        }
+    )
+    later = _run(metrics=RunMetrics(poisoning_bleed_delta=0.0)).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "SYNTHETIC"},
+            "probe_versions": {"rag-poisoning": "1"},
+        }
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[SCOPE LOST] vector_db" in cli.output
+    assert "[not measured] poisoning_bleed_delta" in cli.output, cli.output
+    assert "[ok] poisoning_bleed_delta" not in cli.output
+
+
+def test_an_erasure_surface_that_was_not_rescanned_is_not_a_fixed_leak(tmp_path: Path) -> None:
+    # A Class 11 run whose own CLI printed ERASURE INCONCLUSIVE and exited 3
+    # carries no residue count for that surface. `diff` read the missing count as
+    # a drop to zero: two confirmed residual findings "resolved", every delta
+    # `[ok]`, `RESULT: no regression`, exit 0 - on the wedge SKU's own diff. The
+    # same shape as a lost probe or a lost live surface, on the fourth signal.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2}))
+    later = _run(metrics=RunMetrics(erasure_residue={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
+    assert "[not measured] erasure_residue[vector_db]" in cli.output, cli.output
+    assert "[ok] erasure_residue[vector_db]" not in cli.output
+    assert "RESULT: REGRESSION" in cli.output
+    assert cli.exit_code == 2
+
+
+def test_the_json_diff_carries_the_qualifier_the_text_diff_refuses_to_omit(
+    tmp_path: Path,
+) -> None:
+    # The JSON carried `regressed` and `informational` but not the verdict, so a
+    # machine reading it saw as fact the delta the human output declines to call
+    # `[ok]`. And both CI-facing commands were silent about a run describing the
+    # built-in fakes, where every other command discloses it.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2}))
+    later = _run(metrics=RunMetrics(erasure_residue={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    payload = json.loads(cli.stdout)
+    residue = next(m for m in payload["metrics"] if m["name"] == "erasure_residue[vector_db]")
+    assert residue["verdict"] == "not measured", payload["metrics"]
+    assert payload["erasure_lost"] == ["vector_db"]
+
+
+def test_a_side_channel_the_later_run_could_not_measure_is_not_a_closed_channel(
+    tmp_path: Path,
+) -> None:
+    # `side_channel_effect_sizes` is keyed by tenant PAIR, so it matches no probe
+    # id, no surface and no headline-metric name: none of the three lost-coverage
+    # signals could reach it, and a dropped key became 0.0 in the diff. Keeping an
+    # unmeasured pair out of the signed record was only half the fix - the diff
+    # still read the absence as a drop to zero, and BOTH CI gates passed at exit 0
+    # on a side channel the later run could not measure.
+    pair = "a" * 32 + "->" + "b" * 32
+    earlier = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 9.0}))
+    later = _run(metrics=RunMetrics(side_channel_effect_sizes={}))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert f"[SIDE CHANNEL NOT REMEASURED] {pair}" in cli.output, cli.output
+    assert f"[not measured] side_channel_effect_sizes[{pair}]" in cli.output
+    assert "[ok] side_channel_effect_sizes" not in cli.output
+    assert "RESULT: REGRESSION" in cli.output
+    assert cli.exit_code == 2
+
+
+def test_an_erasure_surface_that_fell_back_to_the_fake_is_not_a_cleared_residual(
+    tmp_path: Path,
+) -> None:
+    # `scope_lost` is surface-keyed, but the verdict converted it into probe ids
+    # via PROBE_SURFACES and matched those against the metric name - discarding
+    # the surface key that `erasure_residue[<surface>]` needs. Every headline
+    # metric on the same run read `[not measured]`; the erasure line was the lone
+    # outlier, asserting the residual data was gone on the strength of a scan
+    # against the built-in fake.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 2})).model_copy(
+        update={"surface_provenance": {"vector_db": "LIVE"}}
+    )
+    later = _run(metrics=RunMetrics(erasure_residue={"vector_db": 0})).model_copy(
+        update={"surface_provenance": {"vector_db": "SYNTHETIC"}}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert "[not measured] erasure_residue[vector_db]" in cli.output, cli.output
+    assert "[ok] erasure_residue[vector_db]" not in cli.output
+
+
+def test_every_expanded_metric_map_treats_a_lost_key_as_unmeasured(tmp_path: Path) -> None:
+    # Each of these maps is keyed by something the probe-id lookup cannot reach -
+    # a surface, a tenant pair, an embedding model - and each had to be wired up
+    # separately as it was noticed, three times over three cycles. The flag is set
+    # where the 0.0 is filled in now, so this sweep covers the next map too.
+    # `per_probe_findings` is deliberately NOT here: it counts findings, so a
+    # probe that RAN and found nothing is absent from it, and the flag labelled
+    # that clean result "not measured". See the two tests below - its genuine
+    # coverage loss is caught by the stricter probe-id signal instead.
+    cases = {
+        "retrieval_pivot_rate_by_model": RunMetrics(retrieval_pivot_rate_by_model={"st:x": 0.9}),
+        "erasure_residue": RunMetrics(erasure_residue={"vector_db": 2}),
+        "side_channel_effect_sizes": RunMetrics(side_channel_effect_sizes={"a->b": 9.0}),
+        "erasure_caveats": RunMetrics(erasure_caveats={"backup": 3}),
+    }
+    for name, metrics in cases.items():
+        cli = CliRunner().invoke(
+            app,
+            [
+                "diff",
+                str(_write(tmp_path / f"{name}-e.json", _run(metrics=metrics))),
+                str(_write(tmp_path / f"{name}-l.json", _run(metrics=RunMetrics()))),
+            ],
+        )
+        line = next(x for x in cli.output.splitlines() if name in x and "[" in x)
+        assert line.strip().startswith("[not measured]"), line
+
+
+def test_a_probe_that_ran_and_found_nothing_does_not_read_not_measured(tmp_path: Path) -> None:
+    # `per_probe_findings` counts FINDINGS, so a probe that ran and found nothing
+    # is absent from it - `_exercised_probes` says exactly that. Marking its key
+    # lost printed `[not measured] per_probe_findings[rag-entity-bleed]: 5 -> 0`
+    # directly under `[ok] confirmed_findings: 5 -> 0`, for the same five
+    # findings, with nothing lost at all. A label that fires on a clean result
+    # teaches the reader to ignore it on a real one.
+    earlier = _run(*_carrying(5, probe_id="rag-x")).model_copy(
+        update={"probe_versions": {"rag-x": "1"}}
+    )
+    later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {"rag-x": "1"}})
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "clean-e.json", earlier)),
+            str(_write(tmp_path / "clean-l.json", later)),
+        ],
+    )
+    assert "[ok] per_probe_findings[rag-x]: 5 -> 0" in cli.output, cli.output
+    assert "[not measured] per_probe_findings" not in cli.output, cli.output
+
+
+def test_a_probe_that_did_not_run_still_reads_not_measured(tmp_path: Path) -> None:
+    # The other half: the same vanished key, but the later run never exercised the
+    # probe. `coverage_lost` reaches it through the probe id in the key - the
+    # stricter of the two signals, and the reason exempting this map is safe.
+    earlier = _run(*_carrying(5, probe_id="rag-x")).model_copy(
+        update={"probe_versions": {"rag-x": "1"}}
+    )
+    later = _run(metrics=RunMetrics()).model_copy(update={"probe_versions": {}})
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "lost-e.json", earlier)),
+            str(_write(tmp_path / "lost-l.json", later)),
+        ],
+    )
+    assert "[not measured] per_probe_findings[rag-x]: 5 -> 0" in cli.output, cli.output
+    assert "[COVERAGE LOST] rag-x" in cli.output, cli.output
+
+
+def test_a_headline_rate_the_later_run_never_measured_is_not_a_fixed_leak(tmp_path: Path) -> None:
+    # The four scalar rates fill an absent measurement with 0.0 exactly as the
+    # expanded maps do. `2c21f90` taught the MAPS that a filled 0.0 is not a
+    # measurement and left the SCALARS relaying it - the incomplete-fix shape, one
+    # commit later. Configuring a single live adapter leaves the other probes no
+    # live step, so all four go None at once while `confirmed_findings` holds:
+    # both gates then printed `[ok] 0.125 -> 0` four times and exited 0 on "no
+    # regression", every leak rate "fixed" by not having been measured.
+    measured = RunMetrics(
+        retrieval_pivot_rate=0.125,
+        poisoning_bleed_delta=1.0,
+        inversion_reconstruction_rate=1.0,
+        extraction_efficiency=0.18,
+    )
+    # `confirmed_findings` holds at 229 across both sides - that is the point, the
+    # rates go absent while the count does not - so both records carry the 229.
+    carried = _carrying(229)
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "measured.json", _run(*carried, metrics=measured))),
+            str(_write(tmp_path / "unmeasured.json", _run(*carried))),
+        ],
+    )
+    for name in (
+        "retrieval_pivot_rate",
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    ):
+        line = next(
+            x
+            for x in cli.output.splitlines()
+            if x.strip().endswith(f" {name}: 0.125 -> 0") or (name in x and "[" in x and "->" in x)
+        )
+        assert line.strip().startswith("[not measured]"), line
+
+
+def test_the_diff_recomputes_the_pivot_rate_from_the_records_own_counts(tmp_path: Path) -> None:
+    # `score` and both PDF engines recompute this from k of n; `diff` relayed the
+    # rate the record asserts about itself. A record whose counts say 95.4% while
+    # its rate field says 0.0 therefore gated CI green at `[ok] 0 -> 0` and
+    # printed 95.4% in the audit PDF bound to the same pack. Comparing a pack you
+    # did not produce is this command's documented use.
+    earlier = RunMetrics(retrieval_pivot_k=0, retrieval_pivot_n=350, retrieval_pivot_rate=0.0)
+    later = RunMetrics(retrieval_pivot_k=334, retrieval_pivot_n=350, retrieval_pivot_rate=0.0)
+    result = diff_runs(_run(metrics=earlier), _run(metrics=later))
+    pivot = next(d for d in result.metrics.deltas if d.name == "retrieval_pivot_rate")
+    assert pivot.baseline == 0.0
+    assert abs(pivot.current - 334 / 350) < 1e-12
+    assert pivot.regressed
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "rpr-e.json", _run(metrics=earlier))),
+            str(_write(tmp_path / "rpr-l.json", _run(metrics=later))),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] retrieval_pivot_rate" in cli.output, cli.output
+
+
+def test_a_side_channel_pair_whose_surface_lost_its_backing_is_not_measured(tmp_path: Path) -> None:
+    # `side_channel_effect_sizes` is keyed by tenant PAIR, so it names neither a
+    # probe id nor a surface: a key that SURVIVES while the model surface behind
+    # it falls back to the built-in fake matched no lookup, and read `[ok] 0.8 ->
+    # 0` beside that surface's own `[SCOPE LOST]` line.
+    pair = "00000000-0000-0000-0000-000000000001->00000000-0000-0000-0000-000000000002"
+    live = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 0.8})).model_copy(
+        update={"surface_provenance": {"model_adapter": "LIVE"}}
+    )
+    fake = _run(metrics=RunMetrics(side_channel_effect_sizes={pair: 0.0})).model_copy(
+        update={"surface_provenance": {"model_adapter": "SYNTHETIC"}}
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "sc-e.json", live)),
+            str(_write(tmp_path / "sc-l.json", fake)),
+        ],
+    )
+    line = next(x for x in cli.output.splitlines() if "side_channel_effect_sizes[" in x)
+    assert line.strip().startswith("[not measured]"), line
+    assert "[SCOPE LOST] model_adapter" in cli.output, cli.output
+
+
+def test_a_baseline_that_never_measured_is_not_rendered_as_a_clean_one(tmp_path: Path) -> None:
+    # The mirror of the lost-key fix, on the other side of the arrow. `baseline`
+    # fills an absent value with 0.0 exactly as `current` does, so
+    # `[REGRESSED] poisoning_bleed_delta: 0 -> 0.9` told the reader the earlier
+    # run measured zero - a clean run that has since broken - when it measured
+    # nothing at all. The same fill reaches every expanded map: a surface the
+    # earlier run never scanned read `erasure_residue[backup]: 0 -> 2`.
+    #
+    # The REGRESSION itself stands. Dropping it would let a doctored earlier
+    # record suppress the signal by omitting the metric - the "record chooses to
+    # be believed" shape - so this is a rendering fix, and the exit code is
+    # asserted below precisely so a later change cannot quietly weaken it.
+    earlier = _run(metrics=RunMetrics(erasure_residue={"vector_db": 1}))
+    later = _run(
+        metrics=RunMetrics(poisoning_bleed_delta=0.9, erasure_residue={"vector_db": 1, "backup": 2})
+    )
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "absent-e.json", earlier)),
+            str(_write(tmp_path / "absent-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] poisoning_bleed_delta: (not measured) -> 0.9" in cli.output, cli.output
+    assert "[REGRESSED] erasure_residue[backup]: (not measured) -> 2" in cli.output, cli.output
+    # A side that WAS measured still prints its number, on both sides.
+    assert "[ok] erasure_residue[vector_db]: 1 -> 1" in cli.output, cli.output
+
+
+def test_the_json_diff_says_which_side_of_a_metric_was_measured(tmp_path: Path) -> None:
+    # The text renderer refuses to state a fill as a value; the JSON stated a bare
+    # `0` for both sides and a consumer read it as a measurement. Same qualifier,
+    # both renderers - the rule this file has had to re-learn once per cycle.
+    earlier = _run(metrics=RunMetrics(retrieval_pivot_rate=0.4))
+    later = _run(metrics=RunMetrics(poisoning_bleed_delta=0.9))
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "js-e.json", earlier)),
+            str(_write(tmp_path / "js-l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    metrics = {m["name"]: m for m in json.loads(cli.stdout)["metrics"]}
+    # measured earlier, not measured later
+    assert metrics["retrieval_pivot_rate"]["baseline_measured"] is True
+    assert metrics["retrieval_pivot_rate"]["current_measured"] is False
+    # not measured earlier, measured later
+    assert metrics["poisoning_bleed_delta"]["baseline_measured"] is False
+    assert metrics["poisoning_bleed_delta"]["current_measured"] is True
+    # measured on NEITHER side: both are fills, so neither is a claim, and the
+    # line reads `[not measured] ... (not measured) -> (not measured)` rather
+    # than `[ok] ... 0 -> 0`, which asserted two runs had measured zero.
+    assert metrics["extraction_efficiency"]["baseline_measured"] is False
+    assert metrics["extraction_efficiency"]["current_measured"] is False
+    assert metrics["extraction_efficiency"]["verdict"] == "not measured"
+
+
+def test_an_unmeasured_headline_rate_fails_the_gate(tmp_path: Path) -> None:
+    # The label was fixed and the gate was not: `diff` printed `[not measured]`
+    # four times and exited 0 - saying plainly it could not compare, then
+    # greenlighting the pipeline. Configuring one live adapter leaves the other
+    # probes no live step, so all four go at once while `probe_versions` still
+    # lists every probe, and no other loss signal can fire.
+    measured = RunMetrics(
+        retrieval_pivot_rate=0.125,
+        poisoning_bleed_delta=0.125,
+        inversion_reconstruction_rate=0.125,
+        extraction_efficiency=0.125,
+    )
+    probes = {"probe_versions": {"rag-entity-bleed": "1", "rag-poisoning": "1"}}
+    earlier = _run(metrics=measured).model_copy(update=probes)
+    later = _run(metrics=RunMetrics()).model_copy(update=probes)
+    result = diff_runs(earlier, later)
+    assert result.metrics.headline_unmeasured == (
+        "retrieval_pivot_rate",
+        "poisoning_bleed_delta",
+        "inversion_reconstruction_rate",
+        "extraction_efficiency",
+    )
+    assert result.regressed
+    # No OTHER signal fires, so this one is load-bearing rather than incidental.
+    assert result.coverage_lost == () and result.scope_lost == ()
+
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "hu-e.json", earlier)),
+            str(_write(tmp_path / "hu-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[RATE NOT REMEASURED] retrieval_pivot_rate" in cli.output, cli.output
+    assert "RESULT: REGRESSION" in cli.output, cli.output
+
+
+def test_a_changed_embedding_model_list_does_not_fail_the_gate(tmp_path: Path) -> None:
+    # The counter-case, and the reason the gate keys on the four SCALARS rather
+    # than on `key_lost` everywhere: `retrieval_pivot_rate_by_model` is a modelled
+    # sweep the record labels as not a measurement of the store, and it degrades
+    # to `{}` whenever the sweep cannot run. Gating that would fail CI on an
+    # ordinary config change. It still LABELS the loss - the line reads
+    # `[not measured]` - it just does not gate.
+    earlier = _run(metrics=RunMetrics(retrieval_pivot_rate_by_model={"st:old": 0.9}))
+    later = _run(metrics=RunMetrics())
+    result = diff_runs(earlier, later)
+    assert result.metrics.headline_unmeasured == ()
+    assert not result.regressed
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "em-e.json", earlier)),
+            str(_write(tmp_path / "em-l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 0, cli.output
+    assert "[not measured] retrieval_pivot_rate_by_model (modelled)[st:old]" in cli.output, (
+        cli.output
+    )
+
+
+def test_the_json_diff_carries_every_gate_reason(tmp_path: Path) -> None:
+    # `headline_unmeasured` reached both TEXT renderers and not the JSON, so a
+    # consumer recomputing the verdict from the reason arrays read six empty
+    # lists over a run that exits 2 - a clean run, in machine-readable form.
+    probes = {"probe_versions": {"rag-entity-bleed": "1", "rag-poisoning": "1"}}
+    earlier = _run(
+        metrics=RunMetrics(retrieval_pivot_rate=0.125, poisoning_bleed_delta=0.125)
+    ).model_copy(update=probes)
+    later = _run(metrics=RunMetrics()).model_copy(update=probes)
+    cli = CliRunner().invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "gr-e.json", earlier)),
+            str(_write(tmp_path / "gr-l.json", later)),
+            "--output",
+            "json",
+        ],
+    )
+    payload = json.loads(cli.stdout)
+    assert payload["regressed"] is True
+    assert payload["headline_unmeasured"] == ["retrieval_pivot_rate", "poisoning_bleed_delta"]
+    # Every other reason array is empty, so this one is the only explanation the
+    # payload offers for the verdict - which is exactly why it had to be there.
+    for name in ("coverage_lost", "scope_lost", "boundary_lost", "erasure_lost"):
+        assert payload[name] == [], name
+
+
+def test_the_json_stream_carries_only_json(tmp_path: Path) -> None:
+    # The machine-readable modes write their document to stdout and every
+    # warning to stderr, so `... --output json > out.json` is parseable however
+    # noisy the run was. The suite asserted this by parsing the MERGED stream,
+    # which passes only while nothing happens to warn about - and a record with
+    # no surface provenance is exactly the case that should.
+    old = _write(tmp_path / "old.json", _run(_finding("a")))
+    new = _write(tmp_path / "new.json", _run(_finding("a"), _finding("b")))
+    result = runner.invoke(app, ["diff", str(old), str(new), "--output", "json"])
+    assert json.loads(result.stdout)["regressed"] is True
+    assert "surface provenance" in result.stderr, result.stderr
+    assert result.stderr not in result.stdout
+
+
+def test_an_erasure_surface_that_lost_its_delete_api_is_a_regression(tmp_path: Path) -> None:
+    # `_erasure_lost` unioned residue with caveats on BOTH sides, so a surface
+    # crossing from `erasure_residue` into `erasure_caveats` still counted as
+    # "scanned" and the gate never fired. That crossing is a backend swapped for
+    # one with no per-tenant delete API - the data is *presumed retained* - and its
+    # caveat findings are deliberately UNVERIFIED, so `newly_confirmed` could not
+    # fire either. Two confirmed residual leaks read `[ok] confirmed_findings:
+    # 2 -> 0` under `RESULT: no regression` at exit 0.
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        _finding("b", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=2, erasure_residue={"vector_db": 2}),
+    )
+    later = _run(
+        _finding("c", status=FindingStatus.UNVERIFIED),
+        metrics=RunMetrics(erasure_caveats={"vector_db": 0}),
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
+    assert "[ok] confirmed_findings" not in cli.output, cli.output
+
+
+def test_a_surface_that_gained_a_delete_api_is_not_a_regression(tmp_path: Path) -> None:
+    # The guard: caveat -> residue is coverage GAINED. Only the direction that
+    # loses a measurement gates.
+    earlier = _run(metrics=RunMetrics(erasure_caveats={"vector_db": 0}))
+    later = _run(metrics=RunMetrics(erasure_residue={"vector_db": 0}))
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 0, cli.output
+    assert "ERASURE NOT RESCANNED" not in cli.output, cli.output
+
+
+def test_a_changed_scenario_makes_every_metric_unmeasured(tmp_path: Path) -> None:
+    # `[SCENARIO CHANGED]` gates the run and never reached `_delta_verdict`, so
+    # every metric line above the banner still read `[ok] N -> 0` - the same
+    # positive assertion ("these leaks were fixed") that the banner one line below
+    # says is not a meaningful comparison. Different tenants, markers and corpus:
+    # the later number is a different measurement, not a smaller one.
+    # Both runs exercise the same probe against the same live surface, so no OTHER
+    # gate can account for the verdicts: `scenario_changed` is the only difference.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=1, per_probe_findings={"rag-entity-bleed": 1}),
+    ).model_copy(update=exercised)
+    later = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
+        update={**exercised, "scenario_hash": "a-different-scenario"}
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[SCENARIO CHANGED]" in cli.output, cli.output
+    assert "[ok]" not in cli.output, cli.output
+    payload = json.loads(
+        runner.invoke(
+            app,
+            [
+                "diff",
+                str(tmp_path / "e.json"),
+                str(tmp_path / "l.json"),
+                "--output",
+                "json",
+            ],
+        ).stdout
+    )
+    assert {m["verdict"] for m in payload["metrics"]} == {"not measured"}, payload["metrics"]
+
+
+def test_save_and_compare_together_are_refused(tmp_path: Path) -> None:
+    # `--save` returned before `--compare` was ever read, so on a documented CI
+    # gate the flag was silently ignored - and the run it ignored was the
+    # REGRESSING one, which then overwrote the baseline at exit 0. The regression
+    # was neither reported nor recoverable: the reference it would have failed
+    # against was gone. An ignored flag earns a warning elsewhere; this one
+    # destroys the evidence the gate exists to produce, so it fails closed.
+    earlier = _run(
+        _finding("a", status=FindingStatus.CONFIRMED), metrics=RunMetrics(confirmed_findings=1)
+    )
+    later = _run(
+        _finding("a", status=FindingStatus.CONFIRMED),
+        _finding("b", status=FindingStatus.CONFIRMED),
+        metrics=RunMetrics(confirmed_findings=2),
+    )
+    _write(tmp_path / "baseline.json", earlier)
+    _write(tmp_path / "run.json", later)
+    before = (tmp_path / "baseline.json").read_text()
+
+    refused = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save", "--compare"])
+    assert refused.exit_code == 3, refused.output
+    assert "not both" in refused.output, refused.output
+    # And it did not overwrite the reference on its way out.
+    assert (tmp_path / "baseline.json").read_text() == before
+
+    # Each flag on its own still works, and the gate still catches the regression.
+    gated = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert gated.exit_code == 2, gated.output
+    saved = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"])
+    assert saved.exit_code == 0, saved.output
+
+
+def test_a_record_whose_counts_contradict_its_own_findings_is_refused(tmp_path: Path) -> None:
+    # `diff` and `baseline --compare` are the only readers that take the headline
+    # counts off a LOADED record as fact; `score`, `report` and `pack` recount the
+    # findings. So zeroing `metrics.confirmed_findings` in a record that still
+    # carries 229 confirmed findings printed
+    #     [ok] confirmed_findings: 229 -> 0
+    #     RESULT: no regression
+    # at exit 0 - the CI-facing command asserting a fix - while `score` graded the
+    # same file F off the findings still in it. Inflating the earlier side is the
+    # same hole from the other direction: a REGRESSION at exit 2 that no finding
+    # supports.
+    #
+    # Refused rather than recounted: which half is wrong is not knowable here, and
+    # believing the findings over the count would read a truncated write as clean
+    # exactly as believing the count over the findings over-reports one.
+    honest = _run(*_carrying(3))
+    for name, doctored in (
+        ("deflated", honest.model_copy(update={"metrics": RunMetrics(confirmed_findings=0)})),
+        ("inflated", honest.model_copy(update={"metrics": RunMetrics(confirmed_findings=99)})),
+        (
+            "per-probe",
+            honest.model_copy(
+                update={
+                    "metrics": RunMetrics(
+                        confirmed_findings=3, per_probe_findings={"rag-entity-bleed": 1}
+                    )
+                }
+            ),
+        ),
+    ):
+        path = _write(tmp_path / f"{name}.json", doctored)
+        clean = _write(tmp_path / "honest.json", honest)
+        # Each side ALONE, not just both together: with only the `later` side ever
+        # doctored, dropping the `earlier` guard left this test passing - the
+        # one-sibling-not-the-other shape, inside the test written to stop it.
+        for earlier, later in ((clean, path), (path, clean), (path, path)):
+            cli = runner.invoke(app, ["diff", str(earlier), str(later)])
+            assert cli.exit_code == 3, f"{name}: {cli.output}"
+            assert "contradicts itself" in cli.output, f"{name}: {cli.output}"
+            assert "RESULT: no regression" not in cli.output, f"{name}: {cli.output}"
+        # `baseline --compare` is the other reader that trusts the counts, and it
+        # loads its two sides by different routes - the saved baseline through
+        # `_load_run_artifact`, the current run through `_load_run`. Guarding one
+        # route would leave the other open, which is how a rule keeps landing on
+        # one sibling and not the next.
+        for doctor_side in ("baseline.json", "run.json"):
+            workdir = tmp_path / f"{name}-{doctor_side}"
+            workdir.mkdir()
+            for leaf in ("baseline.json", "run.json"):
+                _write(workdir / leaf, doctored if leaf == doctor_side else honest)
+            cli = runner.invoke(app, ["baseline", "--workdir", str(workdir), "--compare"])
+            assert cli.exit_code == 3, f"{name}/{doctor_side}: {cli.output}"
+            assert "contradicts itself" in cli.output, f"{name}/{doctor_side}: {cli.output}"
+
+
+def test_a_terse_record_still_scores_and_reports(tmp_path: Path) -> None:
+    # The refusal belongs to the two commands that COMPARE records, not to the
+    # loaders they share. `score` grades off `run.findings` and never reads the
+    # headline counts, so a record whose metrics are terse cannot mislead it -
+    # and refusing there would reject the shape most of this suite's own fixtures
+    # use while buying no safety at all.
+    workdir = tmp_path / "terse"
+    workdir.mkdir()
+    terse = _run(_finding("a")).model_copy(update={"metrics": RunMetrics()})
+    _write(workdir / "run.json", terse)
+    cli = runner.invoke(app, ["score", "--workdir", str(workdir)])
+    assert "contradicts itself" not in cli.output, cli.output
+
+
+def test_a_record_that_records_no_per_probe_counts_at_all_still_loads(tmp_path: Path) -> None:
+    # The refusal above must not fire on `erasure`, which records its findings and
+    # leaves `per_probe_findings` empty - requiring the map to match would trade the
+    # false pass for a false alarm on an honest erasure record carrying a residual.
+    # The exemption is keyed on the two erasure WORKFLOW PROBES, not on the map
+    # being empty: "empty" is also what a gutted probe record looks like, so
+    # exempting the shape would leave every key deletable at once.
+    erasure_shaped = _run(*_carrying(2, probe_id="gdpr-erasure-verification")).model_copy(
+        update={"metrics": RunMetrics(confirmed_findings=2, erasure_residue={"vector_db": 2})}
+    )
+    path = _write(tmp_path / "erasure.json", erasure_shaped)
+    cli = runner.invoke(app, ["diff", str(path), str(path)])
+    assert cli.exit_code == 0, cli.output
+    assert "contradicts itself" not in cli.output, cli.output
+
+
+def test_deleting_a_per_probe_key_is_the_same_contradiction(tmp_path: Path) -> None:
+    # Checking only the keys the record still CARRIES let the hole through one
+    # granularity down: with `confirmed_findings` left truthful so the total
+    # agreed, deleting a single key printed
+    #     [ok] per_probe_findings[rag-entity-bleed]: 3 -> 0
+    #     RESULT: no regression
+    # at exit 0 over a record still carrying those three confirmed findings.
+    # `_per_probe_counts` emits a key for every probe with a confirmed finding, so
+    # in a POPULATED map a missing key is a deletion, never an omission.
+    honest = _run(*_carrying(3))
+    gutted = honest.model_copy(
+        update={"metrics": RunMetrics(confirmed_findings=3, per_probe_findings={})}
+    )
+    clean = _write(tmp_path / "honest.json", honest)
+    path = _write(tmp_path / "gutted.json", gutted)
+    for earlier, later in ((clean, path), (path, clean)):
+        cli = runner.invoke(app, ["diff", str(earlier), str(later)])
+        assert cli.exit_code == 3, cli.output
+        assert "contradicts itself" in cli.output, cli.output
+        assert "RESULT: no regression" not in cli.output, cli.output
+
+
+def test_an_a3_surface_that_stopped_being_scanned_fails_the_gate(tmp_path: Path) -> None:
+    # `_erasure_lost` was computed purely from `erasure_residue` and
+    # `erasure_caveats`, and the CLI writes a key into either only for a surface
+    # with `baseline_observed` - which the A3 `--subject` probe sets False on every
+    # surface, because it scans AFTER the controller's deletion. So no
+    # `erasure --subject` run writes into either dict, and this gate was
+    # structurally blind on the wedge SKU's own path.
+    #
+    # Keyed on WAS IT SCANNED, not on the coverage verdict. Reading the verdict is
+    # the obvious move and it is wrong in the worst direction - see the test below.
+    # The erasure commands record a `surface_provenance` row only for a surface
+    # actually in `report.surfaces`, so that is what separates "scanned" from
+    # "not scanned".
+    scanned = _run(
+        *_carrying(2, probe_id="gdpr-subject-erasure-verification"),
+        metrics=RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+    ).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
+    )
+    unscanned = _run(metrics=RunMetrics(erasure_coverage={"vector_db": "NOT_COVERED"}))
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "scanned.json", scanned)),
+            str(_write(tmp_path / "unscanned.json", unscanned)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[ERASURE NOT RESCANNED] vector_db" in cli.output, cli.output
+
+    # A surface that could not be scanned and now can is an improvement, not a
+    # regression, or every repaired backend fails CI.
+    back = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "unscanned2.json", unscanned)),
+            str(_write(tmp_path / "scanned2.json", scanned)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED]" not in back.output, back.output
+
+
+def test_the_run_that_proves_an_a3_erasure_worked_is_not_a_regression(tmp_path: Path) -> None:
+    # The direction the first version of this gate got wrong, and the reason it is
+    # keyed on provenance rather than on the coverage verdict. With no baseline the
+    # only verdicts an A3 surface can reach are RESIDUAL (the scan found the
+    # subject's data) and NOT_COVERED (it found nothing) - so `RESIDUAL ->
+    # NOT_COVERED` is the SUCCESSFUL DELETION, and gating on that verdict pair
+    # failed the very run that proves the remediation worked.
+    #
+    # Both runs SCANNED the surface; only what they found differs.
+    found = _run(
+        *_carrying(1, probe_id="gdpr-subject-erasure-verification"),
+        metrics=RunMetrics(erasure_coverage={"vector_db": "RESIDUAL"}),
+    ).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
+    )
+    # The same probe ran in both: a second A3 scan records its probe_versions like
+    # the first, and omitting it makes `[COVERAGE LOST]` fire for an unrelated
+    # reason - which would let this test pass while saying nothing.
+    purged = _run(metrics=RunMetrics(erasure_coverage={"vector_db": "NOT_COVERED"})).model_copy(
+        update={
+            "surface_provenance": {"vector_db": "LIVE"},
+            "probe_versions": {"gdpr-subject-erasure-verification": "1"},
+        }
+    )
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "found.json", found)),
+            str(_write(tmp_path / "purged.json", purged)),
+        ],
+    )
+    assert "[ERASURE NOT RESCANNED]" not in cli.output, cli.output
+    assert cli.exit_code == 0, cli.output
+
+
+def test_two_bounded_effect_sizes_are_incomparable_in_both_directions() -> None:
+    # The variance floor sits in `_cohens_d`'s DENOMINATOR, so a floored effect
+    # size is a LOWER BOUND on the true one. Two bounds therefore cannot be
+    # ordered - which `_dict_deltas`' caller already states ("Either run's floor
+    # makes the PAIR incomparable, so both sides count") and `MetricDelta.regressed`
+    # did not honour: it excluded only `informational`.
+    #
+    # So two bounds RISING read [REGRESSED] and failed CI at exit 2 over a number
+    # nobody measured, and two bounds FALLING read [ok] and passed. The field's own
+    # docstring calls it "rendering only"; this makes that true.
+    from sectum_ai.baseline import MetricDelta
+
+    rising = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=5.2, current=146.7, bounded=True
+    )
+    falling = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
+    )
+    assert not rising.regressed, "two lower bounds rising is not a measured regression"
+    assert not falling.regressed
+
+    # A measured pair is untouched - the real gate must keep working.
+    measured = MetricDelta(name="side_channel_effect_sizes[a|b]", baseline=5.2, current=146.7)
+    assert measured.regressed, "a measured rise must still regress"
+
+
+def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
+    # The verdict tag, not the prose suffix. The existing test pins only
+    # "bounds, not measurements" in the output, so `[ok] 146.7 -> 5.2` beside that
+    # caveat passed every assertion while asserting the opposite of it.
+    from sectum_ai.baseline import MetricDelta
+    from sectum_ai.cli.app import _delta_verdict
+
+    bounded = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
+    )
+    assert _delta_verdict(bounded, (), (), (), ()) == "not measured"

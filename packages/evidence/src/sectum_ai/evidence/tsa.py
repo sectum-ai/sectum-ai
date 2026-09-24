@@ -81,7 +81,7 @@ class Rfc3161Timestamper:
             TimestampRequestBuilder()
             .data(digest.encode("utf-8"))
             .hash_algorithm(HashAlgorithm.SHA256)
-            .cert_request()
+            .cert_request(cert_request=True)
             .build()
         )
         http_request = urllib.request.Request(
@@ -124,8 +124,9 @@ def verify_rfc3161_token(
     """
     try:
         from cryptography import x509
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes
         from rfc3161_client import (
-            VerificationError,
             VerifierBuilder,
             decode_timestamp_response,
         )
@@ -143,6 +144,18 @@ def verify_rfc3161_token(
         tsr = decode_timestamp_response(base64.b64decode(token_b64))
     except ValueError as error:
         raise EvidenceError(f"the RFC 3161 token is not a decodable response: {error}") from error
+    if leaf.fingerprint(hashes.SHA256()) != root.fingerprint(hashes.SHA256()):
+        # The library puts the leaf and the roots in ONE flat trust store, so a
+        # self-signed leaf terminates its own chain: supplying `--tsa-cert` alone
+        # silently replaced the pinned root instead of adding a leaf under it.
+        try:
+            leaf.verify_directly_issued_by(root)
+        except (ValueError, TypeError, InvalidSignature) as error:
+            raise EvidenceError(
+                "the supplied TSA certificate is not issued by the pinned root; supply "
+                "the matching root with --tsa-root, or the token is not anchored to a "
+                "trust anchor you pinned"
+            ) from error
     verifier = VerifierBuilder().tsa_certificate(leaf).add_root_certificate(root).build()
     try:
         # A token that decodes at the outer layer but is internally malformed
@@ -151,6 +164,6 @@ def verify_rfc3161_token(
         # the failure is a typed EvidenceError, not an uncaught crash.
         verifier.verify_message(tsr, digest.encode("utf-8"))
         gen_time: datetime = tsr.tst_info.gen_time
-    except (VerificationError, ValueError) as error:
+    except Exception as error:
         raise EvidenceError(f"the RFC 3161 token does not attest this digest: {error}") from error
     return gen_time

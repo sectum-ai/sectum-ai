@@ -47,7 +47,12 @@ SPECS = ["clip:clip-ViT-B-32"]
 pip install "sectum-ai[clip]"
 ```
 
-The image-RPR then reflects a production multi-modal retriever's real embeddings.
+The image-RPR then reflects a production multi-modal *embedder's* real vectors.
+It is still not a measurement of your store: CLIP changes the embedder, never the
+index, and the sweep always retrieves from Sectum's own shared image substrate. The
+Class 13 probe itself gates on `semantic_retrieval`, which no live vector kind the
+CLI builds declares, so against a real store the class reads `NOT_COVERED` — see
+[Known coverage gaps](../../docs/coverage.md#known-coverage-gaps).
 
 ## How the metric is computed
 

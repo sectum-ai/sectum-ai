@@ -11,9 +11,12 @@ atlas_techniques: []
 nist_rmf:
 - MEASURE 2.7
 surfaces:
-- vector_db
+- agent_memory
+- model_adapter
+- search_index
 - semantic_cache
 - tracing
+- vector_db
 requires_adapters:
 - vector_store
 - cache

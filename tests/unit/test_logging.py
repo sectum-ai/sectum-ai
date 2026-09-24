@@ -1,6 +1,7 @@
 """Tests for structured logging and its redaction guarantees (the spec, section 16)."""
 
 import json
+from typing import cast
 
 import pytest
 import structlog
@@ -287,3 +288,34 @@ def test_logging_resolves_stderr_at_write_time(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(sys, "stderr", second)
     log.warning("two")  # must not raise; writes to the live stderr
     assert "two" in second.getvalue()
+
+
+def test_a_key_that_contains_a_secret_word_is_redacted() -> None:
+    # Exact membership missed every key CONTAINING a secret word, while the
+    # config redactor - answering the same question about the same shapes -
+    # matched them by a word boundary. `secret_key`, `tsa_token`, `db_dsn` and
+    # `application_key` were logged in the clear by one path and redacted by the
+    # other; two redactors disagreeing about what a secret is means one is wrong.
+    from sectum_ai.spec._logging import _redact_value
+
+    redacted = cast(
+        "dict[str, object]",
+        _redact_value(
+            {
+                "secret_key": "s3cr3t",
+                "tsa_token": "t0ken",
+                "db_dsn": "postgresql://u:p@h/db",
+                "application_key": "ak",
+                # `*_env` names an environment VARIABLE, not the secret itself.
+                "api_key_env": "SECTUM_API_KEY",
+                # And an ordinary key is untouched.
+                "tokens_used": 42,
+                "probe_id": "rag-entity-bleed",
+            }
+        ),
+    )
+    for key in ("secret_key", "tsa_token", "db_dsn", "application_key"):
+        assert redacted[key] == "<redacted>", key
+    assert redacted["api_key_env"] == "SECTUM_API_KEY"
+    assert redacted["tokens_used"] == 42
+    assert redacted["probe_id"] == "rag-entity-bleed"

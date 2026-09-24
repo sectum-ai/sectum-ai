@@ -183,7 +183,7 @@ def test_an_unverified_finding_is_not_a_failure() -> None:
 def test_grading_a_run_that_exercised_nothing_is_refused() -> None:
     # Grading nothing would emit a letter that means nothing, and F would falsely read
     # as "failed" when the truth is "never tested".
-    with pytest.raises(ConfigError, match="nothing to grade"):
+    with pytest.raises(ConfigError, match="can be graded"):
         score_run(_run(ran=()))
 
 
@@ -227,7 +227,12 @@ def test_class_2_counts_free_headline_renders_a_clean_zero_rate() -> None:
     # pre-counts record `score` re-grades - is shown as it recorded itself. A clean 0.0 rate is
     # falsy but not None, so a truthiness check would drop the flagship RPR headline entirely.
     # This is a distinct branch from the k=0 counts path pinned just above (which recomputes).
-    assert _bleed_headline(RunMetrics(retrieval_pivot_rate=0.0)) == "0.0% RPR"
+    # The label is part of it: a rate with no counts is one the record asserts
+    # about itself, which `evidence/pdf.py` has always said out loud.
+    assert (
+        _bleed_headline(RunMetrics(retrieval_pivot_rate=0.0))
+        == "0.0% RPR (asserted by the record; no sample size recorded)"
+    )
 
 
 def test_class_2_headline_recomputes_the_rate_from_the_counts_not_the_records_claim() -> None:
@@ -318,7 +323,7 @@ def test_class_2_without_a_ci_still_shows_its_rate() -> None:
     # exactly as recorded rather than wearing an interval this grader invented.
     card = score_run(_run(ran=_ALL_PROBES, metrics=RunMetrics(retrieval_pivot_rate=0.954)))
     bleed = next(c for c in card.classes if c.class_id == 2)
-    assert bleed.headline == "95.4% RPR"
+    assert bleed.headline == "95.4% RPR (asserted by the record; no sample size recorded)"
 
 
 def test_every_catalog_class_appears_and_weights_are_declared() -> None:
@@ -456,9 +461,15 @@ def test_the_counts_free_classes_render_a_clean_zero_rate_headline() -> None:
         )
     )
     by_id = {c.class_id: c for c in card.classes}
-    assert by_id[3].headline == "0.0% poisoning bleed"
-    assert by_id[6].headline == "0.0% reconstruction"
-    assert by_id[10].headline == "0.0% extraction efficiency"
+    assert by_id[3].headline == (
+        "0.0% poisoning bleed (asserted by the record; no sample size recorded)"
+    )
+    assert by_id[6].headline == (
+        "0.0% reconstruction (asserted by the record; no sample size recorded)"
+    )
+    assert by_id[10].headline == (
+        "0.0% extraction efficiency (asserted by the record; no sample size recorded)"
+    )
 
 
 def test_a_class_that_did_not_run_carries_no_headline_or_findings() -> None:
@@ -560,12 +571,13 @@ def test_the_published_total_catalog_weight_is_41() -> None:
 
 def test_the_catalog_matches_the_published_methodology() -> None:
     # docs/scorecard.md publishes these exact values, and promises that a scorecard
-    # stamped v1.2 always recomputes to the same letter. The other tests compare the
+    # stamped with a given methodology version always recomputes to the same letter.
+    # The other tests compare the
     # output to the implementation's own constants, so both sides move together and a
     # silent change to what a published grade MEANS stays green. This pins the contract:
     # changing the catalog, a weight, or a threshold must break here and force a
     # METHODOLOGY_VERSION bump (and a docs update) rather than sliding through.
-    assert METHODOLOGY_VERSION == "1.2"
+    assert METHODOLOGY_VERSION == "1.4"
     assert [(entry.class_id, entry.severity) for entry in CATALOG] == [
         (1, Severity.CRITICAL),
         (2, Severity.CRITICAL),

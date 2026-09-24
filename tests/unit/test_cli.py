@@ -133,7 +133,17 @@ def test_baseline_maps_a_config_error_to_exit_3(tmp_path: Path) -> None:
 
 
 def _run_with(findings: tuple[Finding, ...]) -> RunResult:
+    """A run carrying `findings`, with the headline counts they imply.
+
+    Both producers derive `confirmed_findings` from the findings they record, and
+    `baseline --compare` refuses a record where the two disagree - so findings
+    under a bare `RunMetrics()` is a record `probe` could not write.
+    """
     moment = datetime(2026, 1, 1, tzinfo=UTC)
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    per_probe: dict[str, int] = {}
+    for finding in confirmed:
+        per_probe[finding.probe_id] = per_probe.get(finding.probe_id, 0) + 1
     return RunResult(
         run_id="r-1",
         scenario_hash="s",
@@ -141,7 +151,7 @@ def _run_with(findings: tuple[Finding, ...]) -> RunResult:
         started_at=moment,
         finished_at=moment,
         findings=findings,
-        metrics=RunMetrics(),
+        metrics=RunMetrics(confirmed_findings=len(confirmed), per_probe_findings=per_probe),
     )
 
 

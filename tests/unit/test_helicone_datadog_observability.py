@@ -380,3 +380,38 @@ def test_an_error_envelope_is_not_an_empty_tenant(payload: object) -> None:
 
     with pytest.raises(AdapterError):
         _data_list(payload, "helicone")
+
+
+def test_search_traces_refuses_a_capped_page_like_fetch_trace() -> None:
+    # Cycle 4 guarded `fetch_trace`; Class 11 scans with `search_traces` on the
+    # same single page, so a retained canary past the cap read as absent and a
+    # soft-delete backend attested ERASED.
+    from sectum_ai.spec import AdapterError
+
+    helicone = _FakeHelicone()
+    for _ in range(1000):
+        helicone.add(_TENANT_A.hex, "request body")
+    with pytest.raises(AdapterError, match="page cap"):
+        HeliconeObservability(helicone).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+    datadog = _FakeDatadog()
+    for _ in range(1000):
+        datadog.add(_TENANT_A.hex, "span")
+    with pytest.raises(AdapterError, match="page cap"):
+        DatadogObservability(datadog).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+
+
+def test_a_marker_found_on_a_full_page_is_still_reported() -> None:
+    # The refusal must not swallow a definite observation: a canary FOUND on a
+    # full page is residual data, and refusing it would lose a real erasure
+    # failure rather than prevent a false clean.
+    helicone = _FakeHelicone()
+    for index in range(999):
+        helicone.add(_TENANT_A.hex, f"request body {index}")
+    helicone.add(_TENANT_A.hex, "request body SECTUM-CANARY-AAA")
+    hits = HeliconeObservability(helicone).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")
+    assert [hit.snippet for hit in hits if "SECTUM-CANARY-AAA" in hit.snippet]
+    datadog = _FakeDatadog()
+    for index in range(999):
+        datadog.add(_TENANT_A.hex, f"span {index}")
+    datadog.add(_TENANT_A.hex, "span SECTUM-CANARY-AAA")
+    assert DatadogObservability(datadog).search_traces(_TENANT_A, "SECTUM-CANARY-AAA")

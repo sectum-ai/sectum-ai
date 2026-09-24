@@ -39,7 +39,7 @@ dev = [
     { name = "rfc3161-client", specifier = ">=1.0.8" },
     { name = "ruff", specifier = ">=0.16.3" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
-    { name = "weaviate-client", specifier = ">=4.21.3" },
+    { name = "weaviate-client", specifier = ">=4.23.0" },
 ]
 docs = [{ name = "mkdocs-material", specifier = ">=9.7.7" }]
 
@@ -1883,7 +1883,7 @@ wheels = [
 
 [[package]]
 name = "huggingface-hub"
-version = "1.27.0"
+version = "1.30.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1896,9 +1896,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3e/9b/ddf3d02a8681f1b9ce52fda03d755dad6b74c4f8172304c4c8d2975450f9/huggingface_hub-1.27.0.tar.gz", hash = "sha256:c1fed40ea82a6b41b477f5243546549b792ae0a93abcea608cff66089bf8f8df", size = 942668, upload-time = "2026-08-07T12:48:05.161Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/97/2eb4abaa5b969ed385066a0496a3823b3ff467fc1082e2202955f1867d60/huggingface_hub-1.30.0.tar.gz", hash = "sha256:e6a6120bc8c8e2723d03648434ee247088cceb55ba7067e7d34d692cad5fdb57", size = 964291, upload-time = "2026-09-03T10:05:14.053Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/d8/95b735e183957c1f26d94c52977f09d466d55119cbbc1558ea4975e4c216/huggingface_hub-1.27.0-py3-none-any.whl", hash = "sha256:7df6827c2f956c60fbaa64646e979e566db76f619dd0a9729dfb8c5a3eb4f68d", size = 784926, upload-time = "2026-08-07T12:48:02.905Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/0e/3e45bbe0dd48f4e56b1d46649d342de853cd1c7e815323472ab62687f153/huggingface_hub-1.30.0-py3-none-any.whl", hash = "sha256:96ae0a8e99a234374a6fe43e989ebd21c04640b91ab2927e7e5773ba1131ca59", size = 796795, upload-time = "2026-09-03T10:05:12.21Z" },
 ]
 
 [[package]]
@@ -5394,7 +5394,7 @@ requires-dist = [
     { name = "crewai", marker = "extra == 'crewai'", specifier = ">=1.15.1" },
     { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=3.13.1" },
     { name = "httpx", marker = "extra == 'phoenix'", specifier = ">=0.27" },
-    { name = "huggingface-hub", marker = "extra == 'tgi'", specifier = ">=1.26.1" },
+    { name = "huggingface-hub", marker = "extra == 'tgi'", specifier = ">=1.30.0" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=1.5.4" },
     { name = "langchain-core", marker = "extra == 'rag-langchain'", specifier = ">=1.5.4" },
     { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=4.14.0,<5" },
@@ -5416,7 +5416,7 @@ requires-dist = [
     { name = "sectum-ai-spec", editable = "packages/spec" },
     { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.4" },
     { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=5.14.1" },
-    { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9" },
+    { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.23.0" },
 ]
 provides-extras = ["pgvector", "chroma", "weaviate", "redis", "mem0", "phoenix", "langfuse", "langsmith", "mcp", "pinecone", "qdrant", "milvus", "opensearch", "azure-search", "langgraph", "autogen", "crewai", "huggingface", "vllm", "tgi", "openai-assistants", "anthropic-tooluse", "rag-langchain", "boto3", "gcs"]
 
@@ -6302,7 +6302,7 @@ wheels = [
 
 [[package]]
 name = "weaviate-client"
-version = "4.22.0"
+version = "4.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -6313,9 +6313,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "validators" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/34/2a/73cf7d6c7c6aa638738dfcb0d318e0404aab3c0673f82a1a4d89455b21a5/weaviate_client-4.22.0.tar.gz", hash = "sha256:0c50fbef546a522262a87d1138cde0509c7a8a48e702e967be33472e9f7fbae3", size = 860126, upload-time = "2026-06-18T06:08:30.202Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/9f/8bfe42e3c0693afa321fb712c0a1f1ff2b886059db33543120f6953dde8e/weaviate_client-4.23.0.tar.gz", hash = "sha256:19cc336b4c9e58f06cf01cb9aff8f6d8c0fe747f2e80192a9871c63823e8b18d", size = 873028, upload-time = "2026-08-13T14:23:08.112Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/a3/27353ea3fbf9e7d4f03375176a838c632d009f5167d801adcbb5f6d3bd07/weaviate_client-4.22.0-py3-none-any.whl", hash = "sha256:ff2dbc8d1fc25739942402c22d1aba2350a16ba4a6b6ed0ba140689c70adf1d9", size = 652691, upload-time = "2026-06-18T06:08:28.622Z" },
+    { url = "https://files.pythonhosted.org/packages/15/aa/8cafeb1c09901e8d220b00b771ffea35e5ea51db7d384dc85eff6cf667dc/weaviate_client-4.23.0-py3-none-any.whl", hash = "sha256:f17c645d22e1787e8fa4640e20fcfccdee39c81327af410c544a24c21d419e59", size = 656174, upload-time = "2026-08-13T14:23:06.583Z" },
 ]
 
 [[package]]

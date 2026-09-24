@@ -23,13 +23,17 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
+
+
+_UNREAD = object()
+"""Sentinel: the attribute was absent, which is not the same as a zero retention."""
 
 
 class GCSBackup(BackupAdapter):
@@ -95,25 +99,62 @@ class GCSBackup(BackupAdapter):
             self._bucket_meta = self._client.get_bucket(self._bucket)
         return self._bucket_meta
 
-    def _is_versioned(self) -> bool:
-        return bool(getattr(self._meta(), "versioning_enabled", False))
-
     def _soft_delete_retention_s(self) -> int:
-        # Buckets created since 2024 default to a 7-day soft-delete policy: a
-        # deleted object is restorable for that window, which a listing without
-        # `soft_deleted=True` cannot see - so the scan read it as purged.
-        policy = getattr(self._meta(), "soft_delete_policy", None)
-        return int(getattr(policy, "retention_duration_seconds", 0) or 0)
+        """Seconds a deleted object stays restorable, or raise if that cannot be read.
+
+        Buckets created since 2024 default to a 7-day soft-delete policy: a
+        deleted object is restorable for that window, which a listing without
+        `soft_deleted=True` cannot see - so the scan reads it as purged. A
+        non-zero retention is therefore the ONE thing standing between this
+        adapter and signing `backup: ERASED` over data GCS restores on request.
+
+        It read that guard with `getattr(..., 0) or 0`, so every way of failing
+        to read the policy - a client too old to model it, a response without the
+        field, a permission that hides it - collapsed into "there is no policy"
+        and the purge proceeded. That is the fail-open direction on the one check
+        that cannot be caught downstream, and it is the same rule this codebase
+        applies to a supplied-versus-observed count everywhere else: a number
+        nobody measured is not a measurement of zero.
+        """
+        meta = self._meta()
+        if not hasattr(meta, "soft_delete_policy"):
+            raise AdapterError(
+                f"cannot read the soft-delete policy of bucket {self._bucket!r} "
+                "(the installed google-cloud-storage does not model it), so a "
+                "deleted object may stay restorable and this surface cannot be "
+                "attested erased; upgrade the client or scope this run out"
+            )
+        policy = meta.soft_delete_policy
+        if policy is None:
+            # The client knows the field and the bucket has no policy.
+            return 0
+        retention: Any = getattr(policy, "retention_duration_seconds", _UNREAD)
+        if retention is _UNREAD:
+            raise AdapterError(
+                f"the soft-delete policy of bucket {self._bucket!r} carries no "
+                "retention duration, so whether a deleted object stays restorable "
+                "cannot be established and this surface cannot be attested erased"
+            )
+        return int(retention or 0)
 
     def _blobs(self, tenant: UUID) -> list[Any]:
         # With object versioning a delete makes the object noncurrent, not gone;
         # list every generation so the scan sees what is retained and the purge
         # removes each one (a blob listed with `versions=True` carries its
         # generation, which its `delete()` then targets).
-        prefix = self._tenant_prefix(tenant)
-        if self._is_versioned():
-            return list(self._client.list_blobs(self._bucket, prefix=prefix, versions=True))
-        return list(self._client.list_blobs(self._bucket, prefix=prefix))
+        #
+        # UNCONDITIONALLY, where this used to ask `versioning_enabled` first. The
+        # S3 sibling counts a bucket as versioned when the status is "Enabled" OR
+        # "Suspended", because suspending does not delete the generations already
+        # written; GCS has no suspended state to read - turning Object Versioning
+        # off flips the flag to False while every noncurrent generation stays
+        # restorable. The scan then saw none of them, the purge removed none of
+        # them, and the surface was signed `ERASED` over retained data. On a bucket
+        # that was never versioned each object has exactly one generation, so this
+        # listing is the same set the conditional produced.
+        return list(
+            self._client.list_blobs(self._bucket, prefix=self._tenant_prefix(tenant), versions=True)
+        )
 
     def add(self, tenant: UUID, text: str) -> None:
         # Name the object by a content hash so re-adding the same snapshot is idempotent
@@ -123,11 +164,27 @@ class GCSBackup(BackupAdapter):
         blob.upload_from_string(text.encode("utf-8"))
 
     def search(self, tenant: UUID, query: str) -> list[str]:
+        # The pre- AND post-erasure scan. A raw client failure here - a listing the
+        # role cannot make, a denied object - is not this contract's error type, so
+        # `_erase_surface`'s `except AdapterError` does not contain it and one
+        # unreadable bucket aborts the whole Article 17 run. The delete path was
+        # translated first; this is its sibling, and it is the one Class 11 calls
+        # twice per surface.
         query_tokens = _tokens(query)
         hits: list[str] = []
-        for blob in self._blobs(tenant):
+        try:
+            blobs = self._blobs(tenant)
+        except Exception as error:
+            raise AdapterError(f"GCS scan could not list the tenant's objects: {error}") from error
+        for blob in blobs:
             # tolerate a non-text object under the prefix rather than crashing the scan
-            text = blob.download_as_bytes().decode("utf-8", errors="replace")
+            try:
+                raw = blob.download_as_bytes()
+            except Exception as error:
+                raise AdapterError(
+                    f"GCS scan could not read {getattr(blob, 'name', '?')!r}: {error}"
+                ) from error
+            text = raw.decode("utf-8", errors="replace")
             if query_tokens & _tokens(text):
                 hits.append(text)
         return hits
@@ -144,7 +201,21 @@ class GCSBackup(BackupAdapter):
         # residue Class 11 erasure verification is built to catch.
         if self._soft_delete:
             return
-        retention = self._soft_delete_retention_s()
+        # Wrapped like the S3 sibling's listing (`s3.py`): a raw client failure
+        # here is not this contract's error type, so the operator saw
+        # `403 caller does not have storage.buckets.get access` where every other
+        # surface gives Sectum's own framing. The verdict was never wrong - the
+        # probe's containment is `except Exception` precisely because the erasure
+        # surfaces keep this unevenly - but `search` on this same adapter already
+        # wraps both of these calls and `delete` did not.
+        try:
+            retention = self._soft_delete_retention_s()
+        except AdapterError:
+            raise
+        except Exception as error:
+            raise AdapterError(
+                f"GCS purge could not read the bucket's soft-delete policy: {error}"
+            ) from error
         if retention:
             raise ErasureUnsupported(
                 f"the backup bucket keeps deleted objects restorable for {retention} s "
@@ -152,6 +223,28 @@ class GCSBackup(BackupAdapter):
                 "is presumed retained until it ages out"
             )
         # GCS deletes are per-object (no bulk delete_objects call, so no 1000-key cap
-        # to batch around, unlike the S3 sibling).
-        for blob in self._blobs(tenant):
-            blob.delete()
+        # to batch around, unlike the S3 sibling). That difference cost this adapter
+        # the sibling's partial-purge guard twice over: a failing `blob.delete()`
+        # raised the CLIENT's exception, which is not the adapter contract's error
+        # type and so escaped the erasure probe's per-surface containment and
+        # aborted the whole Article 17 run - and it stopped the loop at the first
+        # failure, leaving the later objects neither deleted nor named. Every object
+        # is attempted, and the error names them all, exactly as the S3 sibling's
+        # `Errors` list does.
+        failed: list[str] = []
+        try:
+            blobs = self._blobs(tenant)
+        except Exception as error:
+            raise AdapterError(f"GCS purge could not list the tenant's objects: {error}") from error
+        for blob in blobs:
+            try:
+                blob.delete()
+            except Exception as error:  # any client failure is a failed purge
+                failed.append(f"{getattr(blob, 'name', '?')} ({type(error).__name__})")
+        if failed:
+            raise AdapterError(
+                f"GCS purge left {len(failed)} object(s) in place ({', '.join(failed[:5])}"
+                f"{', ...' if len(failed) > 5 else ''}); a retention-locked / bucket-lock "
+                "bucket has no per-tenant purge - configure `no_erasure: true` so the "
+                "surface is attestable-with-caveat"
+            )

@@ -3,11 +3,16 @@
 from uuid import UUID
 
 from sectum_ai.adapters import FakeAgent
+from sectum_ai.adapters.base import AgentAdapter, AgentResult, Capability
 from sectum_ai.probes import AgentFrameworkHijackProbe, confirmed_findings
+from sectum_ai.probes.detection import dedupe_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
+    AccessOutcome,
+    FindingStatus,
     MarkerType,
     Scenario,
+    Severity,
     SharedEntity,
     Substrate,
     SyntheticTenantSpec,
@@ -61,6 +66,91 @@ def _users_substrate() -> Substrate:
     return build_substrate(scenario)
 
 
+def test_a_clean_agent_run_says_what_it_did_not_establish() -> None:
+    # The fourth by-id read: `lookup <marker_id>` across a principal boundary is
+    # one, and this class graded a bare PASS over exactly Class 1's evidence.
+    #
+    # Unconditional, unlike the three siblings' `AccessOutcome.EMPTY` gate. For
+    # them a RETURNED-but-clean read is real evidence - the backend handed back a
+    # DIFFERENT object, so it resolved the id in the caller's own scope. An agent
+    # narrates a refusal, a miss and a tool error identically, so gating on the
+    # outcome would have kept the caveat silent on every live agent framework -
+    # the case it exists for. FakeAgent pads a miss into "tool returned: ", which
+    # is itself a 200 with an empty body.
+    substrate = build_substrate(default_scenario(seed=2026))
+    runner = Runner(substrate, agent=_seeded_agent(substrate))
+    probe = AgentFrameworkHijackProbe()
+    findings = dedupe_findings([f for _, per_step in runner.run_per_step(probe) for f in per_step])
+
+    assert findings, "a scoped agent must not pass in silence"
+    assert {f.status for f in findings} == {FindingStatus.UNVERIFIED}, findings
+    assert all(f.severity is Severity.INFO for f in findings), findings
+    # The wording has to match what was observed: nothing was 200-empty here.
+    assert "narrates a refusal" in findings[0].evidence_span, findings[0].evidence_span
+    assert "200-empty" not in findings[0].evidence_span, findings[0].evidence_span
+
+    # It stays silent for a PAIR whose leak is proven - a caveat beside that pair's
+    # confirmed finding would say the probe could not establish what it just
+    # established. The probe plans two steps per pair, so the run is caveat-free only
+    # when every step leaks: under `confused_deputy` both the direct and the
+    # token-bearing lookup resolve cross-tenant.
+    leaky = Runner(substrate, agent=_seeded_agent(substrate, confused_deputy=True))
+    confirmed = dedupe_findings([f for _, per_step in leaky.run_per_step(probe) for f in per_step])
+    assert {f.status for f in confirmed} == {FindingStatus.CONFIRMED}, confirmed
+
+    # `tool_call_passthrough` alone is the Asana-class flaw where only the
+    # token-bearing step leaks, so a pair yields BOTH a confirmed finding and the
+    # caveat for its scoped step - the same shape the sibling `agent-tool-hijack`
+    # already produces. It moves no verdict: the class still FAILS on the confirmed
+    # finding, and an unverified one never flips a class.
+    passthrough = Runner(substrate, agent=_seeded_agent(substrate, tool_call_passthrough=True))
+    mixed = dedupe_findings(
+        [f for _, per_step in passthrough.run_per_step(probe) for f in per_step]
+    )
+    assert {f.status for f in mixed} == {FindingStatus.CONFIRMED, FindingStatus.UNVERIFIED}, mixed
+    assert confirmed_findings(mixed), "the leak is still reported"
+
+
+def test_the_caveat_does_not_say_the_agent_answered_when_it_returned_nothing() -> None:
+    # The caveat exists because "a caveat that misstates what was observed is the
+    # over-claim it exists to prevent" - and its wording was unconditional, so it
+    # asserted "the agent answered" over a response the very same Observation
+    # records as EMPTY. Both adapters that produce an empty output are wired into
+    # the CLI: LangGraph returns "" when a graph hits its recursion limit mid
+    # tool-loop, and the HTTP agent returns "" for any 200 whose body carries no
+    # `output` key. `FakeAgent` pads a miss into "tool returned: ", so no fixture
+    # built on it can reach this.
+    class _SilentAgent(AgentAdapter):
+        def __init__(self) -> None:
+            super().__init__(
+                "silent", frozenset({Capability.TOOL_INVOCATION, Capability.TENANT_SCOPED_TOOLS})
+            )
+
+        def run(self, tenant: UUID, task: str) -> AgentResult:
+            return AgentResult(output="", tool_calls=())
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = AgentFrameworkHijackProbe()
+    runner = Runner(substrate, agent=_SilentAgent())
+    results = runner.run_per_step(probe)
+    findings = dedupe_findings([f for _, per_step in results for f in per_step])
+
+    assert findings, "a silent agent must not pass in silence either"
+    span = findings[0].evidence_span
+    assert "returned no output at all" in span, span
+    assert "the agent answered" not in span, span
+    # The observation and the sentence beside it have to agree.
+    step = results[0][0]
+    assert runner._execute(step).access_outcome is AccessOutcome.EMPTY
+
+    # And an agent that DOES answer still gets the wording that describes that.
+    answering = Runner(substrate, agent=_seeded_agent(substrate))
+    answered = dedupe_findings(
+        [f for _, per_step in answering.run_per_step(probe) for f in per_step]
+    )
+    assert "the agent answered" in answered[0].evidence_span, answered[0].evidence_span
+
+
 def test_confused_deputy_agent_leaks_across_tenants() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     agent = _seeded_agent(substrate, confused_deputy=True)
@@ -100,18 +190,29 @@ def test_probe_findings_carry_the_agent_framework_surface() -> None:
     assert all(finding.surface.value == "agent_framework" for finding in findings)
 
 
-def test_user_level_steps_are_not_planned_for_an_interface_that_carries_no_user() -> None:
-    # `AgentAdapter.run(tenant, task)` carries no user, so a user-level step ran as
-    # the tenant and was judged as the user: on a tenant-isolated agent every
+def test_user_level_steps_are_dropped_and_counted_for_an_interface_with_no_user() -> None:
+    # `AgentAdapter.run(tenant, task)` carries no user, so a user-level step would
+    # run as the tenant and be judged as the user: on a tenant-isolated agent every
     # sibling user's marker in the tenant's own answer confirmed as a CRITICAL
-    # cross-user leak - of a session that never existed. The probe plans from
-    # tenants only; the MCP variant of Class 7 (whose `call_tool` carries `user`)
-    # owns the user-scope test.
+    # cross-user leak - of a session that never existed. The probe used to avoid
+    # that by not PLANNING those steps, which also meant the runner's drop path
+    # never fired: `user_steps_dropped` stayed empty, the audit PDF's "user-level
+    # steps not run" clause never printed, and `diff` never reported
+    # `[BOUNDARY LOST]` - the three things `docs/attack-catalog/index.md` promises
+    # for exactly this contract. They are planned and dropped now, so the pass says
+    # the user boundary was not tested rather than saying nothing.
     substrate = _users_substrate()
     steps = AgentFrameworkHijackProbe().plan(substrate)
-    assert all(step.actor_user_id is None for step in steps)
-    findings = Runner(substrate, agent=_seeded_agent(substrate)).run(AgentFrameworkHijackProbe())
-    assert confirmed_findings(findings) == []
+    assert any(step.actor_user_id is not None for step in steps), steps
+
+    probe = AgentFrameworkHijackProbe()
+    runner = Runner(substrate, agent=_seeded_agent(substrate))
+    results = runner.run_per_step(probe)
+    # No user step reaches the adapter, so the false positive stays prevented...
+    assert all(step.actor_user_id is None for step, _ in results)
+    assert confirmed_findings([f for _, findings in results for f in findings]) == []
+    # ...and the run now says how many it could not test.
+    assert runner.dropped_user_steps.get(probe.id, 0) > 0
 
 
 def test_fake_agent_default_is_non_leaky() -> None:

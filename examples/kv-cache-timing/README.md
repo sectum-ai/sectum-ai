@@ -37,13 +37,16 @@ two-sided **Welch's t-test** on the two latency distributions and
 reports the t-statistic, degrees of freedom, p-value, a 95% confidence
 interval on the gap, and Cohen's d.
 
-The two conditions are **interleaved**, alternating which is timed
-first, rather than measured as two blocks. Anything that drifts during
-a run — thermal throttling, CPU frequency scaling, a noisy neighbour —
-would otherwise land entirely on whichever block ran second and read as
-a timing gap. Alternating makes the two conditions' mean measurement
-positions equal, so a linear drift cancels instead of masquerading as a
-side channel.
+The two conditions are **interleaved in a per-pair seeded but exactly
+balanced order** (12 of each), rather than measured as two blocks.
+Anything that drifts during a run — thermal throttling, CPU frequency
+scaling, a noisy neighbour — would otherwise land entirely on whichever
+block ran second and read as a timing gap. Balance is what cancels a
+linear drift: it makes the two conditions' mean measurement positions
+equal. The order is shuffled rather than
+strictly alternating because a fixed ABBA schedule is itself a period-2
+signal — behind a round-robin dispatcher it manufactured 12 confirmed
+findings against a model with no cache at all.
 
 1. **`sectum-ai seed`** provisions four synthetic tenants (Acme, Globex,
    Initech, Hooli) and their canary markers.
@@ -90,10 +93,10 @@ Each Class 5 finding carries:
 - the surface (`KV_CACHE`) + OWASP / ATLAS / NIST control IDs the
   finding maps to
 
-The remediation pointer in the finding row names the standard
-counter-measure: per-tenant prefix-cache scoping (vLLM 0.5+'s
-`tenant_id` keying), or disabling the prefix cache entirely on
-shared deployments.
+The remediation pointer in the finding row reads `disable cross-tenant KV
+prefix-cache sharing`. In practice that means per-tenant prefix-cache keying if
+the serving engine supports it, or disabling the prefix cache on shared
+deployments.
 
 ## What's *not* in this example
 
@@ -101,9 +104,13 @@ shared deployments.
   `FakeModel` with the deliberately-leaky `prefix_cache=true` knob.
   Real engagements point at a self-hosted server via the
   `ModelAdapter` interface: the live `vllm` and `tgi` kinds are the
-  serving-only adapters built for this probe, and `huggingface` covers
-  the local PEFT case. A hosted API (OpenAI / Anthropic) exposes no
-  prefix cache to time, so there is no adapter for one.
+  serving-only adapters built for this probe. `huggingface` covers the
+  local PEFT case for *other* classes but not this one: HF + PEFT loads
+  per tenant and declares no shared prefix cache, so the probe runs
+  against it and can find nothing by construction — its `PASS` is a
+  property of the deployment, not a measurement. A hosted API (OpenAI /
+  Anthropic) exposes no prefix cache to time, so there is no adapter for
+  one.
 - **A statistical baseline against load.** A noisy production
   endpoint may swamp the signal even when the cache is leaky; the
   probe's 24 trials + (p < 0.01 / ordered tenant pairs, Bonferroni; d ≥ 0.8) gate is calibrated for the

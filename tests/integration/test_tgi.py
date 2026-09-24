@@ -41,8 +41,18 @@ def _adapter() -> TGIModel:
 
 def test_tgi_live_infers_and_times() -> None:
     adapter = _adapter()
-    completion = adapter.infer(_TENANT, "The capital of France is")
+    prompt = "The capital of France is"
+    completion = adapter.infer(_TENANT, prompt)
     assert isinstance(completion, str)
+    # `ModelAdapter.infer`'s contract: the COMPLETION ONLY, never an echo of the
+    # prompt. The erasure probe prompts with the canary it scans for, so an
+    # adapter that echoed would fabricate a confirmed "residual" about data that
+    # was never stored. `huggingface_hub` leaves `return_full_text` to the server,
+    # whose default prepends the prompt on the compat route for a text-generation
+    # model, so this is the assertion that catches the pin being dropped.
+    assert not completion.startswith(prompt), (
+        f"TGI echoed the prompt back: {completion[: len(prompt) + 40]!r}"
+    )
     latency_ms = adapter.measure_latency(_TENANT, "The capital of France is")
     assert latency_ms > 0
 

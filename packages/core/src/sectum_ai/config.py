@@ -47,6 +47,7 @@ from sectum_ai.adapters import (
     AgentAdapter,
     BackupAdapter,
     CacheAdapter,
+    Capability,
     EvalSetAdapter,
     FakeAgent,
     FakeAppApi,
@@ -78,7 +79,7 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError, SurfaceProvenance
+from sectum_ai.spec import AdapterError, ConfigError, DetectionProvenance, SurfaceProvenance
 
 
 class ScenarioConfig(BaseModel):
@@ -555,7 +556,55 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
 
 
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
-    """Build the vector-store adapter the config selects."""
+    """Build the vector-store adapter the config selects.
+
+    Every LIVE kind is handed `_hashing_embed`, so none of them ranks
+    semantically and the capability has to say so - see `_lexically_ranked`.
+    Applied here rather than at each of the eight returns so a kind added later
+    cannot miss it.
+    """
+    store = _build_vector_store(config)
+    # The built-in fake keeps the declaration it documents as an exception
+    # (`VectorStoreAdapter.semantic_retrieval`): its Class 6/13 numbers are the
+    # demo exercising the probe, and every example that reports them says so.
+    return store if store.synthetic else _lexically_ranked(store)
+
+
+def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
+    """Mark a store the CLI backs with ``_hashing_embed`` as not semantically ranked.
+
+    ``VectorStoreAdapter.semantic_retrieval`` defaults ``True`` "because every LIVE
+    store Sectum ships is embedding-backed" - which is not true of the ones this
+    resolver builds. There is no config path to a real embedding model for a vector
+    store (``EmbedderConfig`` is the DETECTION pipeline's), so every live kind gets
+    ``_hashing_embed``: a bag-of-tokens counter where synonyms score 0.000, word
+    order is ignored, and a strict token SUBSET of a canary scores 0.894.
+
+    That is exactly the case the capability's own docstring says must declare
+    ``False``: "Run either against a store that matches on substrings instead, and a
+    keyword hit gets recorded as embedding inversion - a real finding attributed to a
+    mechanism the backend does not have." Class 6 queries
+    ``marker.plaintext.rsplit("-", 1)[0]``, which IS that subset, so it retrieved the
+    canary lexically and shipped the finding stamped ``AML.T0024.001 Invert ML
+    Model``. Classes 6 and 13 now report NOT_COVERED - the honest verdict for a check
+    that could not be performed.
+
+    Set per instance, like ``carries_user`` and ``synthetic``. Give the resolver a
+    real embedder and this is the one place to revisit.
+
+    The CAPABILITY has to be withdrawn too, not just the flag:
+    ``VectorStoreAdapter.__init__`` folds ``semantic_retrieval`` into the frozen
+    capability set at construction, so assigning the attribute afterwards leaves
+    ``supports(SEMANTIC_RETRIEVAL)`` true - and the capability is what
+    ``_runnable_probes`` actually gates on. Setting only the flag looks like a fix
+    and changes nothing.
+    """
+    store.semantic_retrieval = False
+    store.capabilities = store.capabilities - {Capability.SEMANTIC_RETRIEVAL}
+    return store
+
+
+def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeVectorStore(
@@ -690,6 +739,17 @@ def build_cache(config: AdapterConfig) -> CacheAdapter:
             soft_delete=_bool(extras, "soft_delete", False),
         )
     if config.kind == "redis":
+        if _bool(extras, "soft_delete", False):
+            # Accepted and dropped: `FakeCache` and the Redis MEMORY adapter both
+            # honour this knob, so an operator validating that Sectum catches cache
+            # residue got a clean run from a setting that never took effect. The
+            # resolver has one precedent for a knob a kind cannot honour - mem0 and
+            # `user_scoped`, below - and this is the same situation.
+            raise ConfigError(
+                "cache kind 'redis' does not support soft_delete - RedisCache deletes "
+                "the key outright, so the knob would model residue the backend cannot "
+                "produce; use kind 'fake' to exercise that path"
+            )
         with _optional_extra("redis"):
             from sectum_ai.adapters.cache.redis import RedisCache
 
@@ -1245,9 +1305,10 @@ def build_agent(config: AdapterConfig) -> AgentAdapter:
             )
         return OpenAIAssistantsAgent(client, assistant_id)
     if config.kind == "anthropic-tooluse":
-        # A live Anthropic native tool-use agent is wired in code (the tool
-        # specs are Python objects carrying a ``__sectum_callable__`` sidecar
-        # so the backend can execute them in the tool-use loop). The resolver
+        # A live Anthropic native tool-use agent is wired in code (each tool is
+        # the python callable itself, carrying its spec as a
+        # ``__sectum_tool_spec__`` attribute, so the backend can execute it in
+        # the tool-use loop). The resolver
         # expects a client-factory callable referenced by
         # ``module.path:callable`` that returns an object implementing the
         # ``_AnthropicClient`` protocol the adapter consumes — typically the
@@ -1328,6 +1389,37 @@ def adapter_config(
         )
 
 
+def build_vector_slot(
+    config: SectumConfig, default: AdapterConfig | None = None
+) -> VectorStoreAdapter:
+    """The adapter filling the vector slot: the `app` resource API, or a store.
+
+    `app` and `vector_store` both fill this slot - the app's resource API is
+    probed through the same contract. Configuring both is a real ambiguity about
+    which system is under test, so it is refused rather than silently resolved.
+
+    Shared with `sectum-ai erasure`, which read `vector_store` directly and so
+    ignored a configured `app` entirely: it built a clean default fake, dropped
+    that adapter's `soft_delete` knob with it, and attested ERASURE VERIFIED
+    against a backend the operator never configured.
+    """
+    # The caller's default, not a fresh one: `erasure --soft-delete` passes a
+    # default carrying that flag, and building our own dropped it - so the run
+    # attested ERASED on the one surface the flag exists to make fail.
+    fake = default if default is not None else AdapterConfig(kind="fake")
+    app = config.adapters.get("app")
+    if app is not None and "vector_store" in config.adapters:
+        raise ConfigError(
+            "configure either 'app' or 'vector_store', not both: each fills the same "
+            "adapter slot, so a run carrying both cannot say which system it probed"
+        )
+    if app is not None:
+        with adapter_config(config, "app", fake) as cfg:
+            return build_app(cfg)
+    with adapter_config(config, "vector_store", fake) as cfg:
+        return build_vector_store(cfg)
+
+
 def build_adapters(config: SectumConfig) -> AdapterBundle:
     """Build every adapter the CLI's probe suite needs.
 
@@ -1337,18 +1429,7 @@ def build_adapters(config: SectumConfig) -> AdapterBundle:
     # `app` and `vector_store` both fill the vector slot - the app's resource API is
     # probed through the same contract. Configuring both is a real ambiguity about
     # which system is under test, so it is refused rather than silently resolved.
-    app = config.adapters.get("app")
-    if app is not None and "vector_store" in config.adapters:
-        raise ConfigError(
-            "configure either 'app' or 'vector_store', not both: each fills the same "
-            "adapter slot, so a run carrying both cannot say which system it probed"
-        )
-    if app is not None:
-        with adapter_config(config, "app", fake) as cfg:
-            vector: VectorStoreAdapter = build_app(cfg)
-    else:
-        with adapter_config(config, "vector_store", fake) as cfg:
-            vector = build_vector_store(cfg)
+    vector = build_vector_slot(config)
     with adapter_config(config, "cache", fake) as cfg:
         cache = build_cache(cfg)
     with adapter_config(config, "model", fake) as cfg:
@@ -1474,5 +1555,20 @@ def build_detection_providers(config: DetectionConfig) -> DetectionProviders:
     return DetectionProviders(
         embedder=build_embedder(config.embedder),
         judge=build_judge(config.judge),
+        semantic_threshold=resolve_semantic_threshold_config(config),
+    )
+
+
+def detection_provenance(config: DetectionConfig) -> DetectionProvenance:
+    """What the run's detector actually was, for the record.
+
+    The RESOLVED threshold, never the literal "auto": the record has to say the
+    number that ran, because that is the one a reader would have to reproduce.
+    """
+    return DetectionProvenance(
+        embedder_kind=config.embedder.kind,
+        embedder_model=config.embedder.model,
+        judge_kind=config.judge.kind,
+        judge_model=config.judge.model,
         semantic_threshold=resolve_semantic_threshold_config(config),
     )

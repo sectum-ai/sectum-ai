@@ -52,13 +52,19 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sectum_ai.evidence.controls import (
     COVERAGE_DISCLAIMER,
     ERASURE,
+    ERASURE_SURFACES,
     control_mappings,
     erasure_scanned_surfaces,
     live_surfaces,
     mapping_requirement,
 )
-from sectum_ai.evidence.labels import backing_surface, leak_label
-from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus
+from sectum_ai.evidence.labels import (
+    backing_surface,
+    is_cross_principal,
+    leak_label,
+    unaccounted_surfaces,
+)
+from sectum_ai.spec import CoverageVerdict, Finding, FindingStatus, SurfaceProvenance
 
 if TYPE_CHECKING:
     from sectum_ai.spec import ControlMapping, RunResult
@@ -117,6 +123,20 @@ def _prop(name: str, value: str) -> dict[str, str]:
     return {"name": name, "value": value, "ns": _PROP_NS}
 
 
+def _scope_prefix(recorded: str | None) -> str:
+    """The description prefix stating which stack an observation describes.
+
+    Three-valued, like the property beside it: the prose stayed two-valued when
+    the label went three-valued, so an UNRECORDED surface was told it describes
+    the built-in fake - stating something the record does not.
+    """
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - describes Sectum's built-in fake, not the operator's stack] "
+
+
 def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
     """Build one OSCAL ``observation`` from a Sectum finding.
 
@@ -138,8 +158,16 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
         f"observed in tenant {finding.observed_in_tenant_id}"
     )
+    # Which stack the observation describes, per ROW. OSCAL states it once for the
+    # run and gates its control findings on it, but a GRC platform tabulates these
+    # observations - and a row from the built-in fake tabulated identically to one
+    # from production. The SARIF projection carries it per result for the same
+    # reason; this is its sibling.
+    backing = backing_surface(finding)
+    provenance = run.surface_provenance.get(backing, "UNRECORDED")
     description = (
-        f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
+        _scope_prefix(run.surface_provenance.get(backing))
+        + f"Sectum AI probe {finding.probe_id!r} tested tenant isolation on the "
         f"{finding.surface.value} surface. {finding.status.value.upper()} "
         f"{finding.severity.value} {leak_label(finding)}: {evidence}"
     )
@@ -151,6 +179,8 @@ def _observation(run: RunResult, finding: Finding) -> dict[str, Any]:
         _prop("sectum-surface", finding.surface.value),
         _prop("sectum-owner-tenant-id", str(finding.owner_tenant_id)),
         _prop("sectum-observed-in-tenant-id", str(finding.observed_in_tenant_id)),
+        _prop("sectum-backing-surface", backing),
+        _prop("sectum-surface-provenance", provenance),
     ]
     if finding.marker_id is not None:
         props.append(_prop("sectum-marker-id", finding.marker_id))
@@ -206,13 +236,42 @@ def _finding(
     Returns:
         An OSCAL finding object as a JSON-serialisable ``dict``.
     """
+    # "Cross-principal" spans the USER boundary as well as the tenant one, and a run
+    # whose adapter cannot carry a user identity never exercised the user half - the
+    # attack catalog says so in as many words: "a pass which says the user boundary
+    # was not tested - never that it held." The audit PDF was the only renderer that
+    # read `user_steps_dropped`, so this control verdict asserted the whole of what
+    # the run had tested half of. Same for a plant the backend swallowed: the class
+    # was graded on setup that never landed.
+    narrowed = "".join(
+        (
+            " The user boundary was not exercised on every probe: user-level steps "
+            "were not run where the adapter cannot carry a user identity, so this "
+            "states the tenant boundary."
+            # On the VALUES, like `pdf.probes_exercised` (`if n`) and `_score_class`
+            # (`sum(...)`): a record carrying `{"rag-poisoning": 0}` is a record that
+            # dropped nothing, and dict truthiness said otherwise.
+            if any(run.metrics.user_steps_dropped.values())
+            else "",
+            " Some planted data never came back from the backend, so part of this "
+            "was graded on setup that did not land."
+            if any(run.metrics.unconfirmed_plants.values())
+            else "",
+        )
+    )
     if mapping_requirement(mapping) == ERASURE:
         objective = "erasure verification"
         failed = has_residual
         verdict = (
-            "Sectum AI found markers remaining, or presumed retained, after the erasure "
-            f"on {', '.join(residual_surfaces)}; the erasure objective is not satisfied "
-            "for this run."
+            # Three distinct failures reach this line - a marker still retrievable,
+            # a surface with no per-tenant erasure API, and a scan that could not
+            # rule the markers out - and stating the first two over the third
+            # asserted a residue the run never measured. `_erasure_assertion` names
+            # which is which in this same finding's `description`.
+            "Sectum AI could not verify the erasure on "
+            f"{', '.join(residual_surfaces)}: a marker remained, the data is presumed "
+            "retained, or its absence could not be established; the erasure objective "
+            "is not satisfied for this run."
             if failed
             else "Sectum AI verified the erasure on every live surface it scanned for this run."
         )
@@ -225,7 +284,7 @@ def _finding(
             "for this run."
             if failed
             else "Sectum AI tested tenant isolation across the live configured AI "
-            "surfaces and confirmed no cross-principal leakage for this run."
+            "surfaces and confirmed no cross-principal leakage for this run." + narrowed
         )
     state = _STATE_NOT_SATISFIED if failed else _STATE_SATISFIED
     return {
@@ -315,16 +374,78 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # a caveat surface (no per-tenant erasure API, data presumed retained) emits
     # UNVERIFIED findings, and "verified the erasure on every live surface" was
     # rendered over three markers presumed retained.
+    # `erasure_scanned_surfaces` drops NOT_COVERED, so a surface the run SCANNED
+    # but could not clear was invisible here - the same hole `_erasure_assertion`
+    # had, fixed there and not here. It made this export state `satisfied` and
+    # "verified the erasure on every live surface it scanned" INSIDE a description
+    # whose own prose said absence could not be established. A live surface that
+    # is NOT_COVERED is scanned-and-unestablished (`erasure` records provenance
+    # only for the surfaces in its report), and it is a failure like any other.
+    scanned = erasure_scanned_surfaces(run)
+    erasure_run = bool(run.metrics.erasure_coverage)
+    # Keyed on the LIVE surfaces, not on the coverage block's own keys. A live
+    # surface absent from the block entirely was never iterated, so it was neither
+    # verified nor unestablished - it vanished, and this export stated `satisfied`
+    # plus "verified the erasure on every live surface it scanned" in a finding
+    # whose `description` carried `controls._erasure_assertion`'s own words:
+    # "absence could not be established on semantic_cache. This run is not an
+    # attestation." A GRC platform reads `status.state`. `ErasureReport.coverage()`
+    # defaults exactly this case to NOT_COVERED, and `_erasure_assertion` already
+    # defaults it that way - the same hole, fixed there and not here, twice now.
+    coverage = (
+        {
+            surface: run.metrics.erasure_coverage.get(surface, CoverageVerdict.NOT_COVERED.value)
+            # Only the surfaces an erasure scan can reach. Keyed on every LIVE
+            # surface, a record whose provenance also named an isolation-only one
+            # reported "could not verify the erasure on mcp" and flipped GDPR
+            # Article 17 to not-satisfied - mcp is not an unverified erasure
+            # surface, it is not an erasure surface. `_erasure_assertion` narrows
+            # the same way, from the same constant, or the two disagree again.
+            for surface in live & ERASURE_SURFACES
+        }
+        if erasure_run
+        else {}
+    )
     residual_surfaces = tuple(
         sorted(
             s
-            for s, v in run.metrics.erasure_coverage.items()
-            if s in erasure_scanned_surfaces(run) and v != CoverageVerdict.ERASED.value
+            for s, v in coverage.items()
+            if (s in scanned and v != CoverageVerdict.ERASED.value)
+            or v == CoverageVerdict.NOT_COVERED.value
         )
     )
-    has_confirmed_leak = any(leak_label(f) != "residual-data finding" for f in attested)
+    has_confirmed_leak = any(is_cross_principal(f) for f in attested)
     has_residual = bool(residual_surfaces)
-    erasure_run = bool(run.metrics.erasure_coverage)
+    # `attested` keeps findings whose surface the block records as LIVE, and the
+    # `synthetic` exclusion below covers the ones it records as a fake. A confirmed
+    # finding on a surface the block never recorded AT ALL is in neither set, so it
+    # simply vanished: ninety confirmed cross-tenant leaks on an unrecorded surface
+    # left all twenty controls reading `satisfied`, while the audit PDF named them
+    # ("placed on no stack at all"), `verify`'s run-scope gate flagged them and
+    # `score` graded F and capped at critical (rule 7). A GRC platform reads
+    # `status.state`, so this export was the one that mattered and the one that lied.
+    #
+    # It is NOT rule 5's case: there the record positively states the surface was
+    # Sectum's own fake, which is not evidence against the operator. Here it states
+    # nothing, so the leak may well be on their stack - and `not-satisfied` would
+    # assert a failure this run cannot place either. So the control is not asserted
+    # at all, the same refusal the synthetic-only run makes below and the scorecard's
+    # rule 1: never imply a stack passed a check nobody can say it was given.
+    unplaceable = [
+        finding
+        for finding in run.findings
+        if finding.status is FindingStatus.CONFIRMED
+        and backing_surface(finding) in unaccounted_surfaces(run)
+    ]
+    unplaceable_isolation = any(is_cross_principal(f) for f in unplaceable)
+    # Narrowed to the surfaces an erasure scan can reach, the way `coverage` and
+    # `controls._erasure_assertion` both are: routing by principals alone withheld
+    # GDPR Article 17 and CCPA 1798.105 over a residue finding on `mcp`, which no
+    # erasure probe scans - and said they "would otherwise have read satisfied on
+    # that evidence", which they would not.
+    unplaceable_erasure = any(
+        not is_cross_principal(f) and backing_surface(f) in ERASURE_SURFACES for f in unplaceable
+    )
     observations = [_observation(run, finding) for finding in run.findings]
     observation_uuids = [observation["uuid"] for observation in observations]
 
@@ -336,7 +457,19 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     # a production result a demo run cannot support. The observations still ship
     # (they are what the run saw); the control findings do not - and
     # `control_mappings` returns none for such a run.
+    withheld_controls: list[str] = []
     for mapping in control_mappings(run):
+        erasure_control = mapping_requirement(mapping) == ERASURE
+        # Only a verdict that would read `satisfied` is withheld. A control already
+        # failing on placeable evidence keeps its `not-satisfied`: an unplaceable
+        # finding must never earn a pass, and must never erase a fail either.
+        if (unplaceable_erasure if erasure_control else unplaceable_isolation) and not (
+            has_residual if erasure_control else has_confirmed_leak
+        ):
+            withheld_controls.extend(
+                cid for cid in mapping.control_ids if cid not in withheld_controls
+            )
+            continue
         for control_id in mapping.control_ids:
             if control_id not in reviewed_control_ids:
                 reviewed_control_ids.append(control_id)
@@ -351,6 +484,26 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                     observation_uuids=observation_uuids,
                 )
             )
+    # The surfaces of the UNPLACEABLE findings, not `unaccounted_surfaces`, which is
+    # status-blind: prefixing its list with "Confirmed" changed the claim's truth
+    # conditions, and the sentence named surfaces carrying only unverified
+    # candidates. The two sibling renderers say the true, neutral thing ("findings
+    # also rest on ..."); this one asserts more than they do, so it must count less.
+    unplaced_surfaces = sorted({backing_surface(finding) for finding in unplaceable})
+    unplaced = (
+        " Confirmed findings in this run rest on "
+        f"{', '.join(unplaced_surfaces)}, which its provenance block never "
+        "recorded: whether those were live backends or Sectum's built-in fakes cannot "
+        "be established from this pack."
+        + (
+            " No verdict is stated for the control(s) that would otherwise have read "
+            f"satisfied on that evidence: {', '.join(withheld_controls)}."
+            if withheld_controls
+            else ""
+        )
+        if unplaceable
+        else ""
+    )
     synthetic = sorted(set(run.surface_provenance) - live)
     excluded = (
         " Surfaces that ran against the built-in fake and are excluded from every "
@@ -360,38 +513,67 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
     )
 
     if not live:
+        # `unplaced` belongs here too. "The observations describe that synthetic
+        # stack, not any production system" is an over-claim about a finding resting
+        # on a surface the block never recorded: the record says nothing about that
+        # surface, so those observations may well describe the operator's live one.
+        # Both sibling renderers already narrow this branch - `pdf.provenance_statement`
+        # and `verify`'s run-scope both append the same trailer - and this is the copy
+        # a GRC platform reads.
         result_description = (
             "Sectum AI ran its probes against its own built-in synthetic stack only "
             "(or recorded no surface provenance): no surface in this run is known to "
             "be a live, configured backend, so no control objective was assessed and "
             "no control finding is stated. The observations describe that synthetic "
-            "stack, not any production system."
-        )
-    elif erasure_run and not has_confirmed_leak:
-        result_description = (
-            "Sectum AI scanned an erasure across the live configured AI surfaces. "
-            + (
-                f"Markers remained, or were presumed retained, on {', '.join(residual_surfaces)}; "
-                "see the observations and findings."
-                if has_residual
-                else "No marker remained on any live surface scanned."
-            )
-            + excluded
-        )
-    elif has_confirmed_leak:
-        result_description = (
-            "Sectum AI provisioned synthetic tenants seeded with cryptographic "
-            "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. At least one manifest-grounded cross-principal "
-            "leak was confirmed on a live surface; see the observations and findings." + excluded
+            "stack, not any production system." + unplaced
         )
     else:
-        result_description = (
+        # COMPOSED, not first-match - the lesson `_erasure_assertion` learned one
+        # module over. A record carrying BOTH a residual erasure and a confirmed
+        # cross-principal leak fell to the isolation branch, and the residue
+        # vanished from the description of the very result that reports it.
+        isolation_lead = (
             "Sectum AI provisioned synthetic tenants seeded with cryptographic "
             "canary markers and ran benign and adversarial probes across the "
-            "configured AI surfaces. No cross-principal leakage was confirmed on "
-            "the live surfaces tested." + excluded
+            "configured AI surfaces. "
         )
+        parts: list[str] = []
+        if erasure_run:
+            parts.append(
+                "Sectum AI scanned an erasure across the live configured AI surfaces. "
+                + (
+                    f"The erasure is unverified on {', '.join(residual_surfaces)}: a marker "
+                    "remained, the data is presumed retained, or its absence could not be "
+                    "established; see the observations and findings."
+                    if has_residual
+                    else "No marker remained on any live surface scanned."
+                )
+            )
+        exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+        if has_confirmed_leak:
+            parts.append(
+                isolation_lead + "At least one manifest-grounded cross-principal leak was "
+                "confirmed on a live surface; see the observations and findings."
+            )
+        elif not exercised:
+            # Nothing ran, so "provisioned tenants and ran probes ... no leakage was
+            # confirmed" described a scan that never happened - an ABSENT result read
+            # as a clean one. SARIF refuses the same record with
+            # `sectum.no-probe-executed` and the PDF prints "none recorded"; `probe`
+            # and `report` both decline to write such a run at all, so this is
+            # reachable through the library only, which is exactly who needs telling.
+            parts.append(
+                "No Sectum AI probe executed in this run, so no isolation objective "
+                "was assessed. An empty finding list here is an ABSENT scan, not a "
+                "clean one."
+            )
+        elif not erasure_run:
+            # An erasure run did not test isolation, so it says nothing either way.
+            parts.append(
+                isolation_lead + "No cross-principal leakage was confirmed on the live "
+                "surfaces tested."
+            )
+        result_description = " ".join(parts) + excluded + unplaced
 
     result: dict[str, Any] = {
         "uuid": _uuid(run.run_id, "result"),
@@ -402,13 +584,21 @@ def run_to_oscal(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         # OSCAL requires reviewed-controls on every result: the controls this
         # assessment spoke to (the union of the framework control ids from
         # control_mappings, deduped in stable order).
+        # `findings` is optional in OSCAL AR 1.1.2 and `minItems: 1` when present;
+        # a `control-selection` has no required properties and its
+        # `include-controls` is `minItems: 1` too. Emitting `[]` for either made the
+        # document schema-INVALID, so a GRC platform that validates on ingest
+        # rejected exactly the pack whose disclosure it needed to read. Omit rather
+        # than empty.
         "reviewed-controls": {
             "control-selections": [
                 {"include-controls": [{"control-id": cid} for cid in reviewed_control_ids]}
+                if reviewed_control_ids
+                else {}
             ]
         },
         "observations": observations,
-        "findings": findings,
+        **({"findings": findings} if findings else {}),
     }
 
     document_uuid: UUID = uuid5(_UUID_NS, run.run_id)

@@ -25,7 +25,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, MemoryAdapter
-from sectum_ai.spec import AdapterError, ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported, residual_present
 
 # get_all(limit=) is capped by mem0 itself; the default (100) silently truncated.
 _GET_ALL_LIMIT = 10000
@@ -37,6 +37,26 @@ _SHARED_SCOPE = "sectum-ai-shared"
 
 def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
+
+
+def _rows(result: Any) -> list[Any]:
+    """The rows of a mem0 response, or an ``AdapterError`` if it is not one."""
+    if isinstance(result, dict):
+        rows = result.get("results")
+        if not isinstance(rows, list):
+            raise AdapterError(
+                f"mem0 returned an object with no 'results' list (keys: {sorted(result)}); "
+                "its response shape is not the one this adapter reads"
+            )
+        return rows
+    if isinstance(result, list):
+        return result
+    if result is None:
+        return []
+    raise AdapterError(
+        f"mem0 returned {type(result).__name__}, not a list or a 'results' object; "
+        "its response shape is not the one this adapter reads"
+    )
 
 
 class Mem0Memory(MemoryAdapter):
@@ -97,10 +117,20 @@ class Mem0Memory(MemoryAdapter):
     def _memories(result: Any) -> list[str]:
         # mem0 search returns {"results": [{"memory": ...}, ...]} in current
         # releases and a bare list of dicts in older ones; read either defensively.
-        rows = result.get("results", []) if isinstance(result, dict) else result
+        # The ENVELOPE is checked, not only the rows: a release that renames the
+        # top-level key (or nests the rows deeper) yielded an empty list, which
+        # read as an empty tenant and let the A3 check attest the subject erased.
+        rows = _rows(result)
         texts: list[str] = []
-        for row in rows or []:
-            text = row.get("memory") if isinstance(row, dict) else None
+        for row in rows:
+            if not isinstance(row, dict) or "memory" not in row:
+                # Keyed on the KEY, not its truthiness: an empty or redacted
+                # memory value is a legitimate backend state, not a mismatch.
+                raise AdapterError(
+                    "mem0 returned a row with no 'memory' key; its response shape "
+                    "is not the one this adapter reads"
+                )
+            text = row.get("memory")
             if text:
                 texts.append(str(text))
         return texts
@@ -117,15 +147,27 @@ class Mem0Memory(MemoryAdapter):
         # listing is the faithful primitive.
         result = self._client.get_all(user_id=self._scope(tenant), limit=_GET_ALL_LIMIT)
         memories = self._memories(result)
-        if len(memories) >= _GET_ALL_LIMIT:
-            # mem0's get_all defaults to limit=100 and pages no further; a
-            # subject's memory past the window read as not recalled - ERASED.
-            raise AdapterError(
-                f"mem0 returned {len(memories)} memories for the scope, its listing "
-                "limit, so the recall would be incomplete"
-            )
         query_tokens = _tokens(query)
-        return [text for text in memories if query_tokens & _tokens(text)]
+        # `residual_present` is the caller's own residual test, not a
+        # lookalike: a suppression predicate LOOSER than the caller's fails
+        # open (the adapter says "found it, no refusal" over a hit the caller
+        # will not count, and the marker past the cap reads absent), so the
+        # two must be one function.
+        recalled = [text for text in memories if query_tokens & _tokens(text)]
+        # `recalled` is token-overlap; the caller counts an exact substring, and
+        # every canary shares the tokens "sectum" and "canary" - so suppress the
+        # refusal only on a hit the caller would also count.
+        found = any(residual_present(query, text) for text in recalled)
+        if not found and len(_rows(result)) >= _GET_ALL_LIMIT:
+            # mem0's get_all defaults to limit=100 and pages no further; a
+            # subject's memory past the window read as not recalled - ERASED. The
+            # count is of ROWS (a row with an empty memory still fills the page),
+            # and a hit already answers the question, so only a miss is refused.
+            raise AdapterError(
+                f"mem0 returned {len(_rows(result))} rows for the scope, its listing "
+                "limit, so a recall that found nothing would be incomplete"
+            )
+        return recalled
 
     def delete(self, tenant: UUID) -> None:
         if self._shared_memory:

@@ -9,13 +9,32 @@ test coverage, not legal certification** — the reports say so explicitly.
 |---|---|---|
 | SOC 2 (TSC) | CC6.1, CC6.6, CC6.7 | Tenant logical separation tested by benign and adversarial probing across the AI surfaces. |
 | ISO/IEC 27001:2022 | A.5.15, A.8.3, A.8.12 | Cross-tenant information leakage tested; residual leakage itemized. |
-| ISO/IEC 42001:2023 | A.6.2.6, A.7.2, A.7.5 | Per-tenant data management and provenance in the AI system tested; isolation verified under operation and monitoring. |
-| GDPR | Art. 17, Art. 32, Art. 25 | Erasure across AI surfaces verified; tenant isolation tested. |
-| CCPA/CPRA | §1798.105, §1798.100, §1798.150 | Deletion of a consumer's personal information across the AI surfaces verified; consumer-data segregation tested. |
-| EU AI Act | Art. 15 | Robustness of tenant isolation under benign and adversarial conditions. |
-| HIPAA | §164.312(a)(1), (c)(1), (e)(1) | PHI tenant segregation verified. |
+| ISO/IEC 42001:2023 | A.6.2.6, A.7.2, A.7.5 | Per-tenant data management and provenance in the AI system tested; isolation verified under AI system operation and monitoring. |
+| GDPR | Article 25, Article 32 | Tenant isolation tested across the AI surfaces. |
+| GDPR | Article 17 | Erasure across the AI surfaces verified. |
+| CCPA/CPRA | 1798.100, 1798.150 | Segregation of consumer data tested across the AI surfaces. |
+| CCPA/CPRA | 1798.105 | Deletion of a consumer's personal information across the AI surfaces verified. |
+| EU AI Act | Article 15 | Robustness of tenant isolation **tested** under benign and adversarial conditions. |
+| HIPAA | 164.312(a)(1), 164.312(c)(1), 164.312(e)(1) | Segregation of regulated tenant data verified across the AI surfaces. |
 | NIST AI RMF | MEASURE 2.7, MANAGE 2.x | Documented measurement of multi-tenant security risk. |
 | OWASP LLM Top 10 | LLM08:2025 | Direct test coverage of vector and embedding multi-tenant weaknesses. |
+
+**The two deletion rows are what an all-`ERASED` run asserts.** They state what
+the run *found*, not merely that it looked, so the wording moves with the
+verdict. A
+run whose purge left residue behind asserts "…tested; residual data remains and
+is itemized in this pack"; one resting partly on a surface with no per-tenant
+erasure API asserts "…tested; one or more surfaces expose no per-tenant erasure
+API, so their data is presumed retained". Only a run whose every scanned surface
+came back `ERASED` says *verified*; a surface the run scanned and could not clear
+is named in the assertion, not dropped from it. The row is never dropped: evidence of a
+failed erasure is still evidence about Article 17, and stating it is the point.
+
+`sectum-ai verify` re-derives this whole table from the run it is given and
+refuses any mapping the run's evidence does not support, so the filter is not
+only a build-time courtesy - a pack asserting a control it did not earn fails
+verification. Asserting *fewer* controls than the evidence earns is honest
+under-claiming and passes.
 
 A pack carries only the mappings its run supports, and only evidence from a
 **live** surface counts: a verdict from the built-in fake describes nothing the

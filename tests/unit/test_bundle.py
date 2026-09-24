@@ -82,8 +82,16 @@ def test_a_freshly_built_bundle_verifies() -> None:
     assert result.passed
     assert all(check.ok for check in result.checks)
     # The audit-PDF binding and both sidecar bindings actually ran (not absent).
+    # Every audit-pdf line names the member it judged: the FIRST present PDF's
+    # verdict came back under the bare name `audit-pdf`, so on a bundle carrying
+    # two documents the second failure named its member and the first did not.
     names = {check.name for check in result.checks}
-    assert {"audit-pdf", "in-toto-attestation:attestation.intoto.json", "dsse-envelope"} <= names
+    assert {
+        "audit-pdf:audit-pack.pdf",
+        "in-toto-attestation:attestation.intoto.json",
+        "dsse-envelope",
+    } <= names
+    assert "audit-pdf" not in names
 
 
 def test_a_bundle_must_contain_the_evidence_member() -> None:
@@ -132,7 +140,7 @@ def test_rebuilt_bundle_with_a_forged_audit_pdf_fails_the_pdf_binding() -> None:
     result = verify_bundle(build_bundle(forged))
     assert not result.passed
     assert all(c.ok for c in result.checks if c.name.startswith("member:"))  # digests consistent
-    assert not _check(result, "audit-pdf").ok
+    assert not _check(result, "audit-pdf:audit-pack.pdf").ok
 
 
 def test_pack_binding_a_pdf_ref_but_missing_the_pdf_member_fails() -> None:
@@ -372,3 +380,17 @@ def test_a_bundled_pdf_the_pack_does_not_bind_fails() -> None:
     result = verify_bundle(build_bundle(members), require_anchored=False, require_live=False)
     assert not result.passed
     assert not _check(result, "audit-pdf:audit-pack.pdf").ok
+
+
+def test_every_audit_pdf_line_names_the_member_it_judged() -> None:
+    # A bundle IS a closed container, and it may carry both documents. The second
+    # one's verdict came back as `audit-pdf:erasure-attestation.pdf` and the
+    # first's as a bare `audit-pdf`, so the failure a reader most needs placed -
+    # the one on the pack's own document - was the one that named nothing.
+    members = _members()
+    members["erasure-attestation.pdf"] = b"%PDF-1.4 somebody else's document\n"
+    result = verify_bundle(build_bundle(members))
+    assert not result.passed
+    assert not _check(result, "audit-pdf:erasure-attestation.pdf").ok
+    assert _check(result, "audit-pdf:audit-pack.pdf").ok
+    assert not any(check.name == "audit-pdf" for check in result.checks), result.checks

@@ -133,3 +133,16 @@ def test_langchain_rag_handles_missing_answer_and_empty_retrieved() -> None:
     result = LangChainRAGPipeline(chain).ask(_TENANT, "q")
     assert result.answer == ""
     assert result.retrieved == ()
+
+
+def test_a_plain_string_passage_keeps_its_content() -> None:
+    # `_to_hit` had no `str` arm, so a plain-string retrieved item fell through to
+    # the Document branch and `getattr(item, "page_content", "")` produced
+    # `VectorHit(content="")`. A retrieved context carrying a foreign canary was
+    # therefore scanned as EMPTY and the leak missed, silently. `_document_text`
+    # in the same file already handled `str`; only its sibling did not.
+    from sectum_ai.adapters.rag.langchain import _to_hit
+
+    hit = _to_hit(_TENANT, "a passage mentioning SECTUM-CANARY-FOREIGN")
+    assert hit.content == "a passage mentioning SECTUM-CANARY-FOREIGN", hit
+    assert "SECTUM-CANARY-FOREIGN" in hit.content

@@ -13,9 +13,11 @@ This adapter scopes per tenant by prefixing the user-proxy message with a
 tenant id from the call arguments the assistant forwards. The substrate verifies
 agent-level isolation (the engineering spec, section 7, Class 7): a tool call
 in tenant Y's session that resolves a resource in tenant X's scope is a
-confused-deputy leak, and the cross-tenant agent tool-call hijack probes need
-to see *which* tool was invoked in each tenant's session - which is what
-``run()`` surfaces in ``AgentResult.tool_calls``.
+confused-deputy leak. ``run()`` surfaces the name of every tool invoked
+in ``AgentResult.tool_calls`` - but the probe pipeline does NOT read it today:
+`Runner._agent_run` records the agent's TEXT output as the observation, so a
+hijacked call that returns no text is invisible to a `sectum-ai probe` run. The
+names are surfaced for SDK callers and the live integration tests.
 
 The ``autogen-agentchat`` / ``autogen-core`` package is imported only on the
 live ``connect`` path, so the adapter and its mock-backed contract test need no
@@ -46,8 +48,9 @@ class AutoGenAgent(AgentAdapter):
     ``[tenant:<tenant.hex>]`` so a tool wired with tenant-aware routing can
     read the tenant identity from the call arguments. The conversation result's
     ``chat_history`` is walked to surface every tool call the assistant made
-    during the run - not just the final state - so the Class 7 probes can see
-    which tool fired in each tenant's session.
+    during the run - not just the final state. `Runner._agent_run` does not read
+    them, so they serve SDK callers and the live integration tests rather than a
+    `sectum-ai probe` run.
     """
 
     def __init__(
@@ -132,7 +135,10 @@ class AutoGenAgent(AgentAdapter):
         history = _chat_history(chat_result, self._assistant)
         if not isinstance(history, list):
             raise AdapterError(f"autogen chat history must be a list, got {type(history).__name__}")
-        return AgentResult(output=_final_text(history), tool_calls=_tool_calls(history))
+        return AgentResult(
+            output=_final_text(history, getattr(self._assistant, "name", None)),
+            tool_calls=_tool_calls(history),
+        )
 
 
 def _chat_history(chat_result: Any, assistant: Any) -> Any:
@@ -140,10 +146,14 @@ def _chat_history(chat_result: Any, assistant: Any) -> Any:
 
     The v0.2 legacy ``ConversableAgent.initiate_chat`` returns a ``ChatResult``
     with ``chat_history`` (a list of ``{"content": ..., "role": ..., ...}``
-    dicts). Some flavours of the v0.4+ stack instead carry a
-    ``chat_messages`` dict keyed on the participating agents; read both so the
-    adapter is portable across the API surfaces and the dict-shaped stub used
-    in the mock-backed test.
+    dicts). A ``ConversableAgent`` in the pinned 0.2.x line instead carries a
+    ``chat_messages`` dict keyed on the participating agents, which a caller may
+    hand this adapter directly; read both so it is portable across the two.
+
+    NOT "the v0.4+ stack", as this said: v0.4 returns ``TaskResult.messages``,
+    a shape this branch rejects. The branch is live all the same - the class
+    contract admits duck-typed stand-ins and the mock-backed test covers it -
+    so the attribution was wrong, not the code.
     """
     if hasattr(chat_result, "chat_history"):
         return chat_result.chat_history
@@ -189,7 +199,14 @@ def _content_to_text(content: Any) -> str:
                 if isinstance(text, str):
                     parts.append(text)
         return "".join(parts)
-    return str(content) if content is not None else ""
+    # NOT `str(content)`. A content object this function cannot read has no
+    # text, and stringifying it yields the object's repr - truthy - so
+    # `Runner._agent_run` records AccessOutcome.RETURNED and Class 7 grades a
+    # memory address as the agent's answer. `CrewAIAgent` was fixed for exactly
+    # this and the commit claimed both siblings already returned "" on the same
+    # shape; they did not - that claim was checked only against an EMPTY message
+    # list, which takes a different early return.
+    return ""
 
 
 def _is_assistant(message: Any) -> bool:
@@ -204,8 +221,41 @@ def _is_assistant(message: Any) -> bool:
     return getattr(message, "role", None) == "assistant"
 
 
-def _final_text(messages: list[Any]) -> str:
-    """Return the text of the last assistant message, or empty string."""
+def _speaker(message: Any) -> str | None:
+    """Who actually said this, from ``name`` - the field that survives the flip."""
+    name = message.get("name") if isinstance(message, dict) else getattr(message, "name", None)
+    return str(name) if name else None
+
+
+def _final_text(messages: list[Any], assistant_name: str | None = None) -> str:
+    """Return the text of the assistant's last reply, or empty string.
+
+    Selected by ``name``, not by ``role``. ``ChatResult.chat_history`` is the
+    INITIATOR's view, and this adapter initiates from the user proxy - so in
+    pyautogen 0.2.x the messages the proxy SENT are stored ``role="assistant"``
+    and the replies received are ``role="user"``. Verified against a real
+    ``ConversableAgent``:
+
+        role=assistant  name=user       content='[tenant:abc] lookup mkr-00001'
+        role=user       name=assistant  content='the canary is SECTUM-CANARY-XYZ'
+
+    Taking the last ``role == "assistant"`` therefore returned Sectum's OWN
+    tenant-prefixed prompt, so the hijack probe scanned a string that
+    structurally cannot carry a leak and recorded "the agent answered and
+    surfaced no foreign canary" - the caveat written to keep the class honest
+    making a false statement. ``name`` carries the real speaker on both sides of
+    the flip.
+
+    Falls back to the role test when the history carries no usable ``name`` (a
+    stand-in or a future shape), so a caller that never learned the assistant's
+    name is no worse off than before.
+    """
+    if assistant_name:
+        for message in reversed(messages):
+            if _speaker(message) == assistant_name:
+                if isinstance(message, dict):
+                    return _content_to_text(message.get("content", ""))
+                return _content_to_text(getattr(message, "content", ""))
     for message in reversed(messages):
         if not _is_assistant(message):
             continue
@@ -272,9 +322,10 @@ def _tool_calls(messages: list[Any]) -> tuple[str, ...]:
     """Walk every message and surface each tool call's name in order.
 
     Surfaces both modern ``tool_calls`` entries (OpenAI tool-calling shape, one
-    message may carry several) and the legacy single ``function_call`` entry,
-    so a Class 7 probe sees every tool that fired regardless of the AutoGen
-    version on the live path.
+    message may carry several) and the legacy single ``function_call`` entry, so
+    an SDK caller reads every tool that fired regardless of the AutoGen version
+    on the live path. The probe pipeline records the agent's text output, not
+    these names.
     """
     names: list[str] = []
     for message in messages:

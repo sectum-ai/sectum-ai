@@ -1,0 +1,307 @@
+"""One predicate answers "is this canary still there" - everywhere it is asked.
+
+Two code paths ask that question about the same bytes: the Class 11 scans that
+COUNT residue, and the capped-listing adapters that decide whether an incomplete
+page needs refusing. When the two disagree, the disagreement is a fail-open in
+one specific direction: an adapter whose suppression is LOOSER than the caller's
+count says "found it, no need to refuse" over a hit the caller will not count, so
+the marker sitting past the cap reads as absent and the surface is signed ERASED.
+
+That is not hypothetical - it shipped. The scans tested a raw case-sensitive
+``in`` while the adapters guarding them suppressed on a casefolded hit, and a
+search index still returning a re-cased copy of the tenant's canary attested
+clean. The fix is not "casefold the scans too": matching the two predicates by
+hand is what failed, and a third normalization (zero-width, NFKC) would split
+them again. There is one function, and these tests pin that there is one.
+"""
+
+from sectum_ai.adapters import fakes
+from sectum_ai.adapters.eval_set import langsmith
+from sectum_ai.adapters.memory import mem0
+from sectum_ai.adapters.observability import datadog, helicone, langfuse, otel, phoenix
+from sectum_ai.adapters.observability import langsmith as trace_langsmith
+from sectum_ai.adapters.search_index import opensearch
+from sectum_ai.probes import _recall
+from sectum_ai.probes.erasure import probe as erasure_probe
+from sectum_ai.probes.subject_erasure import probe as subject_probe
+from sectum_ai.spec import residual_present
+
+
+def test_every_residual_question_resolves_to_the_same_function() -> None:
+    # `is`, not an equality of behaviour: two lookalikes that agree today are
+    # exactly what drifted apart before, and only identity survives the next
+    # normalization someone adds to one of them.
+    # `_recall` is the sixth, and it was missed by the first pass at this: the
+    # MODEL surface asks the same question through `content_recalled`, and a
+    # canary the model re-rendered read as "not recalled" - ERASED - one commit
+    # after the other five were unified. That is why this is a sweep, not a list.
+    for module in (
+        erasure_probe,
+        subject_probe,
+        _recall,
+        langsmith,
+        mem0,
+        opensearch,
+        # The TRACING family, the seventh through thirteenth: `c99bf33` unified
+        # three adapter families and skipped this one, and `_scan_observability`
+        # applies no predicate of its own - it trusts the adapter's already
+        # filtered list, so the adapter's `in` WAS the residue test.
+        helicone,
+        datadog,
+        langfuse,
+        trace_langsmith,
+        phoenix,
+        otel,
+        fakes,
+    ):
+        assert module.residual_present is residual_present, module.__name__
+
+
+def test_residual_present_sees_every_rendering_a_backend_can_apply() -> None:
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, haystack in (
+        ("verbatim", f"row mentioning {canary}"),
+        ("re-cased", f"row mentioning {canary.lower()}"),
+        # U+200B ZERO WIDTH SPACE, U+FF33 FULLWIDTH LATIN CAPITAL S: spelled by
+        # codepoint so this file stays ASCII.
+        ("zero-width split", f"row mentioning {canary[:6]}\u200b{canary[6:]}"),
+        ("full-width", f"row mentioning \uff33{canary[1:]}"),
+    ):
+        assert residual_present(canary, haystack), label
+
+    assert not residual_present(canary, "a row mentioning nothing of the sort")
+    # An empty-plaintext marker would otherwise substring-match every observation
+    # and confirm a leak on all of them.
+    assert not residual_present("", "any text at all")
+
+
+def test_no_module_asks_the_residue_question_with_a_raw_substring_test() -> None:
+    # The identity check above is a LIST, so it structurally cannot see a sibling
+    # that never imported the predicate at all - which is exactly how the tracing
+    # family stayed on a raw `in` through the commit that unified the other three,
+    # and through twelve review cycles. This is the sweep: it walks the source and
+    # fails on any `<marker-ish> in <text>` comparison, whether or not the module
+    # has ever heard of `residual_present`.
+    import ast
+    from pathlib import Path
+
+    # Names that mean "the thing we are looking for", matched on the LEFT of an
+    # `in`. The right operand is only checked against `normalized` below.
+    # `value` and `text` are deliberately NOT here: they matched set-membership
+    # tests over surface names and coverage verdicts, which are a different
+    # question, and a sweep that cries wolf gets suppressed rather than fixed.
+    needles = {
+        "marker",
+        "needle",
+        "query",
+        "plaintext",
+        "phrase",
+        "canary",
+        "secret",
+        "entity",
+        "fingerprint",
+        "subject",
+    }
+    # String methods that do not change WHAT is being looked for, only its form -
+    # `marker.plaintext.lower() in body` is the residue question wearing a hat.
+    transparent = {"lower", "upper", "casefold", "strip", "lstrip", "rstrip"}
+    # Membership tests that are NOT the residue question. `shaped` is the secret
+    # tier's CREDENTIAL-SHAPE branch - a match against tokens a regex extracted,
+    # a different question from "is this marker here".
+    #
+    # `haystack` used to be exempt too, on the reasoning that a normalized
+    # right-hand side means "the comparison IS the shared predicate spelled out".
+    # That held while the predicate had two arms and stopped holding the moment it
+    # grew a third: the exemption is what let all three detection tiers keep their
+    # own copy, so a canary wrapped inside its opaque body was RESIDUAL to the
+    # erasure scan and absent to the detector. Spelled out is not shared.
+    normalized = {"shaped"}
+
+    def _needle_name(node: ast.expr) -> str:
+        """The identifier a marker-ish operand is spelled with.
+
+        Covers a bare name, an attribute, a constant subscript and a see-through
+        method call. NOT covered: a binop, an f-string, or a computed subscript -
+        a residue test written that way is still invisible here.
+
+        The first version required a bare `ast.Name`, so `marker.plaintext` - the
+        shape EVERY Class 11 scan uses - was invisible and it caught only the one
+        family it had been calibrated against. Subscripts and method calls are the
+        same question again (`row["plaintext"] in body`,
+        `marker.plaintext.lower() in body`).
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            # `.lower()` and friends are see-through: recurse to the receiver.
+            return _needle_name(node.value) if node.attr in transparent else node.attr
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
+            return str(node.slice.value)
+        if isinstance(node, ast.Call):
+            return _needle_name(node.func)
+        return ""
+
+    # All five packages. The first version walked two, so a residue test added to
+    # core, evidence or spec would have been unswept - the same blindness by a
+    # different axis.
+    roots = [
+        Path(f"packages/{pkg}/src") for pkg in ("core", "spec", "probes", "adapters", "evidence")
+    ]
+    assert all(root.is_dir() for root in roots), (
+        f"run from the repo root; missing: {[str(r) for r in roots if not r.is_dir()]}"
+    )
+    offenders: list[str] = []
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+                    continue
+                if not isinstance(node.ops[0], ast.In | ast.NotIn):
+                    continue
+                if _needle_name(node.left).lower() not in needles:
+                    continue
+                right = node.comparators[0]
+                if isinstance(right, ast.Set | ast.Dict | ast.Tuple | ast.List):
+                    continue
+                if _needle_name(right) in normalized:
+                    continue
+                offenders.append(f"{path}:{node.lineno}")
+
+    assert not offenders, (
+        "these ask 'is this canary still there' with a raw substring test instead of "
+        f"`residual_present`, so they will disagree with every other caller: {offenders}"
+    )
+
+
+def test_the_shared_predicate_answers_the_detector_s_question() -> None:
+    # The predicate was shared across seven modules and was still WEAKER than the
+    # detector it was meant to agree with: `residual_present` tested a substring
+    # where every detection tier tests a substring OR the marker's tokens
+    # contiguous and in order. So a trace holding a re-punctuated canary was a
+    # CONFIRMED CRITICAL leak on one path and absent on the other - and the
+    # erasure scan, reading the second, signed "Erasure ... verified" over it.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, separator in (
+        ("verbatim", "-"),
+        ("space", " "),
+        # U+2011 NON-BREAKING HYPHEN and U+2013 EN DASH, by codepoint.
+        ("non-breaking hyphen", "\u2011"),
+        ("en dash", "\u2013"),
+    ):
+        rendered = canary.replace("-", separator)
+        assert residual_present(canary, f'{{"prompt": "lookup {rendered}"}}'), label
+
+    # And the arm costs nothing on the other side: the tokens must be contiguous
+    # and in order, so none of these is the canary.
+    for label, text in (
+        ("out of order", " ".join(reversed(canary.split("-")))),
+        ("one token wrong", canary.replace("-", " ")[:-4] + "ZZZZ"),
+        ("a token interposed", canary.replace("-", " X ", 1)),
+        ("unrelated", "an ordinary trace with nothing in it"),
+    ):
+        assert not residual_present(canary, text), label
+
+
+def test_a_canary_split_inside_its_opaque_body_is_still_present() -> None:
+    # The token arm requires EXACT token equality, so it recovers a split only
+    # where one lands on a separator: 4 of this canary's 39 positions. An 80-column
+    # log wraps inside the 26-character base32 body, and the docstring, this page's
+    # class doc and the CHANGELOG all claimed the arm caught it. It did not - in
+    # BOTH directions, since this is the leak detector as well as the erasure scan:
+    # a leaked canary read as a clean PASS and a survivor was signed ERASED.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    body = canary.index("UURK")
+    # Every split point, not a sampled few: the arm has to be indifferent to where
+    # the wrap lands, which is the whole property the old one lacked.
+    for cut in range(1, len(canary)):
+        wrapped = f"audit prompt={canary[:cut]}\n        {canary[cut:]} ok"
+        assert residual_present(canary, wrapped), (cut, canary[cut - 1 : cut + 1])
+    assert body  # the body starts past the prefix; the loop above covers it
+
+    # A secret canary is the same shape with a longer body.
+    key = "sk-" + "bC9dEf7gHiJkLmNoPqRsTuVwXyZ012345AbCdEfGhIjKlMn"
+    assert residual_present(key, f"key {key[:20]}\n   {key[20:]} end")
+
+
+def test_the_projection_arm_cannot_invent_a_canary() -> None:
+    # Dropping every separator is order-preserving and contiguous, so it recovers
+    # a rendering and never manufactures one.
+    canary = "SECTUM-CANARY-UURK6HUSUBK7RGQ42MLR2ZMN5U"
+    for label, text in (
+        ("one character off", canary[:-1] + "V"),
+        ("a different canary", "SECTUM-CANARY-AAAA6HUSUBK7RGQ42MLR2ZMN5U"),
+        ("out of order", " ".join(reversed(canary.split("-")))),
+        ("a token interposed", canary.replace("-", " X ", 1)),
+        ("prefix only", canary[:22]),
+        ("the body without its prefix", canary[14:]),
+        ("unrelated", "an ordinary trace with nothing in it"),
+    ):
+        assert not residual_present(canary, f"row {text} end"), label
+
+
+def test_a_needle_with_no_opaque_token_keeps_the_two_arm_behaviour() -> None:
+    # The projection is scoped to a needle carrying a 16+ character opaque token,
+    # because that is the only shape where joining across a separator cannot be a
+    # coincidence. A name, an SSN and an entity codename are all below it, so
+    # removing their separators must NOT make them match.
+    assert residual_present("Barack Hussein Obama", "row Barack  Hussein\nObama end")
+    assert not residual_present("Barack Hussein Obama", "row BarackHusseinObama end")
+    assert not residual_present("912-34-5678", "ssn 912345678 end")
+    assert not residual_present("ZephyrK3F7A", "codename Zephyr K3F7A end")
+
+
+def test_the_detector_and_the_erasure_scan_answer_with_the_same_bytes() -> None:
+    """Not "the predicate is shared" - "the detector CALLS it", asserted by calling both.
+
+    The test above is named for the detector's question and never invokes the
+    detector, so when a third arm was added to `residual_present` (the projection,
+    for a canary split inside its opaque body) the erasure scan got it and all
+    three detection tiers - which spelled the two arms out inline - did not. A
+    trace holding a log-wrapped foreign canary was RESIDUAL to the erasure scan and
+    a clean PASS to the detector, over the same bytes, which is the one thing the
+    shared predicate exists to prevent.
+    """
+    import logging
+
+    from sectum_ai.probes.detection import DetectionProviders
+    from sectum_ai.spec import MarkerType, Surface
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    logging.disable(logging.CRITICAL)
+    try:
+        substrate = build_substrate(default_scenario(seed=2026))
+        pipeline = DetectionProviders().pipeline(substrate)
+        marker = next(
+            m for m in substrate.manifest.markers if m.marker_type is MarkerType.HARD_CANARY
+        )
+        observer = next(
+            t.tenant_id for t in substrate.tenants if t.tenant_id != marker.owner_tenant_id
+        )
+        canary = marker.plaintext
+        body = canary.index(canary.split("-")[-1])
+
+        renderings = {
+            "verbatim": f"trace: {canary} end",
+            "wrapped inside the opaque body": (
+                f"trace: {canary[: body + 10]}\n    {canary[body + 10 :]} end"
+            ),
+            "hyphens rendered as spaces": f"trace: {canary.replace('-', ' ')} end",
+            "a different canary": "trace: SECTUM-CANARY-AAAABBBBCCCCDDDDEEEEFFFFGG end",
+            "unrelated": "trace: nothing of interest here",
+        }
+        for label, text in renderings.items():
+            detected = bool(
+                pipeline.detect(
+                    observer,
+                    text,
+                    Surface.TRACING,
+                    probe_id="parity",
+                    owasp_llm="",
+                    atlas=(),
+                    nist=(),
+                )
+            )
+            assert detected == residual_present(canary, text), label
+    finally:
+        logging.disable(logging.NOTSET)

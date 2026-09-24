@@ -1,5 +1,9 @@
 """Tests for Class 11 - the GDPR Article 17 erasure-verification wedge."""
 
+from uuid import UUID
+
+import pytest
+
 from sectum_ai.adapters import (
     FakeBackup,
     FakeCache,
@@ -10,9 +14,10 @@ from sectum_ai.adapters import (
     FakeSearchIndex,
     FakeVectorStore,
 )
-from sectum_ai.adapters.base import ObservabilityAdapter
+from sectum_ai.adapters.base import ObservabilityAdapter, VectorHit
 from sectum_ai.probes import ERASURE_SURFACES, ErasureProbe
-from sectum_ai.spec import CoverageVerdict, MarkerType, Substrate, Surface
+from sectum_ai.probes.erasure.probe import ErasureReport, SurfaceErasure
+from sectum_ai.spec import AdapterError, CoverageVerdict, MarkerType, Substrate, Surface
 from sectum_ai.substrate import build_substrate, default_scenario
 
 
@@ -80,6 +85,30 @@ def _seeded_eval(substrate: Substrate, *, soft_delete: bool) -> FakeEvalSet:
         if marker.marker_type is MarkerType.HARD_CANARY:
             eval_set.add(marker.owner_tenant_id, f"eval set fixture mentioning {marker.plaintext}")
     return eval_set
+
+
+def test_one_surfaces_failed_purge_does_not_abort_the_whole_attestation() -> None:
+    # `_erase_surface` catches AdapterError around BOTH scans - one inconclusive
+    # scan must not cost the other seven surfaces their verdicts - and caught
+    # nothing around the delete between them. So an S3 bulk delete reporting
+    # per-key failures, or a denied GCS object, aborted the entire Article 17 run:
+    # no attestation at all, rather than one surface unestablished.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.manifest.markers[0].owner_tenant_id
+
+    class _FailingPurge(FakeBackup):
+        def delete(self, tenant: UUID) -> None:
+            raise AdapterError("S3 purge left 3 object(s) in place (AccessDenied)")
+
+    report = ErasureProbe(substrate, vector=FakeVectorStore(), backup=_FailingPurge()).run(target)
+    coverage = report.coverage()
+    assert len(coverage) == 8, coverage
+    # And the surface can never read ERASED off a purge that did not complete,
+    # whatever the post-scan happens to see.
+    assert coverage[Surface.BACKUP] is CoverageVerdict.NOT_COVERED, coverage
+    backup = next(s for s in report.surfaces if s.surface is Surface.BACKUP)
+    assert not backup.erased
+    assert backup.unverifiable_reason is not None and "AccessDenied" in backup.unverifiable_reason
 
 
 def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
@@ -708,3 +737,339 @@ def test_a_continuing_model_that_kept_the_canary_is_residual() -> None:
     store = _seeded_store(substrate, soft_delete=False)
     report = ErasureProbe(substrate, vector=store, model=model).run(target)
     assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL
+
+
+def test_a_marker_ranked_past_the_page_is_not_attested_erased() -> None:
+    # The Class 11 vector scan read a full similarity page as absence, and did it
+    # at k=10 while its A3 sibling had already moved to k=50 with an inconclusive
+    # verdict. A canary the store still returns - just below the page - therefore
+    # attested ERASED under GDPR Article 17 and CCPA 1798.105.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=True)  # nothing is really deleted
+
+    class _PagedStore(FakeVectorStore):
+        """Answers every query with a FULL page that never holds the canary."""
+
+        def __init__(self, inner: FakeVectorStore) -> None:
+            self._inner = inner
+            self._truncate = False
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def delete(self, tenant: UUID) -> None:
+            self._inner.delete(tenant)
+            self._truncate = True
+
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            hits = self._inner.query(tenant, text, k, user=user)
+            if not self._truncate:
+                return hits
+            # Still stored, but every canary now ranks past the page.
+            return [
+                VectorHit(doc_id=f"filler-{index}", tenant_id=tenant, score=1.0, content="filler")
+                for index in range(k)
+            ]
+
+    paged = _PagedStore(store)
+    report = ErasureProbe(substrate, vector=paged).run(target)
+    surface = report.surfaces[0]
+    assert surface.markers_before > 0
+    assert surface.residual_after == 0  # nothing was FOUND
+    assert surface.unverifiable_after > 0  # but absence was never established
+    assert surface.verdict == "NOT VERIFIED"
+    assert surface.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not surface.erased
+    assert not report.erased
+
+
+def test_an_inconclusive_scan_on_one_surface_does_not_abort_the_run() -> None:
+    # The vector scan degrades to "absence not established" on its own; every
+    # other surface's adapter RAISES when it cannot trust its listing, and nothing
+    # caught it - so one inconclusive trace, memory, eval-set or search scan
+    # aborted the whole erasure run instead of marking that one surface uncovered.
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+
+    class _UntrustworthyObservability(FakeObservability):
+        def search_traces(self, tenant: UUID, marker: str) -> list[object]:  # type: ignore[override]
+            raise AdapterError("the listing was capped, so a miss is not absence")
+
+    report = ErasureProbe(
+        substrate,
+        vector=_seeded_store(substrate, soft_delete=False),
+        observability=_UntrustworthyObservability(),
+    ).run(target)
+    tracing = next(s for s in report.surfaces if s.surface is Surface.TRACING)
+    assert tracing.unverifiable_after > 0
+    assert tracing.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not tracing.erased
+    # The other surface was still scanned, and the run as a whole is not ERASED.
+    vector = next(s for s in report.surfaces if s.surface is Surface.VECTOR_DB)
+    assert vector.erased
+    assert not report.erased
+
+
+class _CaseSensitivePurgeSearchIndex(FakeSearchIndex):
+    """A search index whose purge matches the canary's literal spelling only.
+
+    The ordinary partial purge: the backend's delete walks the documents that
+    match the canary as written, and a derived copy that re-cased it survives.
+    That is the hiding place Class 11 exists to find, and the scan has to see it.
+    """
+
+    def __init__(self, canaries: tuple[str, ...]) -> None:
+        super().__init__(soft_delete=False)
+        self._canaries = canaries
+
+    def delete(self, tenant: UUID) -> None:
+        self._documents[tenant] = [
+            text
+            for text in self._documents.get(tenant, [])
+            if not any(canary in text for canary in self._canaries)
+        ]
+
+
+def test_erasure_counts_a_marker_the_index_re_cased_as_residual() -> None:
+    # A raw case-sensitive `in` here signed ERASURE VERIFIED over a canary the
+    # tenant's own search index still returns: the pre-scan saw the canonical
+    # copy, the purge removed only that one, and the surviving re-cased copy
+    # was invisible to the post-scan. The A3 sibling on the same bytes called
+    # it RESIDUAL - two predicates, one question.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canaries = tuple(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.HARD_CANARY
+    )
+    search = _CaseSensitivePurgeSearchIndex(canaries)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            search.index(
+                marker.owner_tenant_id, f"search index entry mentioning {marker.plaintext}"
+            )
+            search.index(
+                marker.owner_tenant_id,
+                f"derived copy mentioning {marker.plaintext.lower()}",
+            )
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), search_index=search
+    ).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.SEARCH_INDEX].markers_before > 0
+    assert surfaces[Surface.SEARCH_INDEX].residual_after > 0
+    assert report.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.RESIDUAL
+    assert not report.erased
+    assert any(finding.surface is Surface.SEARCH_INDEX for finding in report.findings)
+
+
+class _CaseSensitivePurgeObservability(FakeObservability):
+    """A trace backend whose purge matches the canary's literal spelling only."""
+
+    def __init__(self, canaries: tuple[str, ...]) -> None:
+        super().__init__(soft_delete=False)
+        self._canaries = canaries
+
+    def delete(self, tenant: UUID) -> None:
+        self._traces[tenant] = [
+            row
+            for row in self._traces.get(tenant, [])
+            if not any(canary in row[2] for canary in self._canaries)
+        ]
+
+
+def test_erasure_counts_a_marker_the_trace_backend_re_cased_as_residual() -> None:
+    # The tracing family was the one the shared-predicate commit skipped, and
+    # `_scan_observability` applies no predicate of its own - it takes the
+    # truthiness of the adapter's already-filtered list, so the adapter's raw `in`
+    # WAS the residue test. Same bytes and same partial purge as the search-index
+    # case above, opposite verdicts: the wedge SKU signed ERASURE VERIFIED for a
+    # surface the backend still returns the canary from.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canaries = tuple(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.marker_type is MarkerType.HARD_CANARY
+    )
+    obs = _CaseSensitivePurgeObservability(canaries)
+    for marker in substrate.manifest.markers:
+        if marker.marker_type is MarkerType.HARD_CANARY:
+            obs.record(
+                marker.owner_tenant_id, "sectum-ai-erasure", f"trace recording {marker.plaintext}"
+            )
+            obs.record(
+                marker.owner_tenant_id,
+                "sectum-ai-erasure",
+                f"normalized trace copy {marker.plaintext.lower()}",
+            )
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), observability=obs
+    ).run(target)
+    surfaces = {surface.surface: surface for surface in report.surfaces}
+    assert surfaces[Surface.TRACING].markers_before > 0
+    assert surfaces[Surface.TRACING].residual_after > 0
+    assert report.coverage()[Surface.TRACING] is CoverageVerdict.RESIDUAL
+    assert not report.erased
+
+
+def test_a_shared_weights_model_that_memorized_the_canary_is_still_residual() -> None:
+    # The subject check gates its model scan on `_recall.has_base_control`, and
+    # Class 11 does not - a difference two reviews read as a missing gate. It is
+    # deliberate, and adding the gate would lose a true positive: A3's needles are
+    # natural-language fingerprints a base model may already know, while every
+    # needle here is `SECTUM-CANARY-` plus 26 base32 characters, which no base
+    # model produces by chance. On SHARED_WEIGHTS `has_base_control` is False, so
+    # gating would turn a model that really did memorize the canary from RESIDUAL
+    # into NOT_COVERED.
+    from sectum_ai.probes._recall import has_base_control
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    canary = next(
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY
+    )
+    model = FakeModel(adapter_bleed=True, soft_delete=True)  # SHARED_WEIGHTS
+    model.train_adapter(target, [f"reference {canary} on file"])
+    assert not has_base_control(model), "the premise: no untrained tenant to control against"
+
+    report = ErasureProbe(
+        substrate, vector=_seeded_store(substrate, soft_delete=False), model=model
+    ).run(target)
+    assert report.coverage()[Surface.MODEL_ADAPTER] is CoverageVerdict.RESIDUAL, report.coverage()
+
+
+def test_no_delete_api_and_no_baseline_is_not_a_caveat_about_the_tenants_data() -> None:
+    # Three properties tested the same five fields three ways. `verdict` and
+    # `coverage_verdict` asked "no delete API and a baseline was observed";
+    # `attestable_with_caveat` asked that AND `markers_before > 0`. A backend that
+    # raises ErasureUnsupported unconditionally - Helicone, Datadog APM - on a
+    # tenant whose traces had already aged out lands exactly in the gap.
+    #
+    # The caveat is a positive claim about the tenant's DATA ("no per-tenant
+    # erasure API - data presumed retained"), so making it on a surface where the
+    # scan observed nothing is an over-claim. It also fell out of `caveats` (which
+    # keys on the strict property) and out of `not_covered` (which keys on the
+    # loose one), so the pack asserted it and disclosed it nowhere.
+    starved = SurfaceErasure(
+        surface=Surface.TRACING,
+        markers_before=0,
+        residual_after=0,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert starved.verdict == "NO BASELINE", starved.verdict
+    assert starved.coverage_verdict is CoverageVerdict.NOT_COVERED
+    assert not starved.attestable_with_caveat
+    report = ErasureReport(target_tenant=UUID(int=1), findings=(), surfaces=(starved,))
+    assert report.caveats == ()
+    assert Surface.TRACING in report.not_covered, "it has to be disclosed as SOMETHING"
+
+    # A genuine caveat - the scan saw markers and the backend has no delete API -
+    # is untouched, or the fix trades the over-claim for silence about hiding
+    # place #8.
+    real = SurfaceErasure(
+        surface=Surface.TRACING,
+        markers_before=3,
+        residual_after=3,
+        erasure_supported=False,
+        baseline_observed=True,
+    )
+    assert real.verdict == "ATTESTABLE WITH CAVEAT"
+    assert real.coverage_verdict is CoverageVerdict.ATTESTABLE_WITH_CAVEAT
+    assert real.attestable_with_caveat
+    kept = ErasureReport(target_tenant=UUID(int=1), findings=(), surfaces=(real,))
+    assert [s.surface for s in kept.caveats] == [Surface.TRACING]
+
+
+def test_a_raw_client_failure_is_contained_to_its_own_surface() -> None:
+    # The containment caught `AdapterError` only. Translating a client failure is
+    # the ADAPTER's contract, and the erasure surfaces keep it unevenly: `backup/s3`
+    # and `otel` translate at every call site, while `cache/redis` and `memory/redis`
+    # have no `except` at all. So a `redis.ConnectionError` - the real client's own
+    # type - walked straight past the guard and destroyed all eight surface
+    # verdicts, after the run had already seeded canaries into live backends.
+    #
+    # Contracting the guarantee on a contract half the adapters do not keep made the
+    # guarantee untrue for most of them.
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+    store = FakeVectorStore()
+    store.upsert(tenant, [doc for doc in substrate.documents if doc.tenant_id == tenant])
+
+    class _RedisDown(FakeCache):
+        def delete(self, tenant: UUID) -> None:
+            raise ConnectionError("redis: connection refused")
+
+    report = ErasureProbe(substrate, vector=store, cache=_RedisDown()).run(tenant)
+    verdicts = {s.surface: s for s in report.surfaces}
+    # The other surface keeps its verdict...
+    assert verdicts[Surface.VECTOR_DB].verdict == "ERASED"
+    # ...and the failing one is NOT_COVERED, carrying the backend's own words.
+    broken = verdicts[Surface.SEMANTIC_CACHE]
+    assert broken.verdict == "NOT VERIFIED", broken.verdict
+    assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.NOT_COVERED
+    assert "connection refused" in (broken.unverifiable_reason or "")
+    assert not report.erased
+
+
+@pytest.mark.parametrize(
+    ("fail_after", "verdict", "residual", "unverifiable"),
+    [(2, "NOT VERIFIED", 0, 2), (3, "RESIDUAL DATA", 1, 1), (4, "RESIDUAL DATA", 2, 0)],
+)
+def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
+    fail_after: int, verdict: str, residual: int, unverifiable: int
+) -> None:
+    # Every optional-surface scan was a single comprehension, and the post-scan
+    # handler hard-coded `residual_after=0`. So a scan that positively found
+    # marker 1 and then died reading marker 2 reported "could not establish
+    # absence": ERASURE INCONCLUSIVE at exit 3, where the truth was ERASURE FAILED
+    # at exit 2. A confirmed Article 17 failure reached the DPO as "re-run", and
+    # the exit code a customer's CI keys on flipped.
+    #
+    # This is verbatim the harm the A3 sibling records fixing for itself -
+    # "every one of these scans used to be a comprehension, which dies WHOLE"
+    # (`subject_erasure/probe.py`) - which Class 11 never got. Swept across the
+    # failure point so both boundaries are pinned: dying on the FIRST read still
+    # establishes nothing, and a complete scan is unchanged.
+    from sectum_ai.adapters import FakeSearchIndex, FakeVectorStore
+    from sectum_ai.probes.erasure.probe import ErasureProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    calls = {"n": 0}
+    real_search = FakeSearchIndex.search
+
+    class _DiesMidScan(FakeSearchIndex):
+        def search(self, tenant: UUID, query: str) -> list[str]:
+            calls["n"] += 1
+            if calls["n"] > fail_after:
+                raise RuntimeError("opensearch: cluster went away mid-scan")
+            return real_search(self, tenant, query)
+
+        def delete(self, tenant: UUID) -> None:
+            return None  # a purge that leaves everything in place
+
+    index = _DiesMidScan()
+    for marker in substrate.manifest.markers:
+        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY:
+            index.index(target, f"search index entry mentioning {marker.plaintext}")
+
+    report = ErasureProbe(substrate, vector=FakeVectorStore(), search_index=index).run(
+        target, scope=(Surface.SEARCH_INDEX,)
+    )
+    surface = report.surfaces[0]
+    assert surface.verdict == verdict, surface
+    assert surface.residual_after == residual, surface
+    assert surface.unverifiable_after == unverifiable, surface
+    # The headline the DPO reads, and the exit code CI keys on.
+    assert report.genuine_residual is (residual > 0), report

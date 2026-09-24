@@ -58,7 +58,17 @@ class IkeaExtractionProbe(DetectingProbe):
                             actor_tenant_id=observer.tenant_id,
                             actor_user_id=observer.user_id,
                             action="vector.query",
-                            payload={"query": turn.format(entity=entity.value), "k": "10"},
+                            # `entity` names the SEQUENCE this turn belongs to. The
+                            # class's criterion is "the sequence surfaces a foreign
+                            # canary" (the module docstring), and the headline rate
+                            # counted turns - so a sequence that leaks only on its
+                            # third follow-up scored 1/3, and the metric understated
+                            # the extraction it exists to measure.
+                            payload={
+                                "query": turn.format(entity=entity.value),
+                                "k": "10",
+                                "entity": entity.value,
+                            },
                         )
                     )
         return steps

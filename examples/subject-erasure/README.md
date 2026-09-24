@@ -27,17 +27,26 @@ in the clear. See [`subject.yaml`](subject.yaml).
 
 `run.sh` seeds a substrate, runs `erasure --subject subject.yaml`, and independently
 verifies the attestation. It runs against the built-in synthetic store, so it reports
-`ERASED` with a loud warning that no live adapter is configured — an honest run never
-reads "verified" against an empty store.
+`ABSENCE CHECKED` with a loud warning that no live adapter is configured — an honest
+run never reads "verified" against an empty store.
 
 ## Against production data
 
 Point `vector_store` in [`sectum-ai.yaml`](sectum-ai.yaml) at your real backend
-(Qdrant, pgvector, …). A surface is `ERASED` only when every supplied id is gone
-**and** no supplied content still surfaces; every other surface reads `NOT_COVERED`,
-so the attestation never implies coverage it did not verify. Fingerprint probing is
+(Qdrant, pgvector, …). This check runs **after** the controller's deletion, so it
+establishes *absence*, never an erasure: a surface where every supplied id is gone
+and no supplied content still surfaces reads `ABSENCE CHECKED`, and the coverage
+block records it `NOT_COVERED`. A hit is still a hit — a surviving id or a phrase
+that still surfaces reads `RESIDUAL DATA`. Only Class 11, which plants its own
+canaries and counts them *before* the erasure, can attest `ERASED`. Fingerprint probing is
 best-effort — a clean result is evidence the content no longer surfaces, not proof of
-absence. `tests/integration/test_subject_erasure_qdrant.py` shows a live,
+absence. Against a real approximate-nearest-neighbour store the vector surface
+usually reads `NOT_COVERED` rather than `ERASED`: the check treats a **full**
+top-50 page without the phrase as inconclusive, and such a store returns a full
+page whenever the tenant still holds that many vectors — which an A3 subject
+erasure, removing one subject's data rather than the tenant's, leaves it doing
+(see the coverage gaps in `docs/coverage.md`).
+`tests/integration/test_subject_erasure_qdrant.py` shows a live,
 residual-catching run against Qdrant.
 
 ## Exit codes
