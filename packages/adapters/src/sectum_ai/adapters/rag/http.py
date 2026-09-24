@@ -57,12 +57,41 @@ class HttpRAGPipeline(RAGPipelineAdapter):
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = json.loads(response.read())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        # `UnicodeDecodeError` is a sibling of `JSONDecodeError`, not a subclass,
+        # so a non-UTF-8 body escaped this tuple - and the broad wrap added for
+        # exactly that case starts AFTER this block, so it never caught it either.
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ) as error:
             raise AdapterError(f"RAG HTTP request to {self._url} failed: {error}") from error
         if not isinstance(body, dict):
             raise AdapterError(f"RAG response must be a JSON object, got {type(body).__name__}")
-        retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
-        return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
+        # A 200 carrying an error envelope is not an answer: read as an empty one,
+        # the query still counted toward the Retrieval-Pivot Rate's denominator as
+        # a query that did not leak.
+        for key in ("error", "errors"):
+            if body.get(key):
+                raise AdapterError(
+                    f"RAG pipeline at {self._url} returned an error: {str(body[key])[:200]}"
+                )
+        # Any failure SHAPING the response is an adapter failure too, not a crash.
+        # The catch above named three transport errors, so a 200 whose body is
+        # well-formed JSON of the wrong shape - `"tool_calls": null`, a non-UTF-8
+        # body - escaped as a bare `TypeError`/`UnicodeDecodeError`, which is not
+        # this contract's error type and so escapes the runner's handling of it. Six
+        # sibling RAG adapters wrap broadly for exactly that reason.
+        try:
+            retrieved = tuple(self._hit(tenant, item) for item in body.get("retrieved", []))
+            return RagAnswer(answer=str(body.get("answer", "")), retrieved=retrieved)
+        except AdapterError:
+            raise
+        except Exception as error:
+            raise AdapterError(
+                f"RAG endpoint at {self._url} returned a body this adapter cannot read: {error}"
+            ) from error
 
     @staticmethod
     def _hit(tenant: UUID, item: object) -> VectorHit:

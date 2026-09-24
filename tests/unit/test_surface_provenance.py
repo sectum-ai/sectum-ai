@@ -72,12 +72,29 @@ def test_the_slot_list_covers_every_field_of_the_bundle() -> None:
     )
 
 
-def test_each_slot_contributes_a_distinct_known_surface() -> None:
+@pytest.mark.parametrize(
+    "config",
+    [
+        SectumConfig(),
+        # The one configuration that changes a slot's surface today: an `app`
+        # adapter fills the vector slot and declares `api`. The invariant is about
+        # every buildable bundle, and checking only the default one would pass a
+        # future adapter that reuses a surface straight through.
+        SectumConfig(adapters={"app": AdapterConfig(kind="fake")}),
+    ],
+    ids=["default", "app-in-the-vector-slot"],
+)
+def test_each_slot_contributes_a_distinct_known_surface(config: SectumConfig) -> None:
     # Two slots collapsing onto one surface would silently overwrite each other in
-    # the provenance dict, hiding one family's liveness behind another's.
-    bundle = build_adapters(SectumConfig())
+    # the provenance dict, hiding one family's liveness behind another's:
+    # `surface_provenance_of` is a dict comprehension keyed by the surface, so the
+    # last slot in `_BUNDLE_SLOTS` order would win and the other's LIVE/SYNTHETIC
+    # would vanish from the signed record without a trace.
+    bundle = build_adapters(config)
     surfaces = [getattr(bundle, slot).surface for slot in _BUNDLE_SLOTS]
     assert len(set(surfaces)) == len(surfaces), "two bundle slots report one surface"
+    # And the block the run signs carries one entry per slot, not fewer.
+    assert len(surface_provenance(bundle)) == len(_BUNDLE_SLOTS)
     assert all(s in Surface for s in surfaces)
 
 
@@ -203,3 +220,27 @@ def test_kv_cache_findings_count_as_live_when_the_model_adapter_is_live(
     assert summary["surface_provenance"] == {"model_adapter": "LIVE"}
     assert summary["confirmed_findings"] > 0
     assert summary["confirmed_on_live_surfaces"] == summary["confirmed_findings"]
+
+
+def test_a_run_recording_no_provenance_warns_the_operator(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Two-valued where every sibling is three-valued: the warning fired for a
+    # SYNTHETIC surface and stayed silent for a record with no provenance block
+    # at all - the one run whose subject cannot be established either way, and so
+    # the one the operator heard nothing about. `verify`'s run-scope, `score`'s
+    # UNRECORDED scope and the audit PDF's "Surface provenance: not recorded" all
+    # state it.
+    _warn_on_synthetic_surfaces({})
+    unrecorded = capsys.readouterr()
+    assert "records no surface provenance" in unrecorded.err, unrecorded.err
+    assert "cannot be established" in unrecorded.err
+    assert unrecorded.out == ""
+
+    # A fully live run still says nothing: there is nothing to disclose.
+    _warn_on_synthetic_surfaces({"vector_db": "LIVE"})
+    assert capsys.readouterr().err == ""
+
+    # And the SYNTHETIC case is unchanged.
+    _warn_on_synthetic_surfaces({"vector_db": "SYNTHETIC"})
+    assert "no live adapter configured" in capsys.readouterr().err

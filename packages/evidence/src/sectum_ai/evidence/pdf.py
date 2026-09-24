@@ -18,9 +18,15 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
-from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER
-from sectum_ai.evidence.labels import leak_label
+from sectum_ai.evidence.controls import (
+    _ERASURE_PROBE_IDS,
+    COVERAGE_DISCLAIMER,
+    live_surfaces,
+)
+from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
+from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
+    ERASURE_SURFACES,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
@@ -28,24 +34,16 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
+    rate_from_counts,
     sha256_hex,
+    wilson_interval,
 )
 
-# Canonical erasure-surface order for the coverage matrix, kept here (rather than
-# importing from sectum_ai.probes) because the evidence package sits below probes
-# in the acyclic package graph (ADR-0004) and must not depend on it. It mirrors
-# ``sectum_ai.probes.ERASURE_SURFACES``; the erasure run writes a verdict for each
-# of these into ``RunMetrics.erasure_coverage``.
-_ERASURE_SURFACE_ORDER: tuple[str, ...] = (
-    "vector_db",
-    "tracing",
-    "agent_memory",
-    "semantic_cache",
-    "model_adapter",
-    "search_index",
-    "eval_set",
-    "backup",
-)
+# The coverage matrix's row order, derived from the canonical set rather than
+# transcribed. This was a third copy, kept here because `evidence` sits below
+# `probes` in the acyclic package graph (ADR-0004) - which stopped being a reason
+# once the set moved to `spec`, below both.
+_ERASURE_SURFACE_ORDER: tuple[str, ...] = tuple(surface.value for surface in ERASURE_SURFACES)
 
 # A short, DPO-facing gloss for each coverage verdict rendered in the matrix.
 _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
@@ -63,8 +61,11 @@ _COVERAGE_VERDICT_GLOSS: dict[str, str] = {
 # it did NOT verify, so a NOT_COVERED surface is never read as erased.
 _COVERAGE_CAVEAT = (
     "Coverage states what this attestation verified, surface by surface. A "
-    "NOT_COVERED surface was out of scope, had no configured adapter, or showed "
-    "no pre-erasure baseline - it is explicitly not evidence of erasure and must "
+    "NOT_COVERED surface was out of scope, had no configured adapter, showed "
+    "no pre-erasure baseline, or was scanned without establishing the markers' "
+    "absence (the backend returned a full page of results without them, which a "
+    "marker still stored but ranked below the page produces too) - it is "
+    "explicitly not evidence of erasure and must "
     "not be read as erased. ERASED is measured through the erased tenant's own read "
     "path: a backend that retains the data while revoking that path is "
     "indistinguishable from one that purged it, from outside. ATTESTABLE WITH "
@@ -95,7 +96,25 @@ def provenance_statement(run: RunResult) -> str:
         )
     live = sorted(s for s, p in provenance.items() if p == SurfaceProvenance.LIVE.value)
     synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
+    # The block is what the run ACCOUNTED for; the findings may rest on more. See
+    # `labels.unaccounted_surfaces` for what shipped before this qualifier existed.
+    unaccounted = unaccounted_surfaces(run)
+    trailer = (
+        ""
+        if not unaccounted
+        else (
+            f" This run's findings also rest on {', '.join(unaccounted)}, which its "
+            "provenance block never recorded: whether those were live backends or "
+            "Sectum's built-in fakes cannot be established from this pack."
+        )
+    )
     if not synthetic:
+        if unaccounted:
+            return (
+                "Surface provenance: every surface this run RECORDED was a live, "
+                f"configured backend ({', '.join(live)}), and findings on those "
+                f"surfaces describe those systems.{trailer}"
+            )
         return (
             "Surface provenance: every surface exercised by this run was a live, "
             f"configured backend ({', '.join(live)}). These findings describe those "
@@ -107,13 +126,13 @@ def provenance_statement(run: RunResult) -> str:
             f"run ({', '.join(synthetic)}) was Sectum's built-in synthetic store, so "
             "the findings, metrics, and any clean result below describe that synthetic "
             "stack and NOT a production system. This pack is a demonstration, not an "
-            "attestation."
+            f"attestation.{trailer}"
         )
     return (
         f"Surface provenance: {len(live)} of {len(provenance)} surfaces were live, "
         f"configured backends ({', '.join(live)}). The remaining surfaces "
         f"({', '.join(synthetic)}) were Sectum's built-in synthetic stores; results "
-        "attributed to them describe that fake and not a production system."
+        f"attributed to them describe that fake and not a production system.{trailer}"
     )
 
 
@@ -131,6 +150,35 @@ def confirmed_by_kind(run: RunResult) -> str:
     if not confirmed:
         return "0"
     parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+    # How many describe the operator's systems: an auditor read "226 confirmed
+    # cross-tenant findings" beside asserted controls while the same record's
+    # OSCAL said none was confirmed on a live surface.
+    live = sum(
+        1
+        for f in confirmed
+        if run.surface_provenance.get(backing_surface(f)) == SurfaceProvenance.LIVE.value
+    )
+    # Always, including - especially - when the answer is zero: gating it on the
+    # run having a live surface dropped it from the one pack where it is the whole
+    # point. Three-valued, like every label beside it: a run that records no
+    # provenance at all cannot be said to have zero live-surface findings, and
+    # saying so contradicted the scope paragraph below it in the same document.
+    parts += (
+        f"; on live surfaces {live}"
+        if run.surface_provenance
+        else "; live-surface attribution not recorded"
+    )
+    # "on live surfaces 0" reads as "we placed them, on a fake". An unaccounted
+    # finding was not placed at all, and the two rendered byte-identically - the
+    # same conflation `unaccounted_surfaces` exists to break one section above.
+    unplaceable = sum(
+        1 for finding in confirmed if backing_surface(finding) in unaccounted_surfaces(run)
+    )
+    if unplaceable:
+        parts += (
+            f"; {unplaceable} of them rest on a surface this run's provenance "
+            "does not record and are placed on no stack at all"
+        )
     return f"{len(confirmed)} ({parts})"
 
 
@@ -141,13 +189,29 @@ def probes_exercised(run: RunResult) -> str:
     when the run names them: a one-probe pack and a twelve-probe pack rendered
     identically apart from the digest.
     """
-    if not run.probe_versions:
+    # A finding is itself proof its probe executed - the reasoning
+    # `score._confirmed_probe_ids`, `baseline._exercised_probes` and
+    # `controls._run_supports` all apply. This renderer did not, so the auditor
+    # PDF read "Probes exercised: none recorded" in the same signed pack that
+    # grades that probe's class FAIL.
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    if not exercised:
         return "none recorded"
-    ids = sorted(run.probe_versions)
+    ids = sorted(exercised)
     text = f"{len(ids)}: {', '.join(ids)}"
     dropped = sorted(p for p, n in run.metrics.user_steps_dropped.items() if n)
     if dropped:
         text += f"; user-level steps not run (tenant-level steps only) for: {', '.join(dropped)}"
+    # The sibling disclosure. A probe some of whose plants the backend swallowed
+    # still ran and still graded, on less setup than it planned - and the pack said
+    # so nowhere, so a class graded on half its setup read exactly like one graded
+    # on all of it.
+    unconfirmed = sorted(p for p, n in run.metrics.unconfirmed_plants.items() if n)
+    if unconfirmed:
+        text += (
+            "; planted data could not be read back (the backend acknowledged the write "
+            f"and did not serve it) for: {', '.join(unconfirmed)}"
+        )
     return text
 
 
@@ -159,13 +223,25 @@ def _coverage_rows(run: RunResult) -> list[tuple[str, str]]:
     extra surface key (forward-compatibility) is appended in sorted order so the
     matrix is total and deterministic. Returns ``[]`` for a non-erasure run, so
     the section is omitted entirely.
+
+    A LIVE erasure surface the block never mentions is rendered NOT_COVERED rather
+    than omitted. Both siblings already default it that way - ``oscal`` and
+    ``controls._erasure_assertion``, whose comment records the same defect: "it was
+    neither verified nor unestablished - it simply vanished." This matrix is the
+    DPO-facing one, promising coverage "surface by surface", and it was the copy
+    that still vanished it: the row disappeared while the control assertion two
+    pages on said absence could not be established there.
     """
     coverage = run.metrics.erasure_coverage
     if not coverage:
         return []
-    ordered = [s for s in _ERASURE_SURFACE_ORDER if s in coverage]
-    extra = sorted(s for s in coverage if s not in _ERASURE_SURFACE_ORDER)
-    return [(surface, coverage[surface]) for surface in (*ordered, *extra)]
+    rows = set(coverage) | (live_surfaces(run) & frozenset(_ERASURE_SURFACE_ORDER))
+    ordered = [s for s in _ERASURE_SURFACE_ORDER if s in rows]
+    extra = sorted(s for s in rows if s not in _ERASURE_SURFACE_ORDER)
+    return [
+        (surface, coverage.get(surface, CoverageVerdict.NOT_COVERED.value))
+        for surface in (*ordered, *extra)
+    ]
 
 
 class PdfEngine(StrEnum):
@@ -185,20 +261,141 @@ class PdfEngine(StrEnum):
 # and 8.4). Factual and anti-hype (section 20): what was tested, how detection
 # works, and the explicit limits (no remediation, test coverage not legal
 # certification).
+_ERASURE_METHODOLOGY: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. This pack attests "
+    "whether those markers are still retrievable after erasure on the surfaces "
+    "scanned; it makes no claim about tenant isolation, which no probe in this "
+    "run measured."
+)
+
+# The same sentence with the attestation claim removed, for the erasure branch.
+# `scope_methodology` gained the provenance narrowing on its isolation arms only,
+# so an all-synthetic erasure pack still read "This pack ATTESTS whether those
+# markers are still retrievable" directly beneath `provenance_statement`'s "This
+# pack is a demonstration, not an attestation." - present in both shipped erasure
+# samples.
+_ERASURE_SYNTHETIC: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. This pack records "
+    "whether those markers were still retrievable after erasure on the surfaces "
+    "scanned, on the stack named above, which is not a production system; it "
+    "makes no claim about tenant isolation, which no probe in this run measured."
+)
+
+_DETECTOR_TAIL = (
+    "Confirmation requires the observed content to trace back to a specific "
+    "marker in the ground-truth manifest, so a candidate that cannot be tied to "
+    "a manifest marker is recorded as unverified rather than confirmed. "
+    "Confirmed findings are therefore manifest-grounded - they are not asserted "
+    "to be free of error, and this pack does not rate their exploitability."
+)
+
+# Which tiers ran is a property of the RUN, not of the product. Stated
+# unconditionally, this paragraph promised an auditor "semantic similarity, then
+# a calibrated judge" over three kinds of run that had neither: an `erasure`
+# attestation, whose probe matches by exact substring and invokes no provider at
+# all; a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
+# fake` and `judge.kind: fake` - an offline hashing vector its own docstring
+# calls "not semantically meaningful beyond lexical overlap", and a token-order
+# string matcher; and a run whose threshold gated the semantic tier shut. The
+# record now carries `detection`, so the sentence can be true.
+# Composed per TIER, because the two are configured independently and
+# `offline_only` collapsed them with `and`: one real provider flipped the whole
+# paragraph to the fully-layered claim, so a run with a real embedder and the
+# default `judge.kind: fake` told an auditor "then the configured judge" over a
+# token-order string matcher. That is a documented setup - `EmbedderConfig`'s own
+# `base_url` markets pointing the embedder at a local Ollama, while a judge needs
+# a chat model.
+_TIER_EMBEDDER = {
+    True: (
+        "an OFFLINE similarity stage - this run configured no embedding model, so "
+        "the second tier was Sectum's hashing vector, which measures lexical "
+        "overlap rather than meaning"
+    ),
+    False: "semantic similarity against the configured embedding model",
+}
+_TIER_JUDGE = {
+    True: (
+        "an OFFLINE adjudication stage - this run configured no judge, so the third "
+        "tier was Sectum's token-order string matcher, which is not a calibrated "
+        "judge"
+    ),
+    False: "the configured judge",
+}
+
+
+def _detector_tiers(
+    embedder_offline: bool, judge_offline: bool, semantic_threshold: float | None = None
+) -> str:
+    """The layered-detector sentence, naming each tier as it actually ran.
+
+    The threshold is part of "as it actually ran": the semantic gate is
+    `if not present and similarity < threshold: continue`, and cosine similarity
+    is clamped to 1.0 - so a threshold of 1.0 admits nothing but an exact match
+    and the semantic tier is shut. `DetectionProvenance.semantic_threshold` was
+    recorded for precisely this ("a pack where the semantic tier was gated shut
+    ... was indistinguishable from one where it ran") and no renderer read it, so
+    the paragraph was byte-identical at 0.62 and at 1.0 while telling the auditor
+    "then semantic similarity against the configured embedding model".
+    """
+    tail = (
+        " A paraphrase an offline stage cannot see is not reported as absent - it "
+        "is not reported at all; configure `detection.embedder` and "
+        "`detection.judge` to exercise the semantic tiers. "
+        if embedder_offline or judge_offline
+        else " An exact canary match is decided by the observation itself; a "
+        "semantic match also depends on that judge. "
+    )
+    gate = ""
+    if semantic_threshold is not None:
+        gate = (
+            f" The semantic tier admitted a candidate at a similarity of "
+            f"{semantic_threshold:.2f} or above"
+            + (
+                "; cosine similarity cannot exceed 1.00, so at this setting it "
+                "admitted nothing an exact match had not already decided and the "
+                "semantic tier did not contribute to this pack."
+                if semantic_threshold >= 1.0
+                else "."
+            )
+        )
+    return (
+        "Each observation passes a layered detector - exact canary match, then "
+        f"{_TIER_EMBEDDER[embedder_offline]}, then {_TIER_JUDGE[judge_offline]}."
+        f"{gate}{tail}"
+    ) + _DETECTOR_TAIL
+
+
+_DETECTOR_EXACT = (
+    "Each observation is matched against the ground-truth manifest by exact "
+    "content. This run invoked no embedding model and no judge - the erasure "
+    "workflow reads each surface and checks the subject's own markers directly - "
+    "so no semantic or adjudicated tier contributed to any verdict here. "
+) + _DETECTOR_TAIL
+
+# The same sentence, minus the attestation claim. `provenance_statement` already
+# ends "This pack is a demonstration, not an attestation." for an all-synthetic
+# run, and this paragraph is rendered directly beneath it - so the two read, back
+# to back, "not an attestation" and "this pack attests the isolation of those
+# surfaces". `scope_methodology` conditioned this paragraph on erasure-vs-isolation
+# and never on provenance, and the renderer's own doctrine ("a run-level paragraph
+# does not reach a reader tabulating rows") cuts both ways: a reader who lands on
+# Scope and methodology carries away the second sentence.
+_SCOPE_SYNTHETIC: str = (
+    "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
+    "markers, recorded in a hashed ground-truth manifest. Probes run from each "
+    "tenant's session against the configured surfaces; this pack records what "
+    "those probes observed on the stack named above, which is not a production "
+    "system."
+)
+
 _SCOPE_METHODOLOGY: tuple[str, ...] = (
     "Sectum AI provisions synthetic tenants seeded with cryptographic canary "
     "markers, recorded in a hashed ground-truth manifest. Probes run from each "
     "tenant's session against the configured surfaces; this pack attests the "
     "isolation of those surfaces under the run's scenario.",
-    "Each observation passes a layered detector - exact canary match, then "
-    "semantic similarity, then a calibrated judge. Confirmation requires the "
-    "observed content to trace back to a specific marker in the ground-truth "
-    "manifest, so a candidate that cannot be tied to a manifest marker is "
-    "recorded as unverified rather than confirmed. An exact canary match is "
-    "decided by the observation itself; a semantic match also depends on the "
-    "configured judge. Confirmed findings are therefore manifest-grounded - "
-    "they are not asserted to be free of error, and this pack does not rate "
-    "their exploitability.",
+    _DETECTOR_TAIL,
     "Scope is limited to the probes and surfaces exercised in this run, against "
     "the test condition fixed by the manifest hash below. Sectum verifies and "
     "attests; it does not remediate - findings carry remediation pointers, not "
@@ -214,12 +411,93 @@ _SCOPE_METHODOLOGY: tuple[str, ...] = (
 _VERIFICATION_INSTRUCTION: str = (
     "Verify this pack independently by running 'sectum-ai verify' on it. That "
     "recomputes the whole-pack attested digest - over the run record, the "
-    "manifest hash, the control mappings, and the PDF reference - and checks it "
+    "manifest hash, the control mappings, the PDF reference, and the two anchor "
+    "flags - and checks it "
     "against the timestamp token (and the Rekor inclusion proof when present). "
     "The run digest above is the run's identifier, not the value checked against "
     "the token; any edit to the attested content changes the attested digest and "
     "fails verification."
 )
+
+# Whether THIS pack is independently anchored is the premise of the sentence
+# above, and the PDF said nothing about it. Without an external anchor the
+# timestamp is `LocalTimestamper`'s token, which its own docstring calls
+# "reproducible by anyone over any digest ... an attacker who edits a pack can
+# simply re-stamp it" - so "any edit fails verification" was an over-claim, and
+# the reader following the instruction on a default pack gets
+# `[FAIL] independent-anchor` and `VERIFICATION FAILED` at exit 4 over a pack
+# nobody touched. Every other renderer makes the distinction - `_echo_verdict`,
+# the `independent-anchor` check, the in-toto `anchors` block, and PACK-README
+# inside the same deliverable - and the audit PDF, the artifact the auditor
+# actually reads, was the one that did not.
+_ANCHOR_NONE: str = (
+    "Independent anchor: NONE. This pack's timestamp is Sectum's local "
+    "development token - reproducible by anyone over any digest, so it binds the "
+    "content but is not independent evidence of when, or by whom, it was "
+    "produced. Verification of this pack is integrity-only and 'sectum-ai verify' "
+    "requires --allow-unanchored to complete; without it the run above exits 4 on "
+    "[FAIL] independent-anchor, which is a statement about the anchor and not "
+    "about the content. Re-create the pack with 'report --tsa' and/or '--rekor' "
+    "for a pack whose tamper evidence stands on its own."
+)
+_ANCHOR_PRESENT: str = (
+    "Independent anchor: {anchors}. The attested digest is bound to an anchor "
+    "outside this pack. The tamper evidence is comparative, not self-contained: "
+    "an adversary can edit a pack, recompute the digest and obtain a fresh "
+    "anchor, and that pack will also verify. What gives it away is a reader "
+    "holding the originally published digest, or the Rekor log's history, "
+    "seeing that the re-anchored pack is a different, later record."
+)
+# Both branches above describe the ANCHOR. Whether anything was LIVE is a
+# separate axis, and `verify` gates on it separately - so an all-synthetic pack
+# exits 4 on [FAIL] run-scope no matter which branch it took. The unanchored
+# branch named one flag and stopped, which sent an auditor following the
+# document's own bolded instruction to a tamper-style failure on a genuine
+# artifact; the anchored branch named no flag at all. `docs/samples/README.md`
+# already named both. The note is appended to BOTH branches because the
+# condition belongs to neither.
+_SCOPE_FLAG_TAIL: str = (
+    ", so 'sectum-ai verify' also requires --allow-synthetic to complete; without "
+    "it the run exits 4 on [FAIL] run-scope, which is a statement about what was "
+    "in scope and not about the content."
+)
+_SCOPE_FLAG_SYNTHETIC: str = " No surface in this run was live"
+_SCOPE_FLAG_UNRECORDED: str = (
+    " This pack records no surface provenance, so whether it touched live backends "
+    "or Sectum's built-in synthetic stores cannot be established from it"
+)
+_SCOPE_FLAG_UNACCOUNTED: str = (
+    " Findings in this pack rest on {surfaces}, which its provenance never recorded, "
+    "so whether those were live cannot be established from it"
+)
+
+
+def _scope_flag_note(pack: EvidencePack) -> str:
+    """The `--allow-synthetic` sentence, when `verify`'s run-scope would demand it.
+
+    Keyed on the same three things the gate is (`verify._check_run_scope`): an
+    ABSENT provenance block, a surface recorded as anything but LIVE, and a
+    finding resting on a surface the block never recorded.
+
+    The first version keyed on `live_surfaces()` being empty. That is true for an
+    all-synthetic run AND for a record that does not say, so the PDF asserted "No
+    surface in this run was live" over a pack whose own gate says exactly that
+    cannot be established - and it was silent on the third case, where run-scope
+    fails with a live surface present, which reproduced the very failure the note
+    exists to prevent: an auditor following the document's instruction to a
+    tamper-style exit 4 on a genuine artifact.
+    """
+    run = pack.run_result
+    provenance = run.surface_provenance
+    unaccounted = unaccounted_surfaces(run)
+    if not provenance:
+        return _SCOPE_FLAG_UNRECORDED + _SCOPE_FLAG_TAIL
+    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
+    if not synthetic and not unaccounted:
+        return ""
+    if not synthetic:
+        return _SCOPE_FLAG_UNACCOUNTED.format(surfaces=", ".join(unaccounted)) + _SCOPE_FLAG_TAIL
+    return _SCOPE_FLAG_SYNTHETIC + _SCOPE_FLAG_TAIL
 
 
 def _finding_controls(finding: Finding) -> str:
@@ -274,7 +552,86 @@ def _remediation_line(finding: Finding) -> str | None:
     return f"<i>Remediation: {escape(finding.remediation_pointer)}</i>"
 
 
-def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
+def synthetic_prefix(run: RunResult, finding: Finding) -> str:
+    """``"[synthetic surface] "`` when this finding describes a built-in fake.
+
+    Keyed on an explicit LIVE, like every sibling that answers this question.
+    SARIF floors such a finding's severity and OSCAL prefixes its observation;
+    both PDF engines rendered one identically to a live CRITICAL - in the one
+    document an auditor actually reads.
+    """
+    recorded = run.surface_provenance.get(backing_surface(finding))
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - Sectum's built-in fake, not your stack] "
+
+
+def coverage_gloss(run: RunResult, surface: str, verdict: str) -> str:
+    """The coverage row's plain-English verdict, scoped to the surface it is about.
+
+    `verified clean - no marker retrievable...` over a surface that was Sectum's
+    own in-memory fake is the same over-claim `synthetic_prefix` exists to stop
+    one section above, and the coverage matrix was the only per-row artifact
+    without it: SARIF prefixes and floors, OSCAL prefixes and tags the
+    provenance, the finding rows prefix. A run-level paragraph does not reach a
+    reader tabulating rows - OSCAL's own comment says so.
+
+    NOT_COVERED needs no prefix: it already asserts nothing about the surface.
+    """
+    gloss = _COVERAGE_VERDICT_GLOSS.get(verdict, "")
+    if not gloss or verdict == CoverageVerdict.NOT_COVERED.value:
+        return gloss
+    recorded = run.surface_provenance.get(surface)
+    if recorded == SurfaceProvenance.LIVE.value:
+        return gloss
+    if recorded is None:
+        return f"[surface provenance not recorded - not evidence of a live backend] {gloss}"
+    return f"[synthetic surface - Sectum's built-in fake, not your stack] {gloss}"
+
+
+def scope_methodology(run: RunResult) -> tuple[str, ...]:
+    """The methodology paragraphs, with the isolation claim only where it is earned.
+
+    The first paragraph asserted "this pack attests the isolation of those
+    surfaces" on every pack - including an erasure attestation whose only probe
+    was `gdpr-erasure-verification`. That is verbatim the claim
+    `controls._run_supports` exists to refuse ("a run in which only
+    gdpr-erasure-verification executed used to satisfy this test and ship SOC 2 /
+    ISO / EU AI Act mappings ... in the artifact built for auditors"): the mapping
+    table was fixed and the prose one section above it was not, so both shipped
+    erasure samples carry it.
+    """
+    exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
+    erasure_only = bool(exercised) and not exercised - _ERASURE_PROBE_IDS
+    if erasure_only:
+        # No detector ran at all, whatever the config says: the erasure workflow
+        # never constructs one.
+        detector = _DETECTOR_EXACT
+    elif run.detection is None:
+        # A record from before `detection` was recorded. Which tiers ran cannot be
+        # read off it, so say only what holds for any run - the manifest-grounding
+        # rule - rather than assert tiers that may not have run.
+        detector = _DETECTOR_TAIL
+    else:
+        detector = _detector_tiers(
+            run.detection.embedder_kind == "fake",
+            run.detection.judge_kind == "fake",
+            run.detection.semantic_threshold,
+        )
+    if erasure_only:
+        head = _ERASURE_METHODOLOGY if live_surfaces(run) else _ERASURE_SYNTHETIC
+    elif live_surfaces(run):
+        head = _SCOPE_METHODOLOGY[0]
+    else:
+        # Nothing ran live, so there is no isolation of "those surfaces" to attest
+        # - which is exactly what the paragraph above this one already says.
+        head = _SCOPE_SYNTHETIC
+    return (head, detector, *_SCOPE_METHODOLOGY[2:])
+
+
+def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:
     """Return escaped finding lines, or a single 'none' line for an empty run.
 
     Each finding contributes a summary line - ending with its mapped control IDs
@@ -287,8 +644,9 @@ def _finding_lines(findings: tuple[Finding, ...]) -> list[str]:
         return ["No findings were recorded for this run."]
     lines: list[str] = []
     for finding in findings:
+        marker = escape(synthetic_prefix(run, finding)) if run is not None else ""
         line = (
-            f"<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
+            f"{marker}<b>{escape(finding.severity.value)}</b> - {escape(finding.probe_id)} "
             f"on {escape(finding.surface.value)}: marker "
             f"{escape(finding.marker_id or 'n/a')} ({escape(finding.status.value)})"
         )
@@ -332,16 +690,42 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
         The formatted rate string, or ``None`` when the run recorded no rate.
     """
     metrics = run.metrics
+    # Recomputed from the record's binomial COUNTS, never relayed from the rate and
+    # interval the record asserts about itself - the rule `score._headline` already
+    # follows, and for the same reason: the counts are the evidence, the rate and
+    # interval are bookkeeping. Relaying them let a record whose counts said 334 of
+    # 350 print `2.0% (95% CI 1.9%-2.1%, n=350)` into the auditor's signed PDF,
+    # while `score` read the same record as 95.4%. Refusing to invent an interval
+    # while faithfully relaying a fabricated one reads identically to the auditor.
+    rate = rate_from_counts(
+        metrics.retrieval_pivot_k, metrics.retrieval_pivot_n, metrics.retrieval_pivot_rate
+    )
+    # The record contradicts its own counts. There IS something to state: `score`
+    # refuses to grade such a record outright, while returning None here omitted the
+    # row - byte-identical to a run that took no Class-2 step at all, so the
+    # auditor's PDF hid a corrupt record behind the same silence as an honest one.
+    if metrics.retrieval_pivot_k > metrics.retrieval_pivot_n:
+        return (
+            f"not stated: this record reports {metrics.retrieval_pivot_k} of "
+            f"{metrics.retrieval_pivot_n} retrieval pivots, which is impossible, so "
+            "neither its counts nor the rate it asserts can be believed"
+        )
+    if rate is None:
+        return None
+    if metrics.retrieval_pivot_n > 0:
+        low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
+        return f"{rate:.1%} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
     if metrics.retrieval_pivot_rate is None:
         return None
-    rate = f"{metrics.retrieval_pivot_rate:.1%}"
-    if metrics.retrieval_pivot_rate_ci is None:
-        return rate
-    low, high = metrics.retrieval_pivot_rate_ci
-    return f"{rate} (95% CI {low:.1%}-{high:.1%}, n={metrics.retrieval_pivot_n})"
+    # No counts, so the rate is all the record has and any interval it asserts is
+    # uncheckable - there is no sample size to compute one from. Rendered bare it
+    # was byte-identical to a measured rate beside its CI, which is the same
+    # conflation the `k > n` branch above refuses: label it instead of hiding it,
+    # and instead of presenting it as something it is not.
+    return f"{metrics.retrieval_pivot_rate:.1%} (asserted by the record; no sample size recorded)"
 
 
-def _render_reportlab(pack: EvidencePack) -> bytes:
+def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
 
     Renders only digest-stable content (run digest, manifest hash, control
@@ -376,10 +760,10 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
 
     flow += [Spacer(1, 12), Paragraph("Scope and methodology", heading)]
     flow += [Paragraph(escape(provenance_statement(run)), body)]
-    flow += [Paragraph(escape(text), body) for text in _SCOPE_METHODOLOGY]
+    flow += [Paragraph(escape(text), body) for text in scope_methodology(run)]
 
     flow += [Spacer(1, 12), Paragraph("Findings", heading)]
-    flow += [Paragraph(line, body) for line in _finding_lines(run.findings)]
+    flow += [Paragraph(line, body) for line in _finding_lines(run.findings, run)]
 
     coverage_rows = _coverage_rows(run)
     if coverage_rows:
@@ -392,7 +776,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
             ]
         ]
         for surface, verdict in coverage_rows:
-            gloss = _COVERAGE_VERDICT_GLOSS.get(verdict, "")
+            gloss = coverage_gloss(run, surface, verdict)
             table_data.append(
                 [
                     Paragraph(escape(surface), body),
@@ -418,7 +802,10 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         flow.append(Paragraph(f"<i>{escape(_COVERAGE_CAVEAT)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Compliance control coverage", heading)]
-    flow += [Paragraph(line, body) for line in _control_lines(pack.control_mappings)]
+    # Say it, rather than leaving a bare heading: the weasyprint engine does, and
+    # an empty section reads as "not rendered" where the other reads "none".
+    control_lines = _control_lines(pack.control_mappings) or ["No control mappings were recorded."]
+    flow += [Paragraph(line, body) for line in control_lines]
     flow.append(Paragraph(f"<i>{escape(COVERAGE_DISCLAIMER)}</i>", body))
 
     flow += [Spacer(1, 12), Paragraph("Integrity and independent verification", heading)]
@@ -430,6 +817,7 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in integrity
     ]
     flow.append(Paragraph(escape(_VERIFICATION_INSTRUCTION), body))
+    flow.append(Paragraph(f"<b>{escape(anchor)}</b>", body))
 
     buffer = io.BytesIO()
     document = SimpleDocTemplate(buffer, pagesize=LETTER, title="Sectum AI Evidence Pack")
@@ -437,8 +825,45 @@ def _render_reportlab(pack: EvidencePack) -> bytes:
     return buffer.getvalue()
 
 
+def anchor_statement(pack: EvidencePack, *, anchors: tuple[bool, bool] | None = None) -> str:
+    """What the PDF says about this pack's independent anchor.
+
+    Derived from the pack by default, so the sample-regeneration guard - which
+    re-renders a committed PDF from its committed pack and compares bytes - keeps
+    holding. `render_audit_pack_and_hash` overrides it with the INTENT, because
+    the PDF is rendered before the token that would prove it exists: its
+    throwaway pack carries `tsa_token=""`, so deriving there would print "no
+    anchor" into the PDF of a `--tsa` run and then disagree with the pack that
+    binds it.
+    """
+    timestamped, logged = (
+        anchors
+        if anchors is not None
+        else (
+            _is_external_timestamp_anchor(pack.tsa_token),
+            bool(pack.rekor_proof and pack.rekor_proof.strip()),
+        )
+    )
+    named = [
+        name
+        for name, present in (
+            ("RFC 3161 timestamp", timestamped),
+            ("Rekor transparency log", logged),
+        )
+        if present
+    ]
+    scope_note = _scope_flag_note(pack)
+    if not named:
+        return _ANCHOR_NONE + scope_note
+    return _ANCHOR_PRESENT.format(anchors=" and ".join(named)) + scope_note
+
+
 def render_audit_pack(
-    pack: EvidencePack, output: Path, *, engine: PdfEngine = PdfEngine.REPORTLAB
+    pack: EvidencePack,
+    output: Path,
+    *,
+    engine: PdfEngine = PdfEngine.REPORTLAB,
+    anchors: tuple[bool, bool] | None = None,
 ) -> bytes:
     """Render an ``EvidencePack`` to an auditor-facing PDF at ``output``; return its bytes.
 
@@ -450,13 +875,14 @@ def render_audit_pack(
     returned bytes are exactly what was written to ``output``, so a caller can
     hash them for the ``pdf_ref`` binding.
     """
+    anchor = anchor_statement(pack, anchors=anchors)
     if engine is PdfEngine.WEASYPRINT:
         # Imported lazily so the base install never pulls in weasyprint.
         from sectum_ai.evidence.pdf_weasyprint import render_weasyprint
 
-        data = render_weasyprint(pack)
+        data = render_weasyprint(pack, anchor)
     else:
-        data = _render_reportlab(pack)
+        data = _render_reportlab(pack, anchor)
     output.write_bytes(data)
     return data
 
@@ -468,6 +894,7 @@ def render_audit_pack_and_hash(
     output: Path,
     *,
     engine: PdfEngine = PdfEngine.REPORTLAB,
+    anchors: tuple[bool, bool] = (False, False),
 ) -> str:
     """Render the audit pack to ``output`` and return the SHA-256 of its bytes.
 
@@ -484,4 +911,4 @@ def render_audit_pack_and_hash(
         tsa_token="",
         control_mappings=control_mappings,
     )
-    return sha256_hex(render_audit_pack(render_only, output, engine=engine))
+    return sha256_hex(render_audit_pack(render_only, output, engine=engine, anchors=anchors))

@@ -33,7 +33,7 @@ time and still pass.
 
 **The anchors bind the whole attested pack.** A new `attested_digest(pack)` is the
 SHA-256 of the canonical form of `{run_result, manifest_hash, control_mappings,
-pdf_ref, anchored_in_log}`. `build_evidence_pack` timestamps and Rekor-records
+pdf_ref, anchored_in_log}` — and, since the update below, `anchored_with_timestamp`. `build_evidence_pack` timestamps and Rekor-records
 *that* digest; `sectum-ai verify` recomputes it from the pack's own fields and checks
 it against the timestamp token and any Rekor proof. Editing any bound field
 changes the digest and fails verification.
@@ -54,7 +54,8 @@ changes the digest and fails verification.
 This is a schema change: `SCHEMA_VERSION` is bumped `0.1.0` → `0.2.0`, and packs
 produced under the old scheme do not verify under the new verifier (acceptable —
 at the time of this decision nothing had been published to PyPI and no packs were
-in the wild; the first public release, v0.1.1, ships `SCHEMA_VERSION` 0.5.0).
+in the wild; v0.1.1 - the first release under the `sectum_ai` namespace - ships
+`SCHEMA_VERSION` 0.5.0, and the first public release, v0.1.0, shipped 0.1.0).
 
 **Update (2026-06-03): the timestamp anchor is downgrade-resistant too.** A later
 hardening review found the RFC 3161 TSA anchor still had the asymmetry this ADR
@@ -76,8 +77,8 @@ timestamps to UTC) — see the update note in
 - Tamper-evidence now covers the full auditor-facing surface, not just the run record.
 - Transparency-log anchoring cannot be silently downgraded.
 - `sectum-ai verify <pack>` without the original manifest confirms integrity and internal
-  consistency but not marker-ownership; the CLI now says so explicitly (re-run with
-  the manifest to bind ownership).
+  consistency but not marker-ownership; the CLI now says so explicitly, and
+  names the flag that binds it (`--manifest <manifest.json>`).
 - `tests/invariants/test_evidence_roundtrip.py` gained a tamper-each-field suite
   (control mappings, pdf ref, manifest hash, Rekor strip, flag flip, forged local token).
 - `pdf_ref` is bound into the digest and the CLI now populates it: `sectum-ai report`

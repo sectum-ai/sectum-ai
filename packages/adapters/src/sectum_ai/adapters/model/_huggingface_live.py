@@ -142,18 +142,28 @@ class LivePeftBackend:
         # Strip the Trainer's checkpoint cruft; we only ship the LoRA delta.
         _safe_rmtree(scope_dir / "_trainer")
 
-    def infer(self, scope: str | None, prompt: str) -> str:
-        # Base inference uses the shared PRISTINE base; a scoped call loads the LoRA
-        # onto a FRESH base copy so it never mutates the shared one (PeftModel.
-        # from_pretrained injects adapter modules in place). Sharing the base would
-        # leak this tenant's LoRA into every later base / other-tenant inference and
-        # survive a per-tenant delete.
+    def _prepare(self, scope: str | None, prompt: str) -> tuple[Any, Any]:
+        """The model this scope routes to, and the tokenized prompt.
+
+        Base inference uses the shared PRISTINE base; a scoped call loads the LoRA
+        onto a FRESH base copy so it never mutates the shared one (PeftModel.
+        from_pretrained injects adapter modules in place). Sharing the base would
+        leak this tenant's LoRA into every later base / other-tenant inference and
+        survive a per-tenant delete.
+
+        Split out so `measure_latency_ms` can time the generation WITHOUT this:
+        loading a LoRA off disk is setup, not inference, and timing it would swamp
+        the prefill signal Class 5 reads.
+        """
         model = self._base_model
         if scope is not None:
             scope_dir = self._scope_dir(scope)
             if scope_dir.exists():
                 model = self._PeftModel.from_pretrained(self._load_base(), str(scope_dir))
-        inputs = self._tokenizer(prompt, return_tensors="pt")
+        return model, self._tokenizer(prompt, return_tensors="pt")
+
+    def infer(self, scope: str | None, prompt: str) -> str:
+        model, inputs = self._prepare(scope, prompt)
         with self._torch.no_grad():
             outputs = model.generate(
                 **inputs,
@@ -169,8 +179,29 @@ class LivePeftBackend:
         return decoded
 
     def measure_latency_ms(self, scope: str | None, prompt: str) -> float:
+        """Time to FIRST token, never total generation time.
+
+        `_serving.py` states the rule normatively - "a shared KV prefix cache
+        speeds up the PREFILL, which determines TTFT, so TTFT (not total
+        generation time) isolates the cross-tenant cache signal the Class 5 probe
+        is built to catch" - and both serving siblings implement it by streaming
+        and breaking on the first chunk. This called `infer`, which generates 64
+        tokens: the decode steps cost the same in both arms, so they added
+        variance to the denominator of Cohen's d without adding to the numerator.
+        The mean gap survived and d collapsed, which biases Class 5 toward a MISS
+        and systematically downgrades a detected channel HIGH -> MEDIUM.
+
+        `max_new_tokens=1` is prefill plus one decode step - the same call `infer`
+        already makes, with the decode loop cut to the single token TTFT means.
+        """
+        model, inputs = self._prepare(scope, prompt)
         start = time.perf_counter()
-        self.infer(scope, prompt)
+        with self._torch.no_grad():
+            model.generate(
+                **inputs,
+                max_new_tokens=1,
+                pad_token_id=self._tokenizer.pad_token_id,
+            )
         return (time.perf_counter() - start) * 1000.0
 
     def list_scopes(self) -> list[str]:

@@ -211,3 +211,28 @@ def test_a_subject_naming_another_run_is_rejected() -> None:
     statement["subject"][0]["name"] = "some-other-run"
     with pytest.raises(EvidenceError, match="subject"):
         verify_in_toto_statement(statement, pack)
+
+
+def test_an_empty_timestamp_token_is_not_an_external_anchor() -> None:
+    # The shape test is "not JSON, therefore a real TSA's binary token", and
+    # `json.loads("")` raises - so an EMPTY token read as an external anchor and
+    # the sidecar announced `anchors.timestamp: true` for a pack carrying no
+    # timestamp at all. `rekor_proof` had the same empty-claim bug one line down,
+    # where `is not None` said true for `""`.
+    empty = _pack().model_copy(update={"tsa_token": "", "rekor_proof": ""})
+    anchors = to_in_toto_statement(empty)["predicate"]["anchors"]
+    assert anchors == {"timestamp": False, "transparency_log": False}
+
+    blank = _pack().model_copy(update={"tsa_token": "   ", "rekor_proof": "  "})
+    assert to_in_toto_statement(blank)["predicate"]["anchors"] == {
+        "timestamp": False,
+        "transparency_log": False,
+    }
+
+    # Still true for a real binary token and a real proof - this narrows the
+    # claim to the empty case, it does not disable it.
+    real = _pack().model_copy(update={"tsa_token": "\x30\x82 binary", "rekor_proof": "{}"})
+    assert to_in_toto_statement(real)["predicate"]["anchors"] == {
+        "timestamp": True,
+        "transparency_log": True,
+    }

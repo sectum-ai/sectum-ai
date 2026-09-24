@@ -53,3 +53,11 @@ def test_the_escaping_is_injective_so_the_record_cannot_spoof_it() -> None:
     # identically to one carrying a real newline - the record spoofing our own escaping.
     assert untrusted("run-acme\\x0aGRADE A") != untrusted("run-acme\nGRADE A")
     assert untrusted("\\") == "\\\\"
+
+
+def test_the_escaping_is_injective_for_astral_codepoints() -> None:
+    # `:04x` is a MINIMUM width, so U+E0001 emitted five hex digits and collided
+    # with U+E000 followed by "1": two different inputs, one escaped form, which
+    # is exactly the property this module's docstring argues for.
+    assert untrusted("\U000e0001") != untrusted("\ue000" + "1")
+    assert untrusted("\U000e0001") == "\\U000e0001"

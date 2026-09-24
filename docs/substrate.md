@@ -22,10 +22,18 @@ the conditions of the Retrieval Pivot finding (a benign query naming a shared
 entity pulls a *foreign* tenant's document into the answer), which the flagship
 [Class 2 probe](attack-catalog/class-02-rag-entity-bleed.md) measures.
 
+A scenario with no `shared_entities` plants nothing in the corpus (a pivot
+document names a shared entity, so with none there is nothing to build one
+around), so the probes that query the corpus plan no
+step and their classes read `NOT_COVERED` — never a pass. The probes provisioned
+from the manifest (MCP, agent, memory, cache, model) still have markers to find.
+
 A scenario may also declare **users within a tenant**. Markers and documents are
 then owned by a specific user, and the same machinery verifies the user boundary
-exactly as it verifies the tenant boundary — a principal is just the owner of a
-marker and the actor in a session (ADR-0006).
+as it verifies the tenant boundary — a principal is just the owner of a marker
+and the actor in a session (ADR-0006) — wherever the adapter carries the user to
+its backend; where it does not, the run exercises the tenant boundary alone and
+says so (see [the threat model](threat-model.md)).
 
 ## Corpus generation
 
@@ -51,9 +59,9 @@ Three marker types, each with a distinct detection path:
 
 | Marker type | Form | Detection path |
 |---|---|---|
-| `HARD_CANARY` | A high-entropy branded token, `SECTUM-CANARY-{base32(16 bytes)}` | Exact substring match (case-, width-, and zero-width-insensitive). Zero false positives. |
+| `HARD_CANARY` | A high-entropy branded token, `SECTUM-CANARY-{base32(16 bytes)}` | Exact substring match (case-, width-, and zero-width-insensitive), **or** the marker's tokens contiguous and in order (recovers a re-punctuated canary). Zero false positives. |
 | `ENTITY_CANARY` | A fabricated, single-tenant-unique entity (`Project <codename + fused entropy>-<serial>`, e.g. `Project Zephyr5BL7G-00002`) | Semantic similarity → calibrated judge. Tests organic bleed (Class 2). |
-| `SECRET_CANARY` | A fake but plausibly shaped secret — an OpenAI-style `sk-` key, an AWS `AKIA` id, or a non-issuable `9xx` US SSN | Exact **+ credential-format** detector. Tests PII/secret surfacing and redaction. |
+| `SECRET_CANARY` | A fake but plausibly shaped secret — an OpenAI-style `sk-` key, an AWS `AKIA` id, or a non-issuable `9xx` US SSN | Exact, **credential-format** detector, **or** ordered-token recovery. Tests PII/secret surfacing and redaction. |
 
 Every marker is recorded in the ground-truth manifest as
 `{marker_id, marker_type, owner_tenant_id, owner_user_id?, plaintext, embedding_ref?, planted_locations[]}`.
@@ -105,8 +113,8 @@ marker. A finding is `CONFIRMED` on an exact/format hit, on a foreign entity who
 plaintext is literally present in the observation (a leak by observation, which no
 judge verdict can unmake), or on a judge verdict whose cited evidence is traceable
 to the marker. A semantic candidate that cannot be tied to a manifest marker is
-downgraded to `UNVERIFIED`, excluded from the headline count but kept in the
-appendix. That bounds confirmations to the manifest's own markers; it is not a
+downgraded to `UNVERIFIED`, excluded from the headline count but still itemized
+in the pack's Findings section, labelled with its status. That bounds confirmations to the manifest's own markers; it is not a
 claim that every confirmation is correct, since a semantic confirmation still
 rests on the configured judge. **Zero false negatives:** a foreign marker of any
 type, planted in any field, that appears verbatim in an observation is always

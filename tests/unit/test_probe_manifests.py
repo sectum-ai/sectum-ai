@@ -15,7 +15,12 @@ from typing import Any, cast
 import pytest
 
 import sectum_ai.probes as probes
-from sectum_ai.probes import ERASURE_SURFACES, SUBJECT_VERIFIABLE_SURFACES, load_probe_manifest
+from sectum_ai.probes import (
+    ERASURE_SURFACES,
+    SUBJECT_FINGERPRINT_SURFACES,
+    SUBJECT_VERIFIABLE_SURFACES,
+    load_probe_manifest,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,7 +35,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW_SURFACES: dict[str, list[str]] = {
     "kv-cache-timing": ["kv_cache"],
     "gdpr-erasure-verification": [surface.value for surface in ERASURE_SURFACES],
-    "gdpr-subject-erasure-verification": [surface.value for surface in SUBJECT_VERIFIABLE_SURFACES],
+    # BOTH halves of what A3 scans. The by-id set alone declared three of the six
+    # surfaces the probe reads and emits HIGH findings on, so a catalog consumer
+    # reading `probe.yaml` concluded the model adapter, agent memory and search
+    # index were out of scope while a residual on any of them is reported.
+    "gdpr-subject-erasure-verification": sorted(
+        {surface.value for surface in (*SUBJECT_VERIFIABLE_SURFACES, *SUBJECT_FINGERPRINT_SURFACES)}
+    ),
 }
 _WORKFLOW_REQUIRES: dict[str, list[str]] = {
     "kv-cache-timing": ["model"],
@@ -80,6 +91,26 @@ def test_probe_manifest_mirrors_class_attributes(cls: type) -> None:
         assert manifest["requires_adapters"] == list(probe.requires_adapters)
     else:
         assert manifest["requires_adapters"] == _WORKFLOW_REQUIRES[probe.id]
+
+
+def test_a_manifest_declares_the_capability_that_decides_whether_the_probe_runs() -> None:
+    # `requires_any_capability` is what actually gates Classes 6, 9 and 13: without
+    # it the CLI skips the probe and the class scores NOT_COVERED. It appeared in no
+    # manifest, so a catalog consumer read `requires_adapters` - satisfied by any
+    # vector store - and concluded those classes were covered on a stack where they
+    # never run.
+    gated = [cls for cls in _PROBES if getattr(cls, "requires_any_capability", ())]
+    assert gated, "the introspection broke - three probes declare a capability gate"
+    for cls in gated:
+        expected = [c.value for c in cast(Any, cls).requires_any_capability]
+        assert load_probe_manifest(cls).get("requires_any_capability") == expected, cls
+    # EVERY probe with no gate, not the first one found: `next(...)` checked one of
+    # twelve, so a spurious key on any other manifest passed the whole suite - and
+    # such a key tells a catalog consumer that e.g. Class 1 is gated on semantic
+    # retrieval, which no live store declares, i.e. "NOT_COVERED on your stack".
+    for cls in _PROBES:
+        if not getattr(cls, "requires_any_capability", ()):
+            assert "requires_any_capability" not in load_probe_manifest(cls), cls
 
 
 def test_every_workflow_probe_has_pinned_surface_and_adapter_expectations() -> None:

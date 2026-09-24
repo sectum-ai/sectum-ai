@@ -14,7 +14,8 @@ Requires the ``mcp`` optional dependency: ``pip install sectum-ai-adapters[mcp]`
 """
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from uuid import UUID
 
 from mcp import ClientSession, StdioServerParameters
@@ -28,9 +29,10 @@ from sectum_ai.spec import AdapterError
 class StdioMCPClient(MCPAdapter):
     """A Model Context Protocol client that speaks to a stdio MCP server.
 
-    Scopes by tenant. ``user`` is accepted on ``invoke`` for interface
-    conformance (ADR-0008) but not yet enforced - per-user tool scoping is a
-    follow-on - so this adapter does not report ``USER_SCOPED``.
+    Scopes by tenant. ``user`` is forwarded to the server when ``user_argument``
+    names the tool argument that carries it (ADR-0008), and ``carries_user``
+    reports whether it does. Left unconfigured, the adapter transmits no user and
+    the runner DROPS user-level steps rather than running them as the tenant.
     """
 
     def __init__(
@@ -53,12 +55,19 @@ class StdioMCPClient(MCPAdapter):
         self._tenant_argument = tenant_argument
 
     def list_tools(self) -> list[str]:
-        return asyncio.run(self._list_tools())
+        # Only the TOOL-level `isError` became an `AdapterError`; a transport or
+        # protocol failure - a refused connection, a TLS error, a malformed frame -
+        # came out as whatever the MCP SDK raised. That is not this contract's error
+        # type, so it escapes the runner's handling of an adapter failure and takes
+        # the whole run with it, where every agent adapter wraps instead.
+        with _as_adapter_error("MCP server"):
+            return asyncio.run(self._list_tools())
 
     def invoke(
         self, tenant: UUID, tool: str, arguments: dict[str, str], *, user: UUID | None = None
     ) -> McpResult:
-        return asyncio.run(self._invoke(tenant, tool, arguments, user))
+        with _as_adapter_error("MCP server"):
+            return asyncio.run(self._invoke(tenant, tool, arguments, user))
 
     async def _list_tools(self) -> list[str]:
         async with (
@@ -87,3 +96,14 @@ class StdioMCPClient(MCPAdapter):
         if result.isError:
             raise AdapterError(f"MCP tool {tool!r} failed: {output}")
         return McpResult(tool=tool, output=output)
+
+
+@contextmanager
+def _as_adapter_error(what: str) -> Iterator[None]:
+    """Re-raise anything the MCP SDK throws as the adapter contract's error."""
+    try:
+        yield
+    except AdapterError:
+        raise
+    except Exception as error:
+        raise AdapterError(f"{what} failed: {error}") from error

@@ -15,6 +15,7 @@ from phoenix.client import Client
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
 from sectum_ai.adapters.observability._listing import _refuse_capped
+from sectum_ai.spec import ErasureUnsupported, residual_present
 
 _SPAN_LIMIT = 1000
 """How many spans to scan per project when searching for a marker."""
@@ -39,9 +40,11 @@ class PhoenixObservability(ObservabilityAdapter):
         if project not in self._project_names():
             return []
         hits: list[TraceHit] = []
+        seen = 0
         for span in self._client.spans.get_spans(project_identifier=project, limit=_SPAN_LIMIT):
+            seen += 1
             snippet = self._snippet(span)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(
                     TraceHit(
                         trace_id=str(span["context"]["trace_id"]),
@@ -49,6 +52,10 @@ class PhoenixObservability(ObservabilityAdapter):
                         snippet=snippet,
                     )
                 )
+        # Only a MISS on a full page is refused: a marker found there is a
+        # definite residual, and refusing it would lose a real erasure failure.
+        if not hits:
+            _refuse_capped("Phoenix", seen, _SPAN_LIMIT)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
@@ -80,12 +87,22 @@ class PhoenixObservability(ObservabilityAdapter):
     def delete(self, tenant: UUID) -> None:
         """Delete the tenant's Phoenix project; a missing project is a no-op.
 
-        Suppresses a ``404`` so a concurrent erasure (or a tenant that never
-        accumulated traces) does not surface as a crash - the contract is
-        idempotent.
+        A ``404`` is idempotent success only when the project is in fact gone. A
+        deployment or router that never implemented the delete route answers 404
+        to the method and path too, and swallowing that recorded the surface as
+        erasable - so the re-scan's residue read as the customer's erasure flow
+        failing rather than as a backend with no per-tenant purge. The OTel
+        sibling already re-checks before treating a 404 as success; this is the
+        same rule.
         """
         try:
             self._client.projects.delete(project_name=self._project_name(tenant))
         except httpx.HTTPStatusError as error:
             if error.response.status_code != 404:
                 raise
+            if self._project_name(tenant) in self._project_names():
+                raise ErasureUnsupported(
+                    f"Phoenix answered 404 to the delete while project "
+                    f"{self._project_name(tenant)} is still listed: it exposes no "
+                    "programmatic per-tenant delete, so erasure is attestable-with-caveat"
+                ) from error

@@ -24,9 +24,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS
-from sectum_ai.evidence.labels import leak_label
-from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity
+from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, live_surfaces
+from sectum_ai.evidence.labels import backing_surface, leak_label
+from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity, SurfaceProvenance
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
@@ -69,14 +69,49 @@ _SEVERITY_ORDER: dict[Severity, int] = {
 _UNVERIFIED_SECURITY_SEVERITY = _SECURITY_SEVERITY[Severity.INFO]
 
 
-def _result_level(finding: Finding) -> str:
-    """SARIF level for a finding; unverified candidates never exceed ``note``."""
+def _scope_prefix(recorded: str | None) -> str:
+    """The message prefix stating which stack a result describes.
+
+    Three-valued, like the property beside it: the prose stayed two-valued when
+    the label went three-valued, so an UNRECORDED surface was told it "describes
+    Sectum's built-in fake" - stating something the record does not.
+    """
+    if recorded == SurfaceProvenance.LIVE.value:
+        return ""
+    if recorded is None:
+        return "[surface provenance not recorded - not evidence of a live backend] "
+    return "[synthetic surface - describes Sectum's built-in fake, not your stack] "
+
+
+def _describes_a_fake(finding: Finding, live: frozenset[str]) -> bool:
+    """Whether this finding's backing surface was anything but a live backend.
+
+    Keyed on an explicit LIVE, like every sibling that answers this question
+    (`confirmed_on_live_surfaces` in the JSON summary, `live_surfaces` in the
+    control mappings and the OSCAL projection): a surface whose provenance the
+    record does not state is not evidence that it was live.
+
+    GitHub renders one alert per result, so a run-level provenance property is
+    invisible where it matters: an all-synthetic demo raised 229 `error` alerts
+    (177 of them at `security-severity: 9.5`), indistinguishable from a
+    production scan's.
+    Every other renderer says so inline - the text summary warns, the JSON
+    carries `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF says
+    "a demonstration, not an attestation".
+    """
+    return backing_surface(finding) not in live
+
+
+def _result_level(finding: Finding, live: frozenset[str] = frozenset()) -> str:
+    """SARIF level for a finding; unverified and fake-backed never exceed ``note``."""
     if finding.status is not FindingStatus.CONFIRMED:
+        return "note"
+    if _describes_a_fake(finding, live):
         return "note"
     return _LEVEL_BY_SEVERITY[finding.severity]
 
 
-def _security_severity(finding: Finding) -> str:
+def _security_severity(finding: Finding, live: frozenset[str] = frozenset()) -> str:
     """GitHub ``security-severity`` for a finding; unverified candidates are floored.
 
     A CONFIRMED finding reports its severity bucket. An UNVERIFIED candidate is
@@ -87,10 +122,14 @@ def _security_severity(finding: Finding) -> str:
     """
     if finding.status is not FindingStatus.CONFIRMED:
         return _UNVERIFIED_SECURITY_SEVERITY
+    if _describes_a_fake(finding, live):
+        return _UNVERIFIED_SECURITY_SEVERITY
     return _SECURITY_SEVERITY[finding.severity]
 
 
-def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
+def _rule(
+    probe_id: str, findings: list[Finding], live: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     """Build the SARIF reporting descriptor (rule) for one probe id.
 
     The rule's ``security-severity`` and default ``level`` track the worst
@@ -99,7 +138,18 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
     unverified-only rule never renders as a high-severity GitHub alert (which is
     badged by the rule's ``security-severity``, not its ``level``).
     """
-    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    # A rule whose every confirmed finding sits on a fake advertises the
+    # informational bucket, for the same reason an unverified-only rule does.
+    confirmed = [
+        f
+        for f in findings
+        if f.status is FindingStatus.CONFIRMED and not _describes_a_fake(f, live)
+    ]
+    # The NOUN keys on status alone, not on this fake-filtered list: a confirmed
+    # finding on Sectum's own fake is still confirmed (the result message already
+    # carries the `[synthetic surface ...]` prefix, and the level and bucket below
+    # are what get floored). Calling it a "candidate" would misstate the status.
+    any_confirmed = any(f.status is FindingStatus.CONFIRMED for f in findings)
     if confirmed:
         worst = max(confirmed, key=lambda f: _SEVERITY_ORDER[f.severity])
         level = _LEVEL_BY_SEVERITY[worst.severity]
@@ -115,10 +165,14 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
         "id": probe_id,
         "name": probe_id.replace("-", "_"),
         "shortDescription": {
+            # The noun tracks status, like the level and the bucket two lines
+            # down. It did not: a probe that produced only UNVERIFIED candidates
+            # advertised "leak finding" on its GitHub rule page while every result
+            # under it correctly read "candidate" - the one field of the three that
+            # still asserted a confirmed leak.
             "text": (
-                f"Residual-data finding from the {probe_id} probe"
-                if probe_id in _ERASURE_PROBE_IDS
-                else f"Cross-principal leak finding from the {probe_id} probe"
+                f"{'Residual-data' if probe_id in _ERASURE_PROBE_IDS else 'Cross-principal leak'}"
+                f" {'finding' if any_confirmed else 'candidate'} from the {probe_id} probe"
             )
         },
         "helpUri": _HELP_URI,
@@ -130,18 +184,24 @@ def _rule(probe_id: str, findings: list[Finding]) -> dict[str, Any]:
     }
 
 
-def _result(finding: Finding) -> dict[str, Any]:
+def _result(
+    finding: Finding,
+    live: frozenset[str] = frozenset(),
+    run_provenance: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Build the SARIF result for a single finding."""
+    run_provenance = run_provenance or {}
     detail = finding.evidence_span or (
         f"marker {finding.marker_id} owned by tenant {finding.owner_tenant_id} "
         f"observed in tenant {finding.observed_in_tenant_id}"
     )
     return {
         "ruleId": finding.probe_id,
-        "level": _result_level(finding),
+        "level": _result_level(finding, live),
         "message": {
             "text": (
-                f"{finding.severity.value.upper()} {leak_label(finding)} on "
+                _scope_prefix(run_provenance.get(backing_surface(finding)))
+                + f"{finding.severity.value.upper()} {leak_label(finding)} on "
                 f"{finding.surface.value}: {detail}"
             )
         },
@@ -157,7 +217,14 @@ def _result(finding: Finding) -> dict[str, Any]:
             "owaspLlm": finding.owasp_llm,
             "atlas": list(finding.atlas),
             "nist": list(finding.nist),
-            "security-severity": _security_severity(finding),
+            "security-severity": _security_severity(finding, live),
+            "backingSurface": backing_surface(finding),
+            # Three-valued, like every sibling: `verify`'s run-scope, `score`'s
+            # UNRECORDED scope, the PDF's "Surface provenance: not recorded" and
+            # OSCAL all distinguish "the record does not say" from "the record says
+            # SYNTHETIC". Labelling an unstated surface SYNTHETIC would state
+            # something the record does not.
+            "surfaceProvenance": run_provenance.get(backing_surface(finding), "UNRECORDED"),
         },
     }
 
@@ -175,6 +242,14 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
         still ``evidence.json``; this projection is for code-scanning visibility.
     """
     findings = list(run.findings)
+    live = live_surfaces(run)
+    # A run with no findings and a run in which nothing executed both projected as
+    # `results: []` - "tested, clean" and "never tested", identical in a
+    # code-scanning tab. Every sibling projection states what ran: `score` rule 1
+    # refuses a PASS for a probe that did not run, the PDF prints
+    # `probes_exercised`, OSCAL lists `reviewed-controls`. A finding counts as
+    # proof its probe ran, the same rule `score._confirmed_probe_ids` applies.
+    exercised = sorted(set(run.probe_versions) | {finding.probe_id for finding in findings})
     by_probe: dict[str, list[Finding]] = {}
     for finding in findings:
         by_probe.setdefault(finding.probe_id, []).append(finding)
@@ -188,17 +263,54 @@ def run_to_sarif(run: RunResult, *, tool_version: str = "0") -> dict[str, Any]:
                         "name": "Sectum AI",
                         "informationUri": _INFORMATION_URI,
                         "version": tool_version,
-                        "rules": [_rule(pid, fs) for pid, fs in by_probe.items()],
+                        "rules": [_rule(pid, fs, live) for pid, fs in by_probe.items()],
                     }
                 },
-                "results": [_result(finding) for finding in findings],
+                "results": [
+                    _result(finding, live, dict(run.surface_provenance)) for finding in findings
+                ],
+                "invocations": [
+                    {
+                        "executionSuccessful": True,
+                        "toolExecutionNotifications": [
+                            {
+                                "level": "warning",
+                                "descriptor": {"id": "sectum.no-probe-executed"},
+                                "message": {
+                                    "text": (
+                                        "No Sectum AI probe executed in this run. An empty "
+                                        "result list here is an ABSENT scan, not a clean one."
+                                    )
+                                },
+                            }
+                        ],
+                    }
+                    if not exercised
+                    else {"executionSuccessful": True}
+                ],
                 "properties": {
                     "runId": run.run_id,
+                    "probesExercised": exercised,
                     "scenarioHash": run.scenario_hash,
                     "manifestHash": run.manifest_hash,
                     # Which stack the results describe. Absent from the projection,
                     # an all-synthetic demo read exactly like a production scan.
                     "surfaceProvenance": dict(run.surface_provenance),
+                    # The two "graded on setup that did not land" disclosures. This
+                    # was the one projection without them: a probe whose every
+                    # plant the backend swallowed appears in `probesExercised` - it
+                    # ran - and raises no alert, which in a Security tab reads as
+                    # "this class is clean". Same for a probe that took only
+                    # tenant-level steps because the adapter cannot carry a user:
+                    # the user boundary was never exercised and the SARIF said
+                    # nothing. Every sibling discloses both - the PDF appends them
+                    # to "Probes exercised", OSCAL narrows its satisfied verdict,
+                    # the JSON summary carries them, and `score` reports such a
+                    # class NOT_COVERED - which is the absent-vs-zero conflation
+                    # this run's own `sectum.no-probe-executed` notification exists
+                    # to break, one level down.
+                    "plantsNotConfirmed": dict(run.metrics.unconfirmed_plants),
+                    "userStepsDropped": dict(run.metrics.user_steps_dropped),
                 },
             }
         ],

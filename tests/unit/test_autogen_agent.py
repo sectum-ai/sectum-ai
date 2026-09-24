@@ -302,3 +302,45 @@ def test_autogen_forwards_a_max_turns_kwarg_when_configured() -> None:
     proxy = _FakeUserProxy(script={"go": [_assistant("ok")]})
     AutoGenAgent(_FakeAssistant(), proxy, max_turns=3).run(_TENANT_A, "go")
     assert proxy.calls[0].extras == {"max_turns": 3}
+
+
+def test_the_answer_is_the_assistants_reply_not_our_own_prompt() -> None:
+    # `ChatResult.chat_history` is the INITIATOR's view, and this adapter initiates
+    # from the user proxy - so in pyautogen 0.2.x the messages the proxy SENT are
+    # stored `role="assistant"` and the replies received are `role="user"`.
+    # Verified against a real `ConversableAgent`:
+    #
+    #   role=assistant  name=user       content='[tenant:abc] lookup mkr-00001'
+    #   role=user       name=assistant  content='the canary is SECTUM-CANARY-XYZ'
+    #
+    # Taking the last `role == "assistant"` therefore returned Sectum's OWN
+    # tenant-prefixed prompt, so the hijack probe scanned a string that
+    # structurally cannot carry a leak - and then recorded "the agent answered and
+    # surfaced no foreign canary", which is the caveat written to keep the class
+    # honest making a false statement. `name` carries the real speaker either way.
+    #
+    # The previous double built its history the other way round, which is why no
+    # test could catch it; this one is the shape the library actually produces.
+    proxy = _FakeUserProxy(
+        script={
+            "look it up": [
+                {"role": "assistant", "name": "user", "content": "[tenant:x] look it up"},
+                {
+                    "role": "user",
+                    "name": "sectum-assistant",
+                    "content": "the record says SECTUM-CANARY-XYZ",
+                },
+            ]
+        }
+    )
+    result = AutoGenAgent(_FakeAssistant(), proxy).run(_TENANT_A, "look it up")
+    assert "SECTUM-CANARY-XYZ" in result.output, result.output
+    assert "look it up" not in result.output, result.output
+
+
+def test_a_history_with_no_names_still_reads_the_assistant_message() -> None:
+    # The fallback: a stand-in or a future shape that carries no usable `name`
+    # is no worse off than before, rather than returning nothing at all.
+    proxy = _FakeUserProxy(script={"look it up": [_user("look it up"), _assistant("the answer")]})
+    result = AutoGenAgent(_FakeAssistant(), proxy).run(_TENANT_A, "look it up")
+    assert result.output == "the answer", result.output

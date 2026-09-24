@@ -3,8 +3,7 @@
 import hashlib
 
 from sectum_ai.adapters.fakes import FakeVectorStore
-from sectum_ai.probes.detection import _tokenize
-from sectum_ai.spec import MarkerType, Substrate
+from sectum_ai.spec import MarkerType, Substrate, tokenize
 from sectum_ai.substrate import build_substrate, default_scenario
 from sectum_ai.substrate.markers import _MARKER_CODENAMES
 
@@ -93,7 +92,7 @@ def test_entity_codename_is_a_distinctive_single_token() -> None:
     # "Zephyr" is not distinctive - it collides with ordinary text, so a benign
     # mention plus an over-eager judge could fabricate a CONFIRMED leak. Every
     # entity canary therefore fuses a high-entropy base32 segment onto the codeword
-    # *without a separator*, so `_tokenize` (`[a-z0-9]+`) sees one globally unique
+    # *without a separator*, so `tokenize` (`[a-z0-9]+`) sees one globally unique
     # token, never the bare codeword.
     bare = {name.lower() for name in _MARKER_CODENAMES}
     substrate = _substrate()
@@ -101,7 +100,7 @@ def test_entity_codename_is_a_distinctive_single_token() -> None:
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.ENTITY_CANARY:
             continue
-        tokens = _tokenize(marker.plaintext)
+        tokens = tokenize(marker.plaintext)
         # The fused codename is the one token that begins with a base codeword.
         fused = [t for t in tokens for b in bare if t.startswith(b)]
         assert len(fused) == 1, f"{marker.marker_id} codename token not isolated: {tokens}"

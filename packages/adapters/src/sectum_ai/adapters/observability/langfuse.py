@@ -19,7 +19,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, ObservabilityAdapter, TraceHit
-from sectum_ai.spec import AdapterError
+from sectum_ai.spec import AdapterError, residual_present
 
 _TRACE_LIMIT = 1000
 """How many of a tenant's most recent traces to scan or purge per call."""
@@ -76,11 +76,16 @@ class LangfuseObservability(ObservabilityAdapter):
         )
         return " ".join(str(part) for part in parts if part)
 
-    def _tenant_traces(self, tenant: UUID) -> list[Any]:
-        # Page through the tenant's traces: Langfuse caps the list page size at
-        # _TRACE_PAGE (rejecting larger limits with HTTP 400), so request
-        # fixed-size pages until a short/empty page or the _TRACE_LIMIT scan
-        # budget is reached.
+    def _tenant_traces(self, tenant: UUID) -> tuple[list[Any], bool]:
+        """The tenant's traces, and whether the scan budget ran out first.
+
+        Returns the truncation flag rather than raising on it, because what a
+        truncated listing means depends on the question: a marker FOUND on a
+        partial listing is a definite residual, and refusing it would lose a real
+        erasure failure. Only the callers that read *absence* off the listing
+        refuse - the same rule the Datadog, Helicone, LangSmith and Phoenix
+        backends follow.
+        """
         traces: list[Any] = []
         page = 1
         while True:
@@ -93,24 +98,29 @@ class LangfuseObservability(ObservabilityAdapter):
             if len(batch) < _TRACE_PAGE:
                 break
             if len(traces) >= _TRACE_LIMIT:
-                # A truncated listing is not a scan: a trace beyond the budget read
-                # as absent, so `fetch_trace` attested it erased and `delete` purged
-                # the first thousand and reported the tenant clean.
-                raise AdapterError(
-                    f"tenant {tenant.hex} has more than {_TRACE_LIMIT} Langfuse traces; "
-                    "the listing budget was exhausted before the tenant's traces were, "
-                    "so no verdict about them can be complete"
-                )
+                return traces, True
             page += 1
-        return traces
+        return traces, False
+
+    def _refuse_truncated(self, tenant: UUID) -> None:
+        raise AdapterError(
+            f"tenant {tenant.hex} has more than {_TRACE_LIMIT} Langfuse traces; "
+            "the listing budget was exhausted before the tenant's traces were, "
+            "so no verdict about them can be complete"
+        )
 
     def search_traces(self, tenant: UUID, marker: str) -> list[TraceHit]:
         project = self._project_name()
+        traces, truncated = self._tenant_traces(tenant)
         hits: list[TraceHit] = []
-        for trace in self._tenant_traces(tenant):
+        for trace in traces:
             snippet = self._snippet(trace)
-            if marker in snippet:
+            if residual_present(marker, snippet):
                 hits.append(TraceHit(trace_id=str(trace.id), project=project, snippet=snippet))
+        # A marker found on a partial listing is a definite residual; only a MISS
+        # on one is unknowable.
+        if not hits and truncated:
+            self._refuse_truncated(tenant)
         return hits
 
     def fetch_trace(self, tenant: UUID, trace_id: str) -> TraceHit | None:
@@ -121,11 +131,16 @@ class LangfuseObservability(ObservabilityAdapter):
         id - or an erased one - returns ``None``. The by-id existence primitive
         for the A3 subject-erasure check.
         """
-        for trace in self._tenant_traces(tenant):
+        traces, truncated = self._tenant_traces(tenant)
+        for trace in traces:
             if str(trace.id) == trace_id:
                 return TraceHit(
                     trace_id=trace_id, project=self._project_name(), snippet=self._snippet(trace)
                 )
+        # `None` is read as "the trace is gone", which a truncated listing cannot
+        # establish.
+        if truncated:
+            self._refuse_truncated(tenant)
         return None
 
     def list_projects(self) -> list[str]:
@@ -145,7 +160,12 @@ class LangfuseObservability(ObservabilityAdapter):
         traces to disappear before returning so a post-erasure re-scan is
         accurate.
         """
-        trace_ids = [str(trace.id) for trace in self._tenant_traces(tenant)]
+        traces, truncated = self._tenant_traces(tenant)
+        # A purge over a partial listing leaves the rest and reports the tenant
+        # clean, so `delete` refuses regardless of what it found.
+        if truncated:
+            self._refuse_truncated(tenant)
+        trace_ids = [str(trace.id) for trace in traces]
         if not trace_ids:
             return
         self._client.api.trace.delete_multiple(trace_ids=trace_ids)
@@ -156,7 +176,8 @@ class LangfuseObservability(ObservabilityAdapter):
         # silently on the timeout let the re-scan confirm a residual the backend
         # was still processing.
         for _ in range(_DELETE_SETTLE_TRIES):
-            if not self._tenant_traces(tenant):
+            remaining, _still_truncated = self._tenant_traces(tenant)
+            if not remaining:
                 return
             time.sleep(_DELETE_SETTLE_INTERVAL)
         raise AdapterError(

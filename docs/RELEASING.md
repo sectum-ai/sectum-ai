@@ -7,8 +7,9 @@ it.
 A release ships **all five packages** (`sectum-ai`, `sectum-ai-spec`,
 `sectum-ai-probes`, `sectum-ai-adapters`, `sectum-ai-evidence`) to PyPI at the
 same version, with a CycloneDX SBOM and a Sigstore (keyless) bundle per
-distribution, attached to a matching GitHub Release whose notes are taken
-verbatim from `CHANGELOG.md`.
+distribution, attached to a matching GitHub Release whose notes are taken from
+`CHANGELOG.md` — verbatim for a final tag; a pre-release that falls back to
+`[Unreleased]` gets a one-line banner prepended saying so.
 
 The credential story is **OIDC end to end**: PyPI publishes via Trusted
 Publisher, and Sigstore signs against the workflow's short-lived OIDC identity.
@@ -91,21 +92,27 @@ Edit `[project] version` in each of:
 - `packages/adapters/pyproject.toml`
 - `packages/evidence/pyproject.toml`
 
-All five must be the same string. The first release is `0.1.0`. Subsequent
+All five must be the same string, and `uv lock` must be re-run after editing
+them (the recipe stages `uv.lock`; all three CI `uv sync` steps are `--locked`, so
+a stale lock fails the build rather than shipping unnoticed). The first release is `0.1.0`. Subsequent
 releases follow [Semantic Versioning](https://semver.org/). For a pre-release the
 two spellings differ: the tag is `v0.11.0-rc.1` and its CHANGELOG heading is
 `## [0.11.0-rc.1]`, but `pyproject.toml` must carry the PEP 440 form `0.11.0rc1` —
 `scripts/check_release_version.py` normalises the tag and compares against that.
 
-Then bump the **same version** in four more places — surfaces this list used to
+Then bump the **same version** in these places — surfaces this list used to
 omit, each of which shipped stale at least once:
 
-- `action.yml` — the `version` input's `default`, **and** the "(for example X.Y.Z)"
-  prose in its description
+- `action.yml` — the `version` input's `default`. (Its description's
+  "(for example 1.2.3)" is deliberately a placeholder, not the shipped version,
+  so nothing there goes stale; leave it alone.)
 - `docs/github-action.md` — the `version` row of the inputs table, and the
   `sectum-ai/sectum-ai@vX.Y.Z` pin example
 - `README.md` — the `> **Status: vX.Y.Z.**` line (it read v0.8.1 while the repo
   shipped 0.10.0)
+- `docs/index.md` — the "Sectum AI is at vX.Y.Z" line
+- `SECURITY.md` — the "Latest `0.x` minor (currently `0.Y.x`)" row of the
+  supported-versions table
 
 That default is passed straight to `pip install "sectum-ai==<version>"`, so a
 caller who does not override it gets exactly this string. Leaving it behind means
@@ -113,9 +120,13 @@ every default run of the Action installs the *previous* release: v0.7.0 through
 v0.8.3 all shipped while the Action kept installing 0.6.0, handing users a CLI
 that predated the correctness fixes those releases existed to deliver.
 `tests/unit/test_action_version.py` now fails the build if the Action default, the
-docs table, the docs pin, or the README status line drifts from the package
-version, so this step cannot be silently skipped again. (The `action.yml` prose
-is unguarded — check it by hand.)
+docs table, the docs pin, the README status line, the `docs/index.md` version
+line, or the `SECURITY.md` supported-minor row drifts from the package version,
+so this step cannot be silently skipped again. Its sixth test guards a
+*different* version: `docs/data-models.md`'s `current SCHEMA_VERSION is X.Y.Z`
+line, against `sectum_ai.spec.SCHEMA_VERSION`. That moves only when the schema
+does, so update and stage that page in any release that bumps it. (The
+`action.yml` prose is unguarded — check it by hand.)
 
 ### 2. Re-validate the ATLAS technique catalog
 
@@ -123,6 +134,13 @@ is unguarded — check it by hand.)
 gate. Run the sweep against the
 [MISP mirror](https://raw.githubusercontent.com/MISP/misp-galaxy/main/clusters/mitre-atlas-attack-pattern.json)
 and note the ATLAS revision in the release PR description.
+
+**Record it in the ADR's own validation log, not only in the PR description.**
+Ten releases (v0.7.1–v0.11.0) shipped with the gate unrecorded because the PR
+description is the only place it was written down and nothing reads it back; the
+log is the durable record, and an entry must say which half of the sweep was
+performed — the offline id/​catalog check, the upstream mirror comparison, or
+both. The offline half alone is not the gate.
 
 ### 3. Update `CHANGELOG.md`
 
@@ -140,7 +158,7 @@ the release notes must exist somewhere.
 
 ```sh
 git checkout -b release/v0.1.0
-git add packages/*/pyproject.toml action.yml docs/github-action.md README.md CHANGELOG.md uv.lock
+git add packages/*/pyproject.toml action.yml docs/github-action.md docs/index.md README.md SECURITY.md CHANGELOG.md uv.lock
 git commit -m "chore(release): v0.1.0"
 git push -u origin release/v0.1.0
 gh pr create --title "chore(release): v0.1.0" --body "ATLAS sweep: ..."
@@ -188,9 +206,18 @@ is created automatically with the CHANGELOG section as its body.
 | `v0.1.0-alpha.2` | Pre-release (`alpha`) | Falls back to `## [Unreleased]`. |
 | `v0.1.0-beta.3` | Pre-release (`beta`) | Falls back to `## [Unreleased]`. |
 
-Other forms never reach the workflow: it triggers only on `v*` tags, and
-`scripts/check_release_version.py` additionally rejects a `v*` tag that is not
-`vX.Y.Z[-pre]` (such as `v0.1`).
+Other tag forms are refused before anything is built. The `push` trigger is `v*`
+tags only, so a tag like `v0.1` does start the workflow — and
+`scripts/check_release_version.py` fails it in the first job, because `v0.1` is not
+`vX.Y.Z[-pre]`. The maintainer gets a red Release run, not silence.
+
+**The workflow has a second trigger.** `workflow_dispatch` runs the staged
+bootstrap: with `publish_package` set to one distribution it publishes exactly
+that one, so the project exists and its pending Trusted Publisher activates;
+with `none` it builds and signs without publishing. That path carries no tag, so
+`check_release_version.py` does not run and nothing verifies the version being
+shipped — the `pypi` environment's required reviewer is the only gate. Use it to
+create a project, never to ship a release.
 
 ## Verifying a released artifact
 

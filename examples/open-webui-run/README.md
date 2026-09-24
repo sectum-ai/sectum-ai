@@ -83,15 +83,15 @@ shim. The vector-store adapter therefore stays a fake in the config.
 |---|---|---|---|
 | **1 — boundary fetch** | `tenant-boundary-fetch` (native script) | file object API (`/api/v1/files/{id}/content`) | **READY** — `scripts/class1_boundary_fetch.py` |
 | **2 — RAG entity-bleed (FLAGSHIP)** | `rag-pipeline-bleed` | chat-with-knowledge | **READY** — the headline run |
-| 3 — RAG poisoning | `rag-poisoning` | knowledge base (write) | **READY-with-setup** — a user with `workspace.knowledge` write can add a poison doc under a lure phrase to a shared KB; not in the default dry-run (needs the write-permission config). Documented in "Extending". |
+| 3 — RAG poisoning | `rag-poisoning` | — | **N/A via the shim** — the probe drives the `vector` adapter, which this example pins to the fake; reaching the knowledge base needs a poisoning variant on the `rag` surface. See "Extending". |
 | 4 — semantic cache | `semantic-cache-contamination` | — | **N/A** — vanilla Open WebUI has no cross-tenant semantic/prompt cache surface (chat responses are not served from a shared semantic cache keyed without tenant identity). |
 | 5 — KV-cache timing | `kv-cache-timing` | — | **N/A** — no shared KV prefix-cache timing surface is exposed by the Open WebUI API; this is a model-server property, not Open WebUI's. |
 | 6 — embedding inversion | `embedding-inversion` | (vector store) | **N/A here** — requires reading raw cross-tenant embeddings; Open WebUI does not expose foreign-tenant vectors over its API, and the Class 2 shared-collection path already returns the *plaintext* chunk (inversion is unnecessary — "leaky retrieval returns plaintext"). |
 | 7 — agent tool-call hijack | `agent-tool-hijack` | tool/`tool_ids` on chat completions | **CONDITIONAL** — Open WebUI's tool-calling exists, but a clean cross-tenant confused-deputy test needs tools provisioned per user; out of scope for the dry-run. Documented in "Extending". |
 | 8 — memory contamination | `memory-contamination` | per-user Memories | **READY-with-setup** — Open WebUI has a per-user Memories feature; a cross-user memory-bleed probe is wireable via `/api/v1/memories` (analogous to the file script). Not in the default dry-run. |
 | 9 — LoRA cross-tenant | `lora-cross-tenant` | — | **N/A** — Open WebUI does not fine-tune or serve per-tenant LoRA adapters; it proxies to a model backend. |
-| 10 — IKEA extraction | `ikea-extraction` | chat-with-knowledge | **READY-with-setup** — the multi-turn benign-extraction variant runs over the same shared-KB surface as Class 2; the flagship single-query pivot already demonstrates the bleed. |
-| **11 — erasure (WEDGE)** | `gdpr-erasure-verification` | knowledge base + file + (Chroma) | **READY** — delete a tenant's KB/files via the API, then re-scan to confirm no residual canary; marquee question: do the vectors survive file deletion? See "Class 11". |
+| 10 — IKEA extraction | `ikea-extraction` | — | **N/A via the shim** — its steps are `vector.query`, not `rag.ask`, so it does not reach the shim; only `rag-pipeline-bleed` drives the `rag` surface this example exposes. |
+| **11 — erasure (WEDGE)** | `sectum-ai erasure` (not a `--probe`) | knowledge base + file + (Chroma) | **BUILDING BLOCKS** — `tenant-map.json` records each tenant's KB id and private file ids; the KB/file delete and re-scan are not scripted here. See "Class 11" below. |
 | 12 — evidence chain | (cross-cutting) | — | the signed pack `sectum-ai report` / `verify` produces. |
 
 > The dry-run wires the three the operator asked for first — **Class 1, Class 2
@@ -245,7 +245,9 @@ uv run sectum-ai report  --workdir out/sectum --config sectum-ai.yaml \
 uv run sectum-ai verify  out/sectum/evidence-bundle.zip
 
 # --- isolated (control) evidence -------------------------------------------
-export SECTUM_OWUI_MODE=isolated
+# serve_shim.sh re-sources .env (set -a) AFTER this shell's export, so an
+# exported value is overwritten by whatever .env holds - edit the file.
+sed -i.bak 's/^SECTUM_OWUI_MODE=.*/SECTUM_OWUI_MODE=isolated/' .env
 pkill -f rag_shim.py 2>/dev/null; ./scripts/serve_shim.sh &
 uv run sectum-ai probe   --workdir out/sectum-isolated --config sectum-ai.isolated.yaml --probe rag-pipeline-bleed
 uv run sectum-ai report  --workdir out/sectum-isolated --config sectum-ai.isolated.yaml \
@@ -262,12 +264,16 @@ OSS repo.
 
 ## Extending to the READY-with-setup classes
 
-- **Class 3 (RAG poisoning):** grant a tenant user the `workspace.knowledge`
-  *write* permission, have it add a poison doc carrying a lure phrase to the
-  shared KB, then run `sectum-ai probe --probe rag-poisoning` so another tenant's
-  query of the lure retrieves it.
+- **Class 3 (RAG poisoning):** not reachable through the shim today. The
+  `rag-poisoning` probe drives the `vector` adapter (`vector.upsert` /
+  `vector.query`), which this example pins to the built-in fake — so the
+  command would probe Sectum's own empty store and report nothing, for the reason
+  the "Adapter mapping" section above gives. Reaching Open WebUI's knowledge base
+  needs a poisoning variant on the `rag` surface, or a native script like
+  `class1_boundary_fetch.py`.
 - **Class 8 (memory contamination):** add a small script mirroring
   `class1_boundary_fetch.py` against `POST/GET /api/v1/memories` to plant and
   cross-read per-user memories.
-- **Class 10 (IKEA extraction):** the multi-turn benign-extraction probe runs
-  over the same shared-KB surface as Class 2.
+- **Class 10 (IKEA extraction):** same limitation — `ikea-extraction` steps are
+  `vector.query`, not `rag.ask`, so it does not reach the shim either. Only
+  `rag-pipeline-bleed` drives the `rag` surface this example exposes.
