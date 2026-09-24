@@ -338,6 +338,19 @@ def _erasure_assertion(run: RunResult, named: tuple[str, ...], verified: str) ->
             "one or more surfaces expose no per-tenant erasure API, so their data is "
             "presumed retained"
         )
+    # A surface can be BOTH: a purge that errored mid-flight leaves markers this
+    # scan found AND markers it could not rule out. `coverage_verdict` ranks the
+    # hit first, so such a surface reads RESIDUAL and never entered `inconclusive`
+    # above, which keys on NOT_COVERED - and the pack asserted "residual data
+    # remains and is itemized in this pack" while the unresolved remainder was
+    # named nowhere. Keyed on the count the run records, not on the verdict.
+    unestablished = sorted(
+        surface for surface in named if run.metrics.erasure_unverifiable.get(surface, 0) > 0
+    )
+    for surface in unestablished:
+        if surface not in inconclusive:
+            inconclusive.append(surface)
+    inconclusive.sort()
     if inconclusive:
         failures.append(f"absence could not be established on {', '.join(inconclusive)}")
     if not failures:

@@ -366,6 +366,19 @@ class RunMetrics(SectumModel):
     # the signed evidence pack.
     erasure_residue: dict[str, int] = Field(default_factory=dict)
     erasure_caveats: dict[str, int] = Field(default_factory=dict)
+    # Markers whose post-erasure ABSENCE could not be established, per surface -
+    # the third thing a run can do less of than it planned, beside
+    # `user_steps_dropped` and `unconfirmed_plants`.
+    #
+    # Without it, a purge that ERRORED mid-flight (not `ErasureUnsupported`) was
+    # undisclosed: `coverage_verdict` ranks a hit above the no-baseline branches,
+    # so such a surface reads RESIDUAL, while `erasure_residue` dropped it for
+    # carrying `unverifiable_after` - and `controls._erasure_assertion`, which
+    # keys `inconclusive` on NOT_COVERED, never saw it either. The signed pack
+    # then asserted "residual data remains and is itemized in this pack" over an
+    # EMPTY itemization, under GDPR Article 17 and CCPA 1798.105, with the
+    # markers the failed purge left unresolved named nowhere at all.
+    erasure_unverifiable: dict[str, int] = Field(default_factory=dict)
     # Per-surface erasure coverage (surface value -> CoverageVerdict value): the
     # honest, anti-over-claim record of what a Class 11 attestation verified.
     # Every erasure surface appears - including the ones that were out of scope or
@@ -406,13 +419,13 @@ class RunMetrics(SectumModel):
     # like one graded on all of it. Inside the canonical hash for the same reason.
     unconfirmed_plants: dict[str, int] = Field(default_factory=dict)
 
-    @field_validator("erasure_residue", "erasure_caveats")
+    @field_validator("erasure_residue", "erasure_caveats", "erasure_unverifiable")
     @classmethod
     def _erasure_count_keys_are_erasure_surfaces(
         cls, value: dict[str, int], info: ValidationInfo
     ) -> dict[str, int]:
-        # The two siblings of `erasure_coverage`, written by the same scan over the
-        # same eight surfaces, and neither validated its keys at all - the recurring
+        # The three siblings of `erasure_coverage`, written by the same scan over the
+        # same eight surfaces, and none validated its keys at all - the recurring
         # shape here is a rule applied to one member of a family and not the rest.
         # The audit PDF prints all three into one "Coverage & caveats" matrix, so an
         # invented key in either of these lands in the artifact beside the coverage

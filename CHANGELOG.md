@@ -64,6 +64,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Article 17 assertion no longer says "itemized in this pack" over an empty
+  itemization.** A purge that *errored* mid-flight (not `ErasureUnsupported`)
+  leaves markers the post-scan finds AND markers it cannot rule out.
+  `coverage_verdict` ranks the hit first, so the surface read `RESIDUAL`;
+  `erasure_residue` dropped it for carrying `unverifiable_after`; and
+  `controls._erasure_assertion`, which keys `inconclusive` on `NOT_COVERED`,
+  never saw it. The signed pack then asserted *"residual data remains and is
+  itemized in this pack"* under **GDPR Article 17 and CCPA 1798.105** with
+  `erasure_residue` empty, and named the unresolved markers nowhere.
+  **Schema 0.7.0 gains `RunMetrics.erasure_unverifiable`** (surface → count),
+  the third disclosure block of things a run did less of than it planned; a
+  positive observation now survives the `unverifiable_after` guard, which exists
+  to stop a *zero* reading as a clean purge.
+- **`LangGraphAgent` and `AutoGenAgent` stop laundering an unreadable answer.**
+  The `CrewAIAgent` fix claimed both siblings already returned `""` on the same
+  shape. They did not — that was checked only against an *empty message list*,
+  which takes a different early return; on an unreadable `content` object both
+  returned the object's repr, which is truthy, so Class 7 graded a memory address
+  as the agent's answer. The assertions written to pin the claim could not fail on
+  it, and now use the shape under test.
+- **The A3 data-subject verdict carries both disclosures on its own stream.** The
+  Class 11 sibling got a stdout provenance line; this branch — a *named* data
+  subject with a statutory deadline — kept both the provenance and the "this is
+  NOT an attested erasure" caveat on stderr, so `erasure --subject … 2>/dev/null`
+  printed a clean `NO RESIDUAL FOUND` with neither.
+- **`--scope` gates the seventh seeding site too.** `model.train_adapter` was
+  ungated, which made "a scoped run writes nothing outside its scope" false; the
+  guard test enumerated only the five sites that go through the helper.
+
 - **A CONFIRMED finding no longer quotes a span the observation lacks.**
   `_span_ties_to_marker`'s docstring says the cited span "is in the observation
   AND ties to `marker`", but its presence test was `ordered_within_span`, which

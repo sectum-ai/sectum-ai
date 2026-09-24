@@ -246,6 +246,13 @@
           "title": "Erasure Residue",
           "type": "object"
         },
+        "erasure_unverifiable": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Erasure Unverifiable",
+          "type": "object"
+        },
         "extraction_efficiency": {
           "anyOf": [
             {

@@ -195,7 +195,14 @@ def _content_to_text(content: Any) -> str:
                 if isinstance(text, str):
                     parts.append(text)
         return "".join(parts)
-    return str(content) if content is not None else ""
+    # NOT `str(content)`. A content object this function cannot read has no
+    # text, and stringifying it yields the object's repr - truthy - so
+    # `Runner._agent_run` records AccessOutcome.RETURNED and Class 7 grades a
+    # memory address as the agent's answer. `CrewAIAgent` was fixed for exactly
+    # this and the commit claimed both siblings already returned "" on the same
+    # shape; they did not - that claim was checked only against an EMPTY message
+    # list, which takes a different early return.
+    return ""
 
 
 def _is_assistant(message: Any) -> bool:

@@ -755,6 +755,18 @@ def test_scope_restricts_the_seeding_and_not_only_the_scan(
 
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
 
+    # `train_adapter` is counted too: it is fake-only, so it writes to no live
+    # backend, but it was the one of the seven seeding sites the scope gate did
+    # not cover - and the first version of this test enumerated only the five
+    # that go through `_seed_erasure_surface`, so it could not see that.
+    real_train = adapters.FakeModel.train_adapter
+
+    def _counted_train(self: object, *args: object, **kwargs: object) -> object:
+        writes["model_adapter"] = writes.get("model_adapter", 0) + 1
+        return real_train(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(adapters.FakeModel, "train_adapter", _counted_train)
+
     writes.clear()
     assert _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     assert writes == {}, f"a scoped run wrote canaries to surfaces it never scans: {writes}"
@@ -773,6 +785,7 @@ def test_scope_restricts_the_seeding_and_not_only_the_scan(
         "backup",
         "semantic_cache",
         "agent_memory",
+        "model_adapter",
     }, writes
 
 

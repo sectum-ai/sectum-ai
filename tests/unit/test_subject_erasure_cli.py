@@ -144,3 +144,33 @@ def test_erasure_subject_memory_and_search_fingerprints_warn_synthetic(tmp_path:
     assert "agent_memory" in result.output
     assert "search_index" in result.output
     assert "built-in synthetic store" in result.output
+
+
+def test_the_a3_verdict_carries_both_disclosures_on_its_own_stream(tmp_path: Path) -> None:
+    # The Class 11 sibling got a stdout provenance line so `erasure 2>/dev/null`
+    # could not read as a clean attestation of nothing. This branch - the A3 path,
+    # with a NAMED data subject and a statutory deadline - kept both of its
+    # disclosures on stderr, so the same redirect stripped the provenance AND the
+    # "this is NOT an attested erasure" caveat, leaving only per-surface
+    # "0 still present" lines under NO RESIDUAL FOUND.
+    #
+    # Asserted against result.stdout specifically, with stderr kept separate, or
+    # the redirect this is about is not what the test exercises.
+    _seed(tmp_path)
+    manifest = _write_manifest(
+        tmp_path,
+        "subject_ref: user-1\nrecords:\n  vector_db: [doc-a, doc-b]\n  semantic_cache: [k1]\n",
+    )
+    result = CliRunner().invoke(
+        app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    assert "NO RESIDUAL FOUND" in stdout, stdout
+    assert "NOT an attested erasure" in stdout, (
+        "the caveat that stops this reading as an attestation is not on the "
+        f"verdict's own stream: {stdout}"
+    )
+    assert "SYNTHETIC" in stdout, (
+        f"the A3 verdict does not name its subject on its own stream: {stdout}"
+    )

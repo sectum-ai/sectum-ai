@@ -304,6 +304,17 @@ def test_an_unreadable_crew_output_is_empty_not_its_repr() -> None:
     unreadable = crewai_final(_UnreadableCrewOutput(), [])
     assert unreadable == "", unreadable
     assert not unreadable, "a truthy value here is recorded as RETURNED"
-    # Stated against the siblings, because the defect was the divergence.
-    assert langgraph_final([]) == ""
-    assert autogen_final([], "assistant") == ""
+
+    # Stated against the siblings with the SHAPE UNDER TEST, not an empty message
+    # list. The first version of this test asserted `langgraph_final([]) == ""`,
+    # which takes the loop's early return and passes whatever the flattener does -
+    # so it could not fail on the defect, and the claim it was written to pin
+    # ("both siblings already return '' on the same shape") was false: both
+    # returned the object's repr, which is truthy, and Class 7 graded a memory
+    # address as the agent's answer.
+    content = _UnreadableCrewOutput()
+    assert langgraph_final([{"role": "assistant", "content": content}]) == ""
+    assert (
+        autogen_final([{"role": "assistant", "name": "assistant", "content": content}], "assistant")
+        == ""
+    )
