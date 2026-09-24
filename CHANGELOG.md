@@ -64,6 +64,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The HuggingFace backend times time-to-first-token, not a full generation.**
+  `measure_latency_ms` called `infer`, which generates 64 tokens. Decode costs the
+  same in both arms, so those steps added variance to Cohen's *d*'s denominator
+  without adding to its numerator: the mean gap survived and *d* collapsed. That
+  biases Class 5 toward a **miss** and systematically downgrades a detected
+  channel HIGH → MEDIUM. `model/_serving.py` states the rule normatively and both
+  serving siblings already implement it by breaking on the first streamed chunk.
+  Loading a LoRA off disk is now outside the timer too — it is setup, not
+  inference, and timing it swamped the prefill signal.
+
 - **The audit PDF states the resolved semantic threshold.**
   `DetectionProvenance.semantic_threshold` was recorded for exactly this — its
   docstring says a pack where the semantic tier was gated shut "was
