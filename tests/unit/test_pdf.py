@@ -941,3 +941,40 @@ def test_the_scope_note_says_which_of_the_three_things_verify_will_object_to() -
     # 4. Fully live and fully accounted: no note at all.
     clean = anchor_statement(_pack({Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}))
     assert "--allow-synthetic" not in clean, clean
+
+
+def test_the_methodology_distinguishes_a_semantic_tier_that_was_gated_shut() -> None:
+    # `DetectionProvenance.semantic_threshold` was recorded for exactly this - its
+    # docstring says a pack where the semantic tier was gated shut "was
+    # indistinguishable from one where it ran" - and no renderer read it, so the
+    # methodology paragraph was byte-identical at 0.62 and at 1.0 while telling
+    # the auditor "then semantic similarity against the configured embedding
+    # model". The gate is `similarity < threshold: continue` and cosine
+    # similarity is clamped to 1.0, so at 1.0 the tier admits nothing.
+    from sectum_ai.evidence.pdf import scope_methodology
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def methodology(threshold: float) -> str:
+        run = RunResult(
+            run_id="r",
+            scenario_hash="s",
+            manifest_hash="m" * 64,
+            started_at=moment,
+            finished_at=moment,
+            probe_versions={"rag-entity-bleed": "1"},
+            detection=DetectionProvenance(
+                embedder_kind="openai",
+                embedder_model="text-embedding-3-small",
+                judge_kind="anthropic",
+                judge_model="claude-sonnet-5",
+                semantic_threshold=threshold,
+            ),
+        )
+        return " ".join(scope_methodology(run))
+
+    calibrated, shut = methodology(0.62), methodology(1.0)
+    assert calibrated != shut, "a gated-shut semantic tier reads like one that ran"
+    assert "0.62 or above" in calibrated, calibrated
+    assert "admitted nothing an exact match had not already decided" in shut, shut
+    assert "admitted nothing" not in calibrated, calibrated

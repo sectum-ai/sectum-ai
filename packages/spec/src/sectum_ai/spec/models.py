@@ -506,11 +506,6 @@ class DetectionProvenance(SectumModel):
     semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)]
     """The RESOLVED similarity gate - the number that ran, never the literal "auto"."""
 
-    @property
-    def offline_only(self) -> bool:
-        """True when neither tier past the exact match is a real provider."""
-        return self.embedder_kind == "fake" and self.judge_kind == "fake"
-
 
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""

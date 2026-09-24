@@ -64,6 +64,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The audit PDF states the resolved semantic threshold.**
+  `DetectionProvenance.semantic_threshold` was recorded for exactly this — its
+  docstring says a pack where the semantic tier was gated shut "was
+  indistinguishable from one where it ran" — and no renderer read it, so the
+  methodology paragraph was byte-identical at `0.62` and at `1.0` while telling
+  the auditor "then semantic similarity against the configured embedding model".
+  The gate is `similarity < threshold`, and cosine similarity is clamped to 1.0,
+  so at 1.0 the tier admits nothing an exact match had not already decided; the
+  paragraph now says so.
+- **`GCSBackup.delete` translates a raw client failure on both of its reads.**
+  `search` on the same adapter wraps `get_bucket` and `list_blobs`; `delete`
+  wrapped neither, and the S3 sibling wraps its listing. The verdict was never
+  wrong — the erasure probe's containment is deliberately `except Exception` —
+  so this is contract consistency and message quality.
+
+### Removed
+
+- **`DetectionProvenance.offline_only`**, and the two orphaned PDF constants
+  `_DETECTOR_LAYERED` / `_DETECTOR_OFFLINE`. The property's `and` semantics were
+  abandoned as *incorrect* (one real provider flipped the whole paragraph to the
+  fully-layered claim), so leaving it was a trap rather than neutral dead code. It
+  was a plain `@property`, absent from the exported JSON Schema, so this is not a
+  schema change.
+
 - **A bounded effect-size pair can no longer regress.** The variance floor sits in
   `_cohens_d`'s *denominator*, so a floored effect size is a **lower bound** on the
   true one and two bounds cannot be ordered — which `_dict_deltas`' caller already
