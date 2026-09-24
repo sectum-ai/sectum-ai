@@ -1448,3 +1448,29 @@ def test_build_cache_missing_redis_extra_raises_adaptererror(
     monkeypatch.delitem(sys.modules, "sectum_ai.adapters.cache.redis", raising=False)
     with pytest.raises(AdapterError, match="redis"):
         build_cache(AdapterConfig(kind="redis"))
+
+
+def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
+    # `_lexically_ranked` had zero test references and its entire body showed as
+    # uncovered, because no unit test built a live vector kind. A bug there is an
+    # OVER-CLAIM in both directions its docstring names: a lexical keyword hit
+    # shipped stamped `AML.T0024.001 Invert ML Model`, and a store that found
+    # nothing scoring PASS for a class that could not run. `opensearchpy` opens no
+    # connection until a request, so the live path is checkable offline.
+    from sectum_ai.adapters.vector.opensearch import OpenSearchVectorStore
+
+    store = build_vector_store(AdapterConfig(kind="opensearch", host="example", port=9200))
+    assert isinstance(store, OpenSearchVectorStore)
+    assert not store.synthetic
+    # The capability is WITHDRAWN - the resolver backs every live kind with a
+    # bag-of-tokens `_hashing_embed`, and there is no config path to a real
+    # embedding model for a vector store.
+    assert not store.supports(Capability.SEMANTIC_RETRIEVAL)
+    # ...and nothing else is: the withdrawal must not be over-broad.
+    assert store.supports(Capability.PER_TENANT_NAMESPACE)
+
+    # The documented exception: the built-in fake keeps it, because its embedding
+    # is the substrate's own and the demo depends on the semantic classes running.
+    fake = build_vector_store(AdapterConfig(kind="fake"))
+    assert fake.synthetic
+    assert fake.supports(Capability.SEMANTIC_RETRIEVAL)
