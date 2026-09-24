@@ -64,6 +64,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Class 11 no longer throws away a residual it already observed.** All eight
+  surface scans were single comprehensions and the post-scan handler hard-coded
+  `residual_after=0`, so a scan that positively found marker 1 and then died
+  reading marker 2 reported "could not establish absence" — `ERASURE
+  INCONCLUSIVE` at exit 3 where the truth was `ERASURE FAILED` at exit 2. A
+  confirmed Article 17 failure reached the DPO as "re-run", and the exit code a
+  customer's CI keys on flipped. This is verbatim the harm the A3 sibling records
+  fixing for itself; Class 11 never got it.
+- **The PDF's scope note says which of the three things `verify` will object to.**
+  It keyed on `live_surfaces()` being empty — true for an all-synthetic run *and*
+  for a record carrying no provenance block — so it asserted "No surface in this
+  run was live" over a pack whose own gate says that cannot be established. It
+  was also silent on the third case, a finding resting on an unrecorded surface,
+  where run-scope fails *with* a live surface present: the auditor is sent to a
+  tamper-style exit 4 on a genuine artifact, which is the harm the note exists to
+  prevent.
+- **Every unbacked rate in the scorecard is labelled.** `score._headline`
+  rendered `95.4% RPR` bare where `evidence/pdf.py` renders the same record as
+  `95.4% (asserted by the record; no sample size recorded)` — from the same
+  reasoning, one step short. The three counts-free siblings (`poisoning bleed`,
+  `reconstruction`, `extraction efficiency`) carry no sample size at *all*, so
+  `100.0% poisoning bleed` read identically from 1 of 1 or 300 of 300; they now
+  carry the same label. Persisting k/n for them is the fuller fix and needs new
+  fields.
+
 - **The Article 17 assertion no longer says "itemized in this pack" over an empty
   itemization.** A purge that *errored* mid-flight (not `ErasureUnsupported`)
   leaves markers the post-scan finds AND markers it cannot rule out.

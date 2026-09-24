@@ -95,6 +95,8 @@ __all__ = [
 ]
 
 METHODOLOGY_VERSION = "1.4"
+
+_ASSERTED = "{rate} (asserted by the record; no sample size recorded)"
 """The scorecard methodology revision (``docs/scorecard.md``).
 
 Stamped onto every :class:`~sectum_ai.spec.IsolationScore`, so a recompute uses the same
@@ -309,7 +311,12 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
             # interval over n=0 is not an interval at all - so it is dropped rather than
             # relayed: `12.5% RPR (95% CI 12.4%-12.6%, n=0)` is the same fabrication the
             # counts-recompute exists to refuse, one branch over.
-            return f"{metrics.retrieval_pivot_rate:.1%} RPR"
+            # Labelled, not bare. `evidence/pdf.py` renders this same record as
+            # "95.4% (asserted by the record; no sample size recorded)" from the
+            # same reasoning, and the scorecard stopped one step short: bare, it
+            # is byte-identical to a rate measured over a real sample beside its
+            # interval, which is the conflation both branches exist to refuse.
+            return _ASSERTED.format(rate=f"{metrics.retrieval_pivot_rate:.1%} RPR")
         return None
     rates: dict[int, tuple[str, float | None]] = {
         3: ("poisoning bleed", metrics.poisoning_bleed_delta),
@@ -318,7 +325,14 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
     }
     label_rate = rates.get(entry.class_id)
     if label_rate is not None and label_rate[1] is not None:
-        return f"{label_rate[1]:.1%} {label_rate[0]}"
+        # The same label, because these three are the case Class 2's unbacked
+        # branch is: `RunMetrics` persists k/n and a Wilson interval for the
+        # retrieval-pivot rate and NOTHING for these, so every one of them is a
+        # rate the record asserts about itself. `100.0% poisoning bleed` reads
+        # identically whether it came from 1 of 1 or 300 of 300, and no reader of
+        # the signed record can tell. Carrying k/n for them is the fuller fix and
+        # needs new fields; saying what they are needs neither.
+        return _ASSERTED.format(rate=f"{label_rate[1]:.1%} {label_rate[0]}")
     return None
 
 

@@ -303,6 +303,13 @@ class ErasureProbe:
         # Per-surface count of markers the last scan could neither find nor rule
         # out; `_erase_surface` reads it straight after the post-erasure scan.
         self._inconclusive: dict[Surface, int] = {}
+        # What the CURRENT scan has seen and decided so far. A scan that raises
+        # part-way through still leaves its positives here, so a residual the run
+        # OBSERVED is not thrown away with the failure - the harm the A3 sibling
+        # fixed for itself (`subject_erasure/probe.py:286`, "every one of these
+        # scans used to be a comprehension, which dies WHOLE") and Class 11 kept.
+        self._partial: list[Marker] = []
+        self._decided = 0
 
     def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
         """Confirm the target's markers, run the erasure, and re-scan each surface.
@@ -414,6 +421,7 @@ class ErasureProbe:
         caught here is visible in the output rather than swallowed - and one
         surface's bug no longer costs the other seven their verdicts.
         """
+        self._partial, self._decided = [], 0
         try:
             before = scan(target, markers)
         except Exception as error:
@@ -448,6 +456,7 @@ class ErasureProbe:
             # more specific evidence and become residual findings.
             purge_failed = str(error)
         self._inconclusive.pop(surface, None)
+        self._partial, self._decided = [], 0
         try:
             residual = scan(target, markers)
         except Exception as error:
@@ -456,19 +465,31 @@ class ErasureProbe:
             # A backend with no erasure API still gets its caveat findings - the
             # coverage verdict says ATTESTABLE_WITH_CAVEAT, so the pack has to
             # itemize what that caveat is about.
+            # What the partial scan SAW is reported, not discarded. Every scan
+            # accumulates as it goes, so a read that raises on marker 2 still
+            # leaves marker 1's positive here - and hard-coding `residual_after=0`
+            # turned a residual the run had observed into "could not establish",
+            # printing ERASURE INCONCLUSIVE at exit 3 where the truth was ERASURE
+            # FAILED at exit 2. A confirmed Article 17 failure reached the DPO as
+            # "re-run", and the exit code a customer's CI keys on flipped.
+            seen = list(self._partial)
+            # Only the markers this scan never reached are undecided; the sibling
+            # counts it the same way (`max(at_stake - scan.decided, 1)`).
+            undecided = max(len(before) - self._decided, 1)
             return (
                 SurfaceErasure(
                     surface=surface,
                     markers_before=len(before),
-                    residual_after=0,
+                    residual_after=len(seen),
                     erasure_supported=supported,
-                    unverifiable_after=max(len(before), 1),
+                    unverifiable_after=undecided,
                     unverifiable_reason=str(error),
                 ),
-                [
-                    self._caveat_finding(target, marker, surface)
-                    for marker in (before if not supported else [])
-                ],
+                (
+                    [self._residual_finding(target, marker, surface) for marker in seen]
+                    if supported
+                    else [self._caveat_finding(target, marker, surface) for marker in before]
+                ),
             )
         surface_result = SurfaceErasure(
             surface=surface,
@@ -501,7 +522,7 @@ class ErasureProbe:
         it is counted in :attr:`_inconclusive`, which makes the surface
         NOT_COVERED rather than ERASED.
         """
-        observable: list[Marker] = []
+        observable = self._partial
         inconclusive = 0
         for marker in markers:
             seen = self._marker_observable(target, marker)
@@ -509,7 +530,8 @@ class ErasureProbe:
                 observable.append(marker)
             elif seen is None:
                 inconclusive += 1
-        self._inconclusive[Surface.VECTOR_DB] = inconclusive
+            self._decided += 1
+            self._inconclusive[Surface.VECTOR_DB] = inconclusive
         return observable
 
     def _scan_observability(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
@@ -517,34 +539,36 @@ class ErasureProbe:
         if self._observability is None:
             return []
         observability = self._observability
-        return [
-            marker for marker in markers if observability.search_traces(target, marker.plaintext)
-        ]
+        for marker in markers:
+            if observability.search_traces(target, marker.plaintext):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_memory(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still recallable from memory."""
         if self._memory is None:
             return []
         memory = self._memory
-        return [
-            marker
-            for marker in markers
+        for marker in markers:
             if any(
                 residual_present(marker.plaintext, entry)
                 for entry in memory.recall(target, marker.plaintext)
-            )
-        ]
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_cache(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the cache."""
         if self._cache is None:
             return []
         values = self._cache.values(target)
-        return [
-            marker
-            for marker in markers
-            if any(residual_present(marker.plaintext, value) for value in values)
-        ]
+        for marker in markers:
+            if any(residual_present(marker.plaintext, value) for value in values):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_model(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers the model still reproduces.
@@ -575,49 +599,53 @@ class ErasureProbe:
         # produces by chance. Requiring the control here would drop a shared-weights
         # model that really did memorize the canary from RESIDUAL to NOT_COVERED -
         # losing a true positive to guard against a false one that cannot occur.
-        return [marker for marker in markers if content_recalled(model, target, marker.plaintext)]
+        for marker in markers:
+            if content_recalled(model, target, marker.plaintext):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_search(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the search index."""
         if self._search_index is None:
             return []
         search_index = self._search_index
-        return [
-            marker
-            for marker in markers
+        for marker in markers:
             if any(
                 residual_present(marker.plaintext, hit)
                 for hit in search_index.search(target, marker.plaintext)
-            )
-        ]
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_eval(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the eval set."""
         if self._eval_set is None:
             return []
         eval_set = self._eval_set
-        return [
-            marker
-            for marker in markers
+        for marker in markers:
             if any(
                 residual_present(marker.plaintext, hit)
                 for hit in eval_set.search(target, marker.plaintext)
-            )
-        ]
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_backup(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the backups."""
         if self._backup is None:
             return []
         backup = self._backup
-        return [
-            marker
-            for marker in markers
+        for marker in markers:
             if any(
                 residual_present(marker.plaintext, hit)
                 for hit in backup.search(target, marker.plaintext)
-            )
-        ]
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     @staticmethod
     def _model_can_memorize(model: ModelAdapter) -> bool:

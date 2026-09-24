@@ -877,3 +877,67 @@ def test_the_anchored_statement_does_not_promise_self_contained_tamper_evidence(
     assert "cannot be covered up" not in statement, statement
     assert "comparative" in statement, statement
     assert "will also verify" in statement, statement
+
+
+def test_the_scope_note_says_which_of_the_three_things_verify_will_object_to() -> None:
+    # The first version keyed on `live_surfaces()` being empty, which is true for
+    # an all-synthetic run AND for a record that carries no provenance block at
+    # all - so the PDF asserted "No surface in this run was live" over a pack
+    # whose own run-scope gate says exactly that cannot be established. It was
+    # also silent on the third case, where run-scope FAILS with a live surface
+    # present because findings rest on a surface the block never recorded: the
+    # auditor is sent to a tamper-style exit 4 on a genuine artifact, which is the
+    # harm the note was added to prevent.
+    from sectum_ai.evidence.pdf import anchor_statement
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def _pack(provenance: dict[str, str], findings: tuple[Finding, ...] = ()) -> EvidencePack:
+        run = RunResult(
+            run_id="r",
+            scenario_hash="s",
+            manifest_hash="m" * 64,
+            started_at=moment,
+            finished_at=moment,
+            probe_versions={"tenant-boundary-fetch": "1"},
+            surface_provenance=provenance,
+            findings=findings,
+        )
+        return EvidencePack(run_result=run, manifest_hash="m" * 64, tsa_token='{"digest": "x"}')
+
+    # 1. No provenance block: "cannot be established", never "was not live".
+    unrecorded = anchor_statement(_pack({}))
+    assert "--allow-synthetic" in unrecorded, unrecorded
+    assert "cannot be established" in unrecorded, unrecorded
+    assert "No surface in this run was live" not in unrecorded, unrecorded
+
+    # 2. Recorded and synthetic: the original sentence, which was right here.
+    synthetic = anchor_statement(
+        _pack({Surface.VECTOR_DB.value: SurfaceProvenance.SYNTHETIC.value})
+    )
+    assert "No surface in this run was live" in synthetic, synthetic
+
+    # 3. Every RECORDED surface live, but a finding rests on one that is not in
+    #    the block. `verify` fails run-scope; the note was absent entirely.
+    finding = Finding(
+        finding_id="f1",
+        probe_id="semantic-cache-contamination",
+        severity=Severity.CRITICAL,
+        confidence=1.0,
+        status=FindingStatus.CONFIRMED,
+        owner_tenant_id=UUID(int=0xB),
+        observed_in_tenant_id=UUID(int=0xA),
+        surface=Surface.SEMANTIC_CACHE,
+        marker_id="mkr-1",
+        evidence_span="SECTUM-CANARY-X",
+        owasp_llm="LLM08:2025",
+    )
+    unaccounted = anchor_statement(
+        _pack({Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}, (finding,))
+    )
+    assert "--allow-synthetic" in unaccounted, unaccounted
+    assert "never recorded" in unaccounted, unaccounted
+
+    # 4. Fully live and fully accounted: no note at all.
+    clean = anchor_statement(_pack({Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}))
+    assert "--allow-synthetic" not in clean, clean

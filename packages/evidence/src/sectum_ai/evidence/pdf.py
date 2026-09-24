@@ -447,12 +447,48 @@ _ANCHOR_PRESENT: str = (
 # artifact; the anchored branch named no flag at all. `docs/samples/README.md`
 # already named both. The note is appended to BOTH branches because the
 # condition belongs to neither.
-_SCOPE_FLAG_NOTE: str = (
-    " No surface in this run was live, so 'sectum-ai verify' also requires "
-    "--allow-synthetic to complete; without it the run exits 4 on [FAIL] "
-    "run-scope, which is a statement about what was in scope and not about "
-    "the content."
+_SCOPE_FLAG_TAIL: str = (
+    ", so 'sectum-ai verify' also requires --allow-synthetic to complete; without "
+    "it the run exits 4 on [FAIL] run-scope, which is a statement about what was "
+    "in scope and not about the content."
 )
+_SCOPE_FLAG_SYNTHETIC: str = " No surface in this run was live"
+_SCOPE_FLAG_UNRECORDED: str = (
+    " This pack records no surface provenance, so whether it touched live backends "
+    "or Sectum's built-in synthetic stores cannot be established from it"
+)
+_SCOPE_FLAG_UNACCOUNTED: str = (
+    " Findings in this pack rest on {surfaces}, which its provenance never recorded, "
+    "so whether those were live cannot be established from it"
+)
+
+
+def _scope_flag_note(pack: EvidencePack) -> str:
+    """The `--allow-synthetic` sentence, when `verify`'s run-scope would demand it.
+
+    Keyed on the same three things the gate is (`verify._check_run_scope`): an
+    ABSENT provenance block, a surface recorded as anything but LIVE, and a
+    finding resting on a surface the block never recorded.
+
+    The first version keyed on `live_surfaces()` being empty. That is true for an
+    all-synthetic run AND for a record that does not say, so the PDF asserted "No
+    surface in this run was live" over a pack whose own gate says exactly that
+    cannot be established - and it was silent on the third case, where run-scope
+    fails with a live surface present, which reproduced the very failure the note
+    exists to prevent: an auditor following the document's instruction to a
+    tamper-style exit 4 on a genuine artifact.
+    """
+    run = pack.run_result
+    provenance = run.surface_provenance
+    unaccounted = unaccounted_surfaces(run)
+    if not provenance:
+        return _SCOPE_FLAG_UNRECORDED + _SCOPE_FLAG_TAIL
+    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
+    if not synthetic and not unaccounted:
+        return ""
+    if not synthetic:
+        return _SCOPE_FLAG_UNACCOUNTED.format(surfaces=", ".join(unaccounted)) + _SCOPE_FLAG_TAIL
+    return _SCOPE_FLAG_SYNTHETIC + _SCOPE_FLAG_TAIL
 
 
 def _finding_controls(finding: Finding) -> str:
@@ -805,7 +841,7 @@ def anchor_statement(pack: EvidencePack, *, anchors: tuple[bool, bool] | None = 
         )
         if present
     ]
-    scope_note = "" if live_surfaces(pack.run_result) else _SCOPE_FLAG_NOTE
+    scope_note = _scope_flag_note(pack)
     if not named:
         return _ANCHOR_NONE + scope_note
     return _ANCHOR_PRESENT.format(anchors=" and ".join(named)) + scope_note
