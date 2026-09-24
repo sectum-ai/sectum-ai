@@ -64,6 +64,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A bounded effect-size pair can no longer regress.** The variance floor sits in
+  `_cohens_d`'s *denominator*, so a floored effect size is a **lower bound** on the
+  true one and two bounds cannot be ordered — which `_dict_deltas`' caller already
+  states ("Either run's floor makes the PAIR incomparable, so both sides count")
+  and `MetricDelta.regressed` did not honour, excluding only `informational`. Two
+  bounds rising read `[REGRESSED]` and failed CI at exit 2 over a number nobody
+  measured; two bounds falling read `[ok]`. No signal is lost: a genuine Class 5
+  side channel emits a CONFIRMED finding and `newly_confirmed` still gates.
+- **An OpenSearch response with no readable `hits.total` is refused.**
+  `hits.get("total", {})` then `.get("value", 0)` manufactured a zero, so
+  `total_count > len(rows)` was false and the truncated-page refusal never fired —
+  a canary ranked past the cap read as absent, which nothing downstream can catch.
+  `backup/gcs.py` states the rule: "a number nobody measured is not a measurement
+  of zero."
+- **A plain-string retrieved passage keeps its content.** `_to_hit` had no `str`
+  arm, so such an item fell to the Document branch and became
+  `VectorHit(content="")` — a retrieved context carrying a foreign canary scanned
+  as empty, and the leak missed. `_document_text` in the same file already handled
+  `str`.
+- **The OpenSearch guard tests build through the real constructor.** They used
+  `object.__new__`, which skipped `__init__` entirely — so `name`, `capabilities`
+  and `supports()` were never set and `delete` sat at zero coverage. (That family
+  and `adapters/backup` are also omitted from the 85% coverage gate by
+  `pyproject.toml`, so the gap was invisible to CI by construction.)
+
 - **Class 11 no longer throws away a residual it already observed.** All eight
   surface scans were single comprehensions and the post-scan handler hard-coded
   `residual_after=0`, so a scan that positively found marker 1 and then died

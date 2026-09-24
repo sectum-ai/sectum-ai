@@ -3692,6 +3692,10 @@ def _delta_verdict(
     # lines above a banner saying the comparison is not meaningful.
     if scenario_changed:
         return "not measured"
+    # Neither side is a measurement, so neither `[ok]` nor `[REGRESSED]` is a
+    # statement about the side channel - only about the timer's resolution.
+    if delta.bounded:
+        return "not measured"
     # A probe that lost its user boundary, or whose backing surface fell back to
     # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`
     # printed directly above `[BOUNDARY LOST]` asserted a fix the run never checked.

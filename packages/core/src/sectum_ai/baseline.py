@@ -72,6 +72,19 @@ class MetricDelta:
         """
         if self.informational:
             return False
+        # A bounded pair cannot be ordered, so it cannot regress. The variance
+        # floor sits in `_cohens_d`'s DENOMINATOR, which makes a floored effect
+        # size a LOWER BOUND on the true one - and `_dict_deltas`' caller already
+        # states the rule this honours: "Either run's floor makes the PAIR
+        # incomparable, so both sides count." Without it, two bounds rising read
+        # `[REGRESSED]` and failed CI at exit 2 over a number nobody measured,
+        # and two bounds falling read `[ok]`. This field's own docstring calls it
+        # "rendering only", which is what it now is.
+        #
+        # No signal is lost: a genuine Class 5 side channel emits a CONFIRMED
+        # finding, and `newly_confirmed` still gates.
+        if self.bounded:
+            return False
         return self.current > self.baseline + 1e-9
 
 
