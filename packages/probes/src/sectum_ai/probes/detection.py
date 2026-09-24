@@ -1019,9 +1019,22 @@ class DetectionPipeline:
             for token in (set(span_tokens) & set(marker_tokens)) - boilerplate
             if not token.isdigit()
         }
-        if span_tokens and distinctive_overlap:
-            return ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
-        return False
+        if not (span_tokens and distinctive_overlap):
+            return False
+        # Presence for a QUOTE is exact containment, not token-order traceability.
+        # `ordered_within_span` allows interposed tokens - that is what makes it
+        # the right test for "is the marker PRESENT", and the wrong one for "may
+        # we put this in quotation marks". With it here, a confirmation on
+        # "Project (internal) Zephyr-00002" quoted the plaintext "Project
+        # Zephyr-00002", which the observation does not contain, into the field
+        # the PDF renderer's own docstring calls "the proof" and renders inside
+        # quotation marks. This docstring already said "is in the observation";
+        # the code asked something weaker, and it also kept the honest `else`
+        # branch below unreachable - the one that describes the match instead of
+        # showing text that was never seen.
+        if evidence_span not in text:
+            return False
+        return ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
 
     def _best_window_similarity(
         self,

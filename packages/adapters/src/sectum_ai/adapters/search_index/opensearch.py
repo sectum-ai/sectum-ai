@@ -90,8 +90,25 @@ class OpenSearchSearchIndex(SearchIndexAdapter):
         )
         hits = response.get("hits", {})
         rows = hits.get("hits", [])
-        total = hits.get("total", {})
-        total_count = int(total.get("value", 0)) if isinstance(total, dict) else int(total or 0)
+        # An ABSENT total is not a total of zero. `hits.get("total", {})` then
+        # `.get("value", 0)` made one, so `total_count > len(rows)` was False and
+        # the cap refusal below never fired: a truncated page on a canary MISS
+        # returned silently and the marker ranked past it read as absent. That is
+        # the fail-open direction on a check nothing downstream can catch, and
+        # this codebase states the rule for it in as many words at
+        # `backup/gcs.py` - "a number nobody measured is not a measurement of
+        # zero." The body asks for `track_total_hits: True`, so a response
+        # without one is a backend this adapter cannot read, not an empty index.
+        total = hits.get("total")
+        if isinstance(total, dict):
+            total = total.get("value")
+        if not isinstance(total, int | float):
+            raise AdapterError(
+                f"OpenSearch returned no readable hits.total for the tenant "
+                f"(got {type(total).__name__}), so whether the page of "
+                f"{len(rows)} is complete cannot be established"
+            )
+        total_count = int(total)
         contents = [str(hit.get("_source", {}).get("content", "")) for hit in rows]
         # A truncated page is not a scan: a document ranked past it read as absent.
         # But both callers ask "is this phrase still here", and a page that already

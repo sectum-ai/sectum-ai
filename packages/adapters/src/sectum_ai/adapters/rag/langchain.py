@@ -157,6 +157,14 @@ def _document_text(document: Any) -> str:
 
 def _to_hit(tenant: UUID, item: Any) -> VectorHit:
     """Parse one retrieved item into a ``VectorHit``."""
+    # A plain string is a retrieved passage, not an object with `page_content`.
+    # Without this arm it fell to the Document branch, where `getattr(item,
+    # "page_content", "")` produced `VectorHit(content="")` - so a retrieved
+    # context carrying a foreign canary was scanned as EMPTY and the leak was
+    # missed, silently. `_document_text` above already handles `str`; this is its
+    # sibling in the same file, and only one of them did.
+    if isinstance(item, str):
+        return VectorHit(doc_id="", tenant_id=tenant, score=1.0, content=item)
     if isinstance(item, dict):
         doc_id = item.get("doc_id") or item.get("id") or ""
         content = item.get("content") or item.get("page_content") or ""

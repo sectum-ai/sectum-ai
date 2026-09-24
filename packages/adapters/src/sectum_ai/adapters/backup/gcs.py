@@ -201,7 +201,21 @@ class GCSBackup(BackupAdapter):
         # residue Class 11 erasure verification is built to catch.
         if self._soft_delete:
             return
-        retention = self._soft_delete_retention_s()
+        # Wrapped like the S3 sibling's listing (`s3.py`): a raw client failure
+        # here is not this contract's error type, so the operator saw
+        # `403 caller does not have storage.buckets.get access` where every other
+        # surface gives Sectum's own framing. The verdict was never wrong - the
+        # probe's containment is `except Exception` precisely because the erasure
+        # surfaces keep this unevenly - but `search` on this same adapter already
+        # wraps both of these calls and `delete` did not.
+        try:
+            retention = self._soft_delete_retention_s()
+        except AdapterError:
+            raise
+        except Exception as error:
+            raise AdapterError(
+                f"GCS purge could not read the bucket's soft-delete policy: {error}"
+            ) from error
         if retention:
             raise ErasureUnsupported(
                 f"the backup bucket keeps deleted objects restorable for {retention} s "
@@ -218,7 +232,11 @@ class GCSBackup(BackupAdapter):
         # is attempted, and the error names them all, exactly as the S3 sibling's
         # `Errors` list does.
         failed: list[str] = []
-        for blob in self._blobs(tenant):
+        try:
+            blobs = self._blobs(tenant)
+        except Exception as error:
+            raise AdapterError(f"GCS purge could not list the tenant's objects: {error}") from error
+        for blob in blobs:
             try:
                 blob.delete()
             except Exception as error:  # any client failure is a failed purge

@@ -146,10 +146,14 @@ def _chat_history(chat_result: Any, assistant: Any) -> Any:
 
     The v0.2 legacy ``ConversableAgent.initiate_chat`` returns a ``ChatResult``
     with ``chat_history`` (a list of ``{"content": ..., "role": ..., ...}``
-    dicts). Some flavours of the v0.4+ stack instead carry a
-    ``chat_messages`` dict keyed on the participating agents; read both so the
-    adapter is portable across the API surfaces and the dict-shaped stub used
-    in the mock-backed test.
+    dicts). A ``ConversableAgent`` in the pinned 0.2.x line instead carries a
+    ``chat_messages`` dict keyed on the participating agents, which a caller may
+    hand this adapter directly; read both so it is portable across the two.
+
+    NOT "the v0.4+ stack", as this said: v0.4 returns ``TaskResult.messages``,
+    a shape this branch rejects. The branch is live all the same - the class
+    contract admits duck-typed stand-ins and the mock-backed test covers it -
+    so the attribution was wrong, not the code.
     """
     if hasattr(chat_result, "chat_history"):
         return chat_result.chat_history
@@ -195,7 +199,14 @@ def _content_to_text(content: Any) -> str:
                 if isinstance(text, str):
                     parts.append(text)
         return "".join(parts)
-    return str(content) if content is not None else ""
+    # NOT `str(content)`. A content object this function cannot read has no
+    # text, and stringifying it yields the object's repr - truthy - so
+    # `Runner._agent_run` records AccessOutcome.RETURNED and Class 7 grades a
+    # memory address as the agent's answer. `CrewAIAgent` was fixed for exactly
+    # this and the commit claimed both siblings already returned "" on the same
+    # shape; they did not - that claim was checked only against an EMPTY message
+    # list, which takes a different early return.
+    return ""
 
 
 def _is_assistant(message: Any) -> bool:

@@ -2,6 +2,8 @@
 
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.adapters import (
     FakeBackup,
     FakeCache,
@@ -1017,3 +1019,57 @@ def test_a_raw_client_failure_is_contained_to_its_own_surface() -> None:
     assert report.coverage()[Surface.SEMANTIC_CACHE] is CoverageVerdict.NOT_COVERED
     assert "connection refused" in (broken.unverifiable_reason or "")
     assert not report.erased
+
+
+@pytest.mark.parametrize(
+    ("fail_after", "verdict", "residual", "unverifiable"),
+    [(2, "NOT VERIFIED", 0, 2), (3, "RESIDUAL DATA", 1, 1), (4, "RESIDUAL DATA", 2, 0)],
+)
+def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
+    fail_after: int, verdict: str, residual: int, unverifiable: int
+) -> None:
+    # Every optional-surface scan was a single comprehension, and the post-scan
+    # handler hard-coded `residual_after=0`. So a scan that positively found
+    # marker 1 and then died reading marker 2 reported "could not establish
+    # absence": ERASURE INCONCLUSIVE at exit 3, where the truth was ERASURE FAILED
+    # at exit 2. A confirmed Article 17 failure reached the DPO as "re-run", and
+    # the exit code a customer's CI keys on flipped.
+    #
+    # This is verbatim the harm the A3 sibling records fixing for itself -
+    # "every one of these scans used to be a comprehension, which dies WHOLE"
+    # (`subject_erasure/probe.py`) - which Class 11 never got. Swept across the
+    # failure point so both boundaries are pinned: dying on the FIRST read still
+    # establishes nothing, and a complete scan is unchanged.
+    from sectum_ai.adapters import FakeSearchIndex, FakeVectorStore
+    from sectum_ai.probes.erasure.probe import ErasureProbe
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    calls = {"n": 0}
+    real_search = FakeSearchIndex.search
+
+    class _DiesMidScan(FakeSearchIndex):
+        def search(self, tenant: UUID, query: str) -> list[str]:
+            calls["n"] += 1
+            if calls["n"] > fail_after:
+                raise RuntimeError("opensearch: cluster went away mid-scan")
+            return real_search(self, tenant, query)
+
+        def delete(self, tenant: UUID) -> None:
+            return None  # a purge that leaves everything in place
+
+    index = _DiesMidScan()
+    for marker in substrate.manifest.markers:
+        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY:
+            index.index(target, f"search index entry mentioning {marker.plaintext}")
+
+    report = ErasureProbe(substrate, vector=FakeVectorStore(), search_index=index).run(
+        target, scope=(Surface.SEARCH_INDEX,)
+    )
+    surface = report.surfaces[0]
+    assert surface.verdict == verdict, surface
+    assert surface.residual_after == residual, surface
+    assert surface.unverifiable_after == unverifiable, surface
+    # The headline the DPO reads, and the exit code CI keys on.
+    assert report.genuine_residual is (residual > 0), report

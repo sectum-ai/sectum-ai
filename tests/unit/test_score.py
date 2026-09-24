@@ -227,7 +227,12 @@ def test_class_2_counts_free_headline_renders_a_clean_zero_rate() -> None:
     # pre-counts record `score` re-grades - is shown as it recorded itself. A clean 0.0 rate is
     # falsy but not None, so a truthiness check would drop the flagship RPR headline entirely.
     # This is a distinct branch from the k=0 counts path pinned just above (which recomputes).
-    assert _bleed_headline(RunMetrics(retrieval_pivot_rate=0.0)) == "0.0% RPR"
+    # The label is part of it: a rate with no counts is one the record asserts
+    # about itself, which `evidence/pdf.py` has always said out loud.
+    assert (
+        _bleed_headline(RunMetrics(retrieval_pivot_rate=0.0))
+        == "0.0% RPR (asserted by the record; no sample size recorded)"
+    )
 
 
 def test_class_2_headline_recomputes_the_rate_from_the_counts_not_the_records_claim() -> None:
@@ -318,7 +323,7 @@ def test_class_2_without_a_ci_still_shows_its_rate() -> None:
     # exactly as recorded rather than wearing an interval this grader invented.
     card = score_run(_run(ran=_ALL_PROBES, metrics=RunMetrics(retrieval_pivot_rate=0.954)))
     bleed = next(c for c in card.classes if c.class_id == 2)
-    assert bleed.headline == "95.4% RPR"
+    assert bleed.headline == "95.4% RPR (asserted by the record; no sample size recorded)"
 
 
 def test_every_catalog_class_appears_and_weights_are_declared() -> None:
@@ -456,9 +461,15 @@ def test_the_counts_free_classes_render_a_clean_zero_rate_headline() -> None:
         )
     )
     by_id = {c.class_id: c for c in card.classes}
-    assert by_id[3].headline == "0.0% poisoning bleed"
-    assert by_id[6].headline == "0.0% reconstruction"
-    assert by_id[10].headline == "0.0% extraction efficiency"
+    assert by_id[3].headline == (
+        "0.0% poisoning bleed (asserted by the record; no sample size recorded)"
+    )
+    assert by_id[6].headline == (
+        "0.0% reconstruction (asserted by the record; no sample size recorded)"
+    )
+    assert by_id[10].headline == (
+        "0.0% extraction efficiency (asserted by the record; no sample size recorded)"
+    )
 
 
 def test_a_class_that_did_not_run_carries_no_headline_or_findings() -> None:

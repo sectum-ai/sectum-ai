@@ -1411,3 +1411,42 @@ def test_the_run_that_proves_an_a3_erasure_worked_is_not_a_regression(tmp_path: 
     )
     assert "[ERASURE NOT RESCANNED]" not in cli.output, cli.output
     assert cli.exit_code == 0, cli.output
+
+
+def test_two_bounded_effect_sizes_are_incomparable_in_both_directions() -> None:
+    # The variance floor sits in `_cohens_d`'s DENOMINATOR, so a floored effect
+    # size is a LOWER BOUND on the true one. Two bounds therefore cannot be
+    # ordered - which `_dict_deltas`' caller already states ("Either run's floor
+    # makes the PAIR incomparable, so both sides count") and `MetricDelta.regressed`
+    # did not honour: it excluded only `informational`.
+    #
+    # So two bounds RISING read [REGRESSED] and failed CI at exit 2 over a number
+    # nobody measured, and two bounds FALLING read [ok] and passed. The field's own
+    # docstring calls it "rendering only"; this makes that true.
+    from sectum_ai.baseline import MetricDelta
+
+    rising = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=5.2, current=146.7, bounded=True
+    )
+    falling = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
+    )
+    assert not rising.regressed, "two lower bounds rising is not a measured regression"
+    assert not falling.regressed
+
+    # A measured pair is untouched - the real gate must keep working.
+    measured = MetricDelta(name="side_channel_effect_sizes[a|b]", baseline=5.2, current=146.7)
+    assert measured.regressed, "a measured rise must still regress"
+
+
+def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
+    # The verdict tag, not the prose suffix. The existing test pins only
+    # "bounds, not measurements" in the output, so `[ok] 146.7 -> 5.2` beside that
+    # caveat passed every assertion while asserting the opposite of it.
+    from sectum_ai.baseline import MetricDelta
+    from sectum_ai.cli.app import _delta_verdict
+
+    bounded = MetricDelta(
+        name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
+    )
+    assert _delta_verdict(bounded, (), (), (), ()) == "not measured"

@@ -300,12 +300,6 @@ _DETECTOR_TAIL = (
 # calls "not semantically meaningful beyond lexical overlap", and a token-order
 # string matcher; and a run whose threshold gated the semantic tier shut. The
 # record now carries `detection`, so the sentence can be true.
-_DETECTOR_LAYERED = (
-    "Each observation passes a layered detector - exact canary match, then "
-    "semantic similarity against the configured embedding model, then the "
-    "configured judge. An exact canary match is decided by the observation "
-    "itself; a semantic match also depends on that judge. "
-) + _DETECTOR_TAIL
 # Composed per TIER, because the two are configured independently and
 # `offline_only` collapsed them with `and`: one real provider flipped the whole
 # paragraph to the fully-layered claim, so a run with a real embedder and the
@@ -331,8 +325,20 @@ _TIER_JUDGE = {
 }
 
 
-def _detector_tiers(embedder_offline: bool, judge_offline: bool) -> str:
-    """The layered-detector sentence, naming each tier as it actually ran."""
+def _detector_tiers(
+    embedder_offline: bool, judge_offline: bool, semantic_threshold: float | None = None
+) -> str:
+    """The layered-detector sentence, naming each tier as it actually ran.
+
+    The threshold is part of "as it actually ran": the semantic gate is
+    `if not present and similarity < threshold: continue`, and cosine similarity
+    is clamped to 1.0 - so a threshold of 1.0 admits nothing but an exact match
+    and the semantic tier is shut. `DetectionProvenance.semantic_threshold` was
+    recorded for precisely this ("a pack where the semantic tier was gated shut
+    ... was indistinguishable from one where it ran") and no renderer read it, so
+    the paragraph was byte-identical at 0.62 and at 1.0 while telling the auditor
+    "then semantic similarity against the configured embedding model".
+    """
     tail = (
         " A paraphrase an offline stage cannot see is not reported as absent - it "
         "is not reported at all; configure `detection.embedder` and "
@@ -341,23 +347,26 @@ def _detector_tiers(embedder_offline: bool, judge_offline: bool) -> str:
         else " An exact canary match is decided by the observation itself; a "
         "semantic match also depends on that judge. "
     )
+    gate = ""
+    if semantic_threshold is not None:
+        gate = (
+            f" The semantic tier admitted a candidate at a similarity of "
+            f"{semantic_threshold:.2f} or above"
+            + (
+                "; cosine similarity cannot exceed 1.00, so at this setting it "
+                "admitted nothing an exact match had not already decided and the "
+                "semantic tier did not contribute to this pack."
+                if semantic_threshold >= 1.0
+                else "."
+            )
+        )
     return (
         "Each observation passes a layered detector - exact canary match, then "
         f"{_TIER_EMBEDDER[embedder_offline]}, then {_TIER_JUDGE[judge_offline]}."
-        f"{tail}"
+        f"{gate}{tail}"
     ) + _DETECTOR_TAIL
 
 
-_DETECTOR_OFFLINE = (
-    "Each observation passes a layered detector - exact canary match, then an "
-    "OFFLINE similarity and adjudication stage. This run configured no embedding "
-    "model and no judge, so the second and third tiers were Sectum's built-in "
-    "offline stubs: a hashing vector that measures lexical overlap rather than "
-    "meaning, and a token-order string matcher. They are not an embedding model "
-    "and not a calibrated judge, and a paraphrase they cannot see is not "
-    "reported as absent - it is not reported at all. Configure "
-    "`detection.embedder` and `detection.judge` to exercise the semantic tiers. "
-) + _DETECTOR_TAIL
 _DETECTOR_EXACT = (
     "Each observation is matched against the ground-truth manifest by exact "
     "content. This run invoked no embedding model and no judge - the erasure "
@@ -447,12 +456,48 @@ _ANCHOR_PRESENT: str = (
 # artifact; the anchored branch named no flag at all. `docs/samples/README.md`
 # already named both. The note is appended to BOTH branches because the
 # condition belongs to neither.
-_SCOPE_FLAG_NOTE: str = (
-    " No surface in this run was live, so 'sectum-ai verify' also requires "
-    "--allow-synthetic to complete; without it the run exits 4 on [FAIL] "
-    "run-scope, which is a statement about what was in scope and not about "
-    "the content."
+_SCOPE_FLAG_TAIL: str = (
+    ", so 'sectum-ai verify' also requires --allow-synthetic to complete; without "
+    "it the run exits 4 on [FAIL] run-scope, which is a statement about what was "
+    "in scope and not about the content."
 )
+_SCOPE_FLAG_SYNTHETIC: str = " No surface in this run was live"
+_SCOPE_FLAG_UNRECORDED: str = (
+    " This pack records no surface provenance, so whether it touched live backends "
+    "or Sectum's built-in synthetic stores cannot be established from it"
+)
+_SCOPE_FLAG_UNACCOUNTED: str = (
+    " Findings in this pack rest on {surfaces}, which its provenance never recorded, "
+    "so whether those were live cannot be established from it"
+)
+
+
+def _scope_flag_note(pack: EvidencePack) -> str:
+    """The `--allow-synthetic` sentence, when `verify`'s run-scope would demand it.
+
+    Keyed on the same three things the gate is (`verify._check_run_scope`): an
+    ABSENT provenance block, a surface recorded as anything but LIVE, and a
+    finding resting on a surface the block never recorded.
+
+    The first version keyed on `live_surfaces()` being empty. That is true for an
+    all-synthetic run AND for a record that does not say, so the PDF asserted "No
+    surface in this run was live" over a pack whose own gate says exactly that
+    cannot be established - and it was silent on the third case, where run-scope
+    fails with a live surface present, which reproduced the very failure the note
+    exists to prevent: an auditor following the document's instruction to a
+    tamper-style exit 4 on a genuine artifact.
+    """
+    run = pack.run_result
+    provenance = run.surface_provenance
+    unaccounted = unaccounted_surfaces(run)
+    if not provenance:
+        return _SCOPE_FLAG_UNRECORDED + _SCOPE_FLAG_TAIL
+    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
+    if not synthetic and not unaccounted:
+        return ""
+    if not synthetic:
+        return _SCOPE_FLAG_UNACCOUNTED.format(surfaces=", ".join(unaccounted)) + _SCOPE_FLAG_TAIL
+    return _SCOPE_FLAG_SYNTHETIC + _SCOPE_FLAG_TAIL
 
 
 def _finding_controls(finding: Finding) -> str:
@@ -571,7 +616,9 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
         detector = _DETECTOR_TAIL
     else:
         detector = _detector_tiers(
-            run.detection.embedder_kind == "fake", run.detection.judge_kind == "fake"
+            run.detection.embedder_kind == "fake",
+            run.detection.judge_kind == "fake",
+            run.detection.semantic_threshold,
         )
     if erasure_only:
         head = _ERASURE_METHODOLOGY if live_surfaces(run) else _ERASURE_SYNTHETIC
@@ -805,7 +852,7 @@ def anchor_statement(pack: EvidencePack, *, anchors: tuple[bool, bool] | None = 
         )
         if present
     ]
-    scope_note = "" if live_surfaces(pack.run_result) else _SCOPE_FLAG_NOTE
+    scope_note = _scope_flag_note(pack)
     if not named:
         return _ANCHOR_NONE + scope_note
     return _ANCHOR_PRESENT.format(anchors=" and ".join(named)) + scope_note

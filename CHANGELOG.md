@@ -64,6 +64,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The HuggingFace backend times time-to-first-token, not a full generation.**
+  `measure_latency_ms` called `infer`, which generates 64 tokens. Decode costs the
+  same in both arms, so those steps added variance to Cohen's *d*'s denominator
+  without adding to its numerator: the mean gap survived and *d* collapsed. That
+  biases Class 5 toward a **miss** and systematically downgrades a detected
+  channel HIGH → MEDIUM. `model/_serving.py` states the rule normatively and both
+  serving siblings already implement it by breaking on the first streamed chunk.
+  Loading a LoRA off disk is now outside the timer too — it is setup, not
+  inference, and timing it swamped the prefill signal.
+
+- **The audit PDF states the resolved semantic threshold.**
+  `DetectionProvenance.semantic_threshold` was recorded for exactly this — its
+  docstring says a pack where the semantic tier was gated shut "was
+  indistinguishable from one where it ran" — and no renderer read it, so the
+  methodology paragraph was byte-identical at `0.62` and at `1.0` while telling
+  the auditor "then semantic similarity against the configured embedding model".
+  The gate is `similarity < threshold`, and cosine similarity is clamped to 1.0,
+  so at 1.0 the tier admits nothing an exact match had not already decided; the
+  paragraph now says so.
+- **`GCSBackup.delete` translates a raw client failure on both of its reads.**
+  `search` on the same adapter wraps `get_bucket` and `list_blobs`; `delete`
+  wrapped neither, and the S3 sibling wraps its listing. The verdict was never
+  wrong — the erasure probe's containment is deliberately `except Exception` —
+  so this is contract consistency and message quality.
+
+### Removed
+
+- **`DetectionProvenance.offline_only`**, and the two orphaned PDF constants
+  `_DETECTOR_LAYERED` / `_DETECTOR_OFFLINE`. The property's `and` semantics were
+  abandoned as *incorrect* (one real provider flipped the whole paragraph to the
+  fully-layered claim), so leaving it was a trap rather than neutral dead code. It
+  was a plain `@property`, absent from the exported JSON Schema, so this is not a
+  schema change.
+
+- **A bounded effect-size pair can no longer regress.** The variance floor sits in
+  `_cohens_d`'s *denominator*, so a floored effect size is a **lower bound** on the
+  true one and two bounds cannot be ordered — which `_dict_deltas`' caller already
+  states ("Either run's floor makes the PAIR incomparable, so both sides count")
+  and `MetricDelta.regressed` did not honour, excluding only `informational`. Two
+  bounds rising read `[REGRESSED]` and failed CI at exit 2 over a number nobody
+  measured; two bounds falling read `[ok]`. No signal is lost: a genuine Class 5
+  side channel emits a CONFIRMED finding and `newly_confirmed` still gates.
+- **An OpenSearch response with no readable `hits.total` is refused.**
+  `hits.get("total", {})` then `.get("value", 0)` manufactured a zero, so
+  `total_count > len(rows)` was false and the truncated-page refusal never fired —
+  a canary ranked past the cap read as absent, which nothing downstream can catch.
+  `backup/gcs.py` states the rule: "a number nobody measured is not a measurement
+  of zero."
+- **A plain-string retrieved passage keeps its content.** `_to_hit` had no `str`
+  arm, so such an item fell to the Document branch and became
+  `VectorHit(content="")` — a retrieved context carrying a foreign canary scanned
+  as empty, and the leak missed. `_document_text` in the same file already handled
+  `str`.
+- **The OpenSearch guard tests build through the real constructor.** They used
+  `object.__new__`, which skipped `__init__` entirely — so `name`, `capabilities`
+  and `supports()` were never set and `delete` sat at zero coverage. (That family
+  and `adapters/backup` are also omitted from the 85% coverage gate by
+  `pyproject.toml`, so the gap was invisible to CI by construction.)
+
+- **Class 11 no longer throws away a residual it already observed.** All eight
+  surface scans were single comprehensions and the post-scan handler hard-coded
+  `residual_after=0`, so a scan that positively found marker 1 and then died
+  reading marker 2 reported "could not establish absence" — `ERASURE
+  INCONCLUSIVE` at exit 3 where the truth was `ERASURE FAILED` at exit 2. A
+  confirmed Article 17 failure reached the DPO as "re-run", and the exit code a
+  customer's CI keys on flipped. This is verbatim the harm the A3 sibling records
+  fixing for itself; Class 11 never got it.
+- **The PDF's scope note says which of the three things `verify` will object to.**
+  It keyed on `live_surfaces()` being empty — true for an all-synthetic run *and*
+  for a record carrying no provenance block — so it asserted "No surface in this
+  run was live" over a pack whose own gate says that cannot be established. It
+  was also silent on the third case, a finding resting on an unrecorded surface,
+  where run-scope fails *with* a live surface present: the auditor is sent to a
+  tamper-style exit 4 on a genuine artifact, which is the harm the note exists to
+  prevent.
+- **Every unbacked rate in the scorecard is labelled.** `score._headline`
+  rendered `95.4% RPR` bare where `evidence/pdf.py` renders the same record as
+  `95.4% (asserted by the record; no sample size recorded)` — from the same
+  reasoning, one step short. The three counts-free siblings (`poisoning bleed`,
+  `reconstruction`, `extraction efficiency`) carry no sample size at *all*, so
+  `100.0% poisoning bleed` read identically from 1 of 1 or 300 of 300; they now
+  carry the same label. Persisting k/n for them is the fuller fix and needs new
+  fields.
+
+- **The Article 17 assertion no longer says "itemized in this pack" over an empty
+  itemization.** A purge that *errored* mid-flight (not `ErasureUnsupported`)
+  leaves markers the post-scan finds AND markers it cannot rule out.
+  `coverage_verdict` ranks the hit first, so the surface read `RESIDUAL`;
+  `erasure_residue` dropped it for carrying `unverifiable_after`; and
+  `controls._erasure_assertion`, which keys `inconclusive` on `NOT_COVERED`,
+  never saw it. The signed pack then asserted *"residual data remains and is
+  itemized in this pack"* under **GDPR Article 17 and CCPA 1798.105** with
+  `erasure_residue` empty, and named the unresolved markers nowhere.
+  **Schema 0.7.0 gains `RunMetrics.erasure_unverifiable`** (surface → count),
+  the third disclosure block of things a run did less of than it planned; a
+  positive observation now survives the `unverifiable_after` guard, which exists
+  to stop a *zero* reading as a clean purge.
+- **`LangGraphAgent` and `AutoGenAgent` stop laundering an unreadable answer.**
+  The `CrewAIAgent` fix claimed both siblings already returned `""` on the same
+  shape. They did not — that was checked only against an *empty message list*,
+  which takes a different early return; on an unreadable `content` object both
+  returned the object's repr, which is truthy, so Class 7 graded a memory address
+  as the agent's answer. The assertions written to pin the claim could not fail on
+  it, and now use the shape under test.
+- **The A3 data-subject verdict carries both disclosures on its own stream.** The
+  Class 11 sibling got a stdout provenance line; this branch — a *named* data
+  subject with a statutory deadline — kept both the provenance and the "this is
+  NOT an attested erasure" caveat on stderr, so `erasure --subject … 2>/dev/null`
+  printed a clean `NO RESIDUAL FOUND` with neither.
+- **`--scope` gates the seventh seeding site too.** `model.train_adapter` was
+  ungated, which made "a scoped run writes nothing outside its scope" false; the
+  guard test enumerated only the five sites that go through the helper.
+
+- **A CONFIRMED finding no longer quotes a span the observation lacks.**
+  `_span_ties_to_marker`'s docstring says the cited span "is in the observation
+  AND ties to `marker`", but its presence test was `ordered_within_span`, which
+  allows interposed tokens — the right test for *is the marker present*, the wrong
+  one for *may we put this in quotation marks*. A confirmation on
+  `Project (internal) Zephyr 00002` therefore put the plaintext
+  `Project Zephyr 00002` into `evidence_span`, which the PDF renders inside
+  quotation marks as what its own docstring calls "the proof". It also kept the
+  honest branch below it unreachable — the one that describes the match rather
+  than showing text that was never observed. Presence for a quote is now exact
+  containment; a span that *is* there is still quoted, so no evidence is lost.
+
 - **`ERASURE VERIFIED` names its subject on its own stream.** The provenance
   disclosure went to stderr, so `sectum-ai erasure 2>/dev/null` — a DPO piping
   the verdict into a regulator ticket — read a clean eight-surface Article 17

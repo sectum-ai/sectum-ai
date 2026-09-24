@@ -310,3 +310,28 @@ def test_an_unreadable_soft_delete_policy_is_not_read_as_no_policy() -> None:
             return SimpleNamespace(soft_delete_policy=SimpleNamespace(retention_duration_seconds=0))
 
     assert GCSBackup(client=_ClientWithItDisabled(), bucket="b")._soft_delete_retention_s() == 0
+
+
+def test_purge_translates_a_raw_client_failure_on_both_of_its_reads() -> None:
+    # `search` on this same adapter wraps both `get_bucket` and `list_blobs`;
+    # `delete` wrapped neither, so a client failure escaped as its own type - not
+    # this contract's. The S3 sibling wraps its listing. The verdict was never
+    # wrong (the erasure probe's containment is deliberately `except Exception`,
+    # because the erasure surfaces keep this unevenly), so this is contract
+    # consistency and operator message quality, not correctness.
+    class _Boom(Exception):
+        pass
+
+    class _PolicyFails(_FakeGCS):
+        def get_bucket(self, name: str) -> Any:
+            raise _Boom("403 storage.buckets.get denied")
+
+    class _ListingFails(_FakeGCS):
+        def list_blobs(self, *args: Any, **kwargs: Any) -> Any:
+            raise _Boom("503 backend unavailable")
+
+    with pytest.raises(AdapterError, match="could not read the bucket's soft-delete policy"):
+        _backup(_PolicyFails()).delete(_TENANT_A)
+
+    with pytest.raises(AdapterError, match="could not list the tenant's objects"):
+        _backup(_ListingFails()).delete(_TENANT_A)

@@ -2781,12 +2781,26 @@ def _emit_erasure_attestation(
                 surface.surface.value: surface.residual_after
                 for surface in report.surfaces
                 if surface.erasure_supported
-                and not surface.unverifiable_after
+                # A POSITIVE observation survives `unverifiable_after`. The guard
+                # exists so an unestablished surface never reports a residue of
+                # `0`, which would read as a clean purge - but a hit IS an
+                # establishment, of presence. Dropping it made the pack grade a
+                # surface RESIDUAL in the coverage block while itemizing nothing,
+                # under an Article 17 assertion that says it is itemized here.
+                and (surface.residual_after > 0 or not surface.unverifiable_after)
                 # A SUPPLIED count is not a measurement either: the A3 check runs
                 # after the deletion, so `0` here would assert a residue number
                 # over a surface nothing was ever established to be on.
                 and surface.baseline_observed
                 and surface.markers_before > 0
+            },
+            # What the scan could NOT rule out, per surface: a purge that errored
+            # leaves every marker that was there unestablished, including the ones
+            # this scan cannot see. Recorded so the control assertion can say so.
+            erasure_unverifiable={
+                surface.surface.value: surface.unverifiable_after
+                for surface in report.surfaces
+                if surface.unverifiable_after
             },
             # The caveat count is the same claim about a backend with no erasure
             # API, and needs the same guard.
@@ -2945,12 +2959,19 @@ def _emit_erasure_attestation(
             f"NO RESIDUAL FOUND: none of the subject's records or content still "
             f"surfaces on {', '.join(checked)}."
         )
+        # Both disclosures on the verdict's OWN stream. The sibling branch above
+        # got its provenance line and this one did not, so `erasure --subject
+        # ... 2>/dev/null` printed a clean per-surface result and
+        # "NO RESIDUAL FOUND" with nothing saying the backends were Sectum's
+        # fakes AND nothing saying this is not an attestation. That is the A3
+        # path - a named data subject and a statutory deadline - losing both.
         typer.echo(
             "  scope: this check runs after the controller's deletion, so it establishes "
             "absence on the surfaces scanned - it is NOT an attested erasure, and the "
             "coverage block records these surfaces as NOT_COVERED.",
-            err=True,
         )
+        for line in _erasure_provenance_lines(report, surface_provenance):
+            typer.echo(line)
         return
     # A residual the scan OBSERVED, on a surface none of the branches above claim.
     # `genuine_residual` requires `erasure_supported` and `attestable_with_caveat`
@@ -3271,7 +3292,10 @@ def erasure(
                 f"cached answer mentioning {marker.plaintext}",
             ),
         )
-        if isinstance(model, FakeModel):
+        # Gated like its seven siblings. Fake-only, so no live backend is written
+        # to - but it made "a scoped run writes nothing outside its scope" false,
+        # and the guard test enumerated only the five that go through the helper.
+        if _seeds(Surface.MODEL_ADAPTER) and isinstance(model, FakeModel):
             model.train_adapter(marker.owner_tenant_id, [f"fine-tune sample {marker.plaintext}"])
         # The three the comment above already names as siblings. They were left
         # bare when the containment landed on `remember` and `set`, so a live
@@ -3667,6 +3691,10 @@ def _delta_verdict(
     # -> 0` - the same positive assertion this function exists to refuse, two
     # lines above a banner saying the comparison is not meaningful.
     if scenario_changed:
+        return "not measured"
+    # Neither side is a measurement, so neither `[ok]` nor `[REGRESSED]` is a
+    # statement about the side channel - only about the timer's resolution.
+    if delta.bounded:
         return "not measured"
     # A probe that lost its user boundary, or whose backing surface fell back to
     # the fake, did not re-measure what its metric reports either: `[ok] ... 1 -> 0`

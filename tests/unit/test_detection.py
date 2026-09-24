@@ -1359,3 +1359,40 @@ def test_the_200_empty_caveat_defaults_to_its_probes_own_techniques() -> None:
     assert note is not None
     assert note.atlas == probe.atlas_techniques, note.atlas
     assert note.atlas, "a caveat with no technique at all tells an auditor nothing"
+
+
+def test_a_confirmed_paraphrase_never_quotes_a_span_the_observation_lacks() -> None:
+    # `_span_ties_to_marker`'s docstring says the cited span "is in the
+    # observation AND ties to `marker`". Its presence test was
+    # `ordered_within_span`, which ALLOWS interposed tokens - the right test for
+    # "is the marker present", the wrong one for "may we put this in quotation
+    # marks". So a confirmation on "Project (internal) Zephyr 00002" quoted the
+    # plaintext "Project Zephyr 00002", which the observation does not contain,
+    # into the field the PDF renderer's docstring calls "the proof" and renders
+    # inside quotation marks.
+    #
+    # The existing hallucinated-span guard cannot catch this: its judge cites a
+    # span sharing NO token with the marker, so the distinctive-token tie rejects
+    # it before presence is ever consulted. The span that reaches the hole is the
+    # marker plaintext itself, which is what the shipped FakeJudge cites.
+    substrate = _entity_substrate("Project Zephyr 00002")
+    pipeline = DetectionPipeline(substrate, FakeEmbeddingProvider(), FakeJudge(), 0.0)
+    text = "retrieved context: Project (internal) Zephyr 00002 renewal is at risk"
+    findings = pipeline.detect(_TA, text, Surface.VECTOR_DB, probe_id="p")
+
+    confirmed = [f for f in findings if f.status is FindingStatus.CONFIRMED]
+    assert confirmed, "tokens in order with one interposed word still confirm presence"
+    span = confirmed[0].evidence_span
+    assert span != "Project Zephyr 00002", "the signed pack quotes a phrase the run never observed"
+    assert "interposed" in span, span
+
+    # And the verbatim case is untouched: a span that IS there is still quoted,
+    # so this refusal cannot cost an auditor the real evidence.
+    verbatim_text = "retrieved context: Project Zephyr 00002 renewal is at risk"
+    verbatim = [
+        f
+        for f in pipeline.detect(_TA, verbatim_text, Surface.VECTOR_DB, probe_id="p")
+        if f.status is FindingStatus.CONFIRMED
+    ]
+    assert verbatim and verbatim[0].evidence_span == "Project Zephyr 00002"
+    assert verbatim[0].evidence_span in verbatim_text
