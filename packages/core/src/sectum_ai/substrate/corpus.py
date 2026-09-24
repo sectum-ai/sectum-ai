@@ -172,6 +172,11 @@ def _pivot_assignments(
     round-robin order.
     """
     if not shared_entities or not markers:
+        # No shared entity means no pivot document, so nothing is planted in the
+        # CORPUS - which is a legitimate configuration, not an error: the probes
+        # that query the corpus then plan no step and their classes read
+        # NOT_COVERED (rule 1), while the probes provisioned from the manifest
+        # (MCP, agent, memory, cache, model) still have markers to find.
         return {}
     if size < len(markers):
         raise ConfigError(

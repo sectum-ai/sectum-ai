@@ -13,7 +13,7 @@ import pytest
 
 from sectum_ai.adapters.backup.s3 import S3Backup
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _BUCKET = "sectum-backups"
 _PREFIX = "sectum-ai-backup"
@@ -125,6 +125,30 @@ class _FakeS3:
 
 def _backup(client: _FakeS3, **kwargs: Any) -> S3Backup:
     return S3Backup(client, _BUCKET, prefix=_PREFIX, **kwargs)
+
+
+def test_a_denied_bucket_is_an_adapter_error_on_every_path() -> None:
+    # `_erase_surface` contains `AdapterError`, so a raw boto3 exception escapes it
+    # and one unreadable bucket aborts the whole Article 17 run. `search` is the
+    # path Class 11 calls TWICE per surface (pre- and post-erasure), and it was
+    # translated nowhere; `delete` was translated first and its sibling was missed.
+    # `roles/storage.objectAdmin` grants the objects and not the bucket, so this is
+    # an ordinary permission shape, not an exotic one.
+    class _Denied:
+        def get_bucket_versioning(self, **_: object) -> dict[str, str]:
+            raise RuntimeError("AccessDenied: s3:GetBucketVersioning")
+
+        def get_paginator(self, _name: str) -> object:
+            raise RuntimeError("AccessDenied: s3:ListBucketVersions")
+
+        def delete_objects(self, **_: object) -> dict[str, object]:
+            raise RuntimeError("AccessDenied: s3:DeleteObject")
+
+    adapter = S3Backup(_Denied(), _BUCKET, prefix=_PREFIX)
+    with pytest.raises(AdapterError, match="AccessDenied"):
+        adapter.search(_TENANT_A, "SECTUM-CANARY-X")
+    with pytest.raises(AdapterError, match="AccessDenied"):
+        adapter.delete(_TENANT_A)
 
 
 def test_s3_backup_conforms_and_reports_text_search() -> None:

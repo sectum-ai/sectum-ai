@@ -22,7 +22,7 @@ echo "==> 1/4  Seed the marker substrate (4 synthetic tenants, canary markers)"
 sectum-ai seed --workdir "$out"
 
 echo
-echo "==> 2/4  Probe embedding inversion (cross-tenant ANN reconstruction)"
+echo "==> 2/4  Probe embedding inversion (the demo store ranks lexically; see the README)"
 rc=0; sectum-ai probe --workdir "$out" --probe embedding-inversion || rc=$?
 if [ "$rc" -ne 2 ]; then
   echo "FAIL: expected confirmed cross-tenant leaks (exit 2), got $rc" >&2

@@ -26,6 +26,7 @@ from sectum_ai.spec import (
     ProbeStep,
     Substrate,
     get_logger,
+    residual_present,
 )
 
 _log = get_logger(__name__)
@@ -54,8 +55,14 @@ def payload_int(step: ProbeStep, key: str, default: str) -> int:
         ) from error
 
 
-def _payload_required(step: ProbeStep, key: str) -> str:
-    """Read a required payload value, raising a typed ``AdapterError`` if absent."""
+def payload_required(step: ProbeStep, key: str) -> str:
+    """Read a required payload value, raising a typed ``AdapterError`` if absent.
+
+    Public, like its ``payload_int`` twin: it was private, so the three readers
+    outside this module indexed ``step.payload`` raw and a missing key escaped the
+    ``SectumError`` exit-code mapping as a bare ``KeyError`` - exit 1 where the
+    typed path gives 3.
+    """
     try:
         return step.payload[key]
     except KeyError as error:
@@ -92,6 +99,10 @@ class Runner:
         # Probe id -> user-level steps not run (see run_per_step); the CLI records
         # it in the signed run so a narrowed run cannot pass for a full one.
         self.dropped_user_steps: dict[str, int] = {}
+        # Probe id -> plants that did not read back (see _plant_landed). A probe
+        # whose every plant vanished asked the stack nothing, however many reads
+        # it then ran.
+        self.unconfirmed_plants: dict[str, int] = {}
 
     def preflight(self, probe: Probe) -> None:
         """Raise ``ConfigError`` if the probe's declared adapters are not configured.
@@ -115,13 +126,40 @@ class Runner:
         is dropped unless it is a plant, which runs as the tenant: judged as the
         user it would confirm leaks of a session that never existed, and the run
         may claim only the boundary it could exercise.
+
+        When the filter leaves the probe no *judged* step - a single tenant whose
+        users are the only foreign principals, on an adapter that carries no user
+        - the plants go too and the probe runs nothing. Executing the plants alone
+        put the probe id in ``probe_versions`` and graded its class PASS off zero
+        observations: the vacuous pass each planting probe's own plan guards
+        against (``docs/scorecard.md``, rule 1).
         """
         self.preflight(probe)
+        planned_steps = list(probe.plan(self._substrate))
+
+        def _droppable(step: ProbeStep) -> bool:
+            return (
+                step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
+            )
+
+        judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
+        if judged and all(_droppable(step) for step in judged):
+            # Nothing this probe would have JUDGED can run, so it asks the stack
+            # nothing: its plants go too, wherever they sit. Suppressing only the
+            # droppable plants left a plant on a user-carrying adapter running, and
+            # that alone put the probe in `probe_versions` and graded its class.
+            user_level = sum(1 for step in planned_steps if step.actor_user_id is not None)
+            self.dropped_user_steps[probe.id] = (
+                self.dropped_user_steps.get(probe.id, 0) + user_level
+            )
+            _log.info("probe.user_steps_dropped", probe=probe.id, steps=user_level)
+            return []
         results: list[StepResult] = []
         dropped = 0
-        for planned in probe.plan(self._substrate):
+        planted = unconfirmed = 0
+        for planned in planned_steps:
             step = planned
-            if step.actor_user_id is not None and not self._adapter_for(step.action).carries_user:
+            if _droppable(step):
                 if step.action not in _PLANT_ACTIONS:
                     dropped += 1
                     continue
@@ -131,10 +169,49 @@ class Runner:
                 # that leaks across TENANTS read clean with the probe recorded.
                 step = planned.model_copy(update={"actor_user_id": None})
             observation = self._execute(step)
+            if step.action in _PLANT_ACTIONS:
+                planted += 1
+                if not self._plant_landed(step):
+                    unconfirmed += 1
             results.append((step, probe.detect(step, observation, self._substrate)))
+        # Recorded BEFORE the all-plants-unconfirmed branch, which returns early:
+        # a probe that both dropped its user-level steps and lost every plant
+        # recorded only the second fact, so the signed record and the audit PDF
+        # under-reported the narrowed user boundary on exactly the runs where the
+        # setup also failed. The two are independent disclosures.
         if dropped:
             self.dropped_user_steps[probe.id] = self.dropped_user_steps.get(probe.id, 0) + dropped
             _log.info("probe.user_steps_dropped", probe=probe.id, steps=dropped)
+        observed = any(confirmed_findings(findings) for _, findings in results)
+        if planted and unconfirmed == planted and not observed:
+            # Every plant vanished AND the probe saw nothing, so every read below
+            # it looked for something that was never there: it asked the stack
+            # nothing, however many steps it ran. Same answer as the all-dropped
+            # case above - the probe leaves `probe_versions` and `score` rule 1
+            # makes the class NOT_COVERED, rather than PASS off zero observations.
+            #
+            # `not observed` is load-bearing. Without it this branch deleted
+            # CONFIRMED cross-tenant leaks the probe had actually surfaced: the
+            # reads here also return the CORPUS markers `seed` planted, so a
+            # backend that takes the bulk load and drops the probe's own writes -
+            # a quota, an eviction - or one that simply has no by-id lookup, so
+            # `_plant_landed` fails closed, produced 24 confirmed CRITICAL
+            # findings and recorded none of them. The class then read NOT_COVERED
+            # and the operator was told "the backend acknowledged the write and
+            # did not serve it", which in the second case is false: it served it.
+            # A leak the probe SAW is never suppressed for want of its own setup.
+            self.unconfirmed_plants[probe.id] = (
+                self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
+            )
+            _log.info("probe.plants_unconfirmed", probe=probe.id, plants=unconfirmed)
+            return []
+        if unconfirmed:
+            # Some landed: the probe did interrogate the stack, so it still counts
+            # - and the operator is told how much of its setup did not take.
+            self.unconfirmed_plants[probe.id] = (
+                self.unconfirmed_plants.get(probe.id, 0) + unconfirmed
+            )
+            _log.info("probe.plants_unconfirmed", probe=probe.id, plants=unconfirmed)
         # Operational metadata only — step payloads and observations (tenant
         # content) are never logged here (the engineering spec, section 16).
         confirmed = sum(len(confirmed_findings(findings)) for _, findings in results)
@@ -146,6 +223,58 @@ class Runner:
             confirmed_leaks=confirmed,
         )
         return results
+
+    def _plant_landed(self, step: ProbeStep) -> bool:
+        """Whether a plant step's write is actually readable by the principal that made it.
+
+        Classes 3, 4, 8 and 9 plant, then read the plant back across a principal
+        boundary. Nothing checked the WRITE. A store that acknowledges and drops
+        it - a zero TTL, a read-only replica, a quota - left the probe reading for
+        something that was never there: it ran, found nothing, entered
+        ``probe_versions``, and ``score`` graded the class PASS. That is the
+        vacuous pass rule 1 exists to refuse, reached from the other side. Class 11
+        does not have it, because it counts markers BEFORE acting.
+
+        Read back as the principal that planted, so this asks "did the write
+        take", never "does it cross a boundary" - the second is the probe's
+        question and is judged separately.
+
+        No retry, deliberately. Reflecting a write is the ADAPTER's contract, and
+        every store that needs help already keeps it: Pinecone and Azure AI Search
+        poll ``vector._settle``, OpenSearch indexes with ``refresh=True``, Qdrant
+        upserts with ``wait=True``, Milvus creates its collection
+        ``consistency_level="Strong"``. A backend that returns from a write it
+        cannot yet serve is an adapter bug, and ``settle`` is where it is fixed -
+        putting a retry loop here would paper over it everywhere at once.
+
+        ``model.train`` is exempt. Reading a LoRA back means asking the model to
+        regurgitate, which is probabilistic and is precisely what the probe
+        measures; a model that trained correctly and declined to echo would be
+        recorded as an unplanted probe. Training that fails raises instead
+        (``HuggingFaceLoraModel.train_adapter`` wraps it in ``AdapterError``), so
+        the silent-drop shape the other three have does not arise here.
+        """
+        tenant, user = step.actor_tenant_id, step.actor_user_id
+        try:
+            if step.action == "vector.upsert" and self._vector is not None:
+                doc_id = payload_required(step, "doc_id")
+                return self._vector.fetch(tenant, doc_id, user=user) is not None
+            if step.action == "cache.set" and self._cache is not None:
+                key = payload_required(step, "key")
+                return self._cache.get(tenant, key, user=user) is not None
+            if step.action == "memory.write" and self._memory is not None:
+                text = payload_required(step, "text")
+                return any(
+                    residual_present(text, hit)
+                    for hit in self._memory.recall(tenant, text, user=user)
+                )
+        except AdapterError as error:
+            # A backend that cannot answer "is it there?" has not confirmed the
+            # plant. Fail closed rather than abort: NOT_COVERED is the honest
+            # verdict for a class whose setup could not be established.
+            _log.info("probe.plant_unconfirmed", action=step.action, reason=str(error))
+            return False
+        return True
 
     def run(self, probe: Probe) -> list[Finding]:
         """Plan the probe, execute every step, and return all findings."""
@@ -192,7 +321,7 @@ class Runner:
             raise AdapterError("a vector.query step needs a vector adapter")
         k = payload_int(step, "k", "5")
         hits = self._vector.query(
-            step.actor_tenant_id, _payload_required(step, "query"), k, user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "query"), k, user=step.actor_user_id
         )
         return Observation(
             step_id=step.step_id,
@@ -204,7 +333,7 @@ class Runner:
         if self._vector is None:
             raise AdapterError("a vector.fetch step needs a vector adapter")
         hit = self._vector.fetch(
-            step.actor_tenant_id, step.payload["doc_id"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "doc_id"), user=step.actor_user_id
         )
         # Class 1 deny-semantics: a returned object surfaced (a leak when foreign);
         # an absent one is the ambiguous 200-empty case, not a proven deny.
@@ -219,11 +348,11 @@ class Runner:
         if self._vector is None:
             raise AdapterError("a vector.upsert step needs a vector adapter")
         document = CorpusDocument(
-            doc_id=step.payload["doc_id"],
+            doc_id=payload_required(step, "doc_id"),
             tenant_id=step.actor_tenant_id,
             doc_type="poison",
-            title=step.payload["doc_id"],
-            content=step.payload["content"],
+            title=payload_required(step, "doc_id"),
+            content=payload_required(step, "content"),
             # The planting principal owns the poison, so a user-scoped store
             # filters it from a sibling user's retrieval (ADR-0006/0008).
             owner_user_id=step.actor_user_id,
@@ -236,8 +365,8 @@ class Runner:
             raise AdapterError("a cache.set step needs a cache adapter")
         self._cache.set(
             step.actor_tenant_id,
-            step.payload["key"],
-            step.payload["value"],
+            payload_required(step, "key"),
+            payload_required(step, "value"),
             user=step.actor_user_id,
         )
         return Observation(step_id=step.step_id, surface=self._cache.surface, raw_response="")
@@ -245,18 +374,25 @@ class Runner:
     def _cache_get(self, step: ProbeStep) -> Observation:
         if self._cache is None:
             raise AdapterError("a cache.get step needs a cache adapter")
-        value = self._cache.get(step.actor_tenant_id, step.payload["key"], user=step.actor_user_id)
+        value = self._cache.get(
+            step.actor_tenant_id, payload_required(step, "key"), user=step.actor_user_id
+        )
+        # The same Class 1 deny-semantics `_vector_fetch` records: a foreign
+        # `cache.get` that comes back empty is the ambiguous 200-empty case, not a
+        # proven deny. The identical `str | None` was thrown away here, so Class 4
+        # carried Class 1's evidence with none of its caveat.
         return Observation(
             step_id=step.step_id,
             surface=self._cache.surface,
             raw_response=value or "",
+            access_outcome=(AccessOutcome.RETURNED if value is not None else AccessOutcome.EMPTY),
         )
 
     def _model_train(self, step: ProbeStep) -> Observation:
         if self._model is None:
             raise AdapterError("a model.train step needs a model adapter")
         self._model.train_adapter(
-            step.actor_tenant_id, [step.payload["text"]], user=step.actor_user_id
+            step.actor_tenant_id, [payload_required(step, "text")], user=step.actor_user_id
         )
         return Observation(step_id=step.step_id, surface=self._model.surface, raw_response="")
 
@@ -264,13 +400,13 @@ class Runner:
         if self._model is None:
             raise AdapterError("a model.infer step needs a model adapter")
         response = self._model.infer(
-            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "prompt"), user=step.actor_user_id
         )
         # Class 9 routing assertion: record who actually served only when it is a
         # foreign tenant (a mis-route). The probe reads this to raise a routing
         # finding; a correctly-routed or unknowable inference adds no structured data.
         served_by = self._model.served_by(
-            step.actor_tenant_id, step.payload["prompt"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "prompt"), user=step.actor_user_id
         )
         structured = (
             {"served_by_tenant": str(served_by)}
@@ -289,25 +425,33 @@ class Runner:
             raise AdapterError("an mcp.invoke step needs an MCP adapter")
         arguments = {key: value for key, value in step.payload.items() if key != "tool"}
         result = self._mcp.invoke(
-            step.actor_tenant_id, step.payload["tool"], arguments, user=step.actor_user_id
+            step.actor_tenant_id,
+            payload_required(step, "tool"),
+            arguments,
+            user=step.actor_user_id,
         )
+        # Same rule again: a foreign resource key invoked through a tool is a
+        # by-id read, and an empty result is not an enforced deny.
         return Observation(
             step_id=step.step_id,
             surface=self._mcp.surface,
             raw_response=result.output,
+            access_outcome=(AccessOutcome.RETURNED if result.output else AccessOutcome.EMPTY),
         )
 
     def _memory_write(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.write step needs a memory adapter")
-        self._memory.remember(step.actor_tenant_id, step.payload["text"], user=step.actor_user_id)
+        self._memory.remember(
+            step.actor_tenant_id, payload_required(step, "text"), user=step.actor_user_id
+        )
         return Observation(step_id=step.step_id, surface=self._memory.surface, raw_response="")
 
     def _memory_recall(self, step: ProbeStep) -> Observation:
         if self._memory is None:
             raise AdapterError("a memory.recall step needs a memory adapter")
         recalled = self._memory.recall(
-            step.actor_tenant_id, step.payload["query"], user=step.actor_user_id
+            step.actor_tenant_id, payload_required(step, "query"), user=step.actor_user_id
         )
         return Observation(
             step_id=step.step_id,
@@ -318,17 +462,34 @@ class Runner:
     def _rag_ask(self, step: ProbeStep) -> Observation:
         if self._rag is None:
             raise AdapterError("a rag.ask step needs a rag adapter")
-        answer = self._rag.ask(step.actor_tenant_id, step.payload["query"])
+        answer = self._rag.ask(step.actor_tenant_id, payload_required(step, "query"))
+        # The RETRIEVED CONTEXT as well as the generated answer, which is what the
+        # sibling `_vector_query` has always done with its hits. Scanning the
+        # answer alone made the verdict a property of the model's wording: a
+        # shared-index retriever that hands another tenant's documents to the
+        # model - the exact Class 2 pivot this probe exists to detect - graded
+        # PASS at 0.0% RPR whenever the model paraphrased instead of quoting the
+        # canary. Measured on one shared-index pipeline with 24 markers served
+        # cross-tenant: 15 confirmed with the answer shaped like the fake's, 0
+        # with the answer shaped like a real LLM's. It hid because
+        # `FakeRAGPipeline.ask` returns the chunks AS the answer, so every test
+        # and the demo exercise the one shape where the two agree.
+        #
+        # A foreign document reaching the model's context IS the retrieval-boundary
+        # failure; whether the model then repeats it is the model's disposition,
+        # and resting a signed verdict on it makes the measurement non-deterministic.
         return Observation(
             step_id=step.step_id,
             surface=self._rag.surface,
-            raw_response=answer.answer,
+            raw_response="\n".join([answer.answer, *(hit.content for hit in answer.retrieved)]),
         )
 
     def _observability_search(self, step: ProbeStep) -> Observation:
         if self._observability is None:
             raise AdapterError("an observability.search step needs an observability adapter")
-        hits = self._observability.search_traces(step.actor_tenant_id, step.payload["marker"])
+        hits = self._observability.search_traces(
+            step.actor_tenant_id, payload_required(step, "marker")
+        )
         return Observation(
             step_id=step.step_id,
             surface=self._observability.surface,
@@ -338,12 +499,48 @@ class Runner:
     def _agent_run(self, step: ProbeStep) -> Observation:
         if self._agent is None:
             raise AdapterError("an agent.run step needs an agent adapter")
-        result = self._agent.run(step.actor_tenant_id, step.payload["task"])
+        result = self._agent.run(step.actor_tenant_id, payload_required(step, "task"))
+        # Recorded like the three siblings, but the probe does NOT gate its
+        # 200-empty caveat on it: an agent framework answers in prose whether or
+        # not its tool resolved anything, so `RETURNED` here means "the agent
+        # said something", never "it surfaced an object". See
+        # `AgentFrameworkHijackProbe.detect`.
         return Observation(
             step_id=step.step_id,
             surface=self._agent.surface,
             raw_response=result.output,
+            access_outcome=(AccessOutcome.RETURNED if result.output else AccessOutcome.EMPTY),
         )
+
+
+def confirmed_sequence_rate(step_results: list[StepResult], key: str) -> float:
+    """Fraction of SEQUENCES in which at least one step surfaced a confirmed leak.
+
+    Class 10 is the one headline rate whose unit is not the step. Its probe plans
+    three benign follow-ups per (shared entity, principal) and its own docstring
+    says "the extraction is confirmed when the SEQUENCE surfaces a foreign
+    canary" - so counting turns scored a sequence that leaks only on its third
+    follow-up as 1/3, and the signed metric understated the extraction by up to
+    3x, always in the direction that makes the stack look safer. Measured on the
+    demo stack: 18.1% by turn, 29.2% by sequence.
+
+    The other three rates are unaffected and keep `confirmed_finding_rate`: their
+    probes plan one step per attempt, so a step IS the unit their label names.
+
+    `key` is the payload field naming the sequence; steps are grouped by it
+    together with the acting principal.
+    """
+    if not step_results:
+        return 0.0
+    sequences: dict[tuple[str, str, str], bool] = {}
+    for step, findings in step_results:
+        identity = (
+            str(step.actor_tenant_id),
+            str(step.actor_user_id or ""),
+            str(step.payload.get(key, "")),
+        )
+        sequences[identity] = sequences.get(identity, False) or bool(confirmed_findings(findings))
+    return sum(1 for leaked in sequences.values() if leaked) / len(sequences)
 
 
 def confirmed_finding_rate(step_results: list[StepResult]) -> float:

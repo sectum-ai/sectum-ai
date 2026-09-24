@@ -32,10 +32,30 @@ memory `FakeVectorStore` with `shared_index: true`:
 1. **`sectum-ai seed`** provisions four synthetic tenants with
    `ENTITY_CANARY` markers planted across the corpora.
 2. **`sectum-ai probe --probe embedding-inversion`** issues, from
-   each tenant, nearest-neighbour queries crafted to surface a
-   foreign tenant's entity canary. A foreign canary in the returned
-   neighbours is a confirmed inversion path; the probe exits `2`
-   on at least one such hit.
+   each tenant, retrieval queries crafted to surface a foreign
+   tenant's entity canary. A foreign canary in the returned hits is a
+   confirmed inversion path; the probe exits `2` on at least one such
+   hit.
+
+   **On the built-in fake, that path is lexical, not embedding-based.**
+   `run.sh` passes no `--config`, so the demo store ranks by token
+   overlap — so what this walkthrough demonstrates is the *probe*, not
+   an embedding inversion. Sectum says why in its own adapter contract:
+   "Run either against a store that matches on substrings instead, and a
+   keyword hit gets recorded as embedding inversion - a real finding
+   attributed to a mechanism the backend does not have." So do not read
+   this rate as inversion.
+
+   Pointing the CLI at a live store does not fix that, and no longer
+   pretends to: `sectum-ai.yaml` has no path to a real embedding model
+   for a vector store (`embedding_model` configures the *detection*
+   pipeline), so every live kind is hashing-embedder backed and declares
+   no semantic retrieval — against Qdrant, pgvector, Weaviate, Chroma,
+   Milvus, OpenSearch, Pinecone or Azure AI Search this class reports
+   `NOT_COVERED`, which is the honest verdict for a check that cannot be
+   performed. Reading a real inversion rate needs a real embedder in the
+   vector slot, which today means constructing the adapter through the
+   SDK.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
 4. **`sectum-ai verify`** independently re-checks the pack.
 
@@ -55,9 +75,9 @@ Each Class 6 finding carries:
   `evidence_span` (the text of the returned neighbour)
 - the surface (`VECTOR_DB`)
 - OWASP / ATLAS / NIST control IDs
-- a remediation pointer naming the standard counter-measure: per-
-  tenant namespace filtering on every query path, or moving to a
-  per-tenant index entirely
+Class 6 findings carry no per-finding remediation pointer. The counter-measure
+is per-tenant namespace filtering on every query path, or moving to a per-tenant
+index entirely.
 
 ## What's *not* in this example
 

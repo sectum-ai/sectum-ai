@@ -9,12 +9,21 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    ValidationInfo,
+    field_validator,
+)
 
 from sectum_ai.spec.enums import (
+    ERASURE_SURFACES,
     AccessOutcome,
     ClassVerdict,
     Confidence,
+    CoverageVerdict,
     FindingStatus,
     Grade,
     MarkerType,
@@ -27,6 +36,10 @@ from sectum_ai.spec.enums import (
 
 SCHEMA_VERSION = "0.7.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
+
+The blocks below are the schema changes that carried an anti-over-claim
+guarantee. The three oldest come first; from the ``(newest first)`` marker on,
+the order reverses.
 
 0.2.0 — the evidence anchors now bind the whole pack (manifest hash, control
 mappings, pdf ref, transparency-log intent), not just the run record, and
@@ -45,6 +58,8 @@ which surfaced a foreign marker) and a Wilson score interval on the rate
 (``retrieval_pivot_rate_ci``). The counts make the interval reproducible from the
 signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
+
+(newest first)
 
 0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
 the user-level steps the runner did not run because the adapter cannot carry a
@@ -167,7 +182,7 @@ class PlantedLocation(SectumModel):
     """Where a marker was planted within a document."""
 
     doc_id: str
-    field: str  # one of: body, title, metadata, tags
+    field: str  # one of: body, title, metadata
 
 
 class Marker(SectumModel):
@@ -316,6 +331,9 @@ class Finding(SectumModel):
 # --- Run results and evidence -----------------------------------------------
 
 
+_ERASURE_SURFACE_VALUES = {surface.value for surface in ERASURE_SURFACES}
+
+
 class RunMetrics(SectumModel):
     """Aggregate metrics for a run (the engineering spec, section 9)."""
 
@@ -348,6 +366,19 @@ class RunMetrics(SectumModel):
     # the signed evidence pack.
     erasure_residue: dict[str, int] = Field(default_factory=dict)
     erasure_caveats: dict[str, int] = Field(default_factory=dict)
+    # Markers whose post-erasure ABSENCE could not be established, per surface -
+    # the third thing a run can do less of than it planned, beside
+    # `user_steps_dropped` and `unconfirmed_plants`.
+    #
+    # Without it, a purge that ERRORED mid-flight (not `ErasureUnsupported`) was
+    # undisclosed: `coverage_verdict` ranks a hit above the no-baseline branches,
+    # so such a surface reads RESIDUAL, while `erasure_residue` dropped it for
+    # carrying `unverifiable_after` - and `controls._erasure_assertion`, which
+    # keys `inconclusive` on NOT_COVERED, never saw it either. The signed pack
+    # then asserted "residual data remains and is itemized in this pack" over an
+    # EMPTY itemization, under GDPR Article 17 and CCPA 1798.105, with the
+    # markers the failed purge left unresolved named nowhere at all.
+    erasure_unverifiable: dict[str, int] = Field(default_factory=dict)
     # Per-surface erasure coverage (surface value -> CoverageVerdict value): the
     # honest, anti-over-claim record of what a Class 11 attestation verified.
     # Every erasure surface appears - including the ones that were out of scope or
@@ -358,6 +389,15 @@ class RunMetrics(SectumModel):
     # not erasure runs (the other probe classes leave it untouched).
     erasure_coverage: dict[str, str] = Field(default_factory=dict)
     side_channel_effect_sizes: dict[str, float] = Field(default_factory=dict)
+    # The tenant pairs above whose numbers are BOUNDS, not measurements: an arm's
+    # spread fell below the timer's resolution and the 1 us variance floor stood in
+    # for it, so d, t and p say "at least this distinguishable". The finding's
+    # evidence span has carried that qualifier since the floor was introduced and
+    # the metric did not, so `d=146.7` entered the signed record - and `baseline`'s
+    # and `diff`'s metric lines - as a measurement. Unresolved pairs are excluded
+    # from the map entirely (a 0.0 by arithmetic is not a measurement); a floored
+    # one is real evidence of a real side channel, so it is labelled, not dropped.
+    side_channel_variance_floored: tuple[str, ...] = ()
     # Headline rates for Class 3 (poisoning), Class 6 (inversion), and Class 10
     # (extraction), each in [0, 1]: the fraction of that probe's benign query
     # steps that surfaced a confirmed foreign canary. ``None`` when the probe did
@@ -371,6 +411,100 @@ class RunMetrics(SectumModel):
     # carry the user (``Adapter.carries_user``). Inside the canonical hash, so a
     # narrowed run cannot pass for one that exercised the user boundary.
     user_steps_dropped: dict[str, int] = Field(default_factory=dict)
+    # Probe id -> plants the backend acknowledged and did not serve back (a zero
+    # TTL, a read-only replica, a quota). Its sibling above went into the record
+    # and this stayed an in-memory attribute the CLI warned from, so the PARTIAL
+    # case - some plants landed, the probe still ran and still graded - reached the
+    # signed pack with nothing said: a class graded on half its setup read exactly
+    # like one graded on all of it. Inside the canonical hash for the same reason.
+    unconfirmed_plants: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("erasure_residue", "erasure_caveats", "erasure_unverifiable")
+    @classmethod
+    def _erasure_count_keys_are_erasure_surfaces(
+        cls, value: dict[str, int], info: ValidationInfo
+    ) -> dict[str, int]:
+        # The three siblings of `erasure_coverage`, written by the same scan over the
+        # same eight surfaces, and none validated its keys at all - the recurring
+        # shape here is a rule applied to one member of a family and not the rest.
+        # The audit PDF prints all three into one "Coverage & caveats" matrix, so an
+        # invented key in either of these lands in the artifact beside the coverage
+        # verdicts that are checked.
+        bad = sorted(key for key in value if key not in _ERASURE_SURFACE_VALUES)
+        if bad:
+            raise ValueError(
+                f"{info.field_name} keys must be erasure surfaces "
+                f"({sorted(_ERASURE_SURFACE_VALUES)}); "
+                f"not so for: {', '.join(repr(key) for key in bad)}"
+            )
+        return value
+
+    @field_validator("erasure_coverage")
+    @classmethod
+    def _coverage_keys_and_verdicts_are_members(cls, value: dict[str, str]) -> dict[str, str]:
+        # The identical-shaped `surface_provenance` validates both halves; this
+        # block did neither, and the auditor PDF prints it verbatim into the
+        # "Coverage & caveats" matrix. A record could name a surface that does not
+        # exist and give it a verdict that is not one - "FULLY ERASED" - and the
+        # pack verified clean with the invention drawn into the artifact.
+        # ERASURE surfaces, not any surface. No erasure probe scans `mcp`, `api`,
+        # `rag_pipeline` or `agent_framework`, and `ErasureReport.coverage()` writes
+        # a verdict for exactly the eight it can reach - so a ninth key can only
+        # arrive by hand. Consumers then disagreed about it: the renderers narrow to
+        # `ERASURE_SURFACES` and read it as "not an erasure surface", while
+        # `erasure_scanned_surfaces` does not, so `isolation_surfaces` SUBTRACTED
+        # the invented key and dropped a live surface the isolation probes had
+        # really driven from the pack's own "Live surfaces:" line. Narrowing each
+        # consumer would be four more places to keep in step; the record is one.
+        surfaces = _ERASURE_SURFACE_VALUES
+        verdicts = {member.value for member in CoverageVerdict}
+        bad_keys = sorted(key for key in value if key not in surfaces)
+        if bad_keys:
+            raise ValueError(
+                f"erasure_coverage keys must be erasure surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad_keys)}"
+            )
+        bad_values = sorted(key for key, verdict in value.items() if verdict not in verdicts)
+        if bad_values:
+            raise ValueError(
+                f"erasure_coverage values must be one of {sorted(verdicts)}; "
+                f"not so for: {', '.join(bad_values)}"
+            )
+        return value
+
+
+class DetectionProvenance(SectumModel):
+    """Which detector actually graded this run's observations.
+
+    The audit PDF states the method in its Scope-and-methodology section - "exact
+    canary match, then semantic similarity, then a calibrated judge" - and the
+    record carried nothing that could condition it. Both tiers past the first are
+    off by default: `sectum-ai init` scaffolds `embedder.kind: fake` and
+    `judge.kind: fake`, which resolve to an offline hashing vector whose own
+    docstring calls it "not semantically meaningful beyond lexical overlap" and a
+    token-order string matcher - not an embedding model, and not a calibrated
+    judge. A pack where the semantic tier was gated shut (a threshold of 1.0
+    admits nothing) was indistinguishable from one where it ran.
+
+    Recorded per run so the claim is a function of what happened. ``None`` on a
+    record from a path that runs no detector at all - `erasure` matches by exact
+    substring and invokes neither provider.
+    """
+
+    embedder_kind: str
+    """The configured embedder kind (``fake`` / ``st`` / ``openai`` / ...)."""
+
+    embedder_model: str | None = None
+    """The embedding model name, where the kind names one."""
+
+    judge_kind: str
+    """The configured judge kind (``fake`` / ``openai`` / ``anthropic`` / ...)."""
+
+    judge_model: str | None = None
+    """The judge model name, where the kind names one."""
+
+    semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)]
+    """The RESOLVED similarity gate - the number that ran, never the literal "auto"."""
 
 
 class RunResult(SectumModel):
@@ -397,7 +531,26 @@ class RunResult(SectumModel):
     probe_versions: dict[str, str] = Field(default_factory=dict)
     findings: tuple[Finding, ...] = ()
     metrics: RunMetrics = Field(default_factory=RunMetrics)
+    detection: DetectionProvenance | None = None
+    """Which detector graded this run, or ``None`` where no detector ran."""
     schema_version: str = SCHEMA_VERSION
+
+    @field_validator("surface_provenance")
+    @classmethod
+    def _provenance_keys_are_surfaces(cls, value: dict[str, str]) -> dict[str, str]:
+        # The keys are free-form strings only because a `dict[str, str]` keeps the
+        # canonical-hash form identical to the other blocks - a key that is not a
+        # Surface names nothing this build can reason about, and `score` printed it
+        # verbatim, so a record could inject whole scorecard lines (a forged "every
+        # surface live" scope line and a PASS class row) into its own grade.
+        surfaces = {member.value for member in Surface}
+        bad = sorted(key for key in value if key not in surfaces)
+        if bad:
+            raise ValueError(
+                f"surface_provenance keys must be surfaces ({sorted(surfaces)}); "
+                f"not so for: {', '.join(repr(key) for key in bad)}"
+            )
+        return value
 
     @field_validator("surface_provenance")
     @classmethod
@@ -513,6 +666,15 @@ class IsolationScore(SectumModel):
     # are NOT_COVERED, since a verdict from a fake says nothing about the operator's
     # systems in either direction - a pass is not assurance and a leak is not a fault.
     synthetic_surfaces: tuple[str, ...] = ()
+    # The surfaces this run's confirmed findings rest on that its provenance block
+    # never records, in catalog order. `evidence/labels.py` records that three
+    # renderers answered "was this run live?" from the provenance block alone and
+    # were each fixed - the audit PDF, `verify`'s run-scope gate and the text
+    # scorecard. The machine-readable scorecard was the fourth consumer and was
+    # not: it emitted `"scope": "configured_stack"` with nothing on the subject,
+    # while the text beside it printed "plus 1 surface(s) this run's findings rest
+    # on that its provenance never recorded".
+    unaccounted_surfaces: tuple[str, ...] = ()
     classes: tuple[ClassScore, ...] = ()
     # The methodology revision (weights, thresholds, caps) the grade was computed
     # under, so a recompute uses the same rules and lands on the same letter.

@@ -47,6 +47,8 @@ azure-search = ["azure-search-documents>=11.4", "azure-core>=1.30"]
 langgraph = ["langgraph>=1.2.10", "langchain-core>=1.5.4"]
 autogen = ["pyautogen>=0.2,<0.3"]
 crewai = ["crewai>=1.15.1"]
+# `accelerate` has no direct import: transformers/peft load it at runtime for
+# device placement and dtype handling when training or serving a LoRA.
 huggingface = ["transformers>=5.14.1", "peft>=0.20.0", "torch>=2.4", "accelerate>=1"]
 # vLLM is reached over its OpenAI-compatible HTTP API, so the client SDK is the
 # only dependency (not the GPU-heavy vllm package itself).

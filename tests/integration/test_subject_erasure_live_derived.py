@@ -101,7 +101,12 @@ def test_subject_erasure_memory_fingerprint_against_live_redis(memory: object) -
             subject_ref="dsr-mem-2", records={}, fingerprints={Surface.AGENT_MEMORY: (_PHRASE,)}
         ),
     )
-    assert clean.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.ERASED
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion, so nothing establishes the content was ever there. The coverage
+    # block records NOT_COVERED - what the published methodology already says a
+    # surface with no pre-erasure baseline is. Only Class 11, which plants its
+    # own canaries and counts them BEFORE the erasure, can attest ERASED.
+    assert clean.coverage()[Surface.AGENT_MEMORY] is CoverageVerdict.NOT_COVERED
 
 
 def test_subject_erasure_search_fingerprint_against_live_opensearch(search_index: object) -> None:
@@ -123,4 +128,9 @@ def test_subject_erasure_search_fingerprint_against_live_opensearch(search_index
             subject_ref="dsr-si-2", records={}, fingerprints={Surface.SEARCH_INDEX: (_PHRASE,)}
         ),
     )
-    assert clean.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.ERASED
+    # ABSENCE CHECKED, never ERASED: this probe runs after the controller's
+    # deletion, so nothing establishes the content was ever there. The coverage
+    # block records NOT_COVERED - what the published methodology already says a
+    # surface with no pre-erasure baseline is. Only Class 11, which plants its
+    # own canaries and counts them BEFORE the erasure, can attest ERASED.
+    assert clean.coverage()[Surface.SEARCH_INDEX] is CoverageVerdict.NOT_COVERED

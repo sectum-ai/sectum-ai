@@ -6,6 +6,7 @@ the right payload, returns the right surface) and the negative path (no
 adapter wired → a typed ``AdapterError``).
 """
 
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
 import pytest
@@ -21,14 +22,18 @@ from sectum_ai.adapters import (
     FakeRAGPipeline,
     FakeVectorStore,
 )
-from sectum_ai.probes import RagEntityBleedProbe
+from sectum_ai.probes import Probe, RagEntityBleedProbe, confirmed_findings
 from sectum_ai.runner import Runner
 from sectum_ai.spec import (
     AccessOutcome,
     AdapterError,
     ConfigError,
     CorpusDocument,
+    Finding,
+    FindingStatus,
     ProbeStep,
+    RunMetrics,
+    Severity,
     Substrate,
     Surface,
 )
@@ -548,3 +553,425 @@ def test_user_level_plants_run_as_the_tenant_and_only_reads_are_dropped() -> Non
     found = confirmed_findings([f for _, fs in results for f in fs])
     assert found and all(f.owner_tenant_id != f.observed_in_tenant_id for f in found)
     assert runner.dropped_user_steps.get(MemoryContamProbe.id, 0) > 0
+
+
+def test_a_probe_left_with_only_plants_runs_nothing() -> None:
+    # One tenant whose users are the only foreign principals, on an adapter that
+    # carries no user: every judged read was dropped and the plants alone ran, so
+    # the probe landed in probe_versions and `score` graded its class PASS off
+    # zero observations - the vacuous pass the plan guards exist to prevent.
+    from sectum_ai.adapters import FakeCache
+    from sectum_ai.probes import SemanticCacheProbe
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    class _TenantOnlyCache(FakeCache):
+        carries_user = False
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="cache-one-tenant-two-users",
+            seed=5,
+            tenants=(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=1),
+                    display_name="T1",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=11), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=12), display_name="b"),
+                    ),
+                ),
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    runner = Runner(substrate, cache=_TenantOnlyCache())
+    results = runner.run_per_step(SemanticCacheProbe())
+    assert results == [], "no judged step survives, so the plants are not run either"
+    assert runner.dropped_user_steps[SemanticCacheProbe.id] > 0
+    # ... while an adapter that carries the user runs the whole plan.
+    carrying = Runner(substrate, cache=FakeCache())
+    assert carrying.run_per_step(SemanticCacheProbe())
+    assert carrying.dropped_user_steps == {}
+
+
+def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
+    # The guard suppressed only plants that were themselves droppable, so a plant
+    # on an adapter that DOES carry the user still ran - and that alone put the
+    # probe in probe_versions with zero judged observations.
+    from sectum_ai.adapters import FakeCache, FakeVectorStore
+    from sectum_ai.spec import ProbeStep, SyntheticUserSpec
+
+    class _TenantOnlyCache(FakeCache):
+        carries_user = False
+
+    class _MixedProbe:
+        id = "mixed-adapter-probe"
+        name = "plants in the vector store, reads from the cache"
+        owasp_llm = "LLM08:2025"
+        atlas_techniques: tuple[str, ...] = ()
+        nist_rmf: tuple[str, ...] = ()
+        surfaces = (Surface.SEMANTIC_CACHE,)
+        requires_adapters: tuple[str, ...] = ("vector", "cache")
+
+        def plan(self, substrate: Substrate) -> list[ProbeStep]:
+            user = substrate.principals()[-1].user_id
+            return [
+                ProbeStep(
+                    step_id="plant",
+                    probe_id=self.id,
+                    actor_tenant_id=substrate.tenants[0].tenant_id,
+                    actor_user_id=user,
+                    action="vector.upsert",
+                    payload={},
+                ),
+                ProbeStep(
+                    step_id="read",
+                    probe_id=self.id,
+                    actor_tenant_id=substrate.tenants[0].tenant_id,
+                    actor_user_id=user,
+                    action="cache.get",
+                    payload={"key": "k"},
+                ),
+            ]
+
+        def detect(
+            self, step: ProbeStep, observation: object, substrate: Substrate
+        ) -> list[object]:
+            return []
+
+    substrate = build_substrate(
+        default_scenario(seed=3, corpus_size=24).model_copy(
+            update={
+                "tenants": (
+                    default_scenario(seed=3)
+                    .tenants[0]
+                    .model_copy(
+                        update={
+                            "users": (SyntheticUserSpec(user_id=UUID(int=0x21), display_name="u1"),)
+                        }
+                    ),
+                )
+            }
+        )
+    )
+    store = FakeVectorStore()
+    runner = Runner(substrate, vector=store, cache=_TenantOnlyCache())
+    assert runner.run_per_step(_MixedProbe()) == []  # type: ignore[arg-type]
+    assert runner.dropped_user_steps["mixed-adapter-probe"] == 2
+
+
+def test_the_two_no_user_contracts_drop_and_count_their_user_steps() -> None:
+    # `docs/attack-catalog/index.md` names these two contracts specifically and
+    # promises all three consequences: the steps are "DROPPED rather than failed",
+    # the run records `user_steps_dropped`, and `diff` reports `[BOUNDARY LOST]` -
+    # "a pass which says the user boundary was not tested, never that it held".
+    # Both probes filtered the user principals out at PLAN time instead, so the
+    # runner's drop path - built for exactly this, `carries_user == False` - never
+    # fired: the metric stayed `{}`, the audit PDF's clause never printed, and the
+    # diff signal was always empty. Not planning a step silently is a pass that
+    # says nothing at all.
+    from sectum_ai.adapters import FakeAgent, FakeRAGPipeline
+    from sectum_ai.probes import AgentFrameworkHijackProbe, RagPipelineBleedProbe
+    from sectum_ai.spec import (
+        Scenario,
+        SharedEntity,
+        SyntheticTenantSpec,
+        SyntheticUserSpec,
+    )
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="two-tenants-of-users",
+            seed=3,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=n),
+                    display_name=f"T{n}",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+                    ),
+                )
+                for n in (1, 2)
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    for probe, adapters in (
+        (RagPipelineBleedProbe(), {"rag": FakeRAGPipeline(shared_index=True)}),
+        (AgentFrameworkHijackProbe(), {"agent": FakeAgent(confused_deputy=True)}),
+    ):
+        runner = Runner(substrate, **adapters)
+        results = runner.run_per_step(probe)
+        assert runner.dropped_user_steps.get(probe.id, 0) > 0, probe.id
+        # The tenant-level half still runs - dropping is not the same as skipping
+        # the probe - and no user step reaches an adapter that cannot carry one,
+        # which is the false positive the plan-time filter was written to avoid.
+        assert results, probe.id
+        assert all(step.actor_user_id is None for step, _ in results), probe.id
+
+
+def test_a_plant_the_backend_drops_is_not_a_passing_class() -> None:
+    """The three deterministic planting probes confirm their own write.
+
+    Classes 3, 4 and 8 plant, then read the plant back across a principal
+    boundary; nothing checked the WRITE. A store that acknowledges it and drops it
+    - a zero TTL, a read-only replica, a quota - left the probe reading for
+    something that was never there: it ran, found nothing, entered
+    `probe_versions`, and `score` graded the class PASS. That is rule 1's vacuous
+    pass reached from the other side, and Class 11 never had it because it counts
+    markers BEFORE acting.
+    """
+    from sectum_ai.adapters import FakeCache, FakeMemory, FakeVectorStore
+    from sectum_ai.probes import (
+        MemoryContamProbe,
+        RagPoisoningProbe,
+        SemanticCacheProbe,
+        confirmed_findings,
+    )
+
+    class _DroppingStore(FakeVectorStore):
+        def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
+            return None
+
+    class _DroppingCache(FakeCache):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            return None
+
+    class _DroppingMemory(FakeMemory):
+        def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+            return None
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    cases: tuple[tuple[Probe, Callable[[bool], Runner]], ...] = (
+        (
+            RagPoisoningProbe(),
+            lambda drops: Runner(
+                substrate,
+                vector=(_DroppingStore if drops else FakeVectorStore)(shared_index=True),
+            ),
+        ),
+        (
+            SemanticCacheProbe(),
+            lambda drops: Runner(
+                substrate, cache=(_DroppingCache if drops else FakeCache)(tenant_scoped=False)
+            ),
+        ),
+        (
+            MemoryContamProbe(),
+            lambda drops: Runner(
+                substrate, memory=(_DroppingMemory if drops else FakeMemory)(shared_memory=True)
+            ),
+        ),
+    )
+    for probe, build in cases:
+        # The write vanishes: the probe asked the stack nothing, so it runs nothing
+        # and never reaches `probe_versions` - `score` rule 1 then reports the class
+        # NOT_COVERED instead of PASS.
+        broken = build(True)
+        assert broken.run_per_step(probe) == [], probe.id
+        assert broken.unconfirmed_plants[probe.id] == 8, probe.id
+
+        # And a backend that keeps its writes is untouched: the leak is still found
+        # and nothing is reported as unconfirmed. This is the direction that must
+        # never regress - a false "plant not confirmed" would withhold a real class.
+        intact = build(False)
+        results = intact.run_per_step(probe)
+        assert results, probe.id
+        assert confirmed_findings([f for _, fs in results for f in fs]), probe.id
+        assert probe.id not in intact.unconfirmed_plants, probe.id
+
+
+def test_a_leak_the_probe_actually_saw_is_never_deleted_for_want_of_its_own_plant() -> None:
+    # The all-plants-unconfirmed branch returns [] on the reasoning that "every read
+    # below it looked for something that was never there". That is false when the
+    # reads surface the CORPUS markers `seed` planted rather than the probe's own
+    # plant - so a backend with no by-id lookup (where `_plant_landed` fails closed)
+    # or one that drops only the probe's later writes had 24 confirmed CRITICAL
+    # cross-tenant findings deleted from the record, the class read NOT_COVERED, and
+    # the operator was told the backend "acknowledged the write and did not serve
+    # it" - which in the first case is false: it served it fine.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes import RagPoisoningProbe
+
+    class _NoByIdLookup(FakeVectorStore):
+        """Writes land and queries work; only the by-id read is unavailable."""
+
+        def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> None:
+            raise AdapterError("this backend exposes no by-id lookup")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = RagPoisoningProbe()
+    runner = Runner(substrate, vector=_NoByIdLookup(shared_index=True))
+    results = runner.run_per_step(probe)
+    confirmed = confirmed_findings([f for _, findings in results for f in findings])
+
+    assert results, "the probe's reads ran and saw the corpus; the steps must survive"
+    assert confirmed, "a confirmed cross-tenant leak must never be deleted"
+    # It is still disclosed that the setup could not be confirmed.
+    assert runner.unconfirmed_plants[probe.id] > 0, runner.unconfirmed_plants
+
+
+def test_a_partially_dropped_plant_still_runs_and_still_says_so() -> None:
+    # The PARTIAL branch: some plants landed, so the probe did interrogate the
+    # stack and stays graded - but the operator has to be told how much of its
+    # setup did not take. The all-drop and all-land cases above leave this branch
+    # unreached, so deleting it entirely kept them green.
+    from sectum_ai.adapters import FakeVectorStore
+    from sectum_ai.probes import RagPoisoningProbe
+
+    class _HalfDroppingStore(FakeVectorStore):
+        """Acknowledges every write and keeps every other one."""
+
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__(**kwargs)  # type: ignore[arg-type]
+            self._seen = 0
+
+        def upsert(self, tenant: UUID, documents: Sequence[CorpusDocument]) -> None:
+            self._seen += 1
+            if self._seen % 2:
+                super().upsert(tenant, documents)
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = RagPoisoningProbe()
+    runner = Runner(substrate, vector=_HalfDroppingStore(shared_index=True))
+    results = runner.run_per_step(probe)
+
+    assert results, "half the plants landed, so the probe still asked the stack something"
+    assert runner.unconfirmed_plants[probe.id] == 4, runner.unconfirmed_plants
+
+    # And it reaches the SIGNED record, like `user_steps_dropped` beside it. The
+    # count used to live only on this object: the CLI warned from it once and the
+    # pack said nothing, so the partial case - the probe ran, graded, and did it on
+    # less setup than it planned - was undisclosed to everyone downstream.
+    assert "unconfirmed_plants" in RunMetrics.model_fields
+    recorded = RunMetrics(unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())))
+    assert recorded.unconfirmed_plants == {probe.id: 4}
+
+
+def test_a_model_plant_is_deliberately_not_read_back() -> None:
+    # `model.train` is exempt, and the exemption is the point: reading a LoRA back
+    # means asking the model to regurgitate, which is probabilistic and is exactly
+    # what the probe measures. A model that trained correctly and declined to echo
+    # would be recorded as an unplanted probe - a false NOT_COVERED, which is the
+    # direction this tool must never err in. Training that fails raises instead, so
+    # the silent-drop shape the stores have does not arise here.
+    from sectum_ai.adapters import FakeModel
+    from sectum_ai.probes import LoraCrossTenantProbe
+
+    class _ForgetfulModel(FakeModel):
+        """Trains, but never regurgitates - a plausible real LoRA."""
+
+        def train_adapter(
+            self, tenant: UUID, texts: Sequence[str], *, user: UUID | None = None
+        ) -> None:
+            return None
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    probe = LoraCrossTenantProbe()
+    runner = Runner(substrate, model=_ForgetfulModel(adapter_bleed=True))
+    results = runner.run_per_step(probe)
+    assert results, "the probe still runs"
+    assert probe.id not in runner.unconfirmed_plants, runner.unconfirmed_plants
+
+
+def test_dropped_user_steps_survive_a_probe_that_also_lost_every_plant() -> None:
+    # The all-plants-unconfirmed branch returns early, and `if dropped:` sat below
+    # it - so a probe that BOTH dropped user-level steps (the adapter cannot carry
+    # a user identity) and lost every plant recorded only the second fact. They are
+    # independent disclosures: the signed record and the audit PDF under-reported
+    # the narrowed user boundary on exactly the runs where the setup also failed,
+    # and `diff`'s [BOUNDARY LOST] signal reads that field.
+    #
+    # Needs the MIDDLE branch, not the all-dropped one above it: a multi-tenant
+    # substrate leaves cross-TENANT judged steps that survive, so the run proceeds
+    # to the plant check with `dropped` already non-zero.
+    from sectum_ai.adapters import FakeCache
+    from sectum_ai.probes import SemanticCacheProbe
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    class _DropsTheUserAndSwallowsThePlant(FakeCache):
+        """Carries no user identity, and never serves a plant back."""
+
+        carries_user = False
+
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            return None
+
+    def _tenant(index: int) -> SyntheticTenantSpec:
+        return SyntheticTenantSpec(
+            tenant_id=UUID(int=index),
+            display_name=f"T{index}",
+            industry="robotics",
+            corpus_size=24,
+            users=(
+                SyntheticUserSpec(user_id=UUID(int=index * 10 + 1), display_name="a"),
+                SyntheticUserSpec(user_id=UUID(int=index * 10 + 2), display_name="b"),
+            ),
+        )
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="two-tenants-with-users",
+            seed=5,
+            tenants=(_tenant(1), _tenant(2)),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    probe = SemanticCacheProbe()
+    runner = Runner(substrate, cache=_DropsTheUserAndSwallowsThePlant())
+    assert runner.run(probe) == [], "the premise: every plant vanished, nothing observed"
+    assert runner.unconfirmed_plants.get(probe.id), runner.unconfirmed_plants
+    assert runner.dropped_user_steps.get(probe.id, 0) > 0, runner.dropped_user_steps
+
+
+def test_class_10_is_measured_by_sequence_because_that_is_what_it_claims() -> None:
+    # Class 10's probe plans three benign follow-ups per (shared entity,
+    # principal), and its own module docstring says "the extraction is confirmed
+    # when the SEQUENCE surfaces a foreign canary". The headline rate counted
+    # TURNS, so a sequence that leaks only on its third follow-up scored 1/3 - the
+    # signed metric understating the extraction it exists to measure, by up to 3x
+    # and always in the direction that makes the stack look safer. Measured on the
+    # demo stack: 18.1% by turn, 29.2% by sequence.
+    #
+    # The other three headline rates keep `confirmed_finding_rate`: their probes
+    # plan one step per attempt, so a step IS the unit their label names.
+    from sectum_ai.runner import confirmed_finding_rate, confirmed_sequence_rate
+
+    def _step(entity: str, turn: int) -> ProbeStep:
+        return ProbeStep(
+            step_id=f"ikea-{entity}-{turn}",
+            probe_id="ikea-extraction",
+            actor_tenant_id=UUID(int=1),
+            action="vector.query",
+            payload={"query": f"turn {turn}", "entity": entity},
+        )
+
+    leak = [
+        Finding(
+            finding_id="f",
+            probe_id="ikea-extraction",
+            severity=Severity.HIGH,
+            confidence=1.0,
+            status=FindingStatus.CONFIRMED,
+            owner_tenant_id=UUID(int=2),
+            observed_in_tenant_id=UUID(int=1),
+            surface=Surface.VECTOR_DB,
+        )
+    ]
+    # Two sequences of three turns. The first leaks on its LAST turn only; the
+    # second never leaks.
+    results: list[tuple[ProbeStep, list[Finding]]] = [
+        (_step("acme", 0), []),
+        (_step("acme", 1), []),
+        (_step("acme", 2), leak),
+        (_step("globex", 0), []),
+        (_step("globex", 1), []),
+        (_step("globex", 2), []),
+    ]
+    assert confirmed_finding_rate(results) == 1 / 6, "the old unit: one turn of six"
+    assert confirmed_sequence_rate(results, "entity") == 0.5, "one extraction of two attempted"

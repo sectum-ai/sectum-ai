@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from typer.testing import CliRunner
 
 from sectum_ai.cli.app import (
@@ -221,3 +222,40 @@ def test_pack_include_manifest_without_a_key_errors(tmp_path: Path) -> None:
     # Sealing the ground-truth manifest needs security.manifest_key_env.
     result = _runner.invoke(app, ["pack", "--workdir", str(tmp_path), "--include-manifest"])
     assert result.exit_code == 3
+
+
+def test_pack_refuses_to_seal_another_substrates_ground_truth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `report` refuses a run recorded against a re-seeded substrate; `pack
+    # --include-manifest` loaded the substrate for the same purpose with no such
+    # check. The sealed marker-to-tenant table is the ONLY ground truth an auditor
+    # has for re-deriving who owned which canary, so shipping another substrate's
+    # is worse here than in the PDF - and nothing in the pack revealed it, because
+    # `manifest-consistency` compares the run to the pack, both stale.
+    import base64
+    import os
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    key_env = "SECTUM_TEST_PACK_MANIFEST_KEY"
+    monkeypatch.setenv(key_env, base64.b64encode(os.urandom(32)).decode())
+    runner = CliRunner()
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text(f"workdir: {tmp_path}\nsecurity:\n  manifest_key_env: {key_env}\n")
+    common = ["--config", str(config)]
+
+    assert runner.invoke(app, ["seed", *common]).exit_code == 0
+    assert runner.invoke(app, ["probe", *common]).exit_code in (0, 2)
+    assert runner.invoke(app, ["report", *common]).exit_code == 0
+    ok = runner.invoke(app, ["pack", *common, "--include-manifest"])
+    assert ok.exit_code == 0, ok.output
+
+    # Re-seed with a different scenario: the run on disk now belongs to a
+    # substrate that no longer exists.
+    assert runner.invoke(app, ["seed", *common, "--seed", "4242"]).exit_code == 0
+    stale = runner.invoke(app, ["pack", *common, "--include-manifest"])
+    assert stale.exit_code == 3, stale.output
+    assert "different substrate" in stale.output, stale.output

@@ -32,9 +32,26 @@ class LiveTGIBackend:
         self._max_tokens = max_tokens
 
     def complete(self, prompt: str) -> str:
-        """Return the completion text for ``prompt`` (raw prompt, bounded length)."""
+        """Return the completion text for ``prompt`` (raw prompt, bounded length).
+
+        ``return_full_text=False`` is pinned rather than left to the server.
+        `huggingface_hub` declares the parameter as ``bool | None = None`` and
+        forwards it verbatim, so with it unset TGI's own default applies - and
+        for a ``text-generation`` model reached on the compat route that default
+        PREPENDS the prompt. `ModelAdapter.infer` states the consequence: the
+        erasure probe prompts with the canary it scans for, so an adapter that
+        echoed its prompt would fabricate a confirmed "residual" about data that
+        was never stored. Both sibling backends pin it - `_vllm_live` uses the
+        completions endpoint without ``echo``, `_huggingface_live` strips the
+        prompt tokens explicitly - and TGI was the one leaving it to the server.
+        """
         return str(
-            self._client.text_generation(prompt, max_new_tokens=self._max_tokens, stream=False)
+            self._client.text_generation(
+                prompt,
+                max_new_tokens=self._max_tokens,
+                stream=False,
+                return_full_text=False,
+            )
         )
 
     def first_token_latency_ms(self, prompt: str) -> float:

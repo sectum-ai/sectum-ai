@@ -92,3 +92,54 @@ def test_re_seeding_with_a_key_removes_the_stale_plaintext(
     _runner.invoke(app, ["seed", "--config", str(_config(tmp_path))])
     assert (tmp_path / "substrate.json.enc").exists()
     assert not (tmp_path / "substrate.json").exists()
+
+
+@pytest.mark.parametrize("sealed", [True, False])
+def test_a_substrate_from_another_schema_line_is_refused_however_it_is_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sealed: bool
+) -> None:
+    # `Substrate.schema_version` defaults to SCHEMA_VERSION, so a payload carrying
+    # no stamp parses cleanly and then reports the CURRENT version. The sealed
+    # path read the stamp off the parsed model and so asked the record a question
+    # it had already answered for it; the plaintext path reads the raw JSON, and
+    # its own comment states the rule - "a substrate from another line seeded a
+    # run whose own stamp then read as current".
+    #
+    # The same payload was therefore refused at exit 3 as plaintext and accepted
+    # at exit 0 sealed, with the PERMISSIVE path being the one that has at-rest
+    # protection turned on. Parameterised so the two can never diverge again.
+    import json
+
+    from sectum_ai.crypto import seal_bytes, unseal_bytes
+
+    monkeypatch.setenv(_KEY_ENV, _KEY_B64)
+    key = base64.b64decode(_KEY_B64)
+    config = _config(tmp_path) if sealed else None
+    seed = ["seed", "--config", str(config)] if sealed else ["seed", "--workdir", str(tmp_path)]
+    assert _runner.invoke(app, seed).exit_code == 0
+
+    path = tmp_path / ("substrate.json.enc" if sealed else "substrate.json")
+    payload = json.loads(unseal_bytes(path.read_bytes(), key) if sealed else path.read_text())
+    assert payload.pop("schema_version"), "the substrate no longer carries a stamp to strip"
+    raw = json.dumps(payload).encode()
+    path.write_bytes(seal_bytes(raw, key) if sealed else raw)
+
+    probe = ["probe", "--config", str(config)] if sealed else ["probe", "--workdir", str(tmp_path)]
+    result = _runner.invoke(app, probe)
+    assert result.exit_code == 3, result.output
+    assert "is a schema None record" in result.output, result.output
+
+
+@pytest.mark.parametrize("sealed", [True, False])
+def test_a_substrate_that_does_carry_the_stamp_still_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sealed: bool
+) -> None:
+    # The other half of the guard: re-reading the stamp off the payload must not
+    # start refusing genuine substrates. A false alarm on a real artifact is the
+    # same class of harm as accepting a foreign one.
+    monkeypatch.setenv(_KEY_ENV, _KEY_B64)
+    config = _config(tmp_path) if sealed else None
+    seed = ["seed", "--config", str(config)] if sealed else ["seed", "--workdir", str(tmp_path)]
+    assert _runner.invoke(app, seed).exit_code == 0
+    probe = ["probe", "--config", str(config)] if sealed else ["probe", "--workdir", str(tmp_path)]
+    assert _runner.invoke(app, probe).exit_code in (0, 2)

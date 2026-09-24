@@ -102,6 +102,20 @@ def test_load_config_rejects_an_unknown_embedding_model(tmp_path: Path) -> None:
         load_config(path)
 
 
+def test_a_cache_kind_that_cannot_soft_delete_refuses_the_knob() -> None:
+    # `FakeCache` and the Redis MEMORY adapter both honour `soft_delete`; the Redis
+    # CACHE does not have it, and the resolver accepted the key and dropped it. An
+    # operator validating that Sectum catches cache residue then got a clean run
+    # from a setting that never took effect. The resolver's one precedent for a knob
+    # a kind cannot honour is mem0 + `user_scoped`, which raises.
+    from sectum_ai.config import build_cache
+
+    with pytest.raises(ConfigError, match="does not support soft_delete"):
+        build_cache(AdapterConfig(kind="redis", soft_delete=True))
+    # The knob the fake DOES honour is still accepted.
+    assert build_cache(AdapterConfig(kind="fake", soft_delete=True)) is not None
+
+
 def test_load_config_raises_when_the_file_is_missing(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="not found"):
         load_config(tmp_path / "missing.yaml")
@@ -1434,3 +1448,29 @@ def test_build_cache_missing_redis_extra_raises_adaptererror(
     monkeypatch.delitem(sys.modules, "sectum_ai.adapters.cache.redis", raising=False)
     with pytest.raises(AdapterError, match="redis"):
         build_cache(AdapterConfig(kind="redis"))
+
+
+def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
+    # `_lexically_ranked` had zero test references and its entire body showed as
+    # uncovered, because no unit test built a live vector kind. A bug there is an
+    # OVER-CLAIM in both directions its docstring names: a lexical keyword hit
+    # shipped stamped `AML.T0024.001 Invert ML Model`, and a store that found
+    # nothing scoring PASS for a class that could not run. `opensearchpy` opens no
+    # connection until a request, so the live path is checkable offline.
+    from sectum_ai.adapters.vector.opensearch import OpenSearchVectorStore
+
+    store = build_vector_store(AdapterConfig(kind="opensearch", host="example", port=9200))
+    assert isinstance(store, OpenSearchVectorStore)
+    assert not store.synthetic
+    # The capability is WITHDRAWN - the resolver backs every live kind with a
+    # bag-of-tokens `_hashing_embed`, and there is no config path to a real
+    # embedding model for a vector store.
+    assert not store.supports(Capability.SEMANTIC_RETRIEVAL)
+    # ...and nothing else is: the withdrawal must not be over-broad.
+    assert store.supports(Capability.PER_TENANT_NAMESPACE)
+
+    # The documented exception: the built-in fake keeps it, because its embedding
+    # is the substrate's own and the demo depends on the semantic classes running.
+    fake = build_vector_store(AdapterConfig(kind="fake"))
+    assert fake.synthetic
+    assert fake.supports(Capability.SEMANTIC_RETRIEVAL)

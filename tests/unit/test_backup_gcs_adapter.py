@@ -16,7 +16,7 @@ import pytest
 
 from sectum_ai.adapters.backup.gcs import GCSBackup
 from sectum_ai.adapters.base import BackupAdapter, Capability
-from sectum_ai.spec import ErasureUnsupported
+from sectum_ai.spec import AdapterError, ErasureUnsupported
 
 _BUCKET = "sectum-backups"
 _PREFIX = "sectum-ai-backup"
@@ -50,8 +50,15 @@ class _FakeBlob:
         elif self._client.versioning_enabled:
             # Object versioning: the current generation becomes noncurrent.
             pass
-        else:
-            generations.clear()
+        elif generations:
+            # Versioning OFF deletes the LIVE generation and nothing else. This
+            # branch used to `clear()` every generation, which is what a bucket that
+            # never had versioning looks like - and it made the two indistinguishable,
+            # so a bucket whose versioning was turned off, whose noncurrent
+            # generations Google retains until a lifecycle rule removes them, was
+            # modelled as if the purge had reached them. The adapter was signing
+            # `backup: ERASED` over exactly that data, and this fake could not say so.
+            generations.pop(max(generations), None)
         self._client._store.pop(self.name, None)
         if not generations:
             self._client._generations.pop(self.name, None)
@@ -148,6 +155,65 @@ def test_gcs_backup_delete_purges_a_tenants_objects() -> None:
     assert adapter.search(_TENANT_B, "SECTUM-CANARY-KEEP")
 
 
+def test_a_bucket_whose_versioning_was_turned_off_still_shows_its_retained_generations() -> None:
+    # The S3 sibling counts a bucket as versioned when its status is "Enabled" OR
+    # "Suspended", because suspending does not delete the generations already
+    # written. GCS has no suspended state: turning Object Versioning off flips
+    # `versioning_enabled` to False while every noncurrent generation stays
+    # restorable - so the scan saw none of them, the purge removed none of them,
+    # and the surface was signed ERASED over retained data.
+    client = _FakeGCS(versioned=True)
+    _backup(client).add(_TENANT_A, "SECTUM-CANARY-RETAINED")
+    _backup(client).add(_TENANT_A, "SECTUM-CANARY-RETAINED")  # a second nightly snapshot
+    # The operator turns Object Versioning off. Sectum then runs against the bucket
+    # as it finds it - a FRESH adapter, which is the only way the live path ever
+    # reads this flag - while both generations stay restorable.
+    client.versioning_enabled = False
+    adapter = _backup(client)
+
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-RETAINED"), "the baseline must be visible"
+    adapter.delete(_TENANT_A)
+    assert adapter.search(_TENANT_A, "SECTUM-CANARY-RETAINED") == []
+    retained = [
+        key
+        for key, generations in client._generations.items()
+        if key.startswith(f"{_PREFIX}/{_TENANT_A.hex}/") and generations
+    ]
+    assert retained == [], f"generations left in the bucket after an attested purge: {retained}"
+
+
+def test_a_purge_that_cannot_remove_every_object_says_so_in_the_contracts_error() -> None:
+    # The S3 sibling reads its bulk delete's `Errors` list and raises `AdapterError`.
+    # GCS deletes per object, and a failing one raised the CLIENT's exception - not
+    # the adapter contract's type, so it escaped the erasure probe's per-surface
+    # containment and aborted the whole Article 17 run - after stopping the loop, so
+    # the objects behind the failure were neither deleted nor named.
+    client = _FakeGCS()
+    adapter = _backup(client)
+    for index in range(4):
+        adapter.add(_TENANT_A, f"SECTUM-CANARY-{index}")
+
+    locked = {f"{_PREFIX}/{_TENANT_A.hex}/"}
+    original = _FakeBlob.delete
+
+    def _delete(self: _FakeBlob) -> None:
+        # Every object but the last is retained: a bucket-lock hold.
+        if self.name != sorted(client._store)[-1]:
+            raise RuntimeError("retention hold")
+        original(self)
+
+    _FakeBlob.delete = _delete  # type: ignore[method-assign]
+    try:
+        with pytest.raises(AdapterError, match="GCS purge left 3 object"):
+            adapter.delete(_TENANT_A)
+    finally:
+        _FakeBlob.delete = original  # type: ignore[method-assign]
+    assert locked  # the prefix is what was attempted
+    # The one deletable object WAS deleted: the loop ran to the end rather than
+    # stopping at the first failure, so the error can name every object left.
+    assert len(client._store) == 3
+
+
 def test_gcs_backup_delete_removes_every_object_under_the_prefix() -> None:
     # GCS deletes are per-object; a tenant prefix with many snapshots is fully purged.
     client = _FakeGCS()
@@ -206,3 +272,66 @@ def test_gcs_backup_soft_delete_policy_is_attestable_with_caveat() -> None:
     adapter.add(_TENANT_A, "SECTUM-CANARY-SOFT-POLICY")
     with pytest.raises(ErasureUnsupported, match="soft-delete policy"):
         adapter.delete(_TENANT_A)
+
+
+def test_an_unreadable_soft_delete_policy_is_not_read_as_no_policy() -> None:
+    # A non-zero soft-delete retention is the ONE thing standing between this
+    # adapter and signing `backup: ERASED` over data GCS restores on request: a
+    # deleted object stays restorable for the window, and `_blobs` lists
+    # `versions=True` but never `soft_deleted=True`, so nothing downstream can
+    # catch the mistake.
+    #
+    # It was read with `getattr(..., 0) or 0`, so every way of FAILING to read the
+    # policy - a client too old to model it, a response without the field -
+    # collapsed into "there is no policy" and the purge proceeded. Buckets created
+    # since 2024 default to a 7-day policy, so that is the common case, not a
+    # corner. The rule this codebase applies everywhere else: a number nobody
+    # measured is not a measurement of zero.
+    class _ClientWithoutThePolicy:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace()  # an older client models no such field
+
+    blind = GCSBackup(client=_ClientWithoutThePolicy(), bucket="b")
+    with pytest.raises(AdapterError, match="soft-delete policy"):
+        blind._soft_delete_retention_s()
+
+    class _ClientWithAnEmptyPolicy:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace(soft_delete_policy=SimpleNamespace())
+
+    empty = GCSBackup(client=_ClientWithAnEmptyPolicy(), bucket="b")
+    with pytest.raises(AdapterError, match="retention duration"):
+        empty._soft_delete_retention_s()
+
+    # A bucket the client CAN read and that genuinely has no retention still
+    # purges - the fix must not turn every unversioned bucket into a caveat.
+    class _ClientWithItDisabled:
+        def get_bucket(self, name: str) -> SimpleNamespace:
+            return SimpleNamespace(soft_delete_policy=SimpleNamespace(retention_duration_seconds=0))
+
+    assert GCSBackup(client=_ClientWithItDisabled(), bucket="b")._soft_delete_retention_s() == 0
+
+
+def test_purge_translates_a_raw_client_failure_on_both_of_its_reads() -> None:
+    # `search` on this same adapter wraps both `get_bucket` and `list_blobs`;
+    # `delete` wrapped neither, so a client failure escaped as its own type - not
+    # this contract's. The S3 sibling wraps its listing. The verdict was never
+    # wrong (the erasure probe's containment is deliberately `except Exception`,
+    # because the erasure surfaces keep this unevenly), so this is contract
+    # consistency and operator message quality, not correctness.
+    class _Boom(Exception):
+        pass
+
+    class _PolicyFails(_FakeGCS):
+        def get_bucket(self, name: str) -> Any:
+            raise _Boom("403 storage.buckets.get denied")
+
+    class _ListingFails(_FakeGCS):
+        def list_blobs(self, *args: Any, **kwargs: Any) -> Any:
+            raise _Boom("503 backend unavailable")
+
+    with pytest.raises(AdapterError, match="could not read the bucket's soft-delete policy"):
+        _backup(_PolicyFails()).delete(_TENANT_A)
+
+    with pytest.raises(AdapterError, match="could not list the tenant's objects"):
+        _backup(_ListingFails()).delete(_TENANT_A)

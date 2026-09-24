@@ -32,8 +32,15 @@ The boundary Sectum AI verifies is a **principal**, not only a tenant
 Detection and every probe share one predicate (`is_cross_principal`), and the
 adapter SDK carries an optional user scope
 ([ADR-0008](adr/0008-adapter-user-dimension.md)), so a probe verifies isolation
-at both granularities against a store that is — or is not — user-aware. With no
-users declared, behaviour is exactly the tenant-level case.
+at both granularities — **but only where the adapter carries the calling user to
+its backend** (`carries_user`, which a live adapter sets from its `user_scoped`
+knob). Where it does not, a user-level step would run as the tenant and be judged
+as the user, so the runner does not run it: the run exercises the tenant boundary
+alone, records the count in `RunMetrics.user_steps_dropped`, warns on stderr, and
+`diff` / `baseline --compare` report a run that stopped exercising it as
+`[BOUNDARY LOST]`. A probe left with no judged step runs nothing at all rather
+than grading its class off its plants. With no users declared, behaviour is
+exactly the tenant-level case.
 
 ## What Sectum AI is not — out of scope
 
@@ -98,8 +105,9 @@ sensitive core: an adversary holding it knows every canary in advance.
 ### Evidence packs
 
 An evidence pack is tamper-evident. The pack's `attested_digest` covers the whole
-attested content — the canonical run (findings included) together with the
-manifest binding and the audit-PDF reference; that digest is what gets
+attested content — the canonical run (findings included), the manifest binding,
+the control mappings, the audit-PDF reference, and the two anchor flags; that
+digest is what gets
 timestamped, and `sectum-ai verify` recomputes it and rejects any pack whose
 attested content was altered.
 
@@ -118,9 +126,11 @@ detect that; it checks the pack it is handed.
 
 Sectum AI is synthetic by default — the substrate is fabricated. When pointed at
 a real stack, the probes read whatever that stack returns. In **BYOC** mode the
-CLI runs inside the customer environment and only markers, the judge-cited
-evidence spans of confirmed findings, and the timestamped evidence pack leave
-it; the bulk of retrieved content stays on-box. (The pack is hash-bound and
+CLI runs inside the customer environment and only markers, the evidence spans of
+findings, and the timestamped evidence pack leave it; the bulk of retrieved
+content stays on-box. Note that **unverified** findings ship too, and an evidence
+span can be the judge's own free-text rationale, which may restate observed tenant
+content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)
 
 ## Deployment modes
@@ -128,8 +138,9 @@ timestamped; it is signed by a TSA only when one is configured.)
 - **Hosted.** Sectum AI runs the synthetic tenants against the customer's
   reachable endpoints.
 - **BYOC (bring-your-own-cloud).** The customer runs the CLI inside their own
-  environment. Only the substrate's markers and the signed evidence pack cross
-  the boundary. Set `detection.mode: local` to **enforce** this posture:
+  environment. Only the substrate's markers, the findings' evidence spans (which
+  can include a judge rationale restating observed content — see *Customer data*
+  above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
   detection is the only stage that embeds or judges tenant content, and in
   `local` mode the config fails fast on any embedder or judge that would call a
   default hosted AI API (`openai`/`anthropic` without a `base_url`) — so Sectum

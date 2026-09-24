@@ -110,6 +110,9 @@ class CalibrationResult:
     examples: tuple[CalibrationExample, ...]
     scores: tuple[ThresholdScore, ...]
     recommended_score: ThresholdScore | None
+    # What the shipped default scores on THIS run's labeled set, when no
+    # threshold separated the classes. ``None`` when a real recommendation exists.
+    fallback_score: ThresholdScore | None = None
 
     @property
     def positives(self) -> int:
@@ -304,6 +307,13 @@ def calibrate_threshold(
     examples = build_calibration_set(substrate, pipeline)
     scores = tuple(_score_at(threshold, examples) for threshold in _candidate_thresholds(examples))
     recommended = _recommend(scores)
+    # The fallback is the shipped default, not a measurement: score it on this
+    # run's own labeled set so the caller is told what it admits. Published
+    # unscored, it was printed as "the conservative default" while admitting 25
+    # of 32 negatives - and it gates which candidates become CONFIRMED findings.
+    fallback_score = (
+        None if recommended is not None else _score_at(DEFAULT_SEMANTIC_THRESHOLD, examples)
+    )
     recommended_threshold = (
         recommended.threshold if recommended is not None else DEFAULT_SEMANTIC_THRESHOLD
     )
@@ -313,4 +323,5 @@ def calibrate_threshold(
         examples=tuple(examples),
         scores=scores,
         recommended_score=recommended,
+        fallback_score=fallback_score,
     )

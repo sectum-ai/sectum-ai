@@ -83,8 +83,24 @@ def test_one_result_per_finding_and_one_rule_per_probe() -> None:
 
 
 def test_level_is_severity_driven_for_confirmed_findings() -> None:
-    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    sarif = run_to_sarif(
+        _run(_finding("f-1", severity=Severity.CRITICAL)).model_copy(
+            update={"surface_provenance": {"vector_db": "LIVE"}}
+        )
+    )
+    (run,) = sarif["runs"]
     assert run["results"][0]["level"] == "error"
+
+
+def test_a_run_that_records_no_provenance_is_not_evidence_of_a_live_backend() -> None:
+    # `confirmed_on_live_surfaces` and the control mappings both key on an
+    # explicit LIVE. Keying on an explicit SYNTHETIC instead would have let an
+    # unstated surface render as a critical production alert.
+    (run,) = run_to_sarif(_run(_finding("f-1", severity=Severity.CRITICAL)))["runs"]
+    assert run["results"][0]["level"] == "note"
+    # And the label says what the record says - not SYNTHETIC, which would state
+    # something the record does not. Three-valued, like every sibling renderer.
+    assert run["results"][0]["properties"]["surfaceProvenance"] == "UNRECORDED"
 
 
 def test_unverified_candidate_never_exceeds_note() -> None:
@@ -106,7 +122,10 @@ def test_rule_security_severity_tracks_the_worst_confirmed_finding() -> None:
         _finding("f-1", probe_id="p", severity=Severity.LOW),
         _finding("f-2", probe_id="p", severity=Severity.CRITICAL),
     )
-    (run,) = run_to_sarif(_run(*findings))["runs"]
+    sarif = run_to_sarif(
+        _run(*findings).model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    )
+    (run,) = sarif["runs"]
     (rule,) = run["tool"]["driver"]["rules"]
     assert rule["properties"]["security-severity"] == "9.5"  # critical, not low
 
@@ -174,3 +193,142 @@ def test_rule_text_names_the_probe_kind() -> None:
     }
     assert rules["gdpr-erasure-verification"].startswith("Residual-data finding")
     assert rules["rag-entity-bleed"].startswith("Cross-principal leak finding")
+
+
+def _run_with_provenance(*findings: Finding, **provenance: str) -> RunResult:
+    return _run(*findings).model_copy(update={"surface_provenance": provenance})
+
+
+def test_a_finding_on_a_fake_surface_is_not_a_high_severity_alert() -> None:
+    # GitHub renders one alert per RESULT, so the run-level provenance property is
+    # invisible where it matters: the demo run raised 256 `error` alerts at
+    # security-severity 9.5, indistinguishable from a production scan's. Every
+    # other renderer says so inline - the text summary warns, the JSON carries
+    # `confirmed_on_live_surfaces`, OSCAL asserts nothing, the PDF calls itself a
+    # demonstration.
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="SYNTHETIC"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "note"
+    assert result["properties"]["security-severity"] == "1.0"
+    assert result["properties"]["surfaceProvenance"] == "SYNTHETIC"
+    assert result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "note"
+    assert rule["properties"]["security-severity"] == "1.0"
+
+
+def test_the_same_finding_on_a_live_surface_is_a_critical_alert() -> None:
+    sarif = run_to_sarif(_run_with_provenance(_finding("f-1"), vector_db="LIVE"))
+    result = sarif["runs"][0]["results"][0]
+    assert result["level"] == "error"
+    assert result["properties"]["security-severity"] == "9.5"
+    assert result["properties"]["surfaceProvenance"] == "LIVE"
+    assert not result["message"]["text"].startswith("[synthetic surface")
+    rule = sarif["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "error"
+
+
+def test_an_unrecorded_surface_is_not_told_it_describes_a_fake() -> None:
+    # The property went three-valued and the PROSE stayed two-valued, so a result
+    # on a surface the record does not describe was told it "describes Sectum's
+    # built-in fake" - stating something the record does not.
+    sarif = run_to_sarif(_run(_finding("f-1")))
+    message = sarif["runs"][0]["results"][0]["message"]["text"]
+    assert message.startswith("[surface provenance not recorded"), message
+    assert "built-in fake" not in message
+
+
+def test_a_run_in_which_nothing_executed_is_not_a_clean_scan() -> None:
+    # `results: []` was the projection of BOTH "we tested and found nothing" and
+    # "nothing was tested" - identical in a code-scanning tab, where an empty tab
+    # reads as assurance. Every sibling projection states what ran: `score` rule 1
+    # refuses a PASS for a probe that did not run, the PDF prints the probes
+    # exercised, OSCAL lists its reviewed controls.
+    nothing = run_to_sarif(_run())["runs"][0]
+    assert nothing["results"] == []
+    assert nothing["properties"]["probesExercised"] == []
+    notifications = nothing["invocations"][0]["toolExecutionNotifications"]
+    assert [n["descriptor"]["id"] for n in notifications] == ["sectum.no-probe-executed"]
+    assert "ABSENT scan, not a clean one" in notifications[0]["message"]["text"]
+
+
+def test_a_clean_run_that_did_execute_says_which_probes_ran() -> None:
+    ran = _run().model_copy(update={"probe_versions": {"cross-tenant-retrieval": "1.0"}})
+    projected = run_to_sarif(ran)["runs"][0]
+    assert projected["results"] == []
+    assert projected["properties"]["probesExercised"] == ["cross-tenant-retrieval"]
+    assert "toolExecutionNotifications" not in projected["invocations"][0]
+
+
+def test_a_finding_counts_as_proof_its_probe_ran() -> None:
+    # The same rule `score._confirmed_probe_ids` applies: a record whose
+    # bookkeeping disagrees with its own findings cannot report that nothing ran.
+    projected = run_to_sarif(_run(_finding("f-1")))["runs"][0]
+    assert projected["properties"]["probesExercised"], projected["properties"]
+    assert "toolExecutionNotifications" not in projected["invocations"][0]
+
+
+def test_an_unverified_residue_is_a_candidate_not_a_finding() -> None:
+    # `leak_label` gave every residual finding the same phrase whatever its
+    # status, so an UNVERIFIED one - a surface with no per-tenant erasure API,
+    # whose absence was never established - read "CRITICAL residual-data finding"
+    # in the Security tab beside a marker that really was still retrievable. The
+    # cross-principal labels have said leak-vs-candidate all along.
+    same = _finding("f-r").model_copy(update={"observed_in_tenant_id": _OWNER})
+    confirmed = run_to_sarif(_run(same))["runs"][0]["results"][0]["message"]["text"]
+    assert "residual-data finding" in confirmed, confirmed
+
+    unverified = same.model_copy(update={"status": FindingStatus.UNVERIFIED})
+    text = run_to_sarif(_run(unverified))["runs"][0]["results"][0]["message"]["text"]
+    assert "residual-data candidate" in text, text
+    assert "residual-data finding" not in text, text
+
+
+def test_a_probe_with_only_unverified_findings_does_not_advertise_a_leak() -> None:
+    # The rule's level and security-severity have tracked status since they were
+    # written ("an unverified-only rule never renders as a high-severity GitHub
+    # alert"); its TITLE did not, so a probe that produced only candidates
+    # advertised "Cross-principal leak finding" on its GitHub rule page while
+    # every result underneath correctly read "candidate".
+    unverified = _finding("u", status=FindingStatus.UNVERIFIED)
+    rule = run_to_sarif(_run(unverified))["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["shortDescription"]["text"].startswith("Cross-principal leak candidate"), rule
+    assert rule["defaultConfiguration"]["level"] == "note"
+
+    # A CONFIRMED finding still says "finding" - including on a synthetic surface,
+    # where the level is floored but the status is not in doubt. The result's own
+    # `[synthetic surface ...]` prefix is what says whose stack it describes.
+    confirmed = run_to_sarif(_run(_finding("c")))["runs"][0]["tool"]["driver"]["rules"][0]
+    assert confirmed["shortDescription"]["text"].startswith("Cross-principal leak finding")
+    assert confirmed["defaultConfiguration"]["level"] == "note"
+
+
+def test_the_sarif_run_discloses_setup_that_did_not_land() -> None:
+    # SARIF was the one projection without these two. A probe whose every plant the
+    # backend swallowed - acknowledged the write, never served it - appears in
+    # `probesExercised` because it ran, and raises no alert, which in a Security
+    # tab reads as "this class is clean". Same for a probe that took only
+    # tenant-level steps because the adapter cannot carry a user identity: the user
+    # boundary was never exercised and the SARIF said nothing about it. That is the
+    # absent-vs-zero conflation this run's own `sectum.no-probe-executed`
+    # notification exists to break, one level down.
+    #
+    # Every sibling already discloses both: the PDF appends them to "Probes
+    # exercised", OSCAL narrows its satisfied isolation verdict, the JSON summary
+    # carries them, and `score` reports such a class NOT_COVERED with a note.
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"rag-poisoning": "1", "tenant-boundary-fetch": "1"},
+        metrics=RunMetrics(
+            unconfirmed_plants={"rag-poisoning": 8},
+            user_steps_dropped={"tenant-boundary-fetch": 12},
+        ),
+    )
+    properties = run_to_sarif(run)["runs"][0]["properties"]
+    assert properties["plantsNotConfirmed"] == {"rag-poisoning": 8}
+    assert properties["userStepsDropped"] == {"tenant-boundary-fetch": 12}

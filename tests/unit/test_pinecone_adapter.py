@@ -275,3 +275,50 @@ def test_pinecone_upsert_and_delete_wait_for_the_index_to_reflect_them(
     never = _LaggingIndex(lag=10**6)
     with pytest.raises(AdapterError, match="did not reflect"):
         PineconeVectorStore(never, _embed).upsert(_TENANT_A, _documents(_TENANT_A, "a", "x"))
+
+
+def test_unreadable_index_stats_do_not_settle_the_delete_poll() -> None:
+    # `_namespace_count` backs `delete`'s settle poll, so a 0 it returns is read
+    # as "the purge landed". `hasattr(stats, "get")` made an UNREADABLE stats
+    # response return 0, so a shape this adapter cannot parse settled the poll on
+    # its first try and the namespace was attested erased without ever being read.
+    # `GCSBackup._soft_delete_retention_s` states the rule for the sibling
+    # surface: an answer that could not be established is not a clean one.
+    from types import SimpleNamespace
+
+    from sectum_ai.spec import AdapterError
+
+    class _UnreadableStats(_FakeIndex):
+        def describe_index_stats(self) -> SimpleNamespace:
+            # A list, not a mapping - no `.get`, and previously read as "empty".
+            return SimpleNamespace(namespaces=["some", "other", "shape"])
+
+    store = PineconeVectorStore(_UnreadableStats(), embed=_embed)
+    with pytest.raises(AdapterError, match="cannot be attested erased"):
+        store.delete(_TENANT_A)
+
+
+def test_a_summary_without_a_vector_count_is_refused_too() -> None:
+    # The sibling shape: the namespace IS present in the stats but its summary
+    # carries no count, so whether the purge landed is unknown, not zero.
+    from types import SimpleNamespace
+
+    from sectum_ai.spec import AdapterError
+
+    class _CountlessSummary(_FakeIndex):
+        def describe_index_stats(self) -> SimpleNamespace:
+            return SimpleNamespace(namespaces={_TENANT_A.hex: SimpleNamespace()})
+
+    store = PineconeVectorStore(_CountlessSummary(), embed=_embed)
+    with pytest.raises(AdapterError, match="carries no vector_count"):
+        store.delete(_TENANT_A)
+
+
+def test_an_absent_namespace_is_still_a_clean_purge() -> None:
+    # The false-alarm half: Pinecone drops a namespace from the stats once it
+    # holds nothing, so an absent one is the shape of a SUCCESSFUL delete and
+    # must keep settling at zero.
+    store = PineconeVectorStore(_FakeIndex(), embed=_embed)
+    store.upsert(_TENANT_A, _documents(_TENANT_A, "a", "alpha"))
+    store.delete(_TENANT_A)
+    assert _TENANT_A.hex not in store.list_namespaces()

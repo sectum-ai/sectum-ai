@@ -19,8 +19,12 @@ instead, which pulls this in automatically.
 
 ## JSON Schema
 
-Every model is also published as a standalone JSON Schema document under
-`sectum_ai/spec/schemas/<Model>.schema.json` (shipped in the wheel). Each carries a
+Every model a consumer parses on its own is published as a standalone JSON
+Schema document under `sectum_ai/spec/schemas/<Model>.schema.json` (shipped in the
+wheel). The models a parent only ever embeds — `SyntheticTenantSpec`,
+`SyntheticUserSpec`, `SharedEntity`, `PlantedLocation` — have no file of their
+own; they appear in their parent's `$defs`. `Principal` appears in neither: no
+model carries it as a field. Each carries a
 `$schema` dialect (draft 2020-12) and a version-pinned `$id`
 (`https://schemas.sectum.ai/<schema_version>/<Model>.schema.json`), so external
 tooling can validate Sectum artifacts without importing Python:

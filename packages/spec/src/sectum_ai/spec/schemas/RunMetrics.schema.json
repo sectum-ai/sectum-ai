@@ -30,6 +30,13 @@
       "title": "Erasure Residue",
       "type": "object"
     },
+    "erasure_unverifiable": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Erasure Unverifiable",
+      "type": "object"
+    },
     "extraction_efficiency": {
       "anyOf": [
         {
@@ -131,6 +138,21 @@
         "type": "number"
       },
       "title": "Side Channel Effect Sizes",
+      "type": "object"
+    },
+    "side_channel_variance_floored": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Side Channel Variance Floored",
+      "type": "array"
+    },
+    "unconfirmed_plants": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Unconfirmed Plants",
       "type": "object"
     },
     "user_steps_dropped": {

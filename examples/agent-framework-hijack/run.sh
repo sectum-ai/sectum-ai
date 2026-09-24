@@ -11,10 +11,16 @@
 # the loop - and surfaces the same kinds of cross-tenant findings via the
 # agent's final output rather than the tool result.
 #
-# The probe runs against every shipped v1 agent backend (`fake` / `http` /
-# `langgraph` / `autogen` / `crewai` / `openai-assistants` /
-# `anthropic-tooluse`); this script drives the fake so it stays
-# credential-free and runs end-to-end in CI.
+# The probe's DETECTION is adapter-agnostic across every shipped v1 agent
+# backend (`fake` / `http` / `langgraph` / `autogen` / `crewai` /
+# `openai-assistants` / `anthropic-tooluse`) - the substrate, the canary
+# pipeline and the evidence chain do not know which kind produced the text.
+# `sectum-ai probe` nonetheless runs it only against the built-in fake: the
+# lookup target is an id Sectum INVENTS and no agent adapter has a write
+# primitive, so configuring a live agent kind REMOVES Class 7 from the run
+# (it reads NOT_COVERED) rather than adding it. Driving a live agent is the
+# SDK path. See docs/coverage.md#known-coverage-gaps. This script drives the
+# fake so it stays credential-free and runs end-to-end in CI.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,7 +61,9 @@ sectum-ai verify "$out/evidence.json" --allow-unanchored --allow-synthetic
 echo
 echo "Artifacts written to: $out"
 echo
-echo "The page-3 findings table itemises each confirmed Class 7 leak via the"
-echo "agent-framework surface. To swap the agent caller to a live backend, see"
-echo "examples/agent-tool-hijack/factories.py - the probe stays the same; only"
-echo "the agent.kind in sectum-ai.yaml changes."
+echo "The PDF's Findings section itemises each confirmed Class 7 leak via the"
+echo "agent-framework surface. Pointing agent.kind at a live backend REMOVES"
+echo "Class 7 from a probe run - it reads NOT_COVERED, because the lookup"
+echo "target is an id Sectum invents and no agent adapter can plant it. Driving"
+echo "a live agent is the SDK path: see examples/agent-tool-hijack/factories.py"
+echo "and docs/coverage.md#known-coverage-gaps."

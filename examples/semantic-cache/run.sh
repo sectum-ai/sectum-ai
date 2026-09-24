@@ -5,7 +5,7 @@
 # Reproduces Attack Class 4 - semantic / prompt-cache contamination -
 # end to end (the engineering spec, section 7). Tenant X primes the
 # cache with a query whose answer contains a HARD_CANARY; tenant Y
-# issues a semantically-near query. On a cache that does not key by
+# issues the identical query. On a cache that does not key by
 # tenant, tenant Y receives tenant X's cached answer (canary intact).
 set -euo pipefail
 

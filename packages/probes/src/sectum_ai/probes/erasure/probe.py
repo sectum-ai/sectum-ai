@@ -24,7 +24,10 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.probes._recall import content_recalled
+from sectum_ai.probes._recall import FINGERPRINT_QUERY_K, content_recalled
+from sectum_ai.spec import (
+    ERASURE_SURFACES as _ERASURE_SURFACES,
+)
 from sectum_ai.spec import (
     CoverageVerdict,
     ErasureUnsupported,
@@ -35,6 +38,7 @@ from sectum_ai.spec import (
     Severity,
     Substrate,
     Surface,
+    residual_present,
 )
 
 # The canonical, ordered set of surfaces a Class 11 erasure run can verify - the
@@ -44,19 +48,20 @@ from sectum_ai.spec import (
 # NOT_COVERED rather than silently absent (the anti-over-claim guarantee). The
 # vector store leads because it is always present; the rest follow the run plan's
 # order so the coverage matrix reads in a stable, documented sequence.
-ERASURE_SURFACES: tuple[Surface, ...] = (
-    Surface.VECTOR_DB,
-    Surface.TRACING,
-    Surface.AGENT_MEMORY,
-    Surface.SEMANTIC_CACHE,
-    Surface.MODEL_ADAPTER,
-    Surface.SEARCH_INDEX,
-    Surface.EVAL_SET,
-    Surface.BACKUP,
-)
+# Canonical in `spec`, which both this package and `evidence` import; re-exported
+# here because `sectum_ai.probes.ERASURE_SURFACES` is the public name the CLI and
+# the docs use. The scan plan below is written out separately, so the parity test
+# checks this constant against what the probe really does rather than against
+# itself.
+ERASURE_SURFACES = _ERASURE_SURFACES
 
 # One surface's pre/post scan (target + markers -> the markers still present)
 # and its erasure callable, threaded through the uniform _erase_surface helper.
+# The similarity page the vector scan reads. A marker that is still stored but
+# ranks past the page is invisible to `query`, so a SHORT page without it is
+# absence and a FULL one is only "not in the top k" - the same contract, and the
+# same constant, as the subject probe's fingerprint check.
+
 _Scan = Callable[[UUID, tuple[Marker, ...]], list[Marker]]
 _Delete = Callable[[UUID], None]
 
@@ -79,6 +84,24 @@ class SurfaceErasure:
     markers_before: int
     residual_after: int
     erasure_supported: bool = True
+    # Markers whose post-erasure absence could not be established because the
+    # backend returned a full similarity page without them: still stored and
+    # ranked past the page reads exactly like purged. Such a surface is NOT
+    # attested ERASED.
+    unverifiable_after: int = 0
+    # Why absence could not be established, in the backend's own words when it
+    # said so. The vector scan's cause is a full similarity page; every other
+    # surface's adapter raises with its own, which the operator needs to act on.
+    unverifiable_reason: str | None = None
+    # Whether ``markers_before`` was OBSERVED on the surface, or merely supplied.
+    # Class 11 plants its own canaries and counts what it finds, so the count is a
+    # baseline. The A3 data-subject check is post-hoc - the controller has already
+    # deleted - so its count is the ids and phrases the manifest ASKED about, and
+    # nothing establishes they were ever there. Sharing this dataclass silently
+    # changed the meaning of the field the `erased` guard below keys on, so a
+    # manifest of ids that never existed produced "1 markers before, 0 after ->
+    # ERASED" on four surfaces and a signed pack asserting ERASURE VERIFIED.
+    baseline_observed: bool = True
 
     @property
     def erased(self) -> bool:
@@ -86,10 +109,16 @@ class SurfaceErasure:
 
         A surface with no markers before erasure yields no baseline, so its
         erasure cannot be attested - ``erased`` is ``False`` rather than
-        vacuously ``True``. A caveat surface (no programmatic erasure API) is
-        never ``erased``: its data is presumed retained.
+        vacuously ``True``. A count that was SUPPLIED rather than observed is not
+        a baseline either (``baseline_observed``). A caveat surface (no
+        programmatic erasure API) is never ``erased``: its data is presumed
+        retained.
         """
         if not self.erasure_supported:
+            return False
+        if self.unverifiable_after:
+            return False
+        if not self.baseline_observed:
             return False
         return self.markers_before > 0 and self.residual_after == 0
 
@@ -102,18 +131,41 @@ class SurfaceErasure:
         is presumed retained until it ages out of the backend's retention
         window. Itemized as a caveat, not conflated with a flow failure.
         """
-        return not self.erasure_supported and self.markers_before > 0
+        return not self.erasure_supported and self.markers_before > 0 and self.baseline_observed
 
     @property
     def verdict(self) -> str:
-        """Human-readable: ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, or NO BASELINE."""
+        """ERASED, RESIDUAL DATA, ATTESTABLE WITH CAVEAT, NO BASELINE, or ABSENCE CHECKED."""
+        # `attestable_with_caveat`, not its own spelling of it. Three properties
+        # tested the same five fields three ways, and the third clause -
+        # `markers_before > 0` - was the one only `attestable_with_caveat` had. A
+        # backend that raises `ErasureUnsupported` unconditionally (Helicone,
+        # Datadog) on a tenant whose traces had already aged out therefore read
+        # ATTESTABLE WITH CAVEAT here and False there: the coverage matrix
+        # asserted "no per-tenant erasure API - data presumed retained", a
+        # positive claim about the tenant's DATA, on a surface where the scan
+        # observed nothing. It fell out of `caveats` and out of `not_covered`
+        # too, so one pack carried the claim and no disclosure of it.
+        if self.attestable_with_caveat:
+            return "ATTESTABLE WITH CAVEAT"
+        if self.residual_after > 0:
+            return "RESIDUAL DATA"
+        # FIRST of the three "nothing was found" branches. A scan that could not run
+        # reports zero markers by arithmetic, not by looking, and both branches below
+        # are positive claims that it looked: "NO BASELINE" is defined as "the scan
+        # looked and found none", and "ABSENCE CHECKED" says the same for a post-hoc
+        # check. Ordering this third let an unverifiable A3 surface read ABSENCE
+        # CHECKED; ordering it second left the same hole for `baseline_observed`.
+        if self.unverifiable_after:
+            return "NOT VERIFIED"
+        if not self.baseline_observed:
+            # Nothing was established to be there, so nothing can be attested
+            # gone. Distinct from NO BASELINE, which means the scan looked and
+            # found none: here the scan ran only AFTER the controller's deletion.
+            return "ABSENCE CHECKED"
         if self.markers_before == 0:
             return "NO BASELINE"
-        if not self.erasure_supported:
-            return "ATTESTABLE WITH CAVEAT"
-        if self.residual_after == 0:
-            return "ERASED"
-        return "RESIDUAL DATA"
+        return "ERASED"
 
     @property
     def coverage_verdict(self) -> CoverageVerdict:
@@ -127,13 +179,21 @@ class SurfaceErasure:
         case in the coverage matrix. The anti-over-claim invariant holds here too:
         this property returns ``ERASED`` only when :attr:`erased` is true.
         """
-        if self.markers_before == 0:
-            return CoverageVerdict.NOT_COVERED
-        if not self.erasure_supported:
+        # A caveat is a statement about the BACKEND (no per-tenant erasure API),
+        # and its `residual_after` is by construction the retained count - so it
+        # is decided first or every caveat surface reads RESIDUAL. Keyed on the
+        # same predicate as `verdict` and `attestable_with_caveat`: see there.
+        if self.attestable_with_caveat:
             return CoverageVerdict.ATTESTABLE_WITH_CAVEAT
-        if self.residual_after == 0:
-            return CoverageVerdict.ERASED
-        return CoverageVerdict.RESIDUAL
+        # A hit is a hit whether or not a baseline was established: content still
+        # surfacing IS residual data, so this outranks the no-baseline branches.
+        if self.residual_after > 0:
+            return CoverageVerdict.RESIDUAL
+        if self.markers_before == 0 or not self.baseline_observed:
+            return CoverageVerdict.NOT_COVERED
+        if self.unverifiable_after:
+            return CoverageVerdict.NOT_COVERED
+        return CoverageVerdict.ERASED
 
 
 @dataclass(frozen=True)
@@ -240,6 +300,16 @@ class ErasureProbe:
         self._eval_set = eval_set
         self._backup = backup
         self._documents = {document.doc_id: document for document in substrate.documents}
+        # Per-surface count of markers the last scan could neither find nor rule
+        # out; `_erase_surface` reads it straight after the post-erasure scan.
+        self._inconclusive: dict[Surface, int] = {}
+        # What the CURRENT scan has seen and decided so far. A scan that raises
+        # part-way through still leaves its positives here, so a residual the run
+        # OBSERVED is not thrown away with the failure - the harm the A3 sibling
+        # fixed for itself (`subject_erasure/probe.py:286`, "every one of these
+        # scans used to be a comprehension, which dies WHOLE") and Class 11 kept.
+        self._partial: list[Marker] = []
+        self._decided = 0
 
     def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
         """Confirm the target's markers, run the erasure, and re-scan each surface.
@@ -328,19 +398,111 @@ class ErasureProbe:
         API is recorded as *attestable-with-caveat* (data presumed retained,
         never a false PASS) rather than crashing the run or being misreported
         as a flow failure (spec §7, Class 11, hiding place #8).
+
+        Catches ``AdapterError`` for the same reason one surface further out. The
+        vector scan degrades to "absence not established" on its own; every other
+        surface's adapter *raises* when it cannot trust its listing, and nothing
+        caught it - so one inconclusive trace, memory, eval-set or search scan
+        aborted the whole erasure run instead of marking that one surface
+        uncovered. The verdict for the surface is the same either way: not
+        ERASED, and NOT_COVERED in the coverage block.
+
+        Any ``Exception``, not only ``AdapterError``. Translating a client failure
+        is the ADAPTER's contract and the erasure surfaces keep it unevenly -
+        `backup/s3` and `otel` translate at every call site, `cache/redis` and
+        `memory/redis` have no ``except`` at all - so a `redis.ConnectionError`
+        walked straight past this guard and destroyed all eight verdicts, after
+        the run had already seeded canaries into the operator's live backends.
+        Contracting the containment on a contract half the adapters do not keep
+        made the guarantee this docstring gives untrue for most of them.
+
+        Nothing is silenced by widening it: the surface reads NOT_COVERED and the
+        exception's own text is what the CLI prints as the reason, so a Sectum bug
+        caught here is visible in the output rather than swallowed - and one
+        surface's bug no longer costs the other seven their verdicts.
         """
-        before = scan(target, markers)
+        self._partial, self._decided = [], 0
+        try:
+            before = scan(target, markers)
+        except Exception as error:
+            return (
+                SurfaceErasure(
+                    surface=surface,
+                    markers_before=0,
+                    residual_after=0,
+                    unverifiable_after=1,
+                    unverifiable_reason=str(error),
+                ),
+                [],
+            )
         supported = True
+        purge_failed: str | None = None
         try:
             delete(target)
         except ErasureUnsupported:
             supported = False
-        residual = scan(target, markers)
+        except Exception as error:
+            # The DELETE failed - not "no erasure API" (that is ErasureUnsupported
+            # above) but a purge that was attempted and did not complete: an S3
+            # bulk delete reporting per-key failures, a denied key, a retained
+            # version. Nothing caught it, so ONE surface's failed purge aborted the
+            # whole Article 17 run and every other surface's verdict was lost - the
+            # same defect the two scans around it were fixed for, left on the call
+            # between them.
+            #
+            # Contained here, and the surface can never read ERASED: a purge that
+            # errored leaves absence unestablished whatever the post-scan happens to
+            # see. The post-scan still runs, because markers it DOES see are the
+            # more specific evidence and become residual findings.
+            purge_failed = str(error)
+        self._inconclusive.pop(surface, None)
+        self._partial, self._decided = [], 0
+        try:
+            residual = scan(target, markers)
+        except Exception as error:
+            # Present before, and the post-scan could not establish absence: the
+            # markers it did see are the baseline, and none of them is ruled out.
+            # A backend with no erasure API still gets its caveat findings - the
+            # coverage verdict says ATTESTABLE_WITH_CAVEAT, so the pack has to
+            # itemize what that caveat is about.
+            # What the partial scan SAW is reported, not discarded. Every scan
+            # accumulates as it goes, so a read that raises on marker 2 still
+            # leaves marker 1's positive here - and hard-coding `residual_after=0`
+            # turned a residual the run had observed into "could not establish",
+            # printing ERASURE INCONCLUSIVE at exit 3 where the truth was ERASURE
+            # FAILED at exit 2. A confirmed Article 17 failure reached the DPO as
+            # "re-run", and the exit code a customer's CI keys on flipped.
+            seen = list(self._partial)
+            # Only the markers this scan never reached are undecided; the sibling
+            # counts it the same way (`max(at_stake - scan.decided, 1)`).
+            undecided = max(len(before) - self._decided, 1)
+            return (
+                SurfaceErasure(
+                    surface=surface,
+                    markers_before=len(before),
+                    residual_after=len(seen),
+                    erasure_supported=supported,
+                    unverifiable_after=undecided,
+                    unverifiable_reason=str(error),
+                ),
+                (
+                    [self._residual_finding(target, marker, surface) for marker in seen]
+                    if supported
+                    else [self._caveat_finding(target, marker, surface) for marker in before]
+                ),
+            )
         surface_result = SurfaceErasure(
             surface=surface,
             markers_before=len(before),
             residual_after=len(residual),
             erasure_supported=supported,
+            # A failed purge makes every marker that was there unestablished, even
+            # the ones this scan cannot see: the erase did not complete, so nothing
+            # here can attest their absence.
+            unverifiable_after=(
+                max(len(before), 1) if purge_failed else self._inconclusive.get(surface, 0)
+            ),
+            unverifiable_reason=purge_failed,
         )
         if supported:
             surface_findings = [
@@ -353,35 +515,60 @@ class ErasureProbe:
         return surface_result, surface_findings
 
     def _scan_vector(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
-        """Return the target's hard-canary markers still observable on the vector store."""
-        return [marker for marker in markers if self._marker_observable(target, marker)]
+        """Return the target's hard-canary markers still observable on the vector store.
+
+        A marker whose absence the page could not establish is neither returned
+        (that would be a residual finding the run did not observe) nor forgotten:
+        it is counted in :attr:`_inconclusive`, which makes the surface
+        NOT_COVERED rather than ERASED.
+        """
+        observable = self._partial
+        inconclusive = 0
+        for marker in markers:
+            seen = self._marker_observable(target, marker)
+            if seen:
+                observable.append(marker)
+            elif seen is None:
+                inconclusive += 1
+            self._decided += 1
+            self._inconclusive[Surface.VECTOR_DB] = inconclusive
+        return observable
 
     def _scan_observability(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still observable in tracing."""
         if self._observability is None:
             return []
         observability = self._observability
-        return [
-            marker for marker in markers if observability.search_traces(target, marker.plaintext)
-        ]
+        for marker in markers:
+            if observability.search_traces(target, marker.plaintext):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_memory(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still recallable from memory."""
         if self._memory is None:
             return []
         memory = self._memory
-        return [
-            marker
-            for marker in markers
-            if any(marker.plaintext in entry for entry in memory.recall(target, marker.plaintext))
-        ]
+        for marker in markers:
+            if any(
+                residual_present(marker.plaintext, entry)
+                for entry in memory.recall(target, marker.plaintext)
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_cache(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the cache."""
         if self._cache is None:
             return []
         values = self._cache.values(target)
-        return [marker for marker in markers if any(marker.plaintext in value for value in values)]
+        for marker in markers:
+            if any(residual_present(marker.plaintext, value) for value in values):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_model(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers the model still reproduces.
@@ -400,43 +587,65 @@ class ErasureProbe:
         if self._model is None or not self._model_can_memorize(self._model):
             return []
         model = self._model
-        # The same recall test as the subject check: a real autoregressive LoRA
-        # continues a prompt rather than echoing it, so the whole-canary echo alone
-        # read a memorized canary as absent (NOT_COVERED, never RESIDUAL).
-        return [marker for marker in markers if content_recalled(model, target, marker.plaintext)]
+        # The same recall MECHANISM as the subject check - a real autoregressive
+        # LoRA continues a prompt rather than echoing it, so the whole-canary echo
+        # alone read a memorized canary as absent (NOT_COVERED, never RESIDUAL) -
+        # but deliberately not the same GATE. The subject check also requires
+        # `_recall.has_base_control`, because its needles are natural-language
+        # fingerprints a base model may already know ("Hussein Obama" after
+        # "Barack"), and on SHARED_WEIGHTS there is no untrained tenant to tell
+        # recall from base knowledge. Every needle here is a hard canary: a
+        # `SECTUM-CANARY-` prefix and 26 base32 characters, which no base model
+        # produces by chance. Requiring the control here would drop a shared-weights
+        # model that really did memorize the canary from RESIDUAL to NOT_COVERED -
+        # losing a true positive to guard against a false one that cannot occur.
+        for marker in markers:
+            if content_recalled(model, target, marker.plaintext):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_search(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the search index."""
         if self._search_index is None:
             return []
         search_index = self._search_index
-        return [
-            marker
-            for marker in markers
-            if any(marker.plaintext in hit for hit in search_index.search(target, marker.plaintext))
-        ]
+        for marker in markers:
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in search_index.search(target, marker.plaintext)
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_eval(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the eval set."""
         if self._eval_set is None:
             return []
         eval_set = self._eval_set
-        return [
-            marker
-            for marker in markers
-            if any(marker.plaintext in hit for hit in eval_set.search(target, marker.plaintext))
-        ]
+        for marker in markers:
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in eval_set.search(target, marker.plaintext)
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     def _scan_backup(self, target: UUID, markers: tuple[Marker, ...]) -> list[Marker]:
         """Return the target's hard-canary markers still present in the backups."""
         if self._backup is None:
             return []
         backup = self._backup
-        return [
-            marker
-            for marker in markers
-            if any(marker.plaintext in hit for hit in backup.search(target, marker.plaintext))
-        ]
+        for marker in markers:
+            if any(
+                residual_present(marker.plaintext, hit)
+                for hit in backup.search(target, marker.plaintext)
+            ):
+                self._partial.append(marker)
+            self._decided += 1
+        return self._partial
 
     @staticmethod
     def _model_can_memorize(model: ModelAdapter) -> bool:
@@ -445,15 +654,25 @@ class ErasureProbe:
             for cap in (Capability.PER_TENANT_ADAPTER, Capability.SHARED_WEIGHTS)
         )
 
-    def _marker_observable(self, target: UUID, marker: Marker) -> bool:
+    def _marker_observable(self, target: UUID, marker: Marker) -> bool | None:
+        """Whether ``marker`` is still retrievable: ``None`` when that is unknowable.
+
+        ``None`` means every location came back as a *full* page without the
+        marker: it may be gone, or stored and ranked past the page. Reading that
+        as absence is what let a partial purge attest ERASED over a canary the
+        same store still returns.
+        """
+        inconclusive = False
         for location in marker.planted_locations:
             document = self._documents.get(location.doc_id)
             if document is None:
                 continue
-            hits = self._vector.query(target, document.title, k=10)
-            if any(marker.plaintext in hit.content for hit in hits):
+            hits = self._vector.query(target, document.title, k=FINGERPRINT_QUERY_K)
+            if any(residual_present(marker.plaintext, hit.content) for hit in hits):
                 return True
-        return False
+            if len(hits) >= FINGERPRINT_QUERY_K:
+                inconclusive = True
+        return None if inconclusive else False
 
     def _residual_finding(self, target: UUID, marker: Marker, surface: Surface) -> Finding:
         remediation = {

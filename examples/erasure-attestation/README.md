@@ -63,7 +63,9 @@ ERASURE VERIFIED: no residual marker on vector_db, tracing, agent_memory,
 semantic_cache, model_adapter, search_index, eval_set, backup.
 ```
 
-`sectum-ai verify` then confirms the attestation pack is intact.
+`sectum-ai verify` reports `INTEGRITY OK - UNANCHORED`: the attestation pack is internally
+consistent, but its only timestamp is a reproducible local-dev token, so this
+is not independent tamper evidence.
 
 ## See a failing erasure
 
@@ -79,6 +81,10 @@ and it exits with code 2.
 
 ## Tamper-evidence
 
-The attestation is tamper-evident. Editing `erasure-evidence.json` after the
-fact makes `sectum-ai verify` fail with a clear reason and exit code 4 — so an
-attestation that verifies is an attestation that has not been altered.
+Editing `erasure-evidence.json` after the fact makes `sectum-ai verify` fail with
+a clear reason and exit code 4, so the pack is internally consistent or it is
+not. That is integrity, not tamper evidence: `run.sh` uses the offline demo flow,
+whose only timestamp is a local-dev token anyone can regenerate over an edited
+pack — which is why the run passes `--allow-unanchored` and the CLI says so in
+its own verdict. Re-create the pack with `report --tsa <url> --rekor` for an
+independently anchored attestation, where "verifies" does mean "not altered".
