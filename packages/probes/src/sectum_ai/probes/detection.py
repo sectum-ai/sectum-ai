@@ -898,8 +898,22 @@ class DetectionPipeline:
             # either: an unrelated in-observation sentence passes that, and became
             # the quoted proof of the leak. A span is quotable only when it also
             # ties to this marker - branch 2's distinctive-token test.
-            quotable = bool(leak.evidence_span) and self._span_ties_to_marker(
-                text, leak.evidence_span, marker, self._entity_boilerplate
+            # Containment is asked HERE, not inside `_span_ties_to_marker`, because
+            # that predicate has a second caller: `_span_traceable`'s branch 2,
+            # which decides CONFIRMATION. Tightening the shared predicate made a
+            # judge that re-cased its quotation - or an observation carrying a
+            # newline or a zero-width split - fail branch 2, so a genuine
+            # cross-tenant leak was DOWNGRADED from confirmed/high to
+            # unverified/info: a missed leak, introduced while fixing an
+            # over-claim about quoting. The two questions are separate. Whether
+            # the marker is PRESENT must stay normalization-insensitive; whether
+            # this exact text may be put in quotation marks is byte-exact.
+            quotable = (
+                bool(leak.evidence_span)
+                and leak.evidence_span in text
+                and self._span_ties_to_marker(
+                    text, leak.evidence_span, marker, self._entity_boilerplate
+                )
             )
             if confirmed:
                 # The audit pack renders this span (the PDF renderer), so a
@@ -1021,19 +1035,11 @@ class DetectionPipeline:
         }
         if not (span_tokens and distinctive_overlap):
             return False
-        # Presence for a QUOTE is exact containment, not token-order traceability.
-        # `ordered_within_span` allows interposed tokens - that is what makes it
-        # the right test for "is the marker PRESENT", and the wrong one for "may
-        # we put this in quotation marks". With it here, a confirmation on
-        # "Project (internal) Zephyr-00002" quoted the plaintext "Project
-        # Zephyr-00002", which the observation does not contain, into the field
-        # the PDF renderer's own docstring calls "the proof" and renders inside
-        # quotation marks. This docstring already said "is in the observation";
-        # the code asked something weaker, and it also kept the honest `else`
-        # branch below unreachable - the one that describes the match instead of
-        # showing text that was never seen.
-        if evidence_span not in text:
-            return False
+        # Deliberately token-order, NOT raw containment. This predicate also backs
+        # `_span_traceable`'s branch 2, which decides CONFIRMATION, and `spec/text.py`
+        # states why a raw `in` is wrong for that question: a backend that re-cased,
+        # NFKC-normalized or zero-width-split a canary slips past it. Whether a span
+        # may be QUOTED is asked at the `quotable` call site instead.
         return ordered_within_span(text_tokens, span_tokens, _MAX_INTERPOSED_TOKENS)
 
     def _best_window_similarity(

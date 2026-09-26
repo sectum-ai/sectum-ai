@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import pytest
+
 from sectum_ai.evidence import build_evidence_pack, control_mappings, render_audit_pack
 from sectum_ai.evidence.pdf import (
     _COVERAGE_CAVEAT,
@@ -879,7 +881,7 @@ def test_the_anchored_statement_does_not_promise_self_contained_tamper_evidence(
     assert "will also verify" in statement, statement
 
 
-def test_the_scope_note_says_which_of_the_three_things_verify_will_object_to() -> None:
+def test_the_scope_note_agrees_with_verify_on_every_provenance_shape() -> None:
     # The first version keyed on `live_surfaces()` being empty, which is true for
     # an all-synthetic run AND for a record that carries no provenance block at
     # all - so the PDF asserted "No surface in this run was live" over a pack
@@ -978,3 +980,90 @@ def test_the_methodology_distinguishes_a_semantic_tier_that_was_gated_shut() -> 
     assert "0.62 or above" in calibrated, calibrated
     assert "admitted nothing an exact match had not already decided" in shut, shut
     assert "admitted nothing" not in calibrated, calibrated
+
+
+@pytest.mark.parametrize(
+    ("label", "provenance", "unaccounted"),
+    [
+        ("no provenance", {}, False),
+        ("all live", {Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}, False),
+        ("all live + unaccounted", {Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value}, True),
+        (
+            "mixed, all accounted",
+            {
+                Surface.VECTOR_DB.value: SurfaceProvenance.SYNTHETIC.value,
+                Surface.MODEL_ADAPTER.value: SurfaceProvenance.LIVE.value,
+            },
+            False,
+        ),
+        (
+            "mixed + unaccounted",
+            {
+                Surface.VECTOR_DB.value: SurfaceProvenance.SYNTHETIC.value,
+                Surface.MODEL_ADAPTER.value: SurfaceProvenance.LIVE.value,
+            },
+            True,
+        ),
+        ("all synthetic", {Surface.VECTOR_DB.value: SurfaceProvenance.SYNTHETIC.value}, False),
+    ],
+)
+def test_the_scope_note_is_present_exactly_when_verify_would_object(
+    label: str, provenance: dict[str, str], unaccounted: bool
+) -> None:
+    # Pinned against `verify` itself rather than against a hand-written list of
+    # cases. Two earlier versions of this note each missed one shape, and the
+    # hand-written test missed the same shape both times - it enumerated "the
+    # three things verify will object to" and there were four. Deriving the
+    # expectation from the gate makes a missed case impossible rather than
+    # unlikely: the note must appear exactly when run-scope would fail.
+    #
+    # The MIXED row is the one that was wrong: `verify` PASSES a pack with one
+    # live surface and one fake whose findings are all accounted for, while the
+    # PDF asserted "No surface in this run was live" and promised an exit 4. A
+    # document that tells an auditor a genuine pack needs --allow-synthetic
+    # teaches them to pass it routinely, which suppresses the gate on the packs
+    # where it should fire.
+    from sectum_ai.evidence.pdf import _scope_flag_note
+    from sectum_ai.evidence.verify import _check_run_scope
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    findings: tuple[Finding, ...] = ()
+    if unaccounted:
+        findings = (
+            Finding(
+                finding_id="f1",
+                probe_id="semantic-cache-contamination",
+                severity=Severity.CRITICAL,
+                confidence=1.0,
+                status=FindingStatus.CONFIRMED,
+                owner_tenant_id=UUID(int=0xB),
+                observed_in_tenant_id=UUID(int=0xA),
+                surface=Surface.SEMANTIC_CACHE,
+                marker_id="mkr-1",
+                evidence_span="SECTUM-CANARY-X",
+                owasp_llm="LLM08:2025",
+            ),
+        )
+    run = RunResult(
+        run_id="r",
+        scenario_hash="s",
+        manifest_hash="m" * 64,
+        started_at=moment,
+        finished_at=moment,
+        probe_versions={"tenant-boundary-fetch": "1"},
+        surface_provenance=provenance,
+        findings=findings,
+    )
+    pack = EvidencePack(run_result=run, manifest_hash="m" * 64, tsa_token='{"digest": "x"}')
+
+    would_object = not _check_run_scope(pack, require_live=True).ok
+    note = _scope_flag_note(pack)
+    assert bool(note) == would_object, (
+        f"{label}: verify {'objects' if would_object else 'passes'} but the PDF note is "
+        f"{'present' if note else 'absent'}: {note!r}"
+    )
+    # ...and when it speaks, it must give the reason the gate actually has.
+    if would_object and any(p == SurfaceProvenance.LIVE.value for p in provenance.values()):
+        assert "No surface in this run was live" not in note, (
+            f"{label}: the pack HAS a live surface; this is the unaccounted case"
+        )
