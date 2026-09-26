@@ -1022,11 +1022,11 @@ def test_a_raw_client_failure_is_contained_to_its_own_surface() -> None:
 
 
 @pytest.mark.parametrize(
-    ("fail_after", "verdict", "residual", "unverifiable"),
-    [(2, "NOT VERIFIED", 0, 2), (3, "RESIDUAL DATA", 1, 1), (4, "RESIDUAL DATA", 2, 0)],
+    ("seen_before_failure", "verdict"),
+    [(0, "NOT VERIFIED"), (1, "RESIDUAL DATA"), (None, "RESIDUAL DATA")],
 )
 def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
-    fail_after: int, verdict: str, residual: int, unverifiable: int
+    seen_before_failure: int | None, verdict: str
 ) -> None:
     # Every optional-surface scan was a single comprehension, and the post-scan
     # handler hard-coded `residual_after=0`. So a scan that positively found
@@ -1046,6 +1046,14 @@ def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
 
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id
+    # EVERY marker the tenant owns is a needle (all three types), so the sweep
+    # points are derived from that count rather than hard-coded - the first
+    # version pinned 2 and silently became a different test when the erasure
+    # scan stopped searching hard canaries only.
+    owned = [m for m in substrate.manifest.markers if m.owner_tenant_id == target]
+    total = len(owned)
+    # The pre-scan reads every needle once; the post-scan is reads total+1 onward.
+    fail_after = total * 2 if seen_before_failure is None else total + seen_before_failure
     calls = {"n": 0}
     real_search = FakeSearchIndex.search
 
@@ -1060,16 +1068,51 @@ def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
             return None  # a purge that leaves everything in place
 
     index = _DiesMidScan()
-    for marker in substrate.manifest.markers:
-        if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY:
-            index.index(target, f"search index entry mentioning {marker.plaintext}")
+    for marker in owned:
+        index.index(target, f"search index entry mentioning {marker.plaintext}")
 
     report = ErasureProbe(substrate, vector=FakeVectorStore(), search_index=index).run(
         target, scope=(Surface.SEARCH_INDEX,)
     )
     surface = report.surfaces[0]
+    expected_residual = total if seen_before_failure is None else seen_before_failure
     assert surface.verdict == verdict, surface
-    assert surface.residual_after == residual, surface
-    assert surface.unverifiable_after == unverifiable, surface
+    assert surface.residual_after == expected_residual, surface
+    assert surface.unverifiable_after == total - expected_residual, surface
     # The headline the DPO reads, and the exit code CI keys on.
-    assert report.genuine_residual is (residual > 0), report
+    assert report.genuine_residual is (expected_residual > 0), report
+
+
+def test_a_secret_canary_residual_is_masked_in_the_evidence_span() -> None:
+    # `detection.redact_secret`'s rule, which the detection pipeline has always
+    # applied and this path never did: an evidence pack leaves the box in BYOC
+    # mode (the spec, section 16), so it must not reproduce a credential
+    # verbatim - that would itself be the disclosure the report documents.
+    #
+    # Unreachable while the erasure scan searched hard canaries only. The first
+    # regenerated sample pack after it started searching every marker type
+    # tripped this repo's own gitleaks hook on an `AKIA`-shaped evidence span -
+    # which is what `redact_secret`'s docstring says the elision prevents.
+    from sectum_ai.probes.erasure.probe import _erasure_evidence
+    from sectum_ai.spec import Marker
+
+    secret = Marker(
+        marker_id="s1",
+        marker_type=MarkerType.SECRET_CANARY,
+        owner_tenant_id=UUID(int=0xA),
+        plaintext="AKIA" + "26SZHELJAPAPZVQP",  # split: a literal trips gitleaks
+    )
+    span = _erasure_evidence(secret)
+    assert span == "AKIA...[redacted]", span
+    assert secret.plaintext not in span, "the credential reached the evidence pack verbatim"
+
+    # The other two types are NOT masked - the marker text is the evidence, and
+    # `marker_id` ties a masked secret back to the access-controlled manifest.
+    for kind, text in (
+        (MarkerType.HARD_CANARY, "SECTUM-CANARY-ABCDEF"),
+        (MarkerType.ENTITY_CANARY, "Project Zephyr-00002"),
+    ):
+        marker = Marker(
+            marker_id="m", marker_type=kind, owner_tenant_id=UUID(int=0xA), plaintext=text
+        )
+        assert _erasure_evidence(marker) == text
