@@ -2292,7 +2292,7 @@ wheels = [
 
 [[package]]
 name = "langfuse"
-version = "4.14.3"
+version = "4.15.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
@@ -2302,11 +2302,12 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "packaging" },
     { name = "pydantic" },
+    { name = "typing-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/1c/d3410521e8b36d36aa7e6792394d193f91959742292a56f20cdda56f94aa/langfuse-4.14.3.tar.gz", hash = "sha256:eba25be6da7e5eeb640b28d7a0910f5c40cc6449eeaef89ba5d282d9db1a355d", size = 389580, upload-time = "2026-08-06T09:25:51.043Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/19/59253a357d77147e8cd3ad97817519e158af5d3336654656c92c2fc922f1/langfuse-4.15.6.tar.gz", hash = "sha256:af80ed1199e57c2641c9f228066bf9dc324657c06ce6e68660118fa46b237e35", size = 392968, upload-time = "2026-09-24T13:32:47.032Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/15/8c2d05d20ed05386cbc27bb19987485345f8138052f07a60d3286c329b75/langfuse-4.14.3-py3-none-any.whl", hash = "sha256:a3f77d11d8dcf440f28678271c7ea1aab01c51e372fa344661c038434122f8df", size = 688218, upload-time = "2026-08-06T09:25:49.711Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/c5/927a01c47c0adf53832c6e5e35951e3d4998072ef955f3bb8e87e6d10517/langfuse-4.15.6-py3-none-any.whl", hash = "sha256:2364d5f17342301a8651ef166abb5bb260aaadd94d1ac72aa30c298b3a395d85", size = 706806, upload-time = "2026-09-24T13:32:48.577Z" },
 ]
 
 [[package]]
@@ -5397,7 +5398,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'tgi'", specifier = ">=1.30.0" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=1.5.4" },
     { name = "langchain-core", marker = "extra == 'rag-langchain'", specifier = ">=1.5.4" },
-    { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=4.14.0,<5" },
+    { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=4.15.6,<5" },
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=1.2.10" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1" },
