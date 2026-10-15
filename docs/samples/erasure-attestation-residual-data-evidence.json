@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "bb77ccea5102499d2e3be2ccab9f70af5470a3400fad878e0b6ad94b8c7eb253",
     "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-    "started_at": "2026-09-24T00:14:55.949914+00:00",
-    "finished_at": "2026-09-24T00:14:55.952973+00:00",
+    "started_at": "2026-09-26T21:36:28.606294+00:00",
+    "finished_at": "2026-09-26T21:36:28.683868+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -65,6 +65,98 @@
         "surface": "vector_db",
         "marker_id": "mkr-00001",
         "evidence_span": "SECTUM-CANARY-JOUKVHXJL6MBKBRW6R4OVBQSEI",
+        "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00002",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00002",
+        "evidence_span": "Project ZephyrEYK4G-00002",
+        "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00003",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00003",
+        "evidence_span": "Project Quasar7MTTQ-00003",
+        "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00004",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00004",
+        "evidence_span": "sk-i...[redacted]",
+        "owasp_llm": "LLM08:2025",
+        "owasp_secondary": [
+          "LLM02:2025"
+        ],
+        "atlas": [],
+        "nist": [
+          "MEASURE 2.7"
+        ],
+        "remediation_pointer": "data survived an Article 17 erasure; purge orphaned vectors"
+      },
+      {
+        "finding_id": "erasure-residual-vector_db-mkr-00005",
+        "probe_id": "gdpr-erasure-verification",
+        "severity": "high",
+        "confidence": 1.0,
+        "status": "confirmed",
+        "owner_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "observed_in_tenant_id": "7cd276c8-b7a8-5ec3-988e-c4fec6002ccf",
+        "owner_user_id": null,
+        "observed_in_user_id": null,
+        "surface": "vector_db",
+        "marker_id": "mkr-00005",
+        "evidence_span": "AKIA...[redacted]",
         "owasp_llm": "LLM08:2025",
         "owasp_secondary": [
           "LLM02:2025"
@@ -400,14 +492,14 @@
     ],
     "metrics": {
       "per_probe_findings": {},
-      "confirmed_findings": 16,
+      "confirmed_findings": 20,
       "retrieval_pivot_rate": null,
       "retrieval_pivot_n": 0,
       "retrieval_pivot_k": 0,
       "retrieval_pivot_rate_ci": null,
       "retrieval_pivot_rate_by_model": {},
       "erasure_residue": {
-        "vector_db": 2,
+        "vector_db": 6,
         "tracing": 2,
         "agent_memory": 2,
         "semantic_cache": 2,
@@ -440,10 +532,10 @@
     "schema_version": "0.7.0"
   },
   "manifest_hash": "fb5351edc6cc562185ef06c22dc417733489add8fec7b8be9e981d5f973172d4",
-  "tsa_token": "{\"digest\":\"1f811560e93501a3a1cbb5609510e9e7cb2b3a5ef2b1b976ff5235acd1f3a8cb\",\"timestamped_at\":\"2026-09-24T00:14:55.981801+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"396c28e5f18baaf962367958cbae95e6cdfdd5bff8a615b15daef2e710c78c79\",\"timestamped_at\":\"2026-09-26T21:36:28.770416+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [],
-  "pdf_ref": "a94abbc942f025a5d0b84136c4e4c34f5cd713465eb3f4338fa2c8b8eb40f462",
+  "pdf_ref": "7babd2575a439cfac37aadee418e9cdb8a12d354f9a3b616b4b2692f583d6a40",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.7.0"

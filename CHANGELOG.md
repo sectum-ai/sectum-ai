@@ -64,6 +64,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A secret canary's residual no longer reaches the evidence pack verbatim.**
+  `detection.redact_secret` exists so a pack — which leaves the box in BYOC mode —
+  does not reproduce a credential, and its docstring notes the elision also stops
+  the artifact tripping a secret scanner. The detection pipeline applied it; the
+  erasure findings used `marker.plaintext` raw. Unreachable while the scan
+  searched hard canaries only; the first sample pack regenerated after that
+  changed wrote an `AKIA`-shaped evidence span into a committed artifact, which
+  this repo's own gitleaks hook caught. Hard and entity canaries are unchanged —
+  their text is the evidence.
+
+- **Erasure verification searched 2 of the tenant's 6 markers.** The needle set
+  filtered to `HARD_CANARY`, so a purge that removed the distinctive canary token
+  and left the prose signed `ERASURE VERIFIED: no residual marker` at exit 0 with
+  `erasure_residue {vector_db: 0}` — while the tenant's `ENTITY_CANARY` and its
+  credential-shaped `SECRET_CANARY` values were still retrievable through its own
+  read path. The scan's residual test is exact, normalization-insensitive
+  containment of the marker's own plaintext, which is zero-false-positive for all
+  three types, and every needle is the target's own data, so a hit is residue by
+  definition. A genuine clean delete still reports `ERASED`.
+- **A cross-tenant leak could be downgraded to UNVERIFIED by how the judge
+  rendered its quotation.** The exact-containment check added last cycle went into
+  `_span_ties_to_marker`, which has a second caller — `_span_traceable`'s branch
+  2, which decides *confirmation*, not quoting. A judge that re-cased its quote,
+  or an observation carrying a newline or a zero-width split, failed that branch
+  and the finding dropped out of the confirmed count, the headline, exit 2 and the
+  scorecard. It was also a raw `in` test in the module whose own helper exists to
+  forbid one. Containment now sits at the `quotable` call site, where byte-exactness
+  is the right rule; the shared predicate is normalization-insensitive again.
+- **The PDF scope note had a fourth case.** It keyed on *any* synthetic surface,
+  so a MIXED pack asserted "No surface in this run was live" three pages below its
+  own "1 of 2 surfaces were live", and promised a `verify` failure that does not
+  happen — teaching an auditor to pass `--allow-synthetic` routinely, which
+  suppresses the gate on the packs where it should fire. Now pinned against
+  `verify` itself rather than a hand-written list of cases.
+
 - **The HuggingFace backend times time-to-first-token, not a full generation.**
   `measure_latency_ms` called `infer`, which generates 64 tokens. Decode costs the
   same in both arms, so those steps added variance to Cohen's *d*'s denominator

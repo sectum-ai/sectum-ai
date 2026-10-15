@@ -25,6 +25,7 @@ from sectum_ai.adapters import (
     VectorStoreAdapter,
 )
 from sectum_ai.probes._recall import FINGERPRINT_QUERY_K, content_recalled
+from sectum_ai.probes.detection import redact_secret
 from sectum_ai.spec import (
     ERASURE_SURFACES as _ERASURE_SURFACES,
 )
@@ -64,6 +65,25 @@ ERASURE_SURFACES = _ERASURE_SURFACES
 
 _Scan = Callable[[UUID, tuple[Marker, ...]], list[Marker]]
 _Delete = Callable[[UUID], None]
+
+
+def _erasure_evidence(marker: Marker) -> str:
+    """The marker's plaintext, with a secret canary masked.
+
+    `detection.redact_secret`'s rule, which the detection pipeline has always
+    applied and this path never did: an evidence pack leaves the box in BYOC
+    mode (the spec, section 16), so it must not reproduce a credential verbatim -
+    that would itself be the disclosure the report documents.
+
+    Unreachable until the erasure scan started searching every marker type; while
+    the needles were hard canaries only, no secret could reach these findings. The
+    first regenerated sample pack after that change tripped the repo's own secret
+    scanner on an `AKIA`-shaped evidence span, which is exactly what
+    `redact_secret`'s docstring says the elision exists to prevent.
+    """
+    if marker.marker_type is MarkerType.SECRET_CANARY:
+        return redact_secret(marker.plaintext)
+    return marker.plaintext
 
 
 @dataclass(frozen=True)
@@ -333,10 +353,24 @@ class ErasureProbe:
             it verified.
         """
         in_scope = frozenset(scope) if scope is not None else None
+        # EVERY marker the tenant owns, not just the hard canaries. The scan's
+        # residual test is `residual_present` - exact, normalization-insensitive
+        # containment of the marker's own plaintext - which is zero-false-positive
+        # for all three types, and every needle here is the TARGET's own data, so
+        # a hit is residue by definition.
+        #
+        # Filtering to HARD_CANARY searched 2 of the tenant's 6 markers and then
+        # signed "ERASURE VERIFIED: no residual marker" over the other 4. A purge
+        # that removed the distinctive canary token and left the prose shipped
+        # exit 0 with `erasure_residue {vector_db: 0}` while the tenant's
+        # 'Project Zephyr...' entity and its 'sk-...' / 'AKIA...' secret canaries
+        # were still retrievable through its own read path. The PDF says "this
+        # pack attests whether THOSE MARKERS are still retrievable" and the
+        # coverage gloss says "no marker retrievable" - over a third of them.
         markers = tuple(
             marker
             for marker in self._substrate.manifest.markers
-            if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY
+            if marker.owner_tenant_id == target
         )
         surfaces: list[SurfaceErasure] = []
         findings: list[Finding] = []
@@ -712,7 +746,7 @@ class ErasureProbe:
             observed_in_tenant_id=target,
             surface=surface,
             marker_id=marker.marker_id,
-            evidence_span=marker.plaintext,
+            evidence_span=_erasure_evidence(marker),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,
@@ -749,7 +783,7 @@ class ErasureProbe:
             observed_in_tenant_id=target,
             surface=surface,
             marker_id=marker.marker_id,
-            evidence_span=marker.plaintext,
+            evidence_span=_erasure_evidence(marker),
             owasp_llm=self.owasp_llm,
             atlas=self.atlas_techniques,
             nist=self.nist_rmf,

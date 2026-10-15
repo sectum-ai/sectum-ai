@@ -475,29 +475,35 @@ _SCOPE_FLAG_UNACCOUNTED: str = (
 def _scope_flag_note(pack: EvidencePack) -> str:
     """The `--allow-synthetic` sentence, when `verify`'s run-scope would demand it.
 
-    Keyed on the same three things the gate is (`verify._check_run_scope`): an
-    ABSENT provenance block, a surface recorded as anything but LIVE, and a
-    finding resting on a surface the block never recorded.
+    Keyed on what `verify._check_run_scope` actually gates on: an ABSENT
+    provenance block, NO live surface at all, and a finding resting on a surface
+    the block never recorded.
 
-    The first version keyed on `live_surfaces()` being empty. That is true for an
-    all-synthetic run AND for a record that does not say, so the PDF asserted "No
-    surface in this run was live" over a pack whose own gate says exactly that
-    cannot be established - and it was silent on the third case, where run-scope
-    fails with a live surface present, which reproduced the very failure the note
-    exists to prevent: an auditor following the document's instruction to a
-    tamper-style exit 4 on a genuine artifact.
+    Two earlier versions each missed a case, in the same way. The first keyed on
+    `live_surfaces()` being empty, which is true both for an all-synthetic run and
+    for a record that does not say, so the PDF asserted "No surface in this run
+    was live" over a pack whose own gate says that cannot be established. The
+    second keyed on ANY synthetic surface, which is true of a MIXED pack - so a
+    run with one live surface and one fake got "No surface in this run was live"
+    three pages below its own "1 of 2 surfaces were live", and was promised a
+    `verify` failure that does not happen (`verify` passes a mixed pack whose
+    findings are all accounted for, and a test pins that pass as intended).
+
+    That second miss is the worse one: telling an auditor a genuine pack needs
+    `--allow-synthetic` teaches them to pass it routinely, which suppresses the
+    gate on the packs where it should fire.
     """
     run = pack.run_result
     provenance = run.surface_provenance
     unaccounted = unaccounted_surfaces(run)
     if not provenance:
         return _SCOPE_FLAG_UNRECORDED + _SCOPE_FLAG_TAIL
-    synthetic = sorted(s for s, p in provenance.items() if p != SurfaceProvenance.LIVE.value)
-    if not synthetic and not unaccounted:
-        return ""
-    if not synthetic:
+    live = [s for s, p in provenance.items() if p == SurfaceProvenance.LIVE.value]
+    if not live:
+        return _SCOPE_FLAG_SYNTHETIC + _SCOPE_FLAG_TAIL
+    if unaccounted:
         return _SCOPE_FLAG_UNACCOUNTED.format(surfaces=", ".join(unaccounted)) + _SCOPE_FLAG_TAIL
-    return _SCOPE_FLAG_SYNTHETIC + _SCOPE_FLAG_TAIL
+    return ""
 
 
 def _finding_controls(finding: Finding) -> str:

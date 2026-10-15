@@ -490,7 +490,7 @@ def test_soft_delete_reaches_the_vector_store(tmp_path: Path) -> None:
     # regenerated from its own documented recipe.
     _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     result = _runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--soft-delete"])
-    assert "vector_db: 2 markers before, 2 after -> RESIDUAL DATA" in result.output, result.output
+    assert "vector_db: 6 markers before, 6 after -> RESIDUAL DATA" in result.output, result.output
     assert "ERASURE FAILED" in result.output
     assert result.exit_code == 2
 
@@ -630,7 +630,7 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     assert "could not seed the semantic_cache canary" in result.output, result.output
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.
-    assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+    assert "vector_db: 6 markers before, 0 after -> ERASED" in result.output, result.output
 
 
 @pytest.mark.parametrize(
@@ -679,7 +679,7 @@ def test_every_seeded_surface_costs_only_itself_when_its_backend_refuses(
     assert f"could not seed the {surface} canary" in result.output, result.output
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.
-    assert "vector_db: 2 markers before, 0 after -> ERASED" in result.output, result.output
+    assert "vector_db: 6 markers before, 0 after -> ERASED" in result.output, result.output
 
 
 def test_a_residual_the_scan_observed_is_never_reported_as_markers_not_found(
