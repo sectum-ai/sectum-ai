@@ -1067,3 +1067,60 @@ def test_the_scope_note_is_present_exactly_when_verify_would_object(
         assert "No surface in this run was live" not in note, (
             f"{label}: the pack HAS a live surface; this is the unaccounted case"
         )
+
+
+def test_the_methodology_discloses_confirmations_that_rest_on_no_manifest_marker() -> None:
+    # `_DETECTOR_TAIL` asserts "Confirmation requires the observed content to
+    # trace back to a specific marker in the ground-truth manifest ... Confirmed
+    # findings are therefore manifest-grounded". Class 5 confirms on a Welch
+    # t-test and Class 9's routing assertion on which adapter served the step;
+    # neither carries a marker_id. On the DEFAULT suite that sentence shipped
+    # three lines above sixteen rows reading "marker n/a" in the same signed pack.
+    #
+    # `scope_methodology` already had an arm for a class that runs no detector
+    # (`erasure_only`, because the Class 11 workflow never builds one). These two
+    # are the same shape and had none.
+    from sectum_ai.evidence.pdf import scope_methodology
+
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def methodology(*findings: Finding) -> str:
+        run = RunResult(
+            run_id="r",
+            scenario_hash="s",
+            manifest_hash="m" * 64,
+            started_at=moment,
+            finished_at=moment,
+            probe_versions={"kv-cache-timing": "1", "rag-entity-bleed": "1"},
+            findings=findings,
+            surface_provenance={Surface.VECTOR_DB.value: SurfaceProvenance.LIVE.value},
+        )
+        return " ".join(scope_methodology(run))
+
+    def finding(probe: str, marker: str | None) -> Finding:
+        return Finding(
+            finding_id=f"f-{probe}",
+            probe_id=probe,
+            severity=Severity.HIGH,
+            confidence=1.0,
+            status=FindingStatus.CONFIRMED,
+            owner_tenant_id=UUID(int=0xB),
+            observed_in_tenant_id=UUID(int=0xA),
+            surface=Surface.VECTOR_DB,
+            marker_id=marker,
+            evidence_span="evidence",
+            owasp_llm="LLM08:2025",
+        )
+
+    # A markerless confirmation must be disclosed, and named.
+    with_timing = methodology(
+        finding("rag-entity-bleed", "mkr-1"), finding("kv-cache-timing", None)
+    )
+    assert "Not every confirmed finding" in with_timing, with_timing
+    assert "kv-cache-timing" in with_timing, with_timing
+
+    # ...and a run whose confirmations ALL carry a marker must not carry the
+    # caveat, or the pack under-claims its own evidence.
+    all_grounded = methodology(finding("rag-entity-bleed", "mkr-1"))
+    assert "Not every confirmed finding" not in all_grounded, all_grounded
+    assert "manifest-grounded" in all_grounded, all_grounded

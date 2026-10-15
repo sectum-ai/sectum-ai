@@ -64,6 +64,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A plant is not landed when the backend serves an empty read-back.**
+  `_plant_landed` accepted any non-`None` answer on the `vector.upsert` and
+  `cache.set` branches, so a backend replying to a by-id read with an empty
+  record, a tombstone or a stub had its plant recorded as landed:
+  `unconfirmed_plants` stayed empty, the probe entered `probe_versions`, and the
+  class graded PASS off a canary that was never stored — the vacuous pass the
+  guard exists to refuse. The `memory.write` sibling always compared the content,
+  and both payloads already carry it.
+- **The audit PDF no longer asserts every confirmation is manifest-grounded.** On
+  the default suite, 16 of 229 confirmed findings carry no `marker_id` — Class 5
+  confirms on a Welch t-test, Class 9's routing assertion on which adapter served
+  the step — and the pack printed `marker n/a` sixteen times three lines below
+  "Confirmed findings are therefore manifest-grounded". `scope_methodology`
+  already had an arm for a class that runs no detector (`erasure_only`); these two
+  are the same shape and had none. A run whose confirmations all carry a marker is
+  unchanged.
+
 - **A secret canary's residual no longer reaches the evidence pack verbatim.**
   `detection.redact_secret` exists so a pack — which leaves the box in BYOC mode —
   does not reproduce a credential, and its docstring notes the elision also stops

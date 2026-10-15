@@ -975,3 +975,64 @@ def test_class_10_is_measured_by_sequence_because_that_is_what_it_claims() -> No
     ]
     assert confirmed_finding_rate(results) == 1 / 6, "the old unit: one turn of six"
     assert confirmed_sequence_rate(results, "entity") == 0.5, "one extraction of two attempted"
+
+
+@pytest.mark.parametrize(
+    ("action", "payload"),
+    [
+        ("vector.upsert", {"doc_id": "d1", "content": "Poisoned lure. Reference: CANARY-X"}),
+        ("cache.set", {"key": "k1", "value": "Cached answer. Reference: CANARY-X"}),
+        ("memory.write", {"text": "memory note recording CANARY-X"}),
+    ],
+)
+def test_a_plant_is_not_landed_when_the_backend_serves_an_empty_read_back(
+    action: str, payload: dict[str, str]
+) -> None:
+    # `is not None` accepted a backend that answers a by-id read with an empty
+    # record, a tombstone or a stub. The plant was recorded as landed,
+    # `unconfirmed_plants` stayed empty, the probe entered `probe_versions`, and
+    # the class graded PASS off a canary that was never stored - the vacuous pass
+    # this guard exists to refuse.
+    #
+    # The `memory.write` sibling always compared the CONTENT; the other two did
+    # not, though both payloads carry it. Parameterised over all three so the
+    # family cannot drift apart again.
+    from sectum_ai.adapters.base import VectorHit
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    tenant = substrate.tenants[0].tenant_id
+
+    class _EmptyVector(FakeVectorStore):
+        def upsert(self, tenant: UUID, documents: object) -> None:
+            return None  # accepts the write, stores nothing
+
+        def fetch(self, tenant: UUID, doc_id: str, *, user: UUID | None = None) -> VectorHit:
+            return VectorHit(doc_id=doc_id, tenant_id=tenant, score=1.0, content="")
+
+    class _EmptyCache(FakeCache):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            return None
+
+        def get(self, tenant: UUID, key: str, *, user: UUID | None = None) -> str:
+            return ""
+
+    class _EmptyMemory(FakeMemory):
+        def remember(self, tenant: UUID, text: str, *, user: UUID | None = None) -> None:
+            return None
+
+        def recall(self, tenant: UUID, query: str, *, user: UUID | None = None) -> list[str]:
+            return [""]
+
+    starved = Runner(substrate, vector=_EmptyVector(), cache=_EmptyCache(), memory=_EmptyMemory())
+    step = ProbeStep(
+        step_id="s1", probe_id="p", actor_tenant_id=tenant, action=action, payload=payload
+    )
+    assert not starved._plant_landed(step), (
+        f"{action}: an empty read-back was recorded as a landed plant"
+    )
+
+    # ...and a healthy backend must still report the plant as landed, or every
+    # planting probe would read NOT_COVERED on a stack that works.
+    healthy = Runner(substrate, vector=FakeVectorStore(), cache=FakeCache(), memory=FakeMemory())
+    healthy._execute(step)
+    assert healthy._plant_landed(step), f"{action}: a landed plant was refused"
