@@ -64,6 +64,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failed anchor no longer makes `verify` accuse the previous pack.** The
+  audit PDF was rendered straight to its final path, *before* the TSA/Rekor call
+  that can fail and before the pack was written — so a failure in between left a
+  fresh PDF beside the previous run's pack, whose `pdf_ref` binds the previous
+  document. `verify` then reported `[FAIL] audit-pdf: ... altered or replaced
+  after signing` over an artifact nobody touched: a network blip became a tamper
+  accusation against the operator's own evidence. Reproduced with an unreachable
+  TSA on both `report` and `erasure`. The render is now staged beside the target
+  and moved into place only once the pack that binds it is on disk, and removed
+  if it is not.
+
 - **A plant is not landed when the backend serves an empty read-back.**
   `_plant_landed` accepted any non-`None` answer on the `vector.upsert` and
   `cache.set` branches, so a backend replying to a by-id read with an empty
