@@ -3807,7 +3807,14 @@ def calibrate(
         if embedder != "fake":
             # Validated in every mode: resolving `openai:` built a client with an
             # empty model name and sent the labeled set to the provider.
-            validate_embedding_spec(embedder)
+            try:
+                validate_embedding_spec(embedder)
+            except ConfigError as error:
+                raise ConfigError(
+                    f"--embedder {embedder!r} does not name a real embedding model ({error}); "
+                    "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
+                    "voyage:<model>, or bedrock:<model>"
+                ) from error
         refuse_hosted_embeddings(loaded, [embedder], "--embedder")
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(
