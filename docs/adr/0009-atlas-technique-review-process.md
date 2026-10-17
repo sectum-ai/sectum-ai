@@ -176,3 +176,43 @@ not a per-PR enforcement.
   That half remains outstanding and is a release blocker under
   `docs/RELEASING.md` step 2. An entry that claimed the full sweep would be the
   same over-claim this project refuses everywhere else.
+
+- **2026-10-17** (at v0.12.0) — **both halves performed**, closing the blocker the
+  entry above left outstanding. Swept every probe's `atlas_techniques` against the
+  MISP galaxy mirror (cluster *MITRE ATLAS Techniques*, **version 16, 197
+  techniques** — up from version 14 and 91 at the v0.7.0 sweep).
+
+  All seven assigned IDs are present and none carries a deprecation or revocation
+  marker: `AML.T0020`, `AML.T0024`, `AML.T0024.000`, `AML.T0024.001`,
+  `AML.T0051.001`, `AML.T0053`, `AML.T0057`. **No retirement.**
+
+  **Four were RENAMED upstream**, and the renames are adopted in this release:
+
+  | id | previous canonical name | v16 canonical name |
+  |---|---|---|
+  | `AML.T0020` | Poison Training Data | Training Data Poisoning |
+  | `AML.T0024` | Exfiltration via ML Inference API | Exfiltration via AI Inference API |
+  | `AML.T0024.001` | Invert ML Model | Invert AI Model |
+  | `AML.T0053` | LLM Plugin Compromise | AI Agent Tool Invocation |
+
+  The first three are cosmetic (ATLAS is restyling "ML" to "AI"). The fourth is
+  not. The 2026-07-18 entry's reason for preferring `AML.T0053` over
+  `AML.T0051.001` for Class 7 was that *"`AML.T0053` (LLM Plugin Compromise)
+  already names the surface it attacks"* — and the surface is no longer what the
+  name says. Re-examined: **the mapping stands, and is now better than it was.**
+  "AI Agent Tool Invocation" names the agent's tool-call path directly, which is
+  exactly what the agent-tool-hijack and agent-framework-hijack probes drive;
+  the earlier "plugin" framing was the looser of the two. `AML.T0051.001`
+  (Indirect Prompt Injection) remains scoped to the tool-description-injection
+  sub-probe, unchanged by the rename.
+
+  Fit review of the 106 techniques added since version 14: none displaces an
+  existing mapping. Classes 5 (kv-cache-timing) and 11 (erasure, subject-erasure)
+  remain intentionally unmapped — ATLAS still carries no timing-side-channel
+  technique, and erasure is a control check rather than an adversary technique.
+
+  Canonical names are printed into the signed audit pack through the attack
+  catalog, so a retired name is a claim the source no longer supports; the
+  renames are applied across the 16 sites that carry them (`CHANGELOG.md` and
+  the entries of this log are left as written, being records of what shipped).
+  `tests/unit/test_atlas_ids.py` pins the v16 names.

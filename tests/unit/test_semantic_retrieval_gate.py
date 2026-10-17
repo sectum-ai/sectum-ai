@@ -1,7 +1,7 @@
 """Classes 6 and 13 run only where their mechanism exists.
 
 Both describe a *vector-space* effect. Class 6 reconstructs a foreign entity
-from a partial fragment and reports it as ``AML.T0024.001 Invert ML Model``;
+from a partial fragment and reports it as ``AML.T0024.001 Invert AI Model``;
 Class 13 is the Retrieval Pivot through a shared multi-modal embedding space.
 
 A store that matches on substrings can return a whole document for a fragment
