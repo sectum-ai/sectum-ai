@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by shared tokens, not meaning. The default is unchanged. `semantic_retrieval`
   stays withheld from live stores, so Classes 6 and 13 still read `NOT_COVERED`.
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
-  ranked in (`hashing-64`, the configured spec, or `null` for the built-in fake or
+  ranked in (`hashing-64`, the configured spec in one spelling per model, or
+  `null` for the built-in fake or
   a run in which nothing ranked by similarity over the store), on both `probe` and
   `erasure` records. The scorecard's Class 2, 3 and 10 headlines name it too
   (Class 6 never runs against a live store).
@@ -101,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicit `openai_base_url` counts as local, or, for an LLM while
   `OPENROUTER_API_KEY` is set (mem0 then routes to OpenRouter), an explicit
   `openrouter_base_url`. An embedding spec counts as local only by an allow-list
-  (`st:`, `hash-`, `fake-`), so a provider added later is refused until classified.
+  (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
+  refused until classified.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked

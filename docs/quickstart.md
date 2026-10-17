@@ -297,7 +297,9 @@ place and the JSON summary carries the same words in
 `retrieval_pivot_rate_by_model_note`, so a dashboard cannot mistake it for the
 headline.
 
-`vector_embedder` names the embedding model the vector store ranked with — `null`
-when nothing in the run ranked by similarity over it — and `vector_embedder_note`
-carries the caveat when that is a hashing embedder, which ranks by shared tokens
-rather than meaning, so a dashboard cannot read a lexical rate as a semantic one.
+`vector_embedder` names the embedding model a live vector store ranked with —
+`null` when nothing in the run ranked by similarity over it, and when the slot is
+the built-in fake (this demo's), whose ranking is a lexical stand-in the run
+already discloses as synthetic — and `vector_embedder_note` carries the caveat
+when that model is a hashing embedder, which ranks by shared tokens rather than
+meaning, so a dashboard cannot read a lexical live rate as a semantic one.

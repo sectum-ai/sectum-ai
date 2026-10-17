@@ -192,7 +192,8 @@ class VectorStoreAdapter(Adapter):
     """The embedding model this store was driven with, as the run should record it.
 
     Set by the CLI resolver: ``hashing-64`` for the built-in deterministic default,
-    the configured spec (``st:all-mpnet-base-v2``) for a real model, and ``None``
+    the configured spec (``st:all-mpnet-base-v2``, one spelling per model) for a
+    real model, and ``None``
     for the built-in fake. A Retrieval-Pivot Rate is a property of the geometry it
     was measured in, so two runs in different geometries are not comparable - and
     without this a signed pack cannot say which one it was.

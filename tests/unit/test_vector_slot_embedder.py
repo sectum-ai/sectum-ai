@@ -126,6 +126,11 @@ def test_the_bridge_batches_a_prefetched_corpus_into_few_calls() -> None:
         ("gemini:text-embedding-004", True),
         ("st:all-mpnet-base-v2", False),
         ("hash-128", False),
+        ("hash:64", False),
+        # `calibrate --embedder fake` names the offline fake by the bare word;
+        # refusing it told a BYOC operator the most local option sent data off box.
+        ("fake", False),
+        ("fake-deterministic", False),
     ],
 )
 def test_hosted_specs_are_told_apart_from_local_ones(spec: str, hosted: bool) -> None:

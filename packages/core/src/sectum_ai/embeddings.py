@@ -498,6 +498,9 @@ def validate_embedding_spec(spec: str) -> None:
 LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")
 """Embedding specs that run on the box: sentence-transformers, hashing, recall fakes.
 
+`calibrate --embedder fake` names the offline fake by the bare word, which is
+local too.
+
 `detection.mode: local` - the "no data leaves the box" guarantee - refuses every
 other spec. An allow-list, so a provider added later is hosted until someone
 says otherwise: a deny-list of the hosted ones failed OPEN for any prefix it
@@ -507,7 +510,7 @@ was not updated with.
 
 def is_hosted_embedding_spec(spec: str) -> bool:
     """Whether ``spec`` may send text off the box: anything not known to run locally."""
-    return not spec.startswith(LOCAL_EMBEDDING_PREFIXES)
+    return not (spec == "fake" or spec.startswith(LOCAL_EMBEDDING_PREFIXES))
 
 
 def call_embedder(
