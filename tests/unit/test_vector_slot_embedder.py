@@ -980,9 +980,9 @@ def test_a_seeded_model_that_cannot_load_fails_before_the_stack_is_reached(
     assert seeded.exit_code == 0, seeded.output
 
     def _never(*_: object) -> object:
-        raise AssertionError("the stack was reached before the sweep's models loaded")
+        raise AssertionError("the stack was written before the sweep's models loaded")
 
-    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _never)
+    monkeypatch.setattr("sectum_ai.cli.app._prefetch_corpus", _never)
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3, result.output
     assert "cohere" in result.output.lower(), result.output
@@ -1059,3 +1059,55 @@ def test_a_model_the_sweep_would_discard_is_never_built(
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code in (0, 2), result.output
     assert "only one was configured" in result.output, result.output
+
+
+def test_the_cli_sweeps_the_real_models_of_a_mixed_list_it_resolved_up_front(
+    tmp_path: Path,
+) -> None:
+    # The CLI is the only caller that hands the gradient pre-resolved models; a
+    # wrong list there recorded an empty or mis-keyed gradient with every unit test
+    # of the gradient itself still green.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    specs = ["hash-32", "hash-256", "fake-mini"]
+    seed_args = [arg for spec in specs for arg in ("--embedding-model", spec)]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "fake-mini excluded from the embedding-model gradient" in result.output
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert set(record["metrics"]["retrieval_pivot_rate_by_model"]) == {"hash-32", "hash-256"}
+
+
+def test_an_adapter_config_error_reports_before_the_sweep_models_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A misspelled adapter field is a cheap error; it waited behind a model load
+    # when the sweep resolved first - and an unloadable model replaced it.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("adapters:\n  vector_store:\n    kind: fake\n    shared_idx: true\n")
+    runner = CliRunner()
+    runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            "hash-16",
+            "--embedding-model",
+            "cohere:embed-english-v3.0",
+        ],
+    )
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--config", str(config)])
+    assert result.exit_code == 3, result.output
+    assert "does not read: shared_idx" in result.output, result.output

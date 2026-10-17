@@ -792,16 +792,9 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
-def _sweep_real_names(substrate: Substrate) -> list[str]:
-    """The seeded specs that name real models, when the sweep will compare them.
-
-    Empty unless two or more do: one real model beside the fakes is not a
-    gradient, and an all-fake list runs the recall illustration, which needs no
-    model at all.
-    """
-    names = substrate.scenario.embedding_models
-    real = [name for name in names if not name.startswith("fake-")]
-    return real if len(names) > 1 and len(real) > 1 else []
+def _real_model_names(names: Sequence[str]) -> list[str]:
+    """The specs that name real models; ``fake-*`` names carry a modelled recall."""
+    return [name for name in names if not name.startswith("fake-")]
 
 
 def _resolve_sweep(substrate: Substrate) -> list[EmbeddingModel]:
@@ -809,11 +802,19 @@ def _resolve_sweep(substrate: Substrate) -> list[EmbeddingModel]:
 
     A missing extra or key, or a model that fails to load, otherwise surfaced only
     while the record was built - after every probe had run against the stack -
-    and no record was written. Only the models the sweep will actually compare are
-    built.
+    and no record was written. Only the models a comparison will use are built:
+    one real model beside the fakes is not a gradient, and an all-fake list runs
+    the recall illustration, which needs no model at all.
     """
-    models = [resolve_embedding_model(name) for name in _sweep_real_names(substrate)]
-    return [model for model in models if model is not None]
+    real = _real_model_names(substrate.scenario.embedding_models)
+    if len(real) < 2:
+        return []
+    models: list[EmbeddingModel] = []
+    for name in real:
+        model = resolve_embedding_model(name)
+        assert model is not None  # every validated non-fake spec resolves to a model
+        models.append(model)
+    return models
 
 
 def _per_model_rpr(
@@ -845,8 +846,8 @@ def _per_model_rpr(
     names = substrate.scenario.embedding_models
     if len(names) <= 1:
         return {}
-    real_names = [name for name in names if not name.startswith("fake-")]
-    modelled_only = [name for name in names if name.startswith("fake-")]
+    real_names = _real_model_names(names)
+    modelled_only = [name for name in names if name not in real_names]
     if real_names and modelled_only:
         # Dropping these was silent: an operator who configured 3 models could be
         # shown a 2-model gradient with nothing saying the third was excluded.
@@ -1097,10 +1098,11 @@ def probe(
             raise typer.Exit(code=3)
         suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
-    # After every argument check, before the stack is reached: an unloadable sweep
-    # model otherwise failed only after the whole suite had run.
-    sweep_models = _resolve_sweep(substrate)
     bundle = build_adapters(loaded)
+    # After every argument and adapter-config check, before the first write to the
+    # stack: an unloadable sweep model otherwise failed only after the whole suite
+    # had run, with no record written.
+    sweep_models = _resolve_sweep(substrate)
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
         typer.echo(
