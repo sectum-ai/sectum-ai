@@ -577,3 +577,69 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert "measured in: hash-128 (a hashing embedder" in text.output, text.output
+
+
+def test_a_run_that_ranked_nothing_names_no_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A suite narrowed to Class 1's by-id fetch measured nothing in any geometry;
+    # naming one let an embedder swap gate `diff` as a regression over numbers the
+    # swap cannot have moved.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+
+    def _named(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_name = "st:all-mpnet-base-v2"
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _named)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "tenant-boundary-fetch"])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert "tenant-boundary-fetch" in record["probe_versions"]
+    assert record["vector_embedder"] is None
+
+
+@pytest.mark.parametrize(
+    ("embedder", "expected"),
+    [
+        ("st:all-mpnet-base-v2", ", ranked by st:all-mpnet-base-v2)"),
+        ("hashing-64", ", ranked by hashing-64 - shared tokens, not meaning)"),
+        (None, "n=10)"),
+    ],
+)
+def test_the_scorecard_headline_names_the_geometry(embedder: str | None, expected: str) -> None:
+    # The PDF names the geometry beside the rate; the scorecard showed a rate
+    # ranked by shared tokens exactly as one ranked by a production model.
+    from sectum_ai.score import CATALOG, _headline
+    from sectum_ai.spec import RunMetrics
+
+    class_2 = next(entry for entry in CATALOG if entry.class_id == 2)
+    headline = _headline(class_2, RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=4), embedder)
+    assert headline is not None and headline.endswith(expected), headline
+
+
+def test_a_scored_run_carries_its_geometry_into_the_class_2_line(tmp_path: Path) -> None:
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.score import score_run
+    from sectum_ai.spec import RunResult
+
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    record = json.loads((tmp_path / "run.json").read_text())
+    record["vector_embedder"] = "st:all-mpnet-base-v2"
+    score = score_run(RunResult.model_validate(record))
+    class_2 = next(line for line in score.classes if line.class_id == 2)
+    assert class_2.headline is not None
+    assert "ranked by st:all-mpnet-base-v2" in class_2.headline, class_2.headline

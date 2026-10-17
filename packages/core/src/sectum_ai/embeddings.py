@@ -25,6 +25,7 @@ import os
 import re
 from array import array
 from collections.abc import Callable, Iterable
+from functools import partial
 from typing import Any, Protocol, runtime_checkable
 
 from sectum_ai.spec import AdapterError, ConfigError, SectumError
@@ -551,19 +552,13 @@ class EmbedderBridge:
 
     def prefetch(self, texts: Iterable[str]) -> None:
         """Embed every document text not already cached, ``batch_size`` at a time."""
-        missing = [text for text in dict.fromkeys(texts) if text not in self._documents]
-        for start in range(0, len(missing), self._batch_size):
-            chunk = missing[start : start + self._batch_size]
-            self._store(self._documents, chunk, self._embed(self.model.embed, chunk))
+        self._fill(self._documents, self.model.embed, texts)
 
     def prefetch_queries(self, texts: Iterable[str]) -> None:
         """Embed every query text not already cached in QUERY mode, in batches."""
         texts = list(dict.fromkeys(texts))
         self._query_texts.update(texts)
-        missing = [text for text in texts if text not in self._queries]
-        for start in range(0, len(missing), self._batch_size):
-            chunk = missing[start : start + self._batch_size]
-            self._store(self._queries, chunk, self._embed(self._embed_queries, chunk))
+        self._fill(self._queries, partial(embed_queries, self.model), texts)
 
     def __call__(self, text: str) -> list[float]:
         """The cached vector for ``text``, else ``text`` embedded now as a document."""
@@ -585,21 +580,20 @@ class EmbedderBridge:
             self._dim = len(self("sectum-ai dimension probe"))
         return self._dim
 
-    def _embed_queries(self, texts: list[str]) -> list[list[float]]:
-        return embed_queries(self.model, texts)
-
-    def _embed(
-        self, embed: Callable[[list[str]], list[list[float]]], texts: list[str]
-    ) -> list[list[float]]:
-        return call_embedder(self.name, embed, texts)
-
-    def _store(
-        self, cache: dict[str, array[float]], texts: list[str], vectors: list[list[float]]
+    def _fill(
+        self,
+        cache: dict[str, array[float]],
+        embed: Callable[[list[str]], list[list[float]]],
+        texts: Iterable[str],
     ) -> None:
-        if len(vectors) != len(texts):
-            raise AdapterError(
-                f"embedder {self.name!r} returned {len(vectors)} vectors for {len(texts)} texts"
+        missing = [text for text in dict.fromkeys(texts) if text not in cache]
+        for start in range(0, len(missing), self._batch_size):
+            chunk = missing[start : start + self._batch_size]
+            vectors = call_embedder(self.name, embed, chunk)
+            if len(vectors) != len(chunk):
+                raise AdapterError(
+                    f"embedder {self.name!r} returned {len(vectors)} vectors for {len(chunk)} texts"
+                )
+            cache.update(
+                (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
             )
-        cache.update(
-            (text, array("d", vector)) for text, vector in zip(texts, vectors, strict=True)
-        )

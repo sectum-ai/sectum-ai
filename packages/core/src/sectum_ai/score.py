@@ -81,6 +81,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    is_hashing_embedder,
     rate_from_counts,
     untrusted,
     wilson_interval,
@@ -283,7 +284,21 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
     return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
-def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
+def _geometry(vector_embedder: str | None) -> str:
+    """The embedding geometry a Retrieval-Pivot Rate was measured in, as a suffix.
+
+    The audit PDF names it beside the rate; the scorecard showed a rate ranked by
+    shared tokens exactly as it showed one ranked by a production model.
+    """
+    if vector_embedder is None:
+        return ""
+    lexical = " - shared tokens, not meaning" if is_hashing_embedder(vector_embedder) else ""
+    return f", ranked by {untrusted(vector_embedder)}{lexical}"
+
+
+def _headline(
+    entry: _CatalogClass, metrics: RunMetrics, vector_embedder: str | None = None
+) -> str | None:
     """The class's headline rate rendered with its uncertainty, when it has one.
 
     Class 2's Retrieval-Pivot Rate is recomputed from the record's binomial *counts*
@@ -303,7 +318,7 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
             low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
             return (
                 f"{counts_rate:.1%} RPR (95% CI {low:.1%}-{high:.1%}, "
-                f"n={metrics.retrieval_pivot_n})"
+                f"n={metrics.retrieval_pivot_n}{_geometry(vector_embedder)})"
             )
         if metrics.retrieval_pivot_rate is not None:
             # No counts, so the rate is all the record actually has. Any interval it
@@ -316,7 +331,9 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
             # same reasoning, and the scorecard stopped one step short: bare, it
             # is byte-identical to a rate measured over a real sample beside its
             # interval, which is the conflation both branches exist to refuse.
-            return _ASSERTED.format(rate=f"{metrics.retrieval_pivot_rate:.1%} RPR")
+            return _ASSERTED.format(
+                rate=f"{metrics.retrieval_pivot_rate:.1%} RPR{_geometry(vector_embedder)}"
+            )
         return None
     rates: dict[int, tuple[str, float | None]] = {
         3: ("poisoning bleed", metrics.poisoning_bleed_delta),
@@ -577,7 +594,7 @@ def _score_class(
     # detail column, indistinguishable on the page from one that measured 0.0%.
     # `_headline` returns None for both "this class has no rate" and "the rate is
     # None", so the four classes that HAVE one are named here.
-    headline = _headline(entry, run.metrics)
+    headline = _headline(entry, run.metrics, run.vector_embedder)
     unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
         entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
     )

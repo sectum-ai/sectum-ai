@@ -1250,8 +1250,14 @@ def probe(
         detection=detection_provenance(loaded.detection),
         # The geometry the headline Retrieval-Pivot Rate was measured in. Read off
         # the store the run actually drove, not the config, so it cannot drift
-        # from what happened.
-        vector_embedder=getattr(vector, "embedder_name", None),
+        # from what happened - and recorded only when something RANKED over it: a
+        # narrowed suite of by-id fetches or timing measured nothing in any
+        # geometry, and naming one let a swap gate `diff` over unaffected numbers.
+        vector_embedder=(
+            getattr(vector, "embedder_name", None)
+            if {result[0].probe_id for result in step_results} & set(_GEOMETRY_PROBES)
+            else None
+        ),
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=rpr_rate,

@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays withheld from live stores, so Classes 6 and 13 still read `NOT_COVERED`.
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec, or `null` for the built-in fake or
-  a run that scanned no vector surface), on both `probe` and `erasure` records.
+  a run in which nothing ranked by similarity over the store), on both `probe` and
+  `erasure` records. The scorecard headline names it too.
   Schema **0.8.0**. Both audit-PDF engines name it beside the Retrieval-Pivot Rate,
   as do `probe`'s text and JSON summaries.
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose

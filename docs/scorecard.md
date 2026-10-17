@@ -50,7 +50,11 @@ which reads to an auditor exactly like one we invented. Counts that cannot be tr
 recompute by corrupting them. The rule is the product's, not this command's:
 `report`'s audit PDF and `diff` / `baseline --compare` recompute the same rate
 from the same counts, so one record cannot read 0.0% in CI and 95.4% in the
-signed PDF bound to the same pack.
+signed PDF bound to the same pack. Where the record names the embedding model its
+vector store ranked with (`vector_embedder`), the headline says so —
+`12.5% RPR (95% CI 5.9%-24.7%, n=48, ranked by st:all-mpnet-base-v2)` — and a
+hashing embedder is marked as ranking by shared tokens, not meaning, as the PDF
+marks it.
 
 On a run with some live surfaces, a class backed by both a live surface and a
 built-in fake is graded on the live surface's findings only: a confirmed finding
