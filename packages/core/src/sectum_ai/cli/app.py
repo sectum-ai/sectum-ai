@@ -1609,14 +1609,22 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
     than the customer's store would, under-reporting the Retrieval-Pivot Rate.
     Planning is deterministic, so these are the texts the runner will query.
     """
-    bridge = getattr(store, "embedder_bridge", None)
-    if bridge is not None:
-        bridge.prefetch_queries(
+    _register_queries(
+        store,
+        (
             step.payload["query"]
             for probe in suite
             for step in probe.plan(substrate)
             if step.action == "vector.query" and "query" in step.payload
-        )
+        ),
+    )
+
+
+def _register_queries(store: object, texts: Iterable[str]) -> None:
+    """Embed ``texts`` in QUERY mode up front, when the store has a real model."""
+    bridge = getattr(store, "embedder_bridge", None)
+    if bridge is not None:
+        bridge.prefetch_queries(texts)
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -3194,6 +3202,8 @@ def erasure(
         # The `app`-aware path, as above: the subject scan read `vector_store`
         # directly too.
         subject_store = build_vector_slot(loaded, fake_default)
+        # The content scan queries the manifest's vector fingerprints.
+        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -3345,6 +3355,10 @@ def erasure(
 
     if _seeds(Surface.VECTOR_DB):
         _prefetch_corpus(store, substrate.documents)
+        # The residue scan's fingerprint queries are the target's document titles.
+        _register_queries(
+            store, (doc.title for doc in substrate.documents if doc.tenant_id == target)
+        )
         for tenant in substrate.tenants:
             documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
             store.upsert(tenant.tenant_id, documents)
@@ -3767,21 +3781,36 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
     )
 
 
+# The probes that rank by similarity in the vector store, so whose results move
+# with its embedding model. Class 1 fetches by id and is not among them.
+_GEOMETRY_PROBES: tuple[str, ...] = (
+    RagEntityBleedProbe.id,
+    RagPoisoningProbe.id,
+    EmbeddingInversionProbe.id,
+    IkeaExtractionProbe.id,
+    ErasureProbe.id,
+    SubjectErasureProbe.id,
+)
+
+
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
+    # An embedder swap changes the instrument only for what ranks by similarity in
+    # the vector store: those probes, and the vector surface's erasure counts, read
+    # "not measured". A by-id fetch (Class 1), or a cache or memory regression in
+    # the same run, still reads `[REGRESSED]` rather than hiding behind the banner.
+    swapped = result.embedder_changed is not None
     return _delta_verdict(
         delta,
-        result.coverage_lost,
+        (*result.coverage_lost, *(_GEOMETRY_PROBES if swapped else ())),
         (*result.boundary_lost, *result.plants_lost),
-        # An embedder swap changes the instrument on the vector surface only, so it
-        # is that surface's comparability that is lost: a metric the vector store
-        # feeds reads "not measured", while a cache or memory regression in the
-        # same run still reads `[REGRESSED]` rather than hiding behind the banner.
+        result.scope_lost,
         (
+            *result.erasure_lost,
             *result.scope_lost,
-            *((Surface.VECTOR_DB.value,) if result.embedder_changed is not None else ()),
+            *result.side_channel_lost,
+            *((Surface.VECTOR_DB.value,) if swapped else ()),
         ),
-        (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
         scenario_changed=result.scenario_changed,
     )
 

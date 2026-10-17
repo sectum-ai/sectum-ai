@@ -23,9 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Schema **0.8.0**. Both audit-PDF engines name it beside the Retrieval-Pivot Rate,
   as do `probe`'s text and JSON summaries.
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
-  vector stores ranked with different embedding models, and mark the metrics the
-  vector store feeds as not measured: those rates were taken with different
-  instruments, so one that fell across the swap is not a fix. Metrics off the
+  vector stores ranked with different embedding models, and mark the metrics of
+  the probes that rank by similarity in the vector store — and its erasure counts
+  — as not measured: those were taken with different instruments, so one that
+  fell across the swap is not a fix. A by-id fetch (Class 1) and metrics off the
   vector surface still compare.
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
@@ -93,13 +94,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actually sweeps, which is the one fixed into the substrate at seed time rather
   than the config's. A `mem0` memory adapter is refused too unless its `llm`,
   `embedder` and any `graph_store.llm` providers are local (an `openai` provider
-  with an explicit `openai_base_url` counts); mem0 defaults the first two to OpenAI.
+  with an explicit `openai_base_url` counts, except an LLM while
+  `OPENROUTER_API_KEY` is set, which mem0 then sends to openrouter.ai); mem0
+  defaults the first two to OpenAI.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked
   its queries lower against the corpus than a production store would and
   under-reported the per-model gradient. Queries now use `search_query` / `query`,
-  in the sweep and for the suite's planned queries against a live store.
+  in the sweep, for the suite's planned queries against a live store, and for
+  both erasure modes' fingerprint queries.
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
   every provider call now fails as a typed adapter error (exit 3) naming only the

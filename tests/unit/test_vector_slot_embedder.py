@@ -378,13 +378,22 @@ def _mem0(config: dict[str, object]) -> dict[str, object]:
     return _local(adapters={"memory": {"kind": "mem0", "config": config}})
 
 
-def test_byoc_local_mode_trusts_a_pointed_openai_provider_and_checks_the_graph_llm() -> None:
+def test_byoc_local_mode_trusts_a_pointed_openai_provider_and_checks_the_graph_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     local_llm = {"provider": "ollama"}
     local_embedder = {"provider": "huggingface"}
     # An OpenAI-compatible server the operator pointed at is local - the same trust
     # `detection`'s base_url gets. Refusing it was a false refusal.
     pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:11434/v1"}}
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
+    # Unless mem0's OpenAI LLM will ignore the base URL: with an OpenRouter key in
+    # the environment it calls openrouter.ai instead.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic")
+    with pytest.raises(ValueError, match="mem0 llm"):
+        SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
+    monkeypatch.delenv("OPENROUTER_API_KEY")
     # The graph store's own LLM sends memory content too.
     with pytest.raises(ValueError, match=r"graph_store\.llm"):
         SectumConfig.model_validate(
@@ -418,3 +427,43 @@ def test_the_probe_command_registers_its_queries_before_running(
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert model.queries, "the planned vector queries were never registered"
+
+
+def _bridged_slot(monkeypatch: pytest.MonkeyPatch, model: _Modes) -> None:
+    from sectum_ai.config import build_vector_slot as real_build
+
+    def _bridged(*args: object, **kwargs: object) -> object:
+        store = real_build(*args, **kwargs)  # type: ignore[arg-type]
+        store.embedder_bridge = EmbedderBridge(model)
+        return store
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_vector_slot", _bridged)
+
+
+def test_both_erasure_modes_register_their_fingerprint_queries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Each erasure mode scans the vector store with similarity queries - the
+    # target's document titles, the subject's vector fingerprints. Unregistered,
+    # they embedded as documents, which an asymmetric model ranks lower: a residual
+    # document fell past top-k and the surface read erased or inconclusive.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import _load_substrate, app
+
+    runner = CliRunner()
+    canary = _Modes()
+    _bridged_slot(monkeypatch, canary)
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    substrate = _load_substrate(tmp_path)
+    target = substrate.tenants[0].tenant_id
+    titles = {doc.title for doc in substrate.documents if doc.tenant_id == target}
+    assert titles and set(canary.queries) == titles
+
+    subject = _Modes()
+    _bridged_slot(monkeypatch, subject)
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
+    runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
+    assert subject.queries == ["a subject phrase"]

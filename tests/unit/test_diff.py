@@ -1520,3 +1520,67 @@ def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
     assert cli.exit_code == 2, cli.output
     assert "[REGRESSED] per_probe_findings[semantic-cache-contamination]" in cli.output, cli.output
     assert "[not measured] per_probe_findings[rag-entity-bleed]" in cli.output, cli.output
+
+
+def _swap(earlier: RunResult, later: RunResult) -> tuple[RunResult, RunResult]:
+    return (
+        earlier.model_copy(update={"vector_embedder": "hashing-64"}),
+        later.model_copy(update={"vector_embedder": "st:all-mpnet-base-v2"}),
+    )
+
+
+def _diff_output(tmp_path: Path, earlier: RunResult, later: RunResult) -> str:
+    return runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    ).output
+
+
+def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> None:
+    # The vector surface's erasure count is a similarity scan, so it moved with the
+    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0` asserted an erasure fix.
+    # Class 1 fetches by id and the tracing surface has no embedder, so a
+    # regression there is still a regression.
+    exercised = {
+        "probe_versions": {"tenant-boundary-fetch": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "tracing": "LIVE"},
+    }
+    earlier = _run(
+        metrics=RunMetrics(
+            per_probe_findings={"tenant-boundary-fetch": 0},
+            erasure_residue={"vector_db": 3, "tracing": 0},
+        )
+    ).model_copy(update=exercised)
+    later = _run(
+        _finding("b", probe_id="tenant-boundary-fetch"),
+        metrics=RunMetrics(
+            confirmed_findings=1,
+            per_probe_findings={"tenant-boundary-fetch": 1},
+            erasure_residue={"vector_db": 0, "tracing": 2},
+        ),
+    ).model_copy(update=exercised)
+    output = _diff_output(tmp_path, *_swap(earlier, later))
+    assert "[ok] erasure_residue[vector_db]" not in output, output
+    assert "[REGRESSED] erasure_residue[tracing]" in output, output
+    assert "[REGRESSED] per_probe_findings[tenant-boundary-fetch]" in output, output
+
+
+def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:
+    # A probe that later starts issuing `vector.query` moves with the embedder too;
+    # leaving it off the list prints `[ok]` across a swap for it.
+    from sectum_ai.cli.app import _GEOMETRY_PROBES, _build_suite
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    querying = {
+        probe.id
+        for probe in _build_suite(build_detection_providers(DetectionConfig()))
+        if any(step.action == "vector.query" for step in probe.plan(substrate))
+    }
+    assert querying
+    assert querying <= set(_GEOMETRY_PROBES)

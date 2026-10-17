@@ -373,19 +373,23 @@ class SectumConfig(BaseModel):
 # (`ollama_base_url`, `lmstudio_base_url`, a vLLM server, a local
 # sentence-transformers model). An `openai` provider with an explicit
 # `openai_base_url` is an OpenAI-compatible server the operator chose - the same
-# trust `detection`'s `base_url` gets - so it is local too.
+# trust `detection`'s `base_url` gets - so it is local too. Except for an LLM while
+# `OPENROUTER_API_KEY` is set: mem0's OpenAI LLM then ignores `openai_base_url` and
+# calls openrouter.ai.
 _LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
     "llm": frozenset({"ollama", "lmstudio", "vllm"}),
     "embedder": frozenset({"ollama", "lmstudio", "huggingface"}),
 }
 
 
-def _mem0_provider_is_local(block: object, local: frozenset[str]) -> bool:
+def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) -> bool:
     if not isinstance(block, dict):
         return False
     provider = block.get("provider")
     settings = block.get("config")
     pointed = isinstance(settings, dict) and bool(settings.get("openai_base_url"))
+    if llm and os.environ.get("OPENROUTER_API_KEY"):
+        pointed = False
     return provider in local or (provider == "openai" and pointed)
 
 
@@ -407,7 +411,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         blocks.append(("graph_store.llm", graph["llm"], _LOCAL_MEM0_PROVIDERS["llm"]))
     offenders = []
     for section, block, local in blocks:
-        if not _mem0_provider_is_local(block, local):
+        if not _mem0_provider_is_local(block, local, llm=section != "embedder"):
             provider = block.get("provider") if isinstance(block, dict) else None
             offenders.append(f"memory mem0 {section} ({provider or 'default: openai'!r})")
     return offenders
