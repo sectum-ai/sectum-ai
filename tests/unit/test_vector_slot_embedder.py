@@ -999,4 +999,63 @@ def test_a_local_mode_calibrate_refusal_names_its_offline_option(tmp_path: Path)
     )
     assert result.exit_code == 3, result.output
     assert "hosted embedding API" in result.output, result.output
-    assert "calibrate also accepts fake" in result.output, result.output
+    assert "calibrate also accepts --embedder fake" in result.output, result.output
+
+
+def test_a_usage_error_is_reported_before_the_sweep_models_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Resolving the sweep at the top of `probe` downloaded models before a mistyped
+    # flag was checked - and an unloadable model replaced the usage error.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    runner = CliRunner()
+    runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            "hash-16",
+            "--embedding-model",
+            "cohere:embed-english-v3.0",
+        ],
+    )
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "typo"])
+    assert result.exit_code == 3, result.output
+    assert "unknown probe 'typo'" in result.output, result.output
+
+
+def test_a_model_the_sweep_would_discard_is_never_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One real model beside the fakes is not a gradient; building it anyway cost a
+    # download - and, unloadable, refused a run that would never have used it.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    def _never(spec: str) -> object:
+        raise AssertionError(f"{spec} was built for a sweep that will not run")
+
+    runner = CliRunner()
+    runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            "fake-deterministic",
+            "--embedding-model",
+            "st:all-mpnet-base-v2",
+        ],
+    )
+    monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _never)
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code in (0, 2), result.output
+    assert "only one was configured" in result.output, result.output

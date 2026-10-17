@@ -46,11 +46,12 @@ def sweep(specs: list[str]) -> dict[str, float]:
     substrate = build_substrate(default_scenario(seed=SEED))
     try:
         models = [resolve_embedding_model(spec) for spec in specs]
+        if any(model is None for model in models):
+            raise SystemExit(f"every spec must name a real embedding model; got {specs}")
+        return embedding_provider_sweep(substrate, models)  # type: ignore[arg-type]
     except SectumError as error:
-        raise SystemExit(f"could not load the embedding models: {error}") from error
-    if any(model is None for model in models):
-        raise SystemExit(f"every spec must name a real embedding model; got {specs}")
-    return embedding_provider_sweep(substrate, models)  # type: ignore[arg-type]
+        # Loading (a missing extra or key) and embedding (a revoked key, a quota).
+        raise SystemExit(f"the embedding-model sweep failed: {error}") from error
 
 
 def main() -> int:

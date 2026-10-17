@@ -792,24 +792,34 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
-def _resolve_sweep(substrate: Substrate) -> list[tuple[str, EmbeddingModel | None]]:
-    """Resolve the seeded sweep's models, or ``[]`` when there is no comparison to run.
+def _sweep_real_names(substrate: Substrate) -> list[str]:
+    """The seeded specs that name real models, when the sweep will compare them.
 
-    Called before the suite runs: a missing extra or key, or a model that fails to
-    load, otherwise surfaced only while the record was built - after every probe
-    had run against the stack - and no record was written.
+    Empty unless two or more do: one real model beside the fakes is not a
+    gradient, and an all-fake list runs the recall illustration, which needs no
+    model at all.
     """
     names = substrate.scenario.embedding_models
-    if len(names) <= 1:
-        return []
-    # Resolve once: a `st:` spec constructs (and may download) a model.
-    return [(name, resolve_embedding_model(name)) for name in names]
+    real = [name for name in names if not name.startswith("fake-")]
+    return real if len(names) > 1 and len(real) > 1 else []
+
+
+def _resolve_sweep(substrate: Substrate) -> list[EmbeddingModel]:
+    """Build the sweep's models before the suite runs, or ``[]`` when none will be used.
+
+    A missing extra or key, or a model that fails to load, otherwise surfaced only
+    while the record was built - after every probe had run against the stack -
+    and no record was written. Only the models the sweep will actually compare are
+    built.
+    """
+    models = [resolve_embedding_model(name) for name in _sweep_real_names(substrate)]
+    return [model for model in models if model is not None]
 
 
 def _per_model_rpr(
     substrate: Substrate,
     vector: VectorStoreAdapter,
-    resolved: list[tuple[str, EmbeddingModel | None]] | None = None,
+    resolved: list[EmbeddingModel] | None = None,
 ) -> dict[str, float]:
     """Per-embedding-model retrieval gradient for the run, or ``{}`` if not applicable.
 
@@ -833,13 +843,11 @@ def _per_model_rpr(
     omitted from a live run's evidence.
     """
     names = substrate.scenario.embedding_models
-    if resolved is None:
-        resolved = _resolve_sweep(substrate)
-    if not resolved:
+    if len(names) <= 1:
         return {}
-    real = [model for _, model in resolved if model is not None]
-    modelled_only = [name for name, model in resolved if model is None]
-    if real and modelled_only:
+    real_names = [name for name in names if not name.startswith("fake-")]
+    modelled_only = [name for name in names if name.startswith("fake-")]
+    if real_names and modelled_only:
         # Dropping these was silent: an operator who configured 3 models could be
         # shown a 2-model gradient with nothing saying the third was excluded.
         typer.echo(
@@ -849,9 +857,10 @@ def _per_model_rpr(
             "against a real provider",
             err=True,
         )
-    if len(real) > 1:
-        return embedding_provider_sweep(substrate, real)
-    if real:
+    if len(real_names) > 1:
+        models = resolved if resolved is not None else _resolve_sweep(substrate)
+        return embedding_provider_sweep(substrate, models)
+    if real_names:
         # One real model is not a gradient. Emitting it produced a single-entry
         # "comparison" from a config that asked for several.
         typer.echo(
@@ -1043,7 +1052,6 @@ def probe(
     refuse_hosted_embeddings(
         loaded, substrate.scenario.embedding_models, "the seeded scenario's embedding_models"
     )
-    sweep_models = _resolve_sweep(substrate)
     # The precondition of the whole product, tested as the probes themselves test it. Ask
     # the real question - is any marker foreign to any principal? - rather than a proxy for
     # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
@@ -1089,6 +1097,9 @@ def probe(
             raise typer.Exit(code=3)
         suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
+    # After every argument check, before the stack is reached: an unloadable sweep
+    # model otherwise failed only after the whole suite had run.
+    sweep_models = _resolve_sweep(substrate)
     bundle = build_adapters(loaded)
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
@@ -3835,7 +3846,7 @@ def calibrate(
             refuse_hosted_embeddings(loaded, [embedder], "--embedder")
         except ConfigError as error:
             raise ConfigError(
-                f"--embedder: {error} (calibrate also accepts fake, the offline embedder)"
+                f"{error} (calibrate also accepts --embedder fake, the offline embedder)"
             ) from error
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(

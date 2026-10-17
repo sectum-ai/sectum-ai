@@ -355,15 +355,15 @@ embed or judge tenant content: detection, the vector store's
 sweep's `scenario.embedding_models`, and a `mem0` memory adapter's own embedder
 (and graph LLM). In `local` mode Sectum fails fast on any of
 them that would reach a hosted API — a detection embedder or judge on
-`openai`/`anthropic` without a `base_url`, or an `openai:`/`cohere:`/`voyage:`/`bedrock:`
-spec on the other two, wherever it is given — the config, a `seed` or `calibrate`
+`openai`/`anthropic` without a `base_url`, or a spec other than `st:`/`hash-`/`fake`
+on the store's `embedder` or the sweep's `embedding_models`, wherever it is given — the config, a `seed` or `calibrate`
 override, or the list a substrate was seeded with. A `mem0` memory adapter brings
 its own embedder, which mem0 defaults to OpenAI and which embeds every write;
 `local` mode refuses it unless its `config` sets a local one. Sectum stores memory
 verbatim, so mem0's LLM runs only to feed a graph store — and then that LLM must be
 local too. Together these guarantee that no stage Sectum runs on its own behalf —
-grading, embedding the corpus for the store, the sweep — calls a third-party AI
-service. The adapters you point it at are the system under test and receive the
+grading, embedding the corpus for the store, the sweep, writing to a mem0 memory —
+calls a third-party AI service. The adapters you point it at are the system under test and receive the
 synthetic tenant data by design: a hosted vector database, or an agent adapter
 driving an OpenAI Assistant or the Anthropic Messages API, sends it to that
 provider because that is what is being tested; keep them inside your boundary if
