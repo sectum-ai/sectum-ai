@@ -1450,3 +1450,38 @@ def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
         name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
     )
     assert _delta_verdict(bounded, (), (), (), ()) == "not measured"
+
+
+def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path) -> None:
+    # The Retrieval-Pivot Rate is a property of the embedding geometry, so a swap
+    # moves it with no change to isolation. Without the gate a rate that fell across
+    # the swap read `[ok]` - a fix nobody made - and one that rose read as a
+    # regression in the stack rather than in the instrument.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
+        update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"}
+    )
+    later = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
+        update={**exercised, "vector_embedder": "hashing-64"}
+    )
+    result = diff_runs(earlier, later)
+    assert result.embedder_changed == ("st:all-mpnet-base-v2", "hashing-64")
+    assert result.regressed
+    paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
+    text = runner.invoke(app, ["diff", *paths])
+    assert text.exit_code == 2, text.output
+    assert "[EMBEDDER CHANGED]" in text.output and "hashing-64" in text.output, text.output
+    assert "[ok]" not in text.output, text.output
+    payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
+    assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
+
+
+def test_a_record_that_names_no_embedder_is_not_an_embedder_change() -> None:
+    # A fake slot (or the app API) names none; losing a live store is scope_lost's
+    # to report, so this gate stays out of it rather than double-flag.
+    earlier = _run().model_copy(update={"vector_embedder": "hashing-64"})
+    assert diff_runs(earlier, _run()).embedder_changed is None
+    assert diff_runs(earlier, earlier).embedder_changed is None

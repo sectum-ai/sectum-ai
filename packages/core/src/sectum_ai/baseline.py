@@ -401,6 +401,13 @@ class RunDiff:
     # Finding ids embed markers and principals, so every finding "resolves"; a
     # later run with no users read every cross-user leak as fixed.
     scenario_changed: bool = False
+    # The two runs' vector stores ranked in different embedding geometries. The
+    # Retrieval-Pivot Rate is a property of the geometry, so a swap moves it with no
+    # change to isolation - the spec's own example of a change to flag. A rate that
+    # fell across the swap read `[ok]`, a fix nobody made. Compared only where both
+    # records name one: a pre-0.8.0 record or a fake slot names none, and losing a
+    # live store is `scope_lost`'s to report. ``(earlier, later)`` when they differ.
+    embedder_changed: tuple[str, str] | None = None
 
     @property
     def regressed(self) -> bool:
@@ -439,6 +446,7 @@ class RunDiff:
             or bool(self.side_channel_lost)
             or bool(self.metrics.headline_unmeasured)
             or self.scenario_changed
+            or self.embedder_changed is not None
         )
 
 
@@ -529,6 +537,13 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             )
         ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
+        embedder_changed=(
+            (earlier.vector_embedder, later.vector_embedder)
+            if earlier.vector_embedder is not None
+            and later.vector_embedder is not None
+            and earlier.vector_embedder != later.vector_embedder
+            else None
+        ),
     )
 
 

@@ -27,6 +27,7 @@ from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ERASURE_SURFACES,
+    HASHING_EMBEDDER_NAME,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
@@ -766,6 +767,24 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
     return f"{metrics.retrieval_pivot_rate:.1%} (asserted by the record; no sample size recorded)"
 
 
+def _vector_embedder_summary(run: RunResult) -> str | None:
+    """Name the embedding model the vector store ranked in, or ``None`` if unrecorded.
+
+    The Retrieval-Pivot Rate is a property of that geometry, so the row sits beside
+    it: without it the auditor's PDF stated a rate measured by shared tokens in the
+    same words as one measured by a production embedding model. ``None`` - a fake
+    slot, the ``app`` API, or a run that scanned no vector surface - omits the row.
+    """
+    if run.vector_embedder is None:
+        return None
+    if run.vector_embedder == HASHING_EMBEDDER_NAME:
+        return (
+            f"{HASHING_EMBEDDER_NAME} - Sectum's deterministic hashing embedder, which "
+            "ranks by shared tokens rather than meaning; no embedding model was configured"
+        )
+    return run.vector_embedder
+
+
 def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
 
@@ -795,6 +814,9 @@ def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     rpr_line = _retrieval_pivot_summary(run)
     if rpr_line is not None:
         summary.append(("Retrieval-Pivot Rate", rpr_line))
+    embedder_line = _vector_embedder_summary(run)
+    if embedder_line is not None:
+        summary.append(("Vector store embedding", embedder_line))
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in summary
     ]

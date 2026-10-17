@@ -1124,3 +1124,61 @@ def test_the_methodology_discloses_confirmations_that_rest_on_no_manifest_marker
     all_grounded = methodology(finding("rag-entity-bleed", "mkr-1"))
     assert "Not every confirmed finding" not in all_grounded, all_grounded
     assert "manifest-grounded" in all_grounded, all_grounded
+
+
+def _embedder_pack(embedder: str | None) -> EvidencePack:
+    run = _rpr_run(RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=4)).model_copy(
+        update={"vector_embedder": embedder}
+    )
+    return EvidencePack(run_result=run, manifest_hash=run.manifest_hash)
+
+
+def _reportlab_paragraphs(
+    pack: EvidencePack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> list[str]:
+    """Render ``pack`` with reportlab and return the markup of every paragraph."""
+    from reportlab.platypus import Paragraph
+
+    texts: list[str] = []
+
+    def _recording(text: str, *args: object, **kwargs: object) -> object:
+        texts.append(text)
+        return Paragraph(text, *args, **kwargs)
+
+    monkeypatch.setattr("sectum_ai.evidence.pdf.Paragraph", _recording)
+    render_audit_pack(pack, tmp_path / "pack.pdf")
+    return texts
+
+
+@pytest.mark.parametrize(
+    ("embedder", "expected"),
+    [
+        ("st:all-mpnet-base-v2", "st:all-mpnet-base-v2"),
+        ("hashing-64", "ranks by shared tokens rather than meaning"),
+        (None, None),
+    ],
+)
+def test_both_engines_name_the_geometry_the_rate_was_measured_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, embedder: str | None, expected: str | None
+) -> None:
+    # A rate measured by shared tokens read, in the auditor's PDF, in the same words
+    # as one measured by a production embedding model. Both engines carry the row,
+    # or the two packs of one run state different things about it.
+    pack = _embedder_pack(embedder)
+    html = build_audit_html(pack)
+    reportlab = "\n".join(_reportlab_paragraphs(pack, tmp_path, monkeypatch))
+    if expected is None:
+        assert "Vector store embedding" not in html
+        assert "Vector store embedding" not in reportlab
+    else:
+        assert "Vector store embedding" in html and expected in html
+        assert "Vector store embedding" in reportlab and expected in reportlab
+
+
+def test_the_recorded_embedder_is_escaped_in_both_engines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _embedder_pack("st:<b>forged</b>")
+    assert "<b>forged" not in build_audit_html(pack)
+    texts = _reportlab_paragraphs(pack, tmp_path, monkeypatch)
+    assert not any("<b>forged" in text for text in texts)

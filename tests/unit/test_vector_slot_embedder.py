@@ -187,9 +187,13 @@ def test_the_probe_run_records_the_geometry_its_store_actually_used(
     monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _named)
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
-    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["vector_embedder"] == "st:all-mpnet-base-v2", record.get("vector_embedder")
+    # Every renderer of the rate names its geometry, not just the signed record.
+    assert "measured in: st:all-mpnet-base-v2" in text.output, text.output
+    summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    assert json.loads(summary.stdout)["vector_embedder"] == "st:all-mpnet-base-v2"
 
 
 @pytest.mark.parametrize(
@@ -220,3 +224,120 @@ def test_the_erasure_run_records_the_geometry_only_when_it_scanned_the_store(
     runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", scope])
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert pack["run_result"]["vector_embedder"] == expected
+
+
+class _Modes(HashingEmbedding):
+    """Records which mode each text was embedded in."""
+
+    def __init__(self) -> None:
+        super().__init__("hash-16", dim=16)
+        self.documents: list[str] = []
+        self.queries: list[str] = []
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.documents.extend(texts)
+        return super().embed(texts)
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        self.queries.extend(texts)
+        return super().embed(texts)
+
+
+def test_the_bridge_embeds_the_corpus_as_documents_and_the_rest_as_queries() -> None:
+    model = _Modes()
+    bridge = EmbedderBridge(model)
+    bridge.prefetch(["acme payroll", "globex contract"])
+    bridge("acme payroll")  # the upsert: served from the document cache
+    bridge("who owns the contract")  # a probe query
+    bridge("who owns the contract")  # asked again: cached, not re-embedded
+    assert model.documents == ["acme payroll", "globex contract"]
+    assert model.queries == ["who owns the contract"]
+
+
+def test_a_provider_failure_is_a_typed_adapter_error_that_does_not_echo_the_sdk() -> None:
+    # An SDK's own exception escaped the CLI's typed handler as a traceback and
+    # exit 1; its message can also echo part of the API key.
+    from sectum_ai.spec import AdapterError
+
+    class _Revoked(HashingEmbedding):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            # Split so secret scanning does not flag the synthetic key.
+            raise RuntimeError("Incorrect API key provided: " + "sk-" + "proj-abc123")
+
+    bridge = EmbedderBridge(_Revoked("hash-16", dim=16))
+    with pytest.raises(AdapterError) as caught:
+        bridge.prefetch(["a document"])
+    assert "sk-proj" not in str(caught.value)
+    assert "RuntimeError" in str(caught.value)
+
+
+def _local_config(tmp_path: Path) -> Path:
+    path = tmp_path / "local.yaml"
+    path.write_text("detection:\n  mode: local\n")
+    return path
+
+
+def test_byoc_local_mode_refuses_hosted_specs_that_bypass_the_config(tmp_path: Path) -> None:
+    # The config validator only sees the config. `probe` sweeps the list fixed into
+    # the substrate at seed time, and `seed`/`calibrate` take overrides - each of
+    # which passed a `local` config untouched and sent the corpus to the provider.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    local = str(_local_config(tmp_path))
+    hosted = ["--embedding-model", "openai:text-embedding-3-small"]
+    seeded = runner.invoke(
+        app, ["seed", "--workdir", str(tmp_path / "a"), "--config", local, *hosted]
+    )
+    assert seeded.exit_code == 3, seeded.output
+    assert "--embedding-model" in seeded.output
+
+    # Seeded under a hosted config, then probed under the local one.
+    workdir = str(tmp_path / "b")
+    assert runner.invoke(app, ["seed", "--workdir", workdir, *hosted]).exit_code == 0
+    probed = runner.invoke(app, ["probe", "--workdir", workdir, "--config", local])
+    assert probed.exit_code == 3, probed.output
+    assert "seeded scenario" in probed.output
+    assert not (tmp_path / "b" / "run.json").exists()
+
+    calibrated = runner.invoke(
+        app, ["calibrate", "--config", local, "--embedder", "cohere:embed-english-v3.0"]
+    )
+    assert calibrated.exit_code == 3, calibrated.output
+    # Refused for egress, not merely for the provider's extra being absent.
+    assert "detection.mode 'local'" in calibrated.output, calibrated.output
+
+
+def test_byoc_local_mode_refuses_mem0_on_its_default_hosted_providers() -> None:
+    # mem0 defaults its LLM and embedder to OpenAI, so `memory: {kind: mem0}` alone
+    # sends every memory write off the box.
+    with pytest.raises(ValueError, match="mem0 llm"):
+        SectumConfig.model_validate(_local(adapters={"memory": {"kind": "mem0"}}))
+    with pytest.raises(ValueError, match="mem0 embedder"):
+        SectumConfig.model_validate(
+            _local(adapters={"memory": {"kind": "mem0", "config": {"llm": {"provider": "ollama"}}}})
+        )
+    SectumConfig.model_validate(
+        _local(
+            adapters={
+                "memory": {
+                    "kind": "mem0",
+                    "config": {
+                        "llm": {"provider": "ollama"},
+                        "embedder": {"provider": "huggingface"},
+                    },
+                }
+            }
+        )
+    )
+
+
+def test_the_shared_hashing_name_states_the_hashing_embedders_real_dimension() -> None:
+    # The PDF explains this name and the resolver records it; both read one
+    # constant, which must not drift from the embedder it names.
+    from sectum_ai.config import _hashing_embed
+    from sectum_ai.spec import HASHING_EMBEDDER_NAME
+
+    assert f"hashing-{len(_hashing_embed('probe text'))}" == HASHING_EMBEDDER_NAME

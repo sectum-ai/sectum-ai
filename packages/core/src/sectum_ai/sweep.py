@@ -17,7 +17,7 @@ no fake-derived per-model rates.
 from collections.abc import Sequence
 
 from sectum_ai.adapters.fakes import FakeVectorStore
-from sectum_ai.embeddings import EmbeddingModel, cosine
+from sectum_ai.embeddings import EmbeddingModel, cosine, embed_queries
 from sectum_ai.probes import RagEntityBleedProbe
 from sectum_ai.runner import (
     StepResult,
@@ -94,7 +94,9 @@ def embedding_provider_sweep(
     for model in models:
         document_vectors = model.embed([f"{doc.title} {doc.content}" for doc in documents])
         index = list(zip(documents, document_vectors, strict=True))
-        query_vectors = model.embed([payload_required(step, "query") for step in steps])
+        # As queries: an asymmetric model (Cohere, Voyage) ranks a query embedded
+        # as a document lower against the corpus, under-reporting the gradient.
+        query_vectors = embed_queries(model, [payload_required(step, "query") for step in steps])
         results: list[StepResult] = []
         for step, query_vector in zip(steps, query_vectors, strict=True):
             k = payload_int(step, "k", "5")

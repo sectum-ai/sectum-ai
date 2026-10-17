@@ -87,7 +87,10 @@ measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
 of different
 scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
-`[SCENARIO CHANGED]`; a record from another schema line
+`[SCENARIO CHANGED]`, and two runs whose vector stores ranked with different
+embedding models (`vector_embedder`) — the Retrieval-Pivot Rate is a property of
+the geometry, so the two rates were taken with different instruments — reported
+as `[EMBEDDER CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
 check the run record *inside* a pack, and so is one whose headline counts
 contradict the findings it carries, see below), or residual / attestable-with-caveat data on an erased surface

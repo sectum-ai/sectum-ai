@@ -26,6 +26,7 @@ from sectum_ai.spec.errors import (
 )
 from sectum_ai.spec.hashing import canonical_hash, sha256_hex, to_canonical_json
 from sectum_ai.spec.models import (
+    HASHING_EMBEDDER_NAME,
     SCHEMA_VERSION,
     ClassScore,
     ControlMapping,
@@ -61,6 +62,7 @@ from sectum_ai.spec.text import (
 
 __all__ = [
     "ERASURE_SURFACES",
+    "HASHING_EMBEDDER_NAME",
     "SCHEMA_VERSION",
     "AccessOutcome",
     "AdapterError",

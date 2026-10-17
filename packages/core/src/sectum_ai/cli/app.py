@@ -64,6 +64,7 @@ from sectum_ai.config import (
     detection_provenance,
     embedder_model_name,
     load_config,
+    refuse_hosted_embeddings,
     surface_provenance,
     surface_provenance_of,
 )
@@ -931,6 +932,7 @@ def seed(
     if embedding_model:
         for spec in embedding_model:
             validate_embedding_spec(spec)  # ConfigError -> exit 3
+        refuse_hosted_embeddings(loaded, embedding_model, "--embedding-model")
         embedding_models = tuple(embedding_model)
     else:
         embedding_models = loaded.scenario.embedding_models
@@ -998,6 +1000,11 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
+    # The sweep embeds the list fixed into the substrate at seed time, not the
+    # config's - so a substrate seeded with hosted models passed the config's gate.
+    refuse_hosted_embeddings(
+        loaded, substrate.scenario.embedding_models, "the seeded scenario's embedding_models"
+    )
     # The precondition of the whole product, tested as the probes themselves test it. Ask
     # the real question - is any marker foreign to any principal? - rather than a proxy for
     # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
@@ -1291,6 +1298,7 @@ def probe(
             "probe_count": probe_count,
             "confirmed_findings": len(confirmed),
             "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
+            "vector_embedder": run.vector_embedder,
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
             # dashboard can show the rate's uncertainty, not a bare point estimate.
             "retrieval_pivot_n": run.metrics.retrieval_pivot_n,
@@ -1354,6 +1362,9 @@ def probe(
         )
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
+            if run.vector_embedder is not None:
+                # The geometry the rate was measured in, as the PDF states it.
+                typer.echo(f"  measured in: {untrusted(run.vector_embedder)}")
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,
@@ -3676,6 +3687,8 @@ def calibrate(
     # config defaults; calibration is a pure function of (seed, embedder) and the
     # substrate it builds, so it writes nothing and needs no prior `seed` run.
     _ = workdir if workdir is not None else loaded.workdir
+    if embedder is not None:
+        refuse_hosted_embeddings(loaded, [embedder], "--embedder")
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(
         default_scenario(seed=effective_seed, corpus_size=loaded.scenario.corpus_size)
@@ -3718,6 +3731,17 @@ def _delta_range(delta: MetricDelta) -> str:
     return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
+def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
+    """The banner for two runs whose vector stores ranked in different embedding models."""
+    before, after = (untrusted(name) for name in change)
+    return (
+        f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
+        f"one with {after}: the Retrieval-Pivot Rate is a property of the embedding "
+        "geometry, so the rates were taken with different instruments and their "
+        "difference is not a change in isolation; re-baseline deliberately"
+    )
+
+
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
     return _delta_verdict(
@@ -3726,7 +3750,9 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
         (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
         (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
-        scenario_changed=result.scenario_changed,
+        # An embedder swap is the same refusal as a re-seed: the rates were taken
+        # with a different instrument, so neither `[ok]` nor `[REGRESSED]` holds.
+        scenario_changed=result.scenario_changed or result.embedder_changed is not None,
     )
 
 
@@ -3938,6 +3964,8 @@ def baseline(
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "baseline found may simply have nowhere to appear; re-baseline deliberately"
         )
+    if result.embedder_changed is not None:
+        typer.echo(_embedder_changed_banner(result.embedder_changed, "baseline"))
     # The other CI-facing command. Both were silent about a run describing the
     # built-in fakes, where every other command discloses it.
     _warn_on_synthetic_surfaces(run.surface_provenance)
@@ -4124,6 +4152,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "earlier run found may simply have nowhere to appear"
         )
+    if result.embedder_changed is not None:
+        typer.echo(_embedder_changed_banner(result.embedder_changed, "earlier"))
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -4173,6 +4203,9 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         # empty lists over a run that exits 2 - a clean run, in JSON.
         "headline_unmeasured": list(result.metrics.headline_unmeasured),
         "scenario_changed": result.scenario_changed,
+        "embedder_changed": (
+            list(result.embedder_changed) if result.embedder_changed is not None else None
+        ),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))

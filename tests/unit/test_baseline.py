@@ -335,3 +335,26 @@ def test_the_modelled_gradient_is_labelled_modelled_in_every_renderer() -> None:
     # The MEASURED rate beside it must not pick the label up.
     measured = [delta for delta in deltas if delta.name == "retrieval_pivot_rate"]
     assert measured and "modelled" not in measured[0].name
+
+
+def test_baseline_compare_flags_an_embedder_swap(tmp_path: Path) -> None:
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
+    run_path = tmp_path / "run.json"
+    record = json.loads(run_path.read_text())
+    record["vector_embedder"] = "hashing-64"
+    run_path.write_text(json.dumps(record))
+    assert runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"]).exit_code == 0
+
+    record["vector_embedder"] = "st:all-mpnet-base-v2"
+    run_path.write_text(json.dumps(record))
+    result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
+    assert result.exit_code == 2, result.output
+    assert "[EMBEDDER CHANGED]" in result.output, result.output

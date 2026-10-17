@@ -23,10 +23,11 @@ import json
 import math
 import os
 import re
-from collections.abc import Iterable
+from array import array
+from collections.abc import Callable, Iterable
 from typing import Any, Protocol, runtime_checkable
 
-from sectum_ai.spec import ConfigError
+from sectum_ai.spec import AdapterError, ConfigError, SectumError
 
 __all__ = [
     "BedrockEmbedding",
@@ -58,6 +59,20 @@ class EmbeddingModel(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one vector per input text, in order."""
         ...
+
+
+def embed_queries(model: EmbeddingModel, texts: list[str]) -> list[list[float]]:
+    """Embed ``texts`` as retrieval QUERIES where the model distinguishes them.
+
+    Cohere, Voyage and Cohere-on-Bedrock are asymmetric: a query and a document are
+    embedded into different halves of the space, and ``embed`` is document mode.
+    Embedding a probe's query as a document scores it lower against the corpus
+    than the customer's production store would, which embeds queries as queries -
+    so a Retrieval-Pivot Rate measured that way under-reports. A symmetric model
+    has no ``embed_queries`` and is used as is.
+    """
+    query_mode = getattr(model, "embed_queries", None)
+    return query_mode(texts) if query_mode is not None else model.embed(texts)
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -179,7 +194,8 @@ class CohereEmbedding:
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
     sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
-    Uses ``input_type="search_document"`` (the sweep embeds corpus documents).
+    ``embed`` uses ``input_type="search_document"``; :meth:`embed_queries` uses
+    ``search_query``, the mode a production store embeds its queries in.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "COHERE_API_KEY") -> None:
@@ -201,6 +217,11 @@ class CohereEmbedding:
         response = self._client.embed(texts=texts, model=self._model, input_type="search_document")
         return self._vectors(response)
 
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries (``input_type="search_query"``)."""
+        response = self._client.embed(texts=texts, model=self._model, input_type="search_query")
+        return self._vectors(response)
+
     @staticmethod
     def _vectors(response: object) -> list[list[float]]:
         # Cohere's ``embeddings`` is a plain list of vectors on the v1-style client;
@@ -220,7 +241,7 @@ class VoyageEmbedding:
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
     sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
-    Uses ``input_type="document"`` (the sweep embeds corpus documents). Voyage caps a
+    ``embed`` uses ``input_type="document"`` and :meth:`embed_queries` ``query``. Voyage caps a
     single request at 1000 texts (and a per-model token budget) and does not
     auto-batch, so the whole-corpus sweep is chunked in ``_VOYAGE_BATCH``-sized calls.
     """
@@ -243,14 +264,20 @@ class VoyageEmbedding:
         """Embed ``texts`` and return the vectors in input order, chunked per request."""
         return self._embed_batched(self._client, self._model, texts)
 
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries (``input_type="query"``)."""
+        return self._embed_batched(self._client, self._model, texts, input_type="query")
+
     @classmethod
-    def _embed_batched(cls, client: Any, model: str, texts: list[str]) -> list[list[float]]:
+    def _embed_batched(
+        cls, client: Any, model: str, texts: list[str], *, input_type: str = "document"
+    ) -> list[list[float]]:
         # Voyage does not batch a single embed request, so split the corpus into
         # <=_VOYAGE_BATCH-text calls and concatenate the vectors in input order.
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _VOYAGE_BATCH):
             batch = texts[start : start + _VOYAGE_BATCH]
-            response = client.embed(batch, model=model, input_type="document")
+            response = client.embed(batch, model=model, input_type=input_type)
             vectors.extend(cls._vectors(response))
         return vectors
 
@@ -270,8 +297,8 @@ class BedrockEmbedding:
       embeds the corpus one text at a time. Request body ``{"inputText": ...}``, vector
       under ``embedding``.
     - **Cohere-on-Bedrock** (``cohere.embed-*``) takes a batch of up to 96 texts per
-      call. Request body ``{"texts": [...], "input_type": "search_document"}``, vectors
-      under ``embeddings``.
+      call. Request body ``{"texts": [...], "input_type": "search_document"}``
+      (``search_query`` from :meth:`embed_queries`), vectors under ``embeddings``.
 
     Credentials and region come from boto3's standard chain (env ``AWS_REGION`` /
     profile / instance role); ``region`` overrides it. Like :class:`OpenAIEmbedding`,
@@ -298,6 +325,12 @@ class BedrockEmbedding:
             return self._embed_cohere(texts)
         return [self._embed_titan_one(text) for text in texts]
 
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries; Titan is symmetric, so only Cohere differs."""
+        if self._is_cohere:
+            return self._embed_cohere(texts, input_type="search_query")
+        return self.embed(texts)
+
     def _invoke(self, body: dict[str, Any]) -> Any:
         return self._client.invoke_model(
             modelId=self._model,
@@ -309,11 +342,13 @@ class BedrockEmbedding:
     def _embed_titan_one(self, text: str) -> list[float]:
         return self._titan_vector(self._invoke({"inputText": text}))
 
-    def _embed_cohere(self, texts: list[str]) -> list[list[float]]:
+    def _embed_cohere(
+        self, texts: list[str], input_type: str = "search_document"
+    ) -> list[list[float]]:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _BEDROCK_COHERE_BATCH):
             batch = texts[start : start + _BEDROCK_COHERE_BATCH]
-            response = self._invoke({"texts": batch, "input_type": "search_document"})
+            response = self._invoke({"texts": batch, "input_type": input_type})
             vectors.extend(self._cohere_vectors(response))
         return vectors
 
@@ -435,37 +470,41 @@ class EmbedderBridge:
     Handed a hosted model directly, that is one network call per document - about
     2,000 sequential calls for the default corpus, before a single query. The CLI
     knows the corpus before it upserts, so :meth:`prefetch` embeds it in batches
-    up front and the per-document calls are served from cache. A text that was not
-    prefetched (a probe's query) still embeds on demand, so correctness never
-    depends on the prefetch having happened - only speed and cost do.
+    up front, as DOCUMENTS, and the per-document calls are served from cache.
+
+    A text that was not prefetched is a probe's query, and is embedded on demand
+    as a QUERY (:func:`embed_queries`): an asymmetric model embeds the two into
+    different halves of its space, and the customer's store embeds its queries as
+    queries. The two are cached apart, so a query that happens to equal a document
+    never borrows the document's vector.
     """
 
     def __init__(self, model: EmbeddingModel, *, batch_size: int = 64) -> None:
-        if batch_size <= 0:
-            raise ConfigError(f"embedding batch size must be positive, got {batch_size}")
         self.model = model
         self.name = model.name
         self._batch_size = batch_size
-        self._cache: dict[str, list[float]] = {}
+        # Packed doubles: a 3,072-dim model over the default corpus held ~200 MB as
+        # lists of boxed floats for the whole run.
+        self._documents: dict[str, array[float]] = {}
+        self._queries: dict[str, array[float]] = {}
         self._dim: int | None = None
 
     def prefetch(self, texts: Iterable[str]) -> None:
-        """Embed every text not already cached, ``batch_size`` at a time."""
-        missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
+        """Embed every document text not already cached, ``batch_size`` at a time."""
+        missing = [text for text in dict.fromkeys(texts) if text not in self._documents]
         for start in range(0, len(missing), self._batch_size):
             chunk = missing[start : start + self._batch_size]
-            vectors = self.model.embed(chunk)
-            if len(vectors) != len(chunk):
-                raise ConfigError(
-                    f"embedder {self.name!r} returned {len(vectors)} vectors for {len(chunk)} texts"
-                )
-            self._cache.update(zip(chunk, vectors, strict=True))
+            self._store(self._documents, chunk, self._embed(self.model.embed, chunk))
 
     def __call__(self, text: str) -> list[float]:
-        """Return the vector for ``text``, embedding it now if it was not prefetched."""
-        if text not in self._cache:
-            self.prefetch([text])
-        return self._cache[text]
+        """The document vector for a prefetched text, else ``text`` embedded as a query."""
+        cached = self._documents.get(text)
+        if cached is None:
+            cached = self._queries.get(text)
+        if cached is None:
+            self._store(self._queries, [text], self._embed(self._embed_queries, [text]))
+            cached = self._queries[text]
+        return cached.tolist()
 
     @property
     def dim(self) -> int:
@@ -473,3 +512,34 @@ class EmbedderBridge:
         if self._dim is None:
             self._dim = len(self("sectum-ai dimension probe"))
         return self._dim
+
+    def _embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return embed_queries(self.model, texts)
+
+    def _embed(
+        self, embed: Callable[[list[str]], list[list[float]]], texts: list[str]
+    ) -> list[list[float]]:
+        # A provider SDK raises its own exceptions - a revoked key, a misspelled
+        # model, a rate limit mid-corpus - which escaped the CLI's typed-error
+        # handler as a raw traceback and exit 1 instead of the adapter-error exit 3.
+        try:
+            return embed(texts)
+        except SectumError:
+            raise
+        except Exception as error:
+            # The type only: an SDK's message can echo part of the API key.
+            raise AdapterError(
+                f"embedder {self.name!r} failed ({type(error).__name__}); check its "
+                "model name, credentials and quota"
+            ) from error
+
+    def _store(
+        self, cache: dict[str, array[float]], texts: list[str], vectors: list[list[float]]
+    ) -> None:
+        if len(vectors) != len(texts):
+            raise AdapterError(
+                f"embedder {self.name!r} returned {len(vectors)} vectors for {len(texts)} texts"
+            )
+        cache.update(
+            (text, array("d", vector)) for text, vector in zip(texts, vectors, strict=True)
+        )

@@ -299,3 +299,60 @@ def test_validate_embedding_spec_rejects_a_non_positive_hash_dim() -> None:
     for bad in ("hash-0", "hash--3"):
         with pytest.raises(ConfigError):
             validate_embedding_spec(bad)
+
+
+def test_asymmetric_providers_embed_queries_in_query_mode() -> None:
+    # Cohere, Voyage and Cohere-on-Bedrock embed a query and a document into
+    # different halves of the space. A probe query embedded as a document ranks
+    # lower against the corpus than the customer's store would rank it, so the
+    # measured Retrieval-Pivot Rate under-reports.
+    import json
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import BedrockEmbedding, CohereEmbedding, VoyageEmbedding
+
+    modes: list[str] = []
+
+    class _Client:
+        def embed(self, *args: object, input_type: str, **_: object) -> object:
+            modes.append(input_type)
+            return SimpleNamespace(embeddings=[[1.0]])
+
+        def invoke_model(self, *, body: str, **_: object) -> dict[str, Any]:
+            modes.append(json.loads(body)["input_type"])
+            return _bedrock_body({"embeddings": [[1.0]]})
+
+    cohere = CohereEmbedding.__new__(CohereEmbedding)
+    cohere._model, cohere._client = "embed-english-v3.0", _Client()
+    voyage = VoyageEmbedding.__new__(VoyageEmbedding)
+    voyage._model, voyage._client = "voyage-3", _Client()
+    bedrock = BedrockEmbedding.__new__(BedrockEmbedding)
+    bedrock._model, bedrock._is_cohere, bedrock._client = "cohere.embed-v3", True, _Client()
+    for model in (cohere, voyage, bedrock):
+        model.embed(["a document"])
+        model.embed_queries(["a query"])
+    assert modes == [
+        "search_document",
+        "search_query",
+        "document",
+        "query",
+        "search_document",
+        "search_query",
+    ]
+
+
+def test_the_provider_sweep_embeds_its_queries_in_query_mode() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _Asymmetric(HashingEmbedding):
+        def __init__(self, name: str, dim: int) -> None:
+            super().__init__(name, dim=dim)
+            self.query_calls = 0
+
+        def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            self.query_calls += 1
+            return self.embed(texts)
+
+    models = [_Asymmetric("hash-32", 32), _Asymmetric("hash-64", 64)]
+    embedding_provider_sweep(substrate, models)
+    assert [model.query_calls for model in models] == [1, 1]

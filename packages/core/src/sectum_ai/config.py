@@ -84,7 +84,13 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError, DetectionProvenance, SurfaceProvenance
+from sectum_ai.spec import (
+    HASHING_EMBEDDER_NAME,
+    AdapterError,
+    ConfigError,
+    DetectionProvenance,
+    SurfaceProvenance,
+)
 
 
 class ScenarioConfig(BaseModel):
@@ -337,6 +343,11 @@ class SectumConfig(BaseModel):
         corpus - the largest egress in the product. A validator on
         ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
         three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
+
+        A ``mem0`` memory adapter brings its own LLM and embedder, and mem0 defaults
+        both to OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there.
+        Specs that arrive from the command line or a seeded substrate rather than this
+        file are gated where they are used, by :func:`refuse_hosted_embeddings`.
         """
         if self.detection.mode != "local":
             return self
@@ -348,13 +359,59 @@ class SectumConfig(BaseModel):
         hosted = [m for m in self.scenario.embedding_models if is_hosted_embedding_spec(m)]
         if hosted:
             offenders.append(f"scenario.embedding_models ({', '.join(map(repr, hosted))})")
+        offenders += _hosted_mem0_providers(self.adapters.get("memory"))
         if offenders:
             raise ValueError(
                 f"detection.mode 'local' forbids sending tenant content off the box, but "
-                f"{'; '.join(offenders)} would call a hosted embedding API. Use a local "
-                "model (st:<model>) or the deterministic hash-<dim> instead."
+                f"{'; '.join(offenders)} would call a hosted AI API. Use a local "
+                "model (st:<model>, hash-<dim>, or a local mem0 provider) instead."
             )
         return self
+
+
+# mem0 providers that run on the box or on an endpoint the operator points them at
+# (`ollama_base_url`, `lmstudio_base_url`, a vLLM server, a local
+# sentence-transformers model) - the same trust `detection`'s `base_url` gets.
+_LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
+    "llm": frozenset({"ollama", "lmstudio", "vllm"}),
+    "embedder": frozenset({"ollama", "lmstudio", "huggingface"}),
+}
+
+
+def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
+    """The mem0 LLM / embedder providers in ``memory`` that call a hosted API."""
+    if memory is None or memory.kind != "mem0":
+        return []
+    mem0_config = (memory.model_extra or {}).get("config")
+    sections = mem0_config if isinstance(mem0_config, dict) else {}
+    offenders = []
+    for section, local in _LOCAL_MEM0_PROVIDERS.items():
+        block = sections.get(section)
+        provider = block.get("provider") if isinstance(block, dict) else None
+        if provider not in local:
+            offenders.append(f"memory mem0 {section} ({provider or 'default: openai'!r})")
+    return offenders
+
+
+def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source: str) -> None:
+    """Refuse hosted embedding ``specs`` under ``detection.mode: local``.
+
+    For specs the config validator never sees: ``seed --embedding-model`` and
+    ``calibrate --embedder`` overrides, and the list ``probe`` actually sweeps,
+    which is the one fixed into the substrate at seed time - not the config's.
+
+    Raises:
+        ConfigError: in ``local`` mode, naming the hosted specs and their source.
+    """
+    if config.detection.mode != "local":
+        return
+    hosted = [spec for spec in specs if is_hosted_embedding_spec(spec)]
+    if hosted:
+        raise ConfigError(
+            f"detection.mode 'local' forbids sending tenant content off the box, but "
+            f"{source} ({', '.join(map(repr, hosted))}) would call a hosted embedding "
+            "API. Use a local model (st:<model>) or the deterministic hash-<dim> instead."
+        )
 
 
 def load_config(path: Path) -> SectumConfig:
@@ -592,10 +649,6 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
     )
 
 
-_HASHING_EMBEDDER_NAME = f"hashing-{_EMBED_DIM}"
-"""The name recorded for a store driven by the built-in `_hashing_embed`."""
-
-
 def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
     """The embedding model the operator configured for this store, if any.
 
@@ -636,13 +689,11 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     signed pack has to be able to tell them apart.
     """
     if config.kind == "fake":
-        store = _build_vector_store(config)
-        store.embedder_name = None
-        return store
+        return _build_vector_store(config)
     bridge = _resolve_vector_embedder(config)
     if bridge is None:
         store = _build_vector_store(config)
-        store.embedder_name = _HASHING_EMBEDDER_NAME
+        store.embedder_name = HASHING_EMBEDDER_NAME
     else:
         store = _build_vector_store(config, bridge, bridge.dim)
         store.embedder_name = bridge.name

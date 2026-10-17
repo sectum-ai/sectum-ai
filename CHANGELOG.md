@@ -20,7 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec, or `null` for the built-in fake or
   a run that scanned no vector surface), on both `probe` and `erasure` records.
-  Schema **0.8.0**.
+  Schema **0.8.0**. Both audit-PDF engines name it beside the Retrieval-Pivot Rate,
+  as do `probe`'s text and JSON summaries.
+- **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
+  vector stores ranked with different embedding models, and mark their metric
+  lines as not measured: the rates were taken with different instruments, so a
+  rate that fell across the swap is not a fix.
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable
@@ -82,7 +87,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that detection is the only stage that embeds tenant content; the Class 2 sweep
   embeds the whole corpus and an `openai:`/`cohere:`/`voyage:`/`bedrock:` entry
   passed silently. `local` mode now refuses a hosted spec there and on the new
-  `vector_store.embedder`.
+  `vector_store.embedder` — and wherever else one arrives: a `seed
+  --embedding-model` or `calibrate --embedder` override, and the list `probe`
+  actually sweeps, which is the one fixed into the substrate at seed time rather
+  than the config's. A `mem0` memory adapter is refused too unless its `llm` and
+  `embedder` providers are local; mem0 defaults both to OpenAI.
+- **Asymmetric embedding models embedded probe queries as documents.** Cohere,
+  Voyage and Cohere-on-Bedrock embed queries and documents into different halves
+  of their space, and every call used document mode, so the Class 2 sweep ranked
+  its queries lower against the corpus than a production store would and
+  under-reported the per-model gradient. Queries now use `search_query` / `query`.
 
 - **A failed anchor no longer makes `verify` accuse the previous pack.** The
   audit PDF was rendered straight to its final path, *before* the TSA/Rekor call

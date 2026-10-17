@@ -514,6 +514,13 @@ class DetectionProvenance(SectumModel):
     """The RESOLVED similarity gate - the number that ran, never the literal "auto"."""
 
 
+HASHING_EMBEDDER_NAME = "hashing-64"
+"""``RunResult.vector_embedder`` for a live store on the built-in hashing embedder.
+
+Shared so the CLI that records it and the renderers that explain it cannot drift.
+"""
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 
