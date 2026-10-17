@@ -530,6 +530,17 @@ def is_hashing_embedder(name: str) -> bool:
     return name == HASHING_EMBEDDER_NAME or name.startswith(("hash-", "hash:"))
 
 
+def lexical_caveat(name: str) -> str | None:
+    """The disclosure a hashing embedder's name needs wherever it is shown, else ``None``.
+
+    One wording for the scorecard, the probe summary and both PDF engines, so the
+    disclosure cannot drift between the artifacts an auditor compares.
+    """
+    if not is_hashing_embedder(name):
+        return None
+    return "a deterministic hashing embedder, which ranks by shared tokens rather than meaning"
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 

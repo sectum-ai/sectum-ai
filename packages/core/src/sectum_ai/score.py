@@ -81,7 +81,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
-    is_hashing_embedder,
+    lexical_caveat,
     rate_from_counts,
     untrusted,
     wilson_interval,
@@ -284,16 +284,31 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
     return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
-def _geometry(vector_embedder: str | None) -> str:
-    """The embedding geometry a Retrieval-Pivot Rate was measured in, as a suffix.
+GEOMETRY_PROBES: frozenset[str] = frozenset(
+    {"rag-entity-bleed", "rag-poisoning", "embedding-inversion", "ikea-extraction"}
+)
+"""The probes that rank by similarity over the vector slot's store.
 
-    The audit PDF names it beside the rate; the scorecard showed a rate ranked by
-    shared tokens exactly as it showed one ranked by a production model.
+Their results move with its embedding model, so a run records the model only when
+one of them ran, `diff` scopes an embedder swap to them, and the scorecard names
+the geometry on their classes' headlines. Class 1 fetches by id; the pipeline-end
+bleed probe asks the RAG pipeline, which ranks with its own retriever and index.
+"""
+
+
+def _geometry(vector_embedder: str | None) -> str:
+    """The embedding geometry a headline's vector-store steps ranked in, as a suffix.
+
+    The audit PDF names it; the scorecard showed a rate ranked by shared tokens
+    exactly as it showed one ranked by a production model. Worded as the vector
+    store's STEPS: Class 2's rate also pools the RAG pipeline's, which its own
+    retriever ranked.
     """
     if vector_embedder is None:
         return ""
-    lexical = " - shared tokens, not meaning" if is_hashing_embedder(vector_embedder) else ""
-    return f", ranked by {untrusted(vector_embedder)}{lexical}"
+    caveat = lexical_caveat(vector_embedder)
+    lexical = f" - {caveat}" if caveat is not None else ""
+    return f", vector-store steps ranked by {untrusted(vector_embedder)}{lexical}"
 
 
 def _headline(
@@ -597,7 +612,11 @@ def _score_class(
     # detail column, indistinguishable on the page from one that measured 0.0%.
     # `_headline` returns None for both "this class has no rate" and "the rate is
     # None", so the four classes that HAVE one are named here.
-    headline = _headline(entry, run.metrics, run.vector_embedder)
+    # Named only on a class whose similarity-ranking probe actually ran: Class 2's
+    # rate on a run where only the pipeline-end probe fed it ranked nothing in the
+    # store's geometry.
+    ranked = GEOMETRY_PROBES.intersection(entry.probe_ids, run.probe_versions)
+    headline = _headline(entry, run.metrics, run.vector_embedder if ranked else None)
     unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
         entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
     )

@@ -138,7 +138,7 @@ from sectum_ai.runner import (
     confirmed_sequence_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import PROBE_SURFACES, score_run
+from sectum_ai.score import GEOMETRY_PROBES, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     AdapterError,
@@ -160,7 +160,7 @@ from sectum_ai.spec import (
     SurfaceProvenance,
     canonical_hash,
     configure_logging,
-    is_hashing_embedder,
+    lexical_caveat,
     residual_present,
     sha256_hex,
     untrusted,
@@ -1255,7 +1255,7 @@ def probe(
         # geometry, and naming one let a swap gate `diff` over unaffected numbers.
         vector_embedder=(
             getattr(vector, "embedder_name", None)
-            if {result[0].probe_id for result in step_results} & set(_GEOMETRY_PROBES)
+            if {result[0].probe_id for result in step_results} & GEOMETRY_PROBES
             else None
         ),
         metrics=RunMetrics(
@@ -1378,11 +1378,8 @@ def probe(
         if run.vector_embedder is not None:
             # The geometry every similarity-ranked number above was measured in -
             # the rate, and Classes 3, 6 and 10 - as the PDF states it.
-            lexical = (
-                " (a hashing embedder: shared tokens, not meaning)"
-                if is_hashing_embedder(run.vector_embedder)
-                else ""
-            )
+            caveat = lexical_caveat(run.vector_embedder)
+            lexical = f" ({caveat})" if caveat is not None else ""
             typer.echo(f"vector store ranked with: {untrusted(run.vector_embedder)}{lexical}")
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
@@ -3841,19 +3838,6 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
     )
 
 
-# The probes that rank by similarity over the vector slot's store, so whose
-# counts move with its embedding model. Class 1 fetches by id; the pipeline-end
-# bleed probe asks the RAG pipeline, which ranks with its own retriever and index
-# (the built-in fake keeps one of its own). The erasure modes record no per-probe
-# count; their vector surface is scoped through `key_lost` below.
-_GEOMETRY_PROBES: tuple[str, ...] = (
-    RagEntityBleedProbe.id,
-    RagPoisoningProbe.id,
-    EmbeddingInversionProbe.id,
-    IkeaExtractionProbe.id,
-)
-
-
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
     # An embedder swap changes the instrument only for what ranks by similarity in
@@ -3863,7 +3847,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     swapped = result.embedder_changed is not None
     return _delta_verdict(
         delta,
-        (*result.coverage_lost, *(_GEOMETRY_PROBES if swapped else ())),
+        (*result.coverage_lost, *(sorted(GEOMETRY_PROBES) if swapped else ())),
         (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
         (

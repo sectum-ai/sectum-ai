@@ -576,7 +576,9 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert "vector store ranked with: hash-128 (a hashing embedder" in text.output, text.output
+    assert "vector store ranked with: hash-128 (a deterministic hashing embedder" in text.output, (
+        text.output
+    )
 
 
 def test_a_run_that_ranked_nothing_names_no_geometry(
@@ -609,8 +611,12 @@ def test_a_run_that_ranked_nothing_names_no_geometry(
 @pytest.mark.parametrize(
     ("embedder", "expected"),
     [
-        ("st:all-mpnet-base-v2", ", ranked by st:all-mpnet-base-v2)"),
-        ("hashing-64", ", ranked by hashing-64 - shared tokens, not meaning)"),
+        ("st:all-mpnet-base-v2", ", vector-store steps ranked by st:all-mpnet-base-v2)"),
+        (
+            "hashing-64",
+            ", vector-store steps ranked by hashing-64 - a deterministic hashing embedder,"
+            " which ranks by shared tokens rather than meaning)",
+        ),
         (None, "n=10)"),
     ],
 )
@@ -642,7 +648,7 @@ def test_a_scored_run_carries_its_geometry_into_the_class_2_line(tmp_path: Path)
     score = score_run(RunResult.model_validate(record))
     class_2 = next(line for line in score.classes if line.class_id == 2)
     assert class_2.headline is not None
-    assert "ranked by st:all-mpnet-base-v2" in class_2.headline, class_2.headline
+    assert "vector-store steps ranked by st:all-mpnet-base-v2" in class_2.headline, class_2.headline
 
 
 def test_only_a_ranking_records_the_geometry(
@@ -738,3 +744,28 @@ def test_the_scorecard_names_the_geometry_on_every_similarity_ranked_headline() 
         entry = next(entry for entry in CATALOG if entry.class_id == class_id)
         headline = _headline(entry, metrics, "hashing-64")
         assert headline is not None and "ranked by hashing-64" in headline, headline
+
+
+def test_the_scorecard_names_no_geometry_where_no_similarity_probe_fed_the_class(
+    tmp_path: Path,
+) -> None:
+    # Class 2's rate pools the RAG pipeline's steps, which its own retriever ranked:
+    # on a run where only the pipeline-end probe fed it, naming the store's geometry
+    # described a ranking that never happened.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.score import score_run
+    from sectum_ai.spec import RunResult
+
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "rag-pipeline-bleed"])
+    record = json.loads((tmp_path / "run.json").read_text())
+    record["vector_embedder"] = "st:all-mpnet-base-v2"
+    score = score_run(RunResult.model_validate(record))
+    class_2 = next(line for line in score.classes if line.class_id == 2)
+    assert class_2.headline is not None
+    assert "ranked by" not in class_2.headline, class_2.headline

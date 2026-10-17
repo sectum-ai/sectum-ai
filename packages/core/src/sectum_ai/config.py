@@ -214,8 +214,10 @@ class DetectionConfig(BaseModel):
     # and providers explicitly pointed at an operator-controlled `base_url` (a local
     # or in-VPC endpoint), are allowed — so Sectum itself makes no call to a hosted
     # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
-    # the threat model documents this. Detection is the only stage that embeds or
-    # judges tenant content, so gating it is what makes the zero-egress claim real.
+    # the threat model documents this. Detection is NOT the only stage that embeds
+    # tenant content: the vector store's `embedder`, the Class 2 sweep and a mem0
+    # memory adapter are gated by `SectumConfig._enforce_zero_egress`, and the
+    # zero-egress claim rests on both validators.
     mode: Literal["hosted", "local"] = "hosted"
 
     @model_validator(mode="after")
@@ -335,9 +337,9 @@ class SectumConfig(BaseModel):
         """In ``detection.mode: local``, refuse every embedder that would leave the box.
 
         ``DetectionConfig._enforce_local_mode`` gates the detection embedder and
-        judge, and its docstring states the premise: "Detection is the only stage
-        that embeds or judges tenant content, so gating it is what makes the
-        zero-egress claim real." That premise was false. ``scenario.embedding_models``
+        judge, and the guarantee used to rest on it alone, on the premise that
+        detection is the only stage that embeds or judges tenant content. That
+        premise was false. ``scenario.embedding_models``
         embeds the corpus for the Class 2 sweep and was never gated, so ``mode: local``
         failed OPEN silently; and the vector slot's ``embedder`` embeds the WHOLE
         corpus - the largest egress in the product. A validator on

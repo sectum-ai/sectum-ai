@@ -50,6 +50,7 @@ from sectum_ai.spec.models import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
     is_hashing_embedder,
+    lexical_caveat,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
@@ -109,6 +110,7 @@ __all__ = [
     "get_logger",
     "is_hashing_embedder",
     "json_schemas",
+    "lexical_caveat",
     "normal_quantile",
     "normalize_for_match",
     "ordered_within_span",

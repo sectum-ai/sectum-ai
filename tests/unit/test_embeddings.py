@@ -378,3 +378,23 @@ def test_every_provider_call_path_maps_sdk_failures_to_a_typed_error() -> None:
         _BatchToSingleEmbedder(revoked).embed("an observation")
     for caught in (swept, calibrated):
         assert "sk-proj" not in str(caught.value)
+
+
+class _Short(HashingEmbedding):
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return []
+
+
+def test_a_short_provider_response_is_a_typed_error_on_every_path() -> None:
+    # A degraded response with fewer vectors than texts surfaced as a raw IndexError
+    # in `calibrate` and a strict-zip ValueError in the sweep.
+    from sectum_ai.cli.app import _BatchToSingleEmbedder
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    with pytest.raises(AdapterError, match="returned 0 vectors"):
+        _BatchToSingleEmbedder(_Short("hash-16", dim=16)).embed("an observation")
+    with pytest.raises(AdapterError, match="returned 0 vectors"):
+        embedding_provider_sweep(
+            substrate, [_Short("hash-16", dim=16), HashingEmbedding("hash-32", dim=32)]
+        )

@@ -1574,8 +1574,9 @@ def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> 
 def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:
     # A probe that later starts issuing `vector.query` moves with the embedder too;
     # leaving it off the list prints `[ok]` across a swap for it.
-    from sectum_ai.cli.app import _GEOMETRY_PROBES, _build_suite
+    from sectum_ai.cli.app import _build_suite
     from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.score import GEOMETRY_PROBES
     from sectum_ai.substrate import build_substrate, default_scenario
 
     substrate = build_substrate(default_scenario(seed=2026))
@@ -1585,8 +1586,8 @@ def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() ->
         if any(step.action == "vector.query" for step in probe.plan(substrate))
     }
     assert querying
-    assert querying <= set(_GEOMETRY_PROBES)
+    assert querying <= GEOMETRY_PROBES
     # The pipeline-end probe asks the RAG pipeline, which ranks with its own
     # retriever and index - not the slot's embedder. Listing it named a geometry
     # for a rate the store never ranked, and a swap then gated `diff`.
-    assert "rag-pipeline-bleed" not in _GEOMETRY_PROBES
+    assert "rag-pipeline-bleed" not in GEOMETRY_PROBES

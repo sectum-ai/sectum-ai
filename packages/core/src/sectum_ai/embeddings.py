@@ -502,9 +502,11 @@ def call_embedder(
     rate limit mid-corpus - which escaped the CLI's typed-error handler as a raw
     traceback and exit 1 instead of the adapter-error exit 3. Every path that calls
     a provider goes through here: the vector slot, the Class 2 sweep, `calibrate`.
+    So does the count check: a degraded response with fewer vectors than texts
+    surfaced downstream as a raw IndexError or a strict-zip ValueError.
     """
     try:
-        return embed(texts)
+        vectors = embed(texts)
     except SectumError:
         raise
     except Exception as error:
@@ -513,6 +515,11 @@ def call_embedder(
             f"embedder {name!r} failed ({type(error).__name__}); check its "
             "model name, credentials and quota"
         ) from error
+    if len(vectors) != len(texts):
+        raise AdapterError(
+            f"embedder {name!r} returned {len(vectors)} vectors for {len(texts)} texts"
+        )
+    return vectors
 
 
 class EmbedderBridge:
@@ -590,10 +597,6 @@ class EmbedderBridge:
         for start in range(0, len(missing), self._batch_size):
             chunk = missing[start : start + self._batch_size]
             vectors = call_embedder(self.name, embed, chunk)
-            if len(vectors) != len(chunk):
-                raise AdapterError(
-                    f"embedder {self.name!r} returned {len(vectors)} vectors for {len(chunk)} texts"
-                )
             cache.update(
                 (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
             )

@@ -35,7 +35,7 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
-    is_hashing_embedder,
+    lexical_caveat,
     rate_from_counts,
     sha256_hex,
     wilson_interval,
@@ -781,17 +781,12 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
     """
     if run.vector_embedder is None:
         return None
+    caveat = lexical_caveat(run.vector_embedder)
+    if caveat is None:
+        return run.vector_embedder
     if run.vector_embedder == HASHING_EMBEDDER_NAME:
-        return (
-            f"{HASHING_EMBEDDER_NAME} - Sectum's deterministic hashing embedder, which "
-            "ranks by shared tokens rather than meaning; no embedding model was configured"
-        )
-    if is_hashing_embedder(run.vector_embedder):
-        return (
-            f"{run.vector_embedder} - a deterministic hashing embedder, which ranks by "
-            "shared tokens rather than meaning"
-        )
-    return run.vector_embedder
+        return f"{run.vector_embedder} - {caveat}; no embedding model was configured"
+    return f"{run.vector_embedder} - {caveat}"
 
 
 def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
