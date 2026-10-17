@@ -192,8 +192,8 @@ planned queries and the erasure scans' fingerprint queries, as queries — which
 models. Any other text, such as a document a probe plants mid-run, is embedded as
 a document. The run
 records the model as `vector_embedder` in its signed `RunResult`
-([data models](data-models.md)) and the audit PDF names it beside the
-Retrieval-Pivot Rate; `diff` and `baseline --compare` report two runs that used
+([data models](data-models.md)), and the audit PDF and the scorecard name it beside
+the rates it qualifies; `diff` and `baseline --compare` report two runs that used
 different models as `[EMBEDDER CHANGED]`. A `fake-*` name is refused (it is a sweep recall
 illustration with no vectors to give a store), and so is `embedder` on the
 built-in `fake` store, which does not embed.

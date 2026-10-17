@@ -771,14 +771,15 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
 def _vector_embedder_summary(run: RunResult) -> str | None:
     """Name the embedding model the vector store ranked in, or ``None`` if unrecorded.
 
-    The Retrieval-Pivot Rate is a property of that geometry, so the row sits beside
-    it: without it the auditor's PDF stated a rate measured by shared tokens in the
-    same words as one measured by a production embedding model. Omitted where the
-    record names no embedder (a fake slot, the ``app`` API, a run that scanned no
-    vector surface) and where there is no rate to qualify: on an erasure pack the
-    hashing caveat read as a caveat on the attestation itself.
+    The Retrieval-Pivot Rate is a property of that geometry: without this row the
+    auditor's PDF stated a rate measured by shared tokens in the same words as one
+    measured by a production embedding model. The record names an embedder only
+    when something ranked by similarity over the store, so the row qualifies
+    whatever did - the rate, Classes 3, 6 and 10, or an erasure's vector residue
+    scan, a lexical one of which is a real caveat on that verdict too. Omitted where
+    the record names none.
     """
-    if run.vector_embedder is None or _retrieval_pivot_summary(run) is None:
+    if run.vector_embedder is None:
         return None
     if run.vector_embedder == HASHING_EMBEDDER_NAME:
         return (

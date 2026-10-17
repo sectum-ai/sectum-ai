@@ -20,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec, or `null` for the built-in fake or
   a run in which nothing ranked by similarity over the store), on both `probe` and
-  `erasure` records. The scorecard headline names it too.
-  Schema **0.8.0**. Both audit-PDF engines name it beside the Retrieval-Pivot Rate,
-  as do `probe`'s text and JSON summaries.
+  `erasure` records. The scorecard's Class 2, 3, 6 and 10 headlines name it too.
+  Schema **0.8.0**. Both audit-PDF engines name it in the summary, as do
+  `probe`'s text and JSON summaries.
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
   vector stores ranked with different embedding models, and mark the metrics of
-  the probes that rank by similarity over the vector store (directly or through a
-  RAG pipeline) — and its erasure counts — as not measured: those were taken with different instruments, so one that
+  the probes that rank by similarity over the vector store — and its erasure
+  counts — as not measured: those were taken with different instruments, so one that
   fell across the swap is not a fix. A by-id fetch (Class 1) and metrics off the
   vector surface still compare.
 

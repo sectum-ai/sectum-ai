@@ -721,7 +721,11 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         store.embedder_name = HASHING_EMBEDDER_NAME
     else:
         store = _build_vector_store(config, bridge, bridge.dim)
-        store.embedder_name = bridge.name
+        # A hash spec is recorded by its dim, not its spelling: `hash:64` and
+        # `hash-64` are one geometry, and the recorded name is what `diff` compares.
+        store.embedder_name = (
+            f"hash-{bridge.dim}" if bridge.name.startswith(("hash-", "hash:")) else bridge.name
+        )
         store.embedder_bridge = bridge
     # `semantic_retrieval` stays WITHDRAWN for every live store in this release,
     # including one driven by a real model - deliberately. The capability is a

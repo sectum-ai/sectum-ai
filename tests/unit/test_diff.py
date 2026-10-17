@@ -1582,8 +1582,11 @@ def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() ->
     querying = {
         probe.id
         for probe in _build_suite(build_detection_providers(DetectionConfig()))
-        # `rag.ask` too: a pipeline's retriever ranks over the store Sectum seeded.
-        if any(step.action in ("vector.query", "rag.ask") for step in probe.plan(substrate))
+        if any(step.action == "vector.query" for step in probe.plan(substrate))
     }
     assert querying
     assert querying <= set(_GEOMETRY_PROBES)
+    # The pipeline-end probe asks the RAG pipeline, which ranks with its own
+    # retriever and index - not the slot's embedder. Listing it named a geometry
+    # for a rate the store never ranked, and a swap then gated `diff`.
+    assert "rag-pipeline-bleed" not in _GEOMETRY_PROBES

@@ -191,7 +191,7 @@ def test_the_probe_run_records_the_geometry_its_store_actually_used(
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["vector_embedder"] == "st:all-mpnet-base-v2", record.get("vector_embedder")
     # Every renderer of the rate names its geometry, not just the signed record.
-    assert "measured in: st:all-mpnet-base-v2" in text.output, text.output
+    assert "vector store ranked with: st:all-mpnet-base-v2" in text.output, text.output
     summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
     assert json.loads(summary.stdout)["vector_embedder"] == "st:all-mpnet-base-v2"
 
@@ -576,7 +576,7 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert "measured in: hash-128 (a hashing embedder" in text.output, text.output
+    assert "vector store ranked with: hash-128 (a hashing embedder" in text.output, text.output
 
 
 def test_a_run_that_ranked_nothing_names_no_geometry(
@@ -643,3 +643,98 @@ def test_a_scored_run_carries_its_geometry_into_the_class_2_line(tmp_path: Path)
     class_2 = next(line for line in score.classes if line.class_id == 2)
     assert class_2.headline is not None
     assert "ranked by st:all-mpnet-base-v2" in class_2.headline, class_2.headline
+
+
+def test_only_a_ranking_records_the_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The pipeline-end probe asks the RAG pipeline (the built-in fake keeps its own
+    # index), and a subject check of record ids only fetches by id: neither ranked
+    # over the store, so neither names its geometry.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+
+    def _named(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_name = "st:all-mpnet-base-v2"
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _named)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "rag-pipeline-bleed"])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert "rag-pipeline-bleed" in record["probe_versions"]
+    assert record["vector_embedder"] is None
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_vector_slot", _with_name("st:all-mpnet-base-v2"))
+    for body, expected in (
+        ("records:\n  vector_db: [doc-a]\n", None),
+        ('fingerprints:\n  vector_db: ["a subject phrase"]\n', "st:all-mpnet-base-v2"),
+    ):
+        manifest = tmp_path / "subject.yaml"
+        manifest.write_text("subject_ref: u\n" + body)
+        runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
+        pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+        assert pack["run_result"]["vector_embedder"] == expected, body
+
+
+def _with_name(name: str) -> object:
+    from sectum_ai.config import build_vector_slot as real_build
+
+    def _named(*args: object, **kwargs: object) -> object:
+        store = real_build(*args, **kwargs)  # type: ignore[arg-type]
+        store.embedder_name = name
+        return store
+
+    return _named
+
+
+def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:
+    # Two spellings of one geometry tripped [EMBEDDER CHANGED]. Only the recorded
+    # name is normalised: the sweep keeps the configured spelling as its key.
+    names = {
+        build_vector_store(_opensearch(embedder=spec)).embedder_name
+        for spec in ("hash:64", "hash-64")
+    }
+    assert names == {"hash-64"}
+
+
+def test_the_planted_poison_is_batched_as_documents() -> None:
+    # Class 3 plants its poison mid-run; each plant embedded on demand, one provider
+    # call per document.
+    from types import SimpleNamespace
+
+    from sectum_ai.cli.app import _build_suite, _prefetch_queries
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = _build_suite(build_detection_providers(DetectionConfig()))
+    model = _Modes()
+    _prefetch_queries(SimpleNamespace(embedder_bridge=EmbedderBridge(model)), suite, substrate)
+    planted = {
+        f"{step.payload['doc_id']} {step.payload['content']}"
+        for probe in suite
+        for step in probe.plan(substrate)
+        if step.action == "vector.upsert"
+    }
+    assert planted
+    assert set(model.documents) == planted
+
+
+def test_the_scorecard_names_the_geometry_on_every_similarity_ranked_headline() -> None:
+    from sectum_ai.score import CATALOG, _headline
+    from sectum_ai.spec import RunMetrics
+
+    metrics = RunMetrics(
+        poisoning_bleed_delta=0.5, inversion_reconstruction_rate=0.5, extraction_efficiency=0.5
+    )
+    for class_id in (3, 6, 10):
+        entry = next(entry for entry in CATALOG if entry.class_id == class_id)
+        headline = _headline(entry, metrics, "hashing-64")
+        assert headline is not None and "ranked by hashing-64" in headline, headline

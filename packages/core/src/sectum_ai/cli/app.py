@@ -1375,14 +1375,15 @@ def probe(
         )
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
-            if run.vector_embedder is not None:
-                # The geometry the rate was measured in, as the PDF states it.
-                lexical = (
-                    " (a hashing embedder: shared tokens, not meaning)"
-                    if is_hashing_embedder(run.vector_embedder)
-                    else ""
-                )
-                typer.echo(f"  measured in: {untrusted(run.vector_embedder)}{lexical}")
+        if run.vector_embedder is not None:
+            # The geometry every similarity-ranked number above was measured in -
+            # the rate, and Classes 3, 6 and 10 - as the PDF states it.
+            lexical = (
+                " (a hashing embedder: shared tokens, not meaning)"
+                if is_hashing_embedder(run.vector_embedder)
+                else ""
+            )
+            typer.echo(f"vector store ranked with: {untrusted(run.vector_embedder)}{lexical}")
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,
@@ -1607,27 +1608,48 @@ def _prefetch_corpus(store: object, documents: Iterable[CorpusDocument]) -> None
     optimisation: a store that formats its text differently misses the cache and
     embeds on demand, as a document, which is slower but still correct.
     """
+    _prefetch_texts(store, (f"{document.title} {document.content}" for document in documents))
+
+
+def _prefetch_texts(store: object, texts: Iterable[str]) -> None:
     bridge = getattr(store, "embedder_bridge", None)
     if bridge is not None:
-        bridge.prefetch(f"{document.title} {document.content}" for document in documents)
+        bridge.prefetch(texts)
 
 
 def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrate) -> None:
-    """Register the suite's planned vector queries so they embed in QUERY mode.
+    """Embed the suite's planned vector texts up front: queries as QUERIES, plants in batches.
 
     Not only an optimisation: the store embeds queries and documents through one
     callable, so this is how the bridge knows which texts are queries. An
     asymmetric model (Cohere, Voyage) ranks a query embedded as a document lower
     than the customer's store would, under-reporting the Retrieval-Pivot Rate.
-    Planning is deterministic, so these are the texts the runner will query.
+    The documents a probe plants mid-run (Class 3's poison) are batched as
+    documents, in the text the runner hands the store (`title` is the doc id).
+    Planning is deterministic, so these are the texts the runner will send.
     """
+    if getattr(store, "embedder_bridge", None) is None:
+        return
+    steps = [
+        step
+        for probe in suite
+        for step in probe.plan(substrate)
+        if step.action in ("vector.query", "vector.upsert")
+    ]
     _register_queries(
         store,
         (
             step.payload["query"]
-            for probe in suite
-            for step in probe.plan(substrate)
+            for step in steps
             if step.action == "vector.query" and "query" in step.payload
+        ),
+    )
+    _prefetch_texts(
+        store,
+        (
+            f"{step.payload['doc_id']} {step.payload['content']}"
+            for step in steps
+            if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
         ),
     )
 
@@ -3322,7 +3344,13 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
-            vector_embedder=getattr(subject_store, "embedder_name", None),
+            # Only a content scan ranks; a by-id `fetch` of the record ids measures
+            # nothing in any geometry.
+            vector_embedder=(
+                getattr(subject_store, "embedder_name", None)
+                if manifest.fingerprints.get(Surface.VECTOR_DB)
+                else None
+            ),
             surface_provenance=_subject_provenance(
                 subject_store,
                 (
@@ -3813,14 +3841,13 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
     )
 
 
-# The probes whose per-probe counts move with the vector store's embedding model:
-# the four that rank by similarity in it, and the pipeline-end bleed probe, whose
-# retriever ranks over the store Sectum seeded. Class 1 fetches by id and is not
-# among them. The erasure modes record no per-probe count; their vector surface is
-# scoped through `key_lost` below.
+# The probes that rank by similarity over the vector slot's store, so whose
+# counts move with its embedding model. Class 1 fetches by id; the pipeline-end
+# bleed probe asks the RAG pipeline, which ranks with its own retriever and index
+# (the built-in fake keeps one of its own). The erasure modes record no per-probe
+# count; their vector surface is scoped through `key_lost` below.
 _GEOMETRY_PROBES: tuple[str, ...] = (
     RagEntityBleedProbe.id,
-    RagPipelineBleedProbe.id,
     RagPoisoningProbe.id,
     EmbeddingInversionProbe.id,
     IkeaExtractionProbe.id,

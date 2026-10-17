@@ -349,7 +349,10 @@ def _headline(
         # identically whether it came from 1 of 1 or 300 of 300, and no reader of
         # the signed record can tell. Carrying k/n for them is the fuller fix and
         # needs new fields; saying what they are needs neither.
-        return _ASSERTED.format(rate=f"{label_rate[1]:.1%} {label_rate[0]}")
+        # All three rank over the vector store too, so they carry its geometry.
+        return _ASSERTED.format(
+            rate=f"{label_rate[1]:.1%} {label_rate[0]}{_geometry(vector_embedder)}"
+        )
     return None
 
 

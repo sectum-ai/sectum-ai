@@ -1186,15 +1186,15 @@ def test_the_recorded_embedder_is_escaped_in_both_engines(
     assert not any("<b>forged" in text for text in texts)
 
 
-def test_the_geometry_row_needs_a_rate_to_qualify(
+def test_the_geometry_row_qualifies_whatever_ranked_not_only_the_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # An erasure pack that scanned the vector store records its embedder but has no
-    # Retrieval-Pivot Rate; the hashing caveat there read as a caveat on the
-    # erasure attestation itself.
+    # The record names an embedder only when something ranked over the store - an
+    # erasure's residue scan, Class 3 or 10 - and a lexical ranking is a caveat on
+    # those verdicts too. Gating the row on a Retrieval-Pivot Rate hid it there.
     pack = _embedder_pack("hashing-64", with_rate=False)
-    assert "Vector store embedding" not in build_audit_html(pack)
-    assert not any(
+    assert "Vector store embedding" in build_audit_html(pack)
+    assert any(
         "Vector store embedding" in text
         for text in _reportlab_paragraphs(pack, tmp_path, monkeypatch)
     )
