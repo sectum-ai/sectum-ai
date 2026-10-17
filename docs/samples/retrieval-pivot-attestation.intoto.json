@@ -4,7 +4,7 @@
     {
       "name": "run-sectum-ai-demo-2026",
       "digest": {
-        "sha256": "4b1278790d81fd4a9720299c863ace70c0621cb8d04bdcf2699f418fd170f66c"
+        "sha256": "e59d9c2d874c837e5f0b5b9252c3b3be69080d521a1495ff617b73a4027a63cf"
       }
     }
   ],
@@ -13,8 +13,8 @@
     "schema_version": "0.8.0",
     "scenario_hash": "24cc6346b7139bad3333785b6d2e9e106f2e2620eb82aaf61cae05d453b29a73",
     "manifest_hash": "07cbe06c1355fa3f01d3cd720d4dd1c453ec5d91965d53f694282a45463b26a6",
-    "started_at": "2026-10-17T17:28:52.516219+00:00",
-    "finished_at": "2026-10-17T17:28:54.801097+00:00",
+    "started_at": "2026-10-17T21:45:04.159445+00:00",
+    "finished_at": "2026-10-17T21:45:06.898002+00:00",
     "metrics": {
       "per_probe_findings": {
         "tenant-boundary-fetch": 24,

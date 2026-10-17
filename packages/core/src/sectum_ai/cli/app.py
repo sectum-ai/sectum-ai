@@ -160,6 +160,7 @@ from sectum_ai.spec import (
     SurfaceProvenance,
     canonical_hash,
     configure_logging,
+    describe_vector_embedder,
     lexical_caveat,
     residual_present,
     sha256_hex,
@@ -1383,9 +1384,10 @@ def probe(
         if run.vector_embedder is not None:
             # The geometry every similarity-ranked number above was measured in -
             # the rate, and Classes 3 and 10 - as the PDF states it.
-            caveat = lexical_caveat(run.vector_embedder)
-            lexical = f" ({caveat})" if caveat is not None else ""
-            typer.echo(f"vector-store steps ranked by: {untrusted(run.vector_embedder)}{lexical}")
+            typer.echo(
+                "vector-store steps ranked by: "
+                f"{untrusted(describe_vector_embedder(run.vector_embedder))}"
+            )
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,

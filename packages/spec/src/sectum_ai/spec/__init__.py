@@ -49,6 +49,7 @@ from sectum_ai.spec.models import (
     Substrate,
     SyntheticTenantSpec,
     SyntheticUserSpec,
+    describe_vector_embedder,
     is_hashing_embedder,
     lexical_caveat,
 )
@@ -107,6 +108,7 @@ __all__ = [
     "SyntheticUserSpec",
     "canonical_hash",
     "configure_logging",
+    "describe_vector_embedder",
     "get_logger",
     "is_hashing_embedder",
     "json_schemas",

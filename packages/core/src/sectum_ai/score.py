@@ -81,7 +81,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
-    lexical_caveat,
+    describe_vector_embedder,
     rate_from_counts,
     untrusted,
     wilson_interval,
@@ -306,9 +306,7 @@ def _geometry(vector_embedder: str | None) -> str:
     """
     if vector_embedder is None:
         return ""
-    caveat = lexical_caveat(vector_embedder)
-    lexical = f" - {caveat}" if caveat is not None else ""
-    return f", vector-store steps ranked by {untrusted(vector_embedder)}{lexical}"
+    return f", vector-store steps ranked by {untrusted(describe_vector_embedder(vector_embedder))}"
 
 
 def _headline(

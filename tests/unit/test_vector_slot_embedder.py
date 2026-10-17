@@ -122,6 +122,8 @@ def test_the_bridge_batches_a_prefetched_corpus_into_few_calls() -> None:
         ("cohere:embed-english-v3.0", True),
         ("voyage:voyage-3", True),
         ("bedrock:amazon.titan-embed-text-v2:0", True),
+        # Fail closed: a provider nobody classified is hosted.
+        ("gemini:text-embedding-004", True),
         ("st:all-mpnet-base-v2", False),
         ("hash-128", False),
     ],
@@ -570,7 +572,7 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert (
-        "vector-store steps ranked by: hash-128 (a deterministic hashing embedder" in text.output
+        "vector-store steps ranked by: hash-128 - a deterministic hashing embedder" in text.output
     ), text.output
     import json
 
@@ -612,7 +614,8 @@ def test_a_run_that_ranked_nothing_names_no_geometry(
         (
             "hashing-64",
             ", vector-store steps ranked by hashing-64 - a deterministic hashing embedder,"
-            " which ranks by shared tokens rather than meaning)",
+            " which ranks by shared tokens rather than meaning; no embedding model was"
+            " configured for the vector store)",
         ),
         (None, "n=10)"),
     ],

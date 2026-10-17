@@ -27,7 +27,6 @@ from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ERASURE_SURFACES,
-    HASHING_EMBEDDER_NAME,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
@@ -35,7 +34,7 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
-    lexical_caveat,
+    describe_vector_embedder,
     rate_from_counts,
     sha256_hex,
     wilson_interval,
@@ -311,9 +310,9 @@ _DETECTOR_TAIL = (
 # a chat model.
 _TIER_EMBEDDER = {
     True: (
-        "an OFFLINE similarity stage - this run configured no embedding model, so "
-        "the second tier was Sectum's hashing vector, which measures lexical "
-        "overlap rather than meaning"
+        "an OFFLINE similarity stage - this run configured no detection embedding "
+        "model, so the second tier was Sectum's hashing vector, which measures "
+        "lexical overlap rather than meaning"
     ),
     False: "semantic similarity against the configured embedding model",
 }
@@ -371,7 +370,7 @@ def _detector_tiers(
 
 _DETECTOR_EXACT = (
     "Each observation is matched against the ground-truth manifest by exact "
-    "content. This run invoked no embedding model and no judge - the erasure "
+    "content. Detection invoked no embedding model and no judge - the erasure "
     "workflow reads each surface and checks the subject's own markers directly - "
     "so no semantic or adjudicated tier contributed to any verdict here. "
 ) + _DETECTOR_TAIL
@@ -781,12 +780,7 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
     """
     if run.vector_embedder is None:
         return None
-    caveat = lexical_caveat(run.vector_embedder)
-    if caveat is None:
-        return run.vector_embedder
-    if run.vector_embedder == HASHING_EMBEDDER_NAME:
-        return f"{run.vector_embedder} - {caveat}; no embedding model was configured"
-    return f"{run.vector_embedder} - {caveat}"
+    return describe_vector_embedder(run.vector_embedder)
 
 
 def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:

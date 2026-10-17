@@ -31,7 +31,7 @@ from typing import Any, Protocol, runtime_checkable
 from sectum_ai.spec import AdapterError, ConfigError, SectumError
 
 __all__ = [
-    "HOSTED_EMBEDDING_PREFIXES",
+    "LOCAL_EMBEDDING_PREFIXES",
     "BedrockEmbedding",
     "CohereEmbedding",
     "EmbedderBridge",
@@ -495,18 +495,19 @@ def validate_embedding_spec(spec: str) -> None:
     )
 
 
-HOSTED_EMBEDDING_PREFIXES: tuple[str, ...] = ("openai:", "cohere:", "voyage:", "bedrock:")
-"""Embedding specs that send text to a third-party API.
+LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")
+"""Embedding specs that run on the box: sentence-transformers, hashing, recall fakes.
 
-`st:` (sentence-transformers) and `hash-` run on the box; these four egress.
 `detection.mode: local` - the "no data leaves the box" guarantee - refuses every
-one of them, wherever it is configured.
+other spec. An allow-list, so a provider added later is hosted until someone
+says otherwise: a deny-list of the hosted ones failed OPEN for any prefix it
+was not updated with.
 """
 
 
 def is_hosted_embedding_spec(spec: str) -> bool:
-    """Whether ``spec`` names a provider that sends text off the box."""
-    return spec.startswith(HOSTED_EMBEDDING_PREFIXES)
+    """Whether ``spec`` may send text off the box: anything not known to run locally."""
+    return not spec.startswith(LOCAL_EMBEDDING_PREFIXES)
 
 
 def call_embedder(

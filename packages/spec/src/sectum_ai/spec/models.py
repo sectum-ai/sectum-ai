@@ -541,6 +541,20 @@ def lexical_caveat(name: str) -> str | None:
     return "a deterministic hashing embedder, which ranks by shared tokens rather than meaning"
 
 
+def describe_vector_embedder(name: str) -> str:
+    """``name`` as every renderer shows it: with its caveat, in one wording.
+
+    The scorecard, the probe summary and both PDF engines all call this, so the
+    artifacts an auditor compares cannot describe one geometry three ways.
+    """
+    caveat = lexical_caveat(name)
+    if caveat is None:
+        return name
+    if name == HASHING_EMBEDDER_NAME:
+        return f"{name} - {caveat}; no embedding model was configured for the vector store"
+    return f"{name} - {caveat}"
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 

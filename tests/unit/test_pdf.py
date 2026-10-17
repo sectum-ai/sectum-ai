@@ -591,7 +591,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     # says "not a calibrated judge", so `"calibrated judge" not in ...` fails on
     # the sentence that fixes the defect.
     claims_a_judge = "then the configured judge"
-    assert "no embedding model" in offline_para, offline_para
+    assert "no detection embedding model" in offline_para, offline_para
     assert "no judge" in offline_para, offline_para
     assert claims_a_judge not in offline_para, offline_para
     assert "lexical overlap rather than meaning" in offline_para, offline_para
@@ -1198,3 +1198,13 @@ def test_the_geometry_row_qualifies_whatever_ranked_not_only_the_rate(
         "Vector-store steps ranked by" in text
         for text in _reportlab_paragraphs(pack, tmp_path, monkeypatch)
     )
+
+
+def test_the_erasure_methodology_does_not_deny_the_vector_stores_embedder() -> None:
+    # With `vector_store.embedder` set, the store embedded the corpus and every
+    # residue query; "this run invoked no embedding model" then contradicted the
+    # summary row of the same signed PDF. Detection is what invoked none.
+    from sectum_ai.evidence.pdf import _DETECTOR_EXACT
+
+    assert "Detection invoked no embedding model" in _DETECTOR_EXACT
+    assert "This run invoked no embedding model" not in _DETECTOR_EXACT
