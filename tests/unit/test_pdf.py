@@ -1126,10 +1126,9 @@ def test_the_methodology_discloses_confirmations_that_rest_on_no_manifest_marker
     assert "manifest-grounded" in all_grounded, all_grounded
 
 
-def _embedder_pack(embedder: str | None) -> EvidencePack:
-    run = _rpr_run(RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=4)).model_copy(
-        update={"vector_embedder": embedder}
-    )
+def _embedder_pack(embedder: str | None, *, with_rate: bool = True) -> EvidencePack:
+    metrics = RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=4) if with_rate else RunMetrics()
+    run = _rpr_run(metrics).model_copy(update={"vector_embedder": embedder})
     return EvidencePack(run_result=run, manifest_hash=run.manifest_hash)
 
 
@@ -1182,3 +1181,17 @@ def test_the_recorded_embedder_is_escaped_in_both_engines(
     assert "<b>forged" not in build_audit_html(pack)
     texts = _reportlab_paragraphs(pack, tmp_path, monkeypatch)
     assert not any("<b>forged" in text for text in texts)
+
+
+def test_the_geometry_row_needs_a_rate_to_qualify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An erasure pack that scanned the vector store records its embedder but has no
+    # Retrieval-Pivot Rate; the hashing caveat there read as a caveat on the
+    # erasure attestation itself.
+    pack = _embedder_pack("hashing-64", with_rate=False)
+    assert "Vector store embedding" not in build_audit_html(pack)
+    assert not any(
+        "Vector store embedding" in text
+        for text in _reportlab_paragraphs(pack, tmp_path, monkeypatch)
+    )

@@ -184,8 +184,10 @@ shared tokens, not meaning. A collection, table or index the run creates is crea
 at the model's own output dimension; one left by an earlier run at a different
 dimension (the default is 64) is **reused as it is**, and the backend rejects the
 upsert — remove it, or run `sectum-ai erasure`, before switching models. The corpus
-is embedded in batches before the upsert, as documents; probe queries are embedded
-as queries, which matters for the asymmetric Cohere and Voyage models. The run
+is embedded in batches before the upsert, as documents, and so are the suite's
+planned queries, as queries — which matters for the asymmetric Cohere and Voyage
+models. Any other text, such as a document a probe plants mid-run, is embedded as
+a document. The run
 records the model as `vector_embedder` in its signed `RunResult`
 ([data models](data-models.md)) and the audit PDF names it beside the
 Retrieval-Pivot Rate; `diff` and `baseline --compare` report two runs that used
@@ -336,7 +338,7 @@ deterministic offline fakes; configure real providers for production detection.
 | `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
 | `judge.base_url` | str | provider API | OpenAI-/Anthropic-compatible base URL; `kind: openai` + a local Ollama runs the judge with no account. |
 | `semantic_threshold` | float in `[0.0, 1.0]` \| `auto` | `0.62` | The similarity gate before the judge. A number is used verbatim. `auto` resolves to the calibrated per-model preset for the embedder above (see below), falling back to `0.62` with a logged warning for an unknown model. Raise it (or use `auto`) once a real embedding model is configured — a stronger model surfaces more (the engineering spec, section 7). **Bounded to the range a cosine similarity can occupy**: a value above `1.0` is unsatisfiable and would switch the semantic detector off entirely — no candidate reaches the judge, a paraphrased cross-tenant leak is not recorded even as unverified, and the run still signs a pack asserting isolation. Out-of-range values (including `nan` and `inf`) are rejected at config load. `0.0` is legal and admits every candidate to the judge. |
-| `mode` | `hosted` \| `local` | `hosted` | `local` is the BYOC "no data leaves the box" guarantee: the config **fails fast** if any embedder or judge would call a default hosted AI API. For detection, only `fake` providers, or providers with a `base_url` pointed at an operator-controlled local/in-VPC endpoint, are allowed; a hosted `vector_store.embedder`, `scenario.embedding_models` entry (or `seed --embedding-model` / `calibrate --embedder` override, or a seeded substrate's list) is refused outright (`st:` and `hash-` run on the box), as is a `mem0` memory whose `llm` / `embedder` provider is not local (`ollama`, `lmstudio`, `vllm` / `ollama`, `lmstudio`, `huggingface`) — mem0 defaults both to OpenAI. `hosted` (the default) places no egress restriction. |
+| `mode` | `hosted` \| `local` | `hosted` | `local` is the BYOC "no data leaves the box" guarantee: the config **fails fast** if any embedder or judge would call a default hosted AI API. For detection, only `fake` providers, or providers with a `base_url` pointed at an operator-controlled local/in-VPC endpoint, are allowed; a hosted `vector_store.embedder`, `scenario.embedding_models` entry (or `seed --embedding-model` / `calibrate --embedder` override, or a seeded substrate's list) is refused outright (`st:` and `hash-` run on the box), as is a `mem0` memory whose `llm`, `embedder` or `graph_store.llm` provider is not local (`ollama`, `lmstudio`, `vllm` / `ollama`, `lmstudio`, `huggingface`, or `openai` with an explicit `openai_base_url`) — mem0 defaults `llm` and `embedder` to OpenAI. `hosted` (the default) places no egress restriction. |
 
 Real providers reach their HTTP APIs with the standard library only; the API key
 is read from the environment, never inlined. A local OpenAI-compatible server —
@@ -353,7 +355,8 @@ them that would reach a hosted API — a detection embedder or judge on
 spec on the other two, wherever it is given — the config, a `seed` or `calibrate`
 override, or the list a substrate was seeded with. A `mem0` memory adapter brings
 its own LLM and embedder, and mem0 defaults both to OpenAI; `local` mode refuses
-it unless its `config` sets both to a local provider. Together these guarantee it
+it unless its `config` sets both — and any `graph_store.llm` — to a local
+provider. Together these guarantee it
 makes no call to a third-party AI service. A `base_url` you set is trusted to point at an endpoint
 inside your own boundary; that target is your trust boundary, not Sectum's (see
 the [threat model](threat-model.md)).

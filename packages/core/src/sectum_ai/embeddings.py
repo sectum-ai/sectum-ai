@@ -463,6 +463,28 @@ def is_hosted_embedding_spec(spec: str) -> bool:
     return spec.startswith(HOSTED_EMBEDDING_PREFIXES)
 
 
+def call_embedder(
+    name: str, embed: Callable[[list[str]], list[list[float]]], texts: list[str]
+) -> list[list[float]]:
+    """Call a provider's ``embed`` with its failures mapped to :class:`AdapterError`.
+
+    A provider SDK raises its own exceptions - a revoked key, a misspelled model, a
+    rate limit mid-corpus - which escaped the CLI's typed-error handler as a raw
+    traceback and exit 1 instead of the adapter-error exit 3. Every path that calls
+    a provider goes through here: the vector slot, the Class 2 sweep, `calibrate`.
+    """
+    try:
+        return embed(texts)
+    except SectumError:
+        raise
+    except Exception as error:
+        # The type only: an SDK's message can echo part of the API key.
+        raise AdapterError(
+            f"embedder {name!r} failed ({type(error).__name__}); check its "
+            "model name, credentials and quota"
+        ) from error
+
+
 class EmbedderBridge:
     """Adapt a batch :class:`EmbeddingModel` to the single-text callable a store takes.
 
@@ -472,11 +494,16 @@ class EmbedderBridge:
     knows the corpus before it upserts, so :meth:`prefetch` embeds it in batches
     up front, as DOCUMENTS, and the per-document calls are served from cache.
 
-    A text that was not prefetched is a probe's query, and is embedded on demand
-    as a QUERY (:func:`embed_queries`): an asymmetric model embeds the two into
+    The store calls the same callable to embed a query, so the bridge cannot tell
+    the two apart by the call. An asymmetric model (Cohere, Voyage) embeds them into
     different halves of its space, and the customer's store embeds its queries as
-    queries. The two are cached apart, so a query that happens to equal a document
-    never borrows the document's vector.
+    queries - so the CLI registers the suite's planned query texts with
+    :meth:`prefetch_queries`, which embeds them in QUERY mode. Anything not
+    registered is embedded as a DOCUMENT on demand: a poison document a probe
+    plants mid-run must be indexed the way the corpus is, and a query the plan did
+    not name falls back to document mode, which is what every call used before
+    query mode existed. A text registered as both is a document: the index is what
+    the store keeps.
     """
 
     def __init__(self, model: EmbeddingModel, *, batch_size: int = 64) -> None:
@@ -496,14 +523,21 @@ class EmbedderBridge:
             chunk = missing[start : start + self._batch_size]
             self._store(self._documents, chunk, self._embed(self.model.embed, chunk))
 
+    def prefetch_queries(self, texts: Iterable[str]) -> None:
+        """Embed every query text not already cached in QUERY mode, in batches."""
+        missing = [text for text in dict.fromkeys(texts) if text not in self._queries]
+        for start in range(0, len(missing), self._batch_size):
+            chunk = missing[start : start + self._batch_size]
+            self._store(self._queries, chunk, self._embed(self._embed_queries, chunk))
+
     def __call__(self, text: str) -> list[float]:
-        """The document vector for a prefetched text, else ``text`` embedded as a query."""
+        """The cached vector for ``text``, else ``text`` embedded now as a document."""
         cached = self._documents.get(text)
         if cached is None:
             cached = self._queries.get(text)
         if cached is None:
-            self._store(self._queries, [text], self._embed(self._embed_queries, [text]))
-            cached = self._queries[text]
+            self.prefetch([text])
+            cached = self._documents[text]
         return cached.tolist()
 
     @property
@@ -519,19 +553,7 @@ class EmbedderBridge:
     def _embed(
         self, embed: Callable[[list[str]], list[list[float]]], texts: list[str]
     ) -> list[list[float]]:
-        # A provider SDK raises its own exceptions - a revoked key, a misspelled
-        # model, a rate limit mid-corpus - which escaped the CLI's typed-error
-        # handler as a raw traceback and exit 1 instead of the adapter-error exit 3.
-        try:
-            return embed(texts)
-        except SectumError:
-            raise
-        except Exception as error:
-            # The type only: an SDK's message can echo part of the API key.
-            raise AdapterError(
-                f"embedder {self.name!r} failed ({type(error).__name__}); check its "
-                "model name, credentials and quota"
-            ) from error
+        return call_embedder(self.name, embed, texts)
 
     def _store(
         self, cache: dict[str, array[float]], texts: list[str], vectors: list[list[float]]

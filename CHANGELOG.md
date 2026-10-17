@@ -23,9 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Schema **0.8.0**. Both audit-PDF engines name it beside the Retrieval-Pivot Rate,
   as do `probe`'s text and JSON summaries.
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
-  vector stores ranked with different embedding models, and mark their metric
-  lines as not measured: the rates were taken with different instruments, so a
-  rate that fell across the swap is not a fix.
+  vector stores ranked with different embedding models, and mark the metrics the
+  vector store feeds as not measured: those rates were taken with different
+  instruments, so one that fell across the swap is not a fix. Metrics off the
+  vector surface still compare.
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable
@@ -90,13 +91,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `vector_store.embedder` — and wherever else one arrives: a `seed
   --embedding-model` or `calibrate --embedder` override, and the list `probe`
   actually sweeps, which is the one fixed into the substrate at seed time rather
-  than the config's. A `mem0` memory adapter is refused too unless its `llm` and
-  `embedder` providers are local; mem0 defaults both to OpenAI.
+  than the config's. A `mem0` memory adapter is refused too unless its `llm`,
+  `embedder` and any `graph_store.llm` providers are local (an `openai` provider
+  with an explicit `openai_base_url` counts); mem0 defaults the first two to OpenAI.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked
   its queries lower against the corpus than a production store would and
-  under-reported the per-model gradient. Queries now use `search_query` / `query`.
+  under-reported the per-model gradient. Queries now use `search_query` / `query`,
+  in the sweep and for the suite's planned queries against a live store.
+- **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
+  traceback and exit 1, with an SDK message that can echo part of the API key;
+  every provider call now fails as a typed adapter error (exit 3) naming only the
+  exception type.
 
 - **A failed anchor no longer makes `verify` accuse the previous pack.** The
   audit PDF was rendered straight to its final path, *before* the TSA/Rekor call

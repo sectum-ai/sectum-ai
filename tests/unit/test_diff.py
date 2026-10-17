@@ -1485,3 +1485,38 @@ def test_a_record_that_names_no_embedder_is_not_an_embedder_change() -> None:
     earlier = _run().model_copy(update={"vector_embedder": "hashing-64"})
     assert diff_runs(earlier, _run()).embedder_changed is None
     assert diff_runs(earlier, earlier).embedder_changed is None
+
+
+def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
+    tmp_path: Path,
+) -> None:
+    # The swap changes the instrument on the vector surface only. Marking EVERY
+    # metric line "not measured" hid a real semantic-cache leak that appeared in
+    # the same run behind the banner.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0", "semantic-cache-contamination": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "semantic_cache": "LIVE"},
+    }
+    earlier = _run(
+        metrics=RunMetrics(
+            per_probe_findings={"rag-entity-bleed": 0, "semantic-cache-contamination": 0}
+        )
+    ).model_copy(update={**exercised, "vector_embedder": "hashing-64"})
+    later = _run(
+        _finding("c", probe_id="semantic-cache-contamination"),
+        metrics=RunMetrics(
+            confirmed_findings=1,
+            per_probe_findings={"rag-entity-bleed": 0, "semantic-cache-contamination": 1},
+        ),
+    ).model_copy(update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"})
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] per_probe_findings[semantic-cache-contamination]" in cli.output, cli.output
+    assert "[not measured] per_probe_findings[rag-entity-bleed]" in cli.output, cli.output

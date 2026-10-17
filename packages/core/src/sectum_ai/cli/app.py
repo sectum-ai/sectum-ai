@@ -69,7 +69,12 @@ from sectum_ai.config import (
     surface_provenance_of,
 )
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
-from sectum_ai.embeddings import EmbeddingModel, resolve_embedding_model, validate_embedding_spec
+from sectum_ai.embeddings import (
+    EmbeddingModel,
+    call_embedder,
+    resolve_embedding_model,
+    validate_embedding_spec,
+)
 from sectum_ai.evidence import (
     PdfEngine,
     RekorTransparencyLog,
@@ -1112,6 +1117,7 @@ def probe(
         agent=bundle.agent,
     )
 
+    _prefetch_queries(vector, suite, substrate)
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
     # A single probe stays serial regardless of --max-concurrency (a pool is only
@@ -1587,11 +1593,30 @@ def _prefetch_corpus(store: object, documents: Iterable[CorpusDocument]) -> None
     document - about 2,000 sequential calls for the default corpus. Embedding the
     same strings in batches first means ``upsert`` is served from cache. Purely an
     optimisation: a store that formats its text differently misses the cache and
-    embeds on demand, which is slower but still correct.
+    embeds on demand, as a document, which is slower but still correct.
     """
     bridge = getattr(store, "embedder_bridge", None)
     if bridge is not None:
         bridge.prefetch(f"{document.title} {document.content}" for document in documents)
+
+
+def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrate) -> None:
+    """Register the suite's planned vector queries so they embed in QUERY mode.
+
+    Not only an optimisation: the store embeds queries and documents through one
+    callable, so this is how the bridge knows which texts are queries. An
+    asymmetric model (Cohere, Voyage) ranks a query embedded as a document lower
+    than the customer's store would, under-reporting the Retrieval-Pivot Rate.
+    Planning is deterministic, so these are the texts the runner will query.
+    """
+    bridge = getattr(store, "embedder_bridge", None)
+    if bridge is not None:
+        bridge.prefetch_queries(
+            step.payload["query"]
+            for probe in suite
+            for step in probe.plan(substrate)
+            if step.action == "vector.query" and "query" in step.payload
+        )
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -3491,7 +3516,7 @@ class _BatchToSingleEmbedder:
 
     def embed(self, text: str) -> tuple[float, ...]:
         """Embed a single text by calling the batch model with a one-item list."""
-        return tuple(self._model.embed([text])[0])
+        return tuple(call_embedder(self.name, self._model.embed, [text])[0])
 
 
 def _resolve_calibration_embedder(
@@ -3748,11 +3773,16 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
         delta,
         result.coverage_lost,
         (*result.boundary_lost, *result.plants_lost),
-        result.scope_lost,
+        # An embedder swap changes the instrument on the vector surface only, so it
+        # is that surface's comparability that is lost: a metric the vector store
+        # feeds reads "not measured", while a cache or memory regression in the
+        # same run still reads `[REGRESSED]` rather than hiding behind the banner.
+        (
+            *result.scope_lost,
+            *((Surface.VECTOR_DB.value,) if result.embedder_changed is not None else ()),
+        ),
         (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
-        # An embedder swap is the same refusal as a re-seed: the rates were taken
-        # with a different instrument, so neither `[ok]` nor `[REGRESSED]` holds.
-        scenario_changed=result.scenario_changed or result.embedder_changed is not None,
+        scenario_changed=result.scenario_changed,
     )
 
 

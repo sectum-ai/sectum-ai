@@ -772,10 +772,12 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
 
     The Retrieval-Pivot Rate is a property of that geometry, so the row sits beside
     it: without it the auditor's PDF stated a rate measured by shared tokens in the
-    same words as one measured by a production embedding model. ``None`` - a fake
-    slot, the ``app`` API, or a run that scanned no vector surface - omits the row.
+    same words as one measured by a production embedding model. Omitted where the
+    record names no embedder (a fake slot, the ``app`` API, a run that scanned no
+    vector surface) and where there is no rate to qualify: on an erasure pack the
+    hashing caveat read as a caveat on the attestation itself.
     """
-    if run.vector_embedder is None:
+    if run.vector_embedder is None or _retrieval_pivot_summary(run) is None:
         return None
     if run.vector_embedder == HASHING_EMBEDDER_NAME:
         return (

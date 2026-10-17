@@ -147,8 +147,8 @@ timestamped; it is signed by a TSA only when one is configured.)
   API (a detection provider on `openai`/`anthropic` without a `base_url`, or an
   `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec, whether it comes from the
   config, a CLI override, or the list a substrate was seeded with). A `mem0` memory
-  adapter is refused too unless its LLM and embedder are local providers, since
-  mem0 defaults both to OpenAI — so Sectum makes no call to a third-party AI
+  adapter is refused too unless its LLM, embedder and any graph-store LLM are local
+  providers, since mem0 defaults the first two to OpenAI — so Sectum makes no call to a third-party AI
   service. A `base_url` you configure is
   trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
   server); that target is your trust boundary, not Sectum's.

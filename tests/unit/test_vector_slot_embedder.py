@@ -243,15 +243,46 @@ class _Modes(HashingEmbedding):
         return super().embed(texts)
 
 
-def test_the_bridge_embeds_the_corpus_as_documents_and_the_rest_as_queries() -> None:
+def test_only_registered_queries_embed_in_query_mode() -> None:
+    # The store embeds documents and queries through one callable, so the bridge
+    # cannot tell them apart by the call. Defaulting an unknown text to QUERY mode
+    # indexed Class 3's mid-run poison documents as queries - in the wrong half of
+    # an asymmetric space. Unknown texts are documents; planned queries are
+    # registered.
     model = _Modes()
     bridge = EmbedderBridge(model)
     bridge.prefetch(["acme payroll", "globex contract"])
+    bridge.prefetch_queries(["who owns the contract", "who owns the contract"])
     bridge("acme payroll")  # the upsert: served from the document cache
-    bridge("who owns the contract")  # a probe query
-    bridge("who owns the contract")  # asked again: cached, not re-embedded
-    assert model.documents == ["acme payroll", "globex contract"]
+    bridge("who owns the contract")  # a planned query: served from the query cache
+    bridge("a poison document planted mid-run")  # unknown: embedded as a document
+    assert model.documents == [
+        "acme payroll",
+        "globex contract",
+        "a poison document planted mid-run",
+    ]
     assert model.queries == ["who owns the contract"]
+
+
+def test_the_probe_registers_every_planned_vector_query() -> None:
+    from types import SimpleNamespace
+
+    from sectum_ai.cli.app import _build_suite, _prefetch_queries
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = _build_suite(build_detection_providers(DetectionConfig()))
+    model = _Modes()
+    _prefetch_queries(SimpleNamespace(embedder_bridge=EmbedderBridge(model)), suite, substrate)
+    planned = {
+        step.payload["query"]
+        for probe in suite
+        for step in probe.plan(substrate)
+        if step.action == "vector.query"
+    }
+    assert planned
+    assert set(model.queries) == planned
 
 
 def test_a_provider_failure_is_a_typed_adapter_error_that_does_not_echo_the_sdk() -> None:
@@ -341,3 +372,49 @@ def test_the_shared_hashing_name_states_the_hashing_embedders_real_dimension() -
     from sectum_ai.spec import HASHING_EMBEDDER_NAME
 
     assert f"hashing-{len(_hashing_embed('probe text'))}" == HASHING_EMBEDDER_NAME
+
+
+def _mem0(config: dict[str, object]) -> dict[str, object]:
+    return _local(adapters={"memory": {"kind": "mem0", "config": config}})
+
+
+def test_byoc_local_mode_trusts_a_pointed_openai_provider_and_checks_the_graph_llm() -> None:
+    local_llm = {"provider": "ollama"}
+    local_embedder = {"provider": "huggingface"}
+    # An OpenAI-compatible server the operator pointed at is local - the same trust
+    # `detection`'s base_url gets. Refusing it was a false refusal.
+    pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:11434/v1"}}
+    SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
+    # The graph store's own LLM sends memory content too.
+    with pytest.raises(ValueError, match=r"graph_store\.llm"):
+        SectumConfig.model_validate(
+            _mem0(
+                {
+                    "llm": local_llm,
+                    "embedder": local_embedder,
+                    "graph_store": {"provider": "neo4j", "llm": {"provider": "openai"}},
+                }
+            )
+        )
+
+
+def test_the_probe_command_registers_its_queries_before_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+
+    model = _Modes()
+
+    def _bridged(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_bridge = EmbedderBridge(model)
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _bridged)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert model.queries, "the planned vector queries were never registered"

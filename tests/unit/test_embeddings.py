@@ -356,3 +356,25 @@ def test_the_provider_sweep_embeds_its_queries_in_query_mode() -> None:
     models = [_Asymmetric("hash-32", 32), _Asymmetric("hash-64", 64)]
     embedding_provider_sweep(substrate, models)
     assert [model.query_calls for model in models] == [1, 1]
+
+
+class _Revoked(HashingEmbedding):
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("Incorrect API key provided: " + "sk-" + "proj-abc123")
+
+
+def test_every_provider_call_path_maps_sdk_failures_to_a_typed_error() -> None:
+    # The vector slot's bridge mapped them; the Class 2 sweep and `calibrate`
+    # called the same providers raw - a traceback, exit 1, and an SDK message that
+    # can echo part of the key.
+    from sectum_ai.cli.app import _BatchToSingleEmbedder
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    revoked = _Revoked("hash-16", dim=16)
+    with pytest.raises(AdapterError) as swept:
+        embedding_provider_sweep(substrate, [revoked, HashingEmbedding("hash-32", dim=32)])
+    with pytest.raises(AdapterError) as calibrated:
+        _BatchToSingleEmbedder(revoked).embed("an observation")
+    for caught in (swept, calibrated):
+        assert "sk-proj" not in str(caught.value)

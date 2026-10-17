@@ -371,24 +371,44 @@ class SectumConfig(BaseModel):
 
 # mem0 providers that run on the box or on an endpoint the operator points them at
 # (`ollama_base_url`, `lmstudio_base_url`, a vLLM server, a local
-# sentence-transformers model) - the same trust `detection`'s `base_url` gets.
+# sentence-transformers model). An `openai` provider with an explicit
+# `openai_base_url` is an OpenAI-compatible server the operator chose - the same
+# trust `detection`'s `base_url` gets - so it is local too.
 _LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
     "llm": frozenset({"ollama", "lmstudio", "vllm"}),
     "embedder": frozenset({"ollama", "lmstudio", "huggingface"}),
 }
 
 
+def _mem0_provider_is_local(block: object, local: frozenset[str]) -> bool:
+    if not isinstance(block, dict):
+        return False
+    provider = block.get("provider")
+    settings = block.get("config")
+    pointed = isinstance(settings, dict) and bool(settings.get("openai_base_url"))
+    return provider in local or (provider == "openai" and pointed)
+
+
 def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
-    """The mem0 LLM / embedder providers in ``memory`` that call a hosted API."""
+    """The mem0 sections in ``memory`` whose model provider calls a hosted API.
+
+    ``llm`` and ``embedder`` default to OpenAI when absent. ``graph_store.llm``
+    overrides the LLM for graph memory and is checked only when it is given.
+    """
     if memory is None or memory.kind != "mem0":
         return []
     mem0_config = (memory.model_extra or {}).get("config")
     sections = mem0_config if isinstance(mem0_config, dict) else {}
+    blocks: list[tuple[str, object, frozenset[str]]] = [
+        (section, sections.get(section), local) for section, local in _LOCAL_MEM0_PROVIDERS.items()
+    ]
+    graph = sections.get("graph_store")
+    if isinstance(graph, dict) and graph.get("llm") is not None:
+        blocks.append(("graph_store.llm", graph["llm"], _LOCAL_MEM0_PROVIDERS["llm"]))
     offenders = []
-    for section, local in _LOCAL_MEM0_PROVIDERS.items():
-        block = sections.get(section)
-        provider = block.get("provider") if isinstance(block, dict) else None
-        if provider not in local:
+    for section, block, local in blocks:
+        if not _mem0_provider_is_local(block, local):
+            provider = block.get("provider") if isinstance(block, dict) else None
             offenders.append(f"memory mem0 {section} ({provider or 'default: openai'!r})")
     return offenders
 
