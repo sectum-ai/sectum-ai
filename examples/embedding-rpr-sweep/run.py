@@ -28,7 +28,7 @@ import structlog
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL))
 
 from sectum_ai.embeddings import resolve_embedding_model  # noqa: E402
-from sectum_ai.spec import ConfigError  # noqa: E402
+from sectum_ai.spec import SectumError  # noqa: E402
 from sectum_ai.substrate import build_substrate, default_scenario  # noqa: E402
 from sectum_ai.sweep import embedding_provider_sweep  # noqa: E402
 
@@ -46,8 +46,8 @@ def sweep(specs: list[str]) -> dict[str, float]:
     substrate = build_substrate(default_scenario(seed=SEED))
     try:
         models = [resolve_embedding_model(spec) for spec in specs]
-    except ConfigError as error:
-        raise SystemExit(f"every spec must name a real embedding model: {error}") from error
+    except SectumError as error:
+        raise SystemExit(f"could not load the embedding models: {error}") from error
     if any(model is None for model in models):
         raise SystemExit(f"every spec must name a real embedding model; got {specs}")
     return embedding_provider_sweep(substrate, models)  # type: ignore[arg-type]

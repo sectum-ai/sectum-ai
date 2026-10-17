@@ -792,7 +792,25 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
-def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str, float]:
+def _resolve_sweep(substrate: Substrate) -> list[tuple[str, EmbeddingModel | None]]:
+    """Resolve the seeded sweep's models, or ``[]`` when there is no comparison to run.
+
+    Called before the suite runs: a missing extra or key, or a model that fails to
+    load, otherwise surfaced only while the record was built - after every probe
+    had run against the stack - and no record was written.
+    """
+    names = substrate.scenario.embedding_models
+    if len(names) <= 1:
+        return []
+    # Resolve once: a `st:` spec constructs (and may download) a model.
+    return [(name, resolve_embedding_model(name)) for name in names]
+
+
+def _per_model_rpr(
+    substrate: Substrate,
+    vector: VectorStoreAdapter,
+    resolved: list[tuple[str, EmbeddingModel | None]] | None = None,
+) -> dict[str, float]:
     """Per-embedding-model retrieval gradient for the run, or ``{}`` if not applicable.
 
     NOT a measurement of the configured vector store. Both sweeps retrieve from
@@ -815,11 +833,10 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
     omitted from a live run's evidence.
     """
     names = substrate.scenario.embedding_models
-    if len(names) <= 1:
+    if resolved is None:
+        resolved = _resolve_sweep(substrate)
+    if not resolved:
         return {}
-    # Resolve once: a `st:` spec constructs (and may download) a model, so the
-    # earlier two-pass form would have paid that twice.
-    resolved = [(name, resolve_embedding_model(name)) for name in names]
     real = [model for _, model in resolved if model is not None]
     modelled_only = [name for name, model in resolved if model is None]
     if real and modelled_only:
@@ -1026,6 +1043,7 @@ def probe(
     refuse_hosted_embeddings(
         loaded, substrate.scenario.embedding_models, "the seeded scenario's embedding_models"
     )
+    sweep_models = _resolve_sweep(substrate)
     # The precondition of the whole product, tested as the probes themselves test it. Ask
     # the real question - is any marker foreign to any principal? - rather than a proxy for
     # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
@@ -1282,7 +1300,7 @@ def probe(
             # Real embedding providers (st:/openai:/hash-) record a genuine
             # per-model gradient for any stack; legacy fake names fall back to the
             # in-memory recall illustration. See _per_model_rpr.
-            retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
+            retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector, sweep_models),
             per_probe_findings=_per_probe_counts(confirmed),
             user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
             unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())),
@@ -3808,16 +3826,17 @@ def calibrate(
     # substrate it builds, so it writes nothing and needs no prior `seed` run.
     _ = workdir if workdir is not None else loaded.workdir
     if embedder is not None:
-        if embedder != "fake":
-            # Validated in every mode: resolving `openai:` built a client with an
-            # empty model name and sent the labeled set to the provider.
-            try:
+        # Validated in every mode: resolving `openai:` built a client with an empty
+        # model name and sent the labeled set to the provider. Either refusal names
+        # calibrate's own offline option, which the shared messages cannot know.
+        try:
+            if embedder != "fake":
                 validate_model_spec(embedder)
-            except ConfigError as error:
-                raise ConfigError(
-                    f"--embedder: {error} (calibrate also accepts fake, the offline embedder)"
-                ) from error
-        refuse_hosted_embeddings(loaded, [embedder], "--embedder")
+            refuse_hosted_embeddings(loaded, [embedder], "--embedder")
+        except ConfigError as error:
+            raise ConfigError(
+                f"--embedder: {error} (calibrate also accepts fake, the offline embedder)"
+            ) from error
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(
         default_scenario(seed=effective_seed, corpus_size=loaded.scenario.corpus_size)

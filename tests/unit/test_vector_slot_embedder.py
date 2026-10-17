@@ -952,3 +952,51 @@ def test_an_unknown_seeded_embedding_model_is_refused_before_any_probe_runs(
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3, result.output
     assert "unknown embedding model 'mini-lm'" in result.output, result.output
+
+
+def test_a_seeded_model_that_cannot_load_fails_before_the_stack_is_reached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Well-formed but unloadable (an extra or key missing): it passed the name
+    # check and failed only while the record was built, after every probe had run.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    runner = CliRunner()
+    seeded = runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            "hash-16",
+            "--embedding-model",
+            "cohere:embed-english-v3.0",
+        ],
+    )
+    assert seeded.exit_code == 0, seeded.output
+
+    def _never(*_: object) -> object:
+        raise AssertionError("the stack was reached before the sweep's models loaded")
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _never)
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "cohere" in result.output.lower(), result.output
+
+
+def test_a_local_mode_calibrate_refusal_names_its_offline_option(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    local = str(_local_config(tmp_path))
+    result = CliRunner().invoke(
+        app, ["calibrate", "--config", local, "--embedder", "openai:text-embedding-3-small"]
+    )
+    assert result.exit_code == 3, result.output
+    assert "hosted embedding API" in result.output, result.output
+    assert "calibrate also accepts fake" in result.output, result.output

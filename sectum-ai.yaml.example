@@ -88,7 +88,8 @@ adapters:
     #   api_key_env: SECTUM_AZURE_SEARCH_KEY
     # Any live kind also takes the embedding model your production index uses;
     # without it the store ranks by a 64-dim hashing embedder (shared tokens, not
-    # meaning). Same syntax as scenario.embedding_models.
+    # meaning). The same spec syntax as scenario.embedding_models, minus its fake-*
+    # recall names, which have no vectors to give a store.
     #   embedder: st:all-mpnet-base-v2
     kind: fake
 

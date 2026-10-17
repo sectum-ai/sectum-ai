@@ -349,10 +349,11 @@ is read from the environment, never inlined. A local OpenAI-compatible server �
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
 
-Set `detection.mode: local` to **enforce** that offline posture. Three stages
+Set `detection.mode: local` to **enforce** that offline posture. Four stages
 embed or judge tenant content: detection, the vector store's
-[`embedder`](#vector_store) (which embeds the whole corpus), and the Class 2
-sweep's `scenario.embedding_models`. In `local` mode Sectum fails fast on any of
+[`embedder`](#vector_store) (which embeds the whole corpus), the Class 2
+sweep's `scenario.embedding_models`, and a `mem0` memory adapter's own embedder
+(and graph LLM). In `local` mode Sectum fails fast on any of
 them that would reach a hosted API — a detection embedder or judge on
 `openai`/`anthropic` without a `base_url`, or an `openai:`/`cohere:`/`voyage:`/`bedrock:`
 spec on the other two, wherever it is given — the config, a `seed` or `calibrate`
