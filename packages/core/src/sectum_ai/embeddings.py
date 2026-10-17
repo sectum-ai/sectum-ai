@@ -23,6 +23,7 @@ import json
 import math
 import os
 import re
+from collections.abc import Iterable
 from typing import Any, Protocol, runtime_checkable
 
 from sectum_ai.spec import ConfigError
@@ -411,3 +412,64 @@ def validate_embedding_spec(spec: str) -> None:
         f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
         "st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
     )
+
+
+HOSTED_EMBEDDING_PREFIXES: tuple[str, ...] = ("openai:", "cohere:", "voyage:", "bedrock:")
+"""Embedding specs that send text to a third-party API.
+
+`st:` (sentence-transformers) and `hash-` run on the box; these four egress.
+`detection.mode: local` - the "no data leaves the box" guarantee - refuses every
+one of them, wherever it is configured.
+"""
+
+
+def is_hosted_embedding_spec(spec: str) -> bool:
+    """Whether ``spec`` names a provider that sends text off the box."""
+    return spec.startswith(HOSTED_EMBEDDING_PREFIXES)
+
+
+class EmbedderBridge:
+    """Adapt a batch :class:`EmbeddingModel` to the single-text callable a store takes.
+
+    Every live vector store calls its embedder once per document inside `upsert`.
+    Handed a hosted model directly, that is one network call per document - about
+    2,000 sequential calls for the default corpus, before a single query. The CLI
+    knows the corpus before it upserts, so :meth:`prefetch` embeds it in batches
+    up front and the per-document calls are served from cache. A text that was not
+    prefetched (a probe's query) still embeds on demand, so correctness never
+    depends on the prefetch having happened - only speed and cost do.
+    """
+
+    def __init__(self, model: EmbeddingModel, *, batch_size: int = 64) -> None:
+        if batch_size <= 0:
+            raise ConfigError(f"embedding batch size must be positive, got {batch_size}")
+        self.model = model
+        self.name = model.name
+        self._batch_size = batch_size
+        self._cache: dict[str, list[float]] = {}
+        self._dim: int | None = None
+
+    def prefetch(self, texts: Iterable[str]) -> None:
+        """Embed every text not already cached, ``batch_size`` at a time."""
+        missing = [text for text in dict.fromkeys(texts) if text not in self._cache]
+        for start in range(0, len(missing), self._batch_size):
+            chunk = missing[start : start + self._batch_size]
+            vectors = self.model.embed(chunk)
+            if len(vectors) != len(chunk):
+                raise ConfigError(
+                    f"embedder {self.name!r} returned {len(vectors)} vectors for {len(chunk)} texts"
+                )
+            self._cache.update(zip(chunk, vectors, strict=True))
+
+    def __call__(self, text: str) -> list[float]:
+        """Return the vector for ``text``, embedding it now if it was not prefetched."""
+        if text not in self._cache:
+            self.prefetch([text])
+        return self._cache[text]
+
+    @property
+    def dim(self) -> int:
+        """The model's output dimension, read off a real embedding the first time."""
+        if self._dim is None:
+            self._dim = len(self("sectum-ai dimension probe"))
+        return self._dim

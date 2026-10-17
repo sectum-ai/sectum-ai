@@ -83,6 +83,6 @@ or real CLIP. Live multi-modal vector-store adapters and generic-suite / CLI wir
 follow-on. Like Class 6, the probe requires a vector-slot adapter reporting
 `semantic_retrieval` — the pivot it describes happens in a shared embedding space — so it
 is skipped and scores `NOT_COVERED` against the `app` family and against every live
-vector store the CLI builds (all of which are hashing-embedder backed; see
-[Class 6](class-06-embedding-inversion.md#runs-when)). Walkthrough:
+vector store the CLI builds — none of which embeds images, even with a configured text
+`embedder` (see [Class 6](class-06-embedding-inversion.md#runs-when)). Walkthrough:
 [`examples/multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed).

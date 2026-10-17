@@ -34,7 +34,7 @@ from sectum_ai.spec.enums import (
     SurfaceProvenance,
 )
 
-SCHEMA_VERSION = "0.7.0"
+SCHEMA_VERSION = "0.8.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 The blocks below are the schema changes that carried an anti-over-claim
@@ -60,6 +60,13 @@ signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
 
 (newest first)
+
+0.8.0 — :class:`RunResult` records ``vector_embedder``: the embedding model the
+vector slot's store was driven with. A Retrieval-Pivot Rate is a property of the
+geometry it was measured in, and the vector slot can now be driven by a real
+model rather than only the deterministic hashing embedder. Without this field a
+signed pack could not say which geometry its headline came from, and a reader
+comparing two packs could not tell an embedder swap from any other change.
 
 0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
 the user-level steps the runner did not run because the adapter cannot carry a
@@ -533,6 +540,15 @@ class RunResult(SectumModel):
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     detection: DetectionProvenance | None = None
     """Which detector graded this run, or ``None`` where no detector ran."""
+    vector_embedder: str | None = None
+    """The embedding model the vector slot's store was driven with.
+
+    ``hashing-64`` for the built-in deterministic default, the configured spec
+    (``st:all-mpnet-base-v2``) for a real model, and ``None`` where the record does
+    not say - a pre-0.8.0 record, a run whose vector slot was the built-in fake, or
+    a workflow that drives no vector store. Independent of ``detection``: that is
+    the model Sectum GRADES with, this is the geometry the customer's store RANKS in.
+    """
     schema_version: str = SCHEMA_VERSION
 
     @field_validator("surface_provenance")

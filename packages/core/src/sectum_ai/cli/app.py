@@ -9,7 +9,7 @@ import functools
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
@@ -138,6 +138,7 @@ from sectum_ai.spec import (
     AdapterError,
     ClassVerdict,
     ConfigError,
+    CorpusDocument,
     EvidenceError,
     EvidencePack,
     Finding,
@@ -1058,6 +1059,7 @@ def probe(
     model = bundle.model
     mcp = bundle.mcp
     memory = bundle.memory
+    _prefetch_corpus(vector, substrate.documents)
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
         vector.upsert(tenant.tenant_id, documents)
@@ -1232,6 +1234,10 @@ def probe(
         # calibrated judge" - and had nothing to condition it on, while both tiers
         # past the first are off by default.
         detection=detection_provenance(loaded.detection),
+        # The geometry the headline Retrieval-Pivot Rate was measured in. Read off
+        # the store the run actually drove, not the config, so it cannot drift
+        # from what happened.
+        vector_embedder=getattr(vector, "embedder_name", None),
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=rpr_rate,
@@ -1560,6 +1566,21 @@ def _erasure_provenance_lines(
         "Sectum's built-in SYNTHETIC store, not a configured backend; those surfaces "
         "attest no production system.",
     ]
+
+
+def _prefetch_corpus(store: object, documents: Iterable[CorpusDocument]) -> None:
+    """Batch-embed a corpus before it is upserted, when the store has a real model.
+
+    Every live store embeds ``f"{document.title} {document.content}"`` once per
+    document inside ``upsert``. Against a hosted model that is one network call per
+    document - about 2,000 sequential calls for the default corpus. Embedding the
+    same strings in batches first means ``upsert`` is served from cache. Purely an
+    optimisation: a store that formats its text differently misses the cache and
+    embeds on demand, which is slower but still correct.
+    """
+    bridge = getattr(store, "embedder_bridge", None)
+    if bridge is not None:
+        bridge.prefetch(f"{document.title} {document.content}" for document in documents)
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -2759,6 +2780,7 @@ def _emit_erasure_attestation(
     started: datetime,
     finished: datetime,
     surface_provenance: dict[str, str],
+    vector_embedder: str | None,
 ) -> None:
     """Build and write the signed erasure attestation for a report, then report it.
 
@@ -2782,6 +2804,13 @@ def _emit_erasure_attestation(
             for surface, provenance in surface_provenance.items()
             if surface in {scanned.surface.value for scanned in report.surfaces}
         },
+        # Scoped like the provenance above: a run that never scanned the vector
+        # surface says nothing about the geometry its store ranks in.
+        vector_embedder=(
+            vector_embedder
+            if Surface.VECTOR_DB in {scanned.surface for scanned in report.surfaces}
+            else None
+        ),
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
@@ -3225,6 +3254,7 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
+            vector_embedder=getattr(subject_store, "embedder_name", None),
             surface_provenance=_subject_provenance(
                 subject_store,
                 (
@@ -3278,6 +3308,7 @@ def erasure(
         return in_scope is None or surface in in_scope
 
     if _seeds(Surface.VECTOR_DB):
+        _prefetch_corpus(store, substrate.documents)
         for tenant in substrate.tenants:
             documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
             store.upsert(tenant.tenant_id, documents)
@@ -3411,6 +3442,7 @@ def erasure(
         started=started,
         finished=finished,
         surface_provenance=provenance,
+        vector_embedder=getattr(store, "embedder_name", None),
     )
 
 

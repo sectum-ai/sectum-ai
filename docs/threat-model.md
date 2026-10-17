@@ -141,10 +141,12 @@ timestamped; it is signed by a TSA only when one is configured.)
   environment. Only the substrate's markers, the findings' evidence spans (which
   can include a judge rationale restating observed content — see *Customer data*
   above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
-  detection is the only stage that embeds or judges tenant content, and in
-  `local` mode the config fails fast on any embedder or judge that would call a
-  default hosted AI API (`openai`/`anthropic` without a `base_url`) — so Sectum
-  makes no call to a third-party AI service. A `base_url` you configure is
+  three stages embed or judge tenant content — detection, the vector store's
+  `embedder` (the whole corpus), and the Class 2 sweep's `embedding_models` — and
+  in `local` mode the config fails fast on any of them that would call a hosted AI
+  API (a detection provider on `openai`/`anthropic` without a `base_url`, or an
+  `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec) — so Sectum makes no call
+  to a third-party AI service. A `base_url` you configure is
   trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
   server); that target is your trust boundary, not Sectum's.
 

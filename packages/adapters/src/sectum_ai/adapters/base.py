@@ -12,6 +12,7 @@ so on) - subclass the family base classes.
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -185,6 +186,23 @@ class VectorStoreAdapter(Adapter):
     it ranks by lexical token overlap and still declares ``True``, so the offline
     demo's Class 6 and 13 numbers are the probe exercising itself, not an
     inversion. Every example that reports them says so.
+    """
+
+    embedder_name: str | None = None
+    """The embedding model this store was driven with, as the run should record it.
+
+    Set by the CLI resolver: ``hashing-64`` for the built-in deterministic default,
+    the configured spec (``st:all-mpnet-base-v2``) for a real model, and ``None``
+    for the built-in fake. A Retrieval-Pivot Rate is a property of the geometry it
+    was measured in, so two runs in different geometries are not comparable - and
+    without this a signed pack cannot say which one it was.
+    """
+
+    embedder_bridge: Any = None
+    """The batching bridge behind a configured model, so the CLI can prefetch a corpus.
+
+    Typed opaquely because the bridge lives in the core package, which the adapters
+    package must not import.
     """
 
     def __init__(self, name: str, capabilities: frozenset[Capability] | None = None) -> None:

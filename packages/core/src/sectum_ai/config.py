@@ -69,7 +69,12 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.embeddings import validate_embedding_spec
+from sectum_ai.embeddings import (
+    EmbedderBridge,
+    is_hosted_embedding_spec,
+    resolve_embedding_model,
+    validate_embedding_spec,
+)
 from sectum_ai.probes import (
     AnthropicJudge,
     DetectionProviders,
@@ -319,6 +324,38 @@ class SectumConfig(BaseModel):
             return {key: value for key, value in data.items() if value is not None}
         return data
 
+    @model_validator(mode="after")
+    def _enforce_zero_egress(self) -> "SectumConfig":
+        """In ``detection.mode: local``, refuse every embedder that would leave the box.
+
+        ``DetectionConfig._enforce_local_mode`` gates the detection embedder and
+        judge, and its docstring states the premise: "Detection is the only stage
+        that embeds or judges tenant content, so gating it is what makes the
+        zero-egress claim real." That premise was false. ``scenario.embedding_models``
+        embeds the corpus for the Class 2 sweep and was never gated, so ``mode: local``
+        failed OPEN silently; and the vector slot's ``embedder`` embeds the WHOLE
+        corpus - the largest egress in the product. A validator on
+        ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
+        three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
+        """
+        if self.detection.mode != "local":
+            return self
+        offenders: list[str] = []
+        store = self.adapters.get("vector_store")
+        spec = (store.model_extra or {}).get("embedder") if store else None
+        if isinstance(spec, str) and is_hosted_embedding_spec(spec):
+            offenders.append(f"vector_store.embedder ({spec!r})")
+        hosted = [m for m in self.scenario.embedding_models if is_hosted_embedding_spec(m)]
+        if hosted:
+            offenders.append(f"scenario.embedding_models ({', '.join(map(repr, hosted))})")
+        if offenders:
+            raise ValueError(
+                f"detection.mode 'local' forbids sending tenant content off the box, but "
+                f"{'; '.join(offenders)} would call a hosted embedding API. Use a local "
+                "model (st:<model>) or the deterministic hash-<dim> instead."
+            )
+        return self
+
 
 def load_config(path: Path) -> SectumConfig:
     """Load and validate a ``sectum-ai.yaml`` configuration file.
@@ -555,30 +592,82 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
     )
 
 
+_HASHING_EMBEDDER_NAME = f"hashing-{_EMBED_DIM}"
+"""The name recorded for a store driven by the built-in `_hashing_embed`."""
+
+
+def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
+    """The embedding model the operator configured for this store, if any.
+
+    The embedder belongs to the customer's STORE, not to Sectum: a real index was
+    built with the customer's model, so the synthetic corpus has to be upserted in
+    that same geometry or similarity is meaningless and the dimensions will not
+    match. That is why this reads the vector adapter's own `embedder` key and is
+    independent of `detection.embedder`, which is Sectum's choice for GRADING.
+
+    Resolved through the same spec syntax and resolver as
+    `scenario.embedding_models`, rather than a third provider menu. A `fake-*`
+    name is refused: it is a sweep RECALL name with no vectors to give a store.
+    """
+    spec = (config.model_extra or {}).get("embedder")
+    if spec is None:
+        return None
+    if not isinstance(spec, str) or not spec:
+        raise ConfigError(f"vector_store.embedder must be a model spec string, got {spec!r}")
+    validate_embedding_spec(spec)
+    model = resolve_embedding_model(spec)
+    if model is None:
+        raise ConfigError(
+            f"vector_store.embedder {spec!r} is a sweep recall name, not an embedding "
+            "model; use hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
+            "voyage:<model> or bedrock:<model>"
+        )
+    return EmbedderBridge(model)
+
+
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     """Build the vector-store adapter the config selects.
 
-    Every LIVE kind is handed `_hashing_embed`, so none of them ranks
-    semantically and the capability has to say so - see `_lexically_ranked`.
-    Applied here rather than at each of the eight returns so a kind added later
-    cannot miss it.
+    A LIVE kind is driven by the configured `embedder` when there is one, in that
+    model's own output dimension, and by the deterministic `_hashing_embed`
+    otherwise. Which one is recorded on the store as `embedder_name`, because a
+    Retrieval-Pivot Rate is a property of the embedding geometry it was measured
+    in: two runs in different geometries are not comparable, and a reader of the
+    signed pack has to be able to tell them apart.
     """
-    store = _build_vector_store(config)
-    # The built-in fake keeps the declaration it documents as an exception
-    # (`VectorStoreAdapter.semantic_retrieval`): its Class 6/13 numbers are the
-    # demo exercising the probe, and every example that reports them says so.
-    return store if store.synthetic else _lexically_ranked(store)
+    if config.kind == "fake":
+        store = _build_vector_store(config)
+        store.embedder_name = None
+        return store
+    bridge = _resolve_vector_embedder(config)
+    if bridge is None:
+        store = _build_vector_store(config)
+        store.embedder_name = _HASHING_EMBEDDER_NAME
+    else:
+        store = _build_vector_store(config, bridge, bridge.dim)
+        store.embedder_name = bridge.name
+        store.embedder_bridge = bridge
+    # `semantic_retrieval` stays WITHDRAWN for every live store in this release,
+    # including one driven by a real model - deliberately. The capability is a
+    # single coarse flag gating two classes, and neither can be honest yet:
+    # Class 13 retrieves by IMAGE similarity and needs a multimodal embedder a
+    # text model cannot provide, and Class 6 records a fragment-query retrieval
+    # as `AML.T0024.001`, an attribution under review. Advertising
+    # it would let both run where neither measures what its name says; withdrawn,
+    # they read NOT_COVERED. Class 2 does not gate on it - it simply queries, and
+    # its retrieval now ranks in the configured model's geometry.
+    return store if store.synthetic else _without_semantic_retrieval(store)
 
 
-def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
-    """Mark a store the CLI backs with ``_hashing_embed`` as not semantically ranked.
+def _without_semantic_retrieval(store: VectorStoreAdapter) -> VectorStoreAdapter:
+    """Withdraw the ``semantic_retrieval`` capability from a live store the CLI built.
 
     ``VectorStoreAdapter.semantic_retrieval`` defaults ``True`` "because every LIVE
     store Sectum ships is embedding-backed" - which is not true of the ones this
-    resolver builds. There is no config path to a real embedding model for a vector
-    store (``EmbedderConfig`` is the DETECTION pipeline's), so every live kind gets
-    ``_hashing_embed``: a bag-of-tokens counter where synonyms score 0.000, word
-    order is ignored, and a strict token SUBSET of a canary scores 0.894.
+    resolver builds without an ``embedder``: those get ``_hashing_embed``, a
+    bag-of-tokens counter where synonyms score 0.000, word order is ignored, and a
+    strict token SUBSET of a canary scores 0.894. A store WITH an ``embedder`` is
+    withdrawn too, for the reasons at the call site.
 
     That is exactly the case the capability's own docstring says must declare
     ``False``: "Run either against a store that matches on substrings instead, and a
@@ -589,8 +678,7 @@ def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
     Model``. Classes 6 and 13 now report NOT_COVERED - the honest verdict for a check
     that could not be performed.
 
-    Set per instance, like ``carries_user`` and ``synthetic``. Give the resolver a
-    real embedder and this is the one place to revisit.
+    Set per instance, like ``carries_user`` and ``synthetic``.
 
     The CAPABILITY has to be withdrawn too, not just the flag:
     ``VectorStoreAdapter.__init__`` folds ``semantic_retrieval`` into the frozen
@@ -604,7 +692,11 @@ def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
     return store
 
 
-def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
+def _build_vector_store(
+    config: AdapterConfig,
+    embed: Callable[[str], list[float]] = _hashing_embed,
+    dim: int = _EMBED_DIM,
+) -> VectorStoreAdapter:
     extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeVectorStore(
@@ -618,7 +710,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
 
             dsn = _resolve_secret(extras, "dsn", "dsn_env")
             return PgVectorStore(
-                dsn, _hashing_embed, dim=_EMBED_DIM, user_scoped=_bool(extras, "user_scoped", False)
+                dsn, embed, dim=dim, user_scoped=_bool(extras, "user_scoped", False)
             )
     if config.kind == "chroma":
         with _optional_extra("chroma"):
@@ -627,7 +719,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             host = _str(extras, "host", "localhost")
             port = _int(extras, "port", 8000)
             return ChromaVectorStore(
-                host, port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
+                host, port, embed, user_scoped=_bool(extras, "user_scoped", False)
             )
     if config.kind == "weaviate":
         with _optional_extra("weaviate"):
@@ -640,7 +732,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 host,
                 port,
                 grpc_port,
-                _hashing_embed,
+                embed,
                 user_scoped=_bool(extras, "user_scoped", False),
             )
     if config.kind == "pinecone":
@@ -652,7 +744,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             return PineconeVectorStore.connect(
                 api_key,
                 index_name,
-                _hashing_embed,
+                embed,
                 host=_optional_str(extras, "host"),
                 user_scoped=_bool(extras, "user_scoped", False),
             )
@@ -668,8 +760,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return QdrantVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 host=_str(extras, "host", "localhost"),
                 port=_int(extras, "port", 6333),
                 grpc_port=_int(extras, "grpc_port", 6334),
@@ -687,8 +779,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return MilvusVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 uri=_str(extras, "uri", "http://localhost:19530"),
                 token=milvus_token,
                 user_scoped=_bool(extras, "user_scoped", False),
@@ -705,8 +797,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return OpenSearchVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 host=_str(extras, "host", "localhost"),
                 port=_int(extras, "port", 9200),
                 user=_optional_str(extras, "user"),
@@ -720,8 +812,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             from sectum_ai.adapters.vector.azure_search import AzureSearchVectorStore
 
             return AzureSearchVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 endpoint=_required_str(extras, "endpoint"),
                 api_key=_resolve_secret(extras, "api_key", "api_key_env"),
                 user_scoped=_bool(extras, "user_scoped", False),

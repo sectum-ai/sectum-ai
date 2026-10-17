@@ -1451,7 +1451,7 @@ def test_build_cache_missing_redis_extra_raises_adaptererror(
 
 
 def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
-    # `_lexically_ranked` had zero test references and its entire body showed as
+    # `_without_semantic_retrieval` had zero test references and its entire body showed as
     # uncovered, because no unit test built a live vector kind. A bug there is an
     # OVER-CLAIM in both directions its docstring names: a lexical keyword hit
     # shipped stamped `AML.T0024.001 Invert ML Model`, and a store that found

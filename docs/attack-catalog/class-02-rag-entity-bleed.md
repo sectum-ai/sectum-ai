@@ -53,6 +53,14 @@ trusting a rounded figure. The Wilson interval is the right tool here: unlike th
 normal (Wald) approximation it stays inside [0, 100%] and keeps near-nominal
 coverage at small `n` or an extreme rate (0% or 100%).
 
+The rate is also a property of the **embedding geometry** the store ranks in. A
+live store is driven by its configured
+[`embedder`](../configuration.md#vector_store) — set it to the model your production
+index was built with — and otherwise by a deterministic hashing embedder that ranks
+by shared tokens rather than meaning. The run records which one as
+`vector_embedder` in its signed `RunResult`, so two rates measured in different
+geometries cannot be mistaken for the same measurement.
+
 ## Embedding-model sweep
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
@@ -68,7 +76,8 @@ sweeps them and reports `retrieval_pivot_rate_by_model`.
     construction. The gradient therefore describes how much cross-tenant content
     each *embedding model* surfaces under an assumed shared-index condition; it is
     not `retrieval_pivot_rate`, which is the metric that measures the configured
-    store. The CLI prints it under its own heading for this reason.
+    store — in the geometry of that store's `embedder`. The CLI prints it under its
+    own heading for this reason.
 
     Legacy `fake-*` names carry a modelled recall rather than real vectors, so they
     cannot share a sweep with a real provider: a mixed config drops them and says

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A real embedding model for the vector slot.** Every live `vector_store` kind
+  takes an optional `embedder` (`st:<model>`, `hash-<dim>`, `openai:<model>`,
+  `cohere:<model>`, `voyage:<model>`, `bedrock:<model>`): the store is created at
+  that model's dimension and the corpus is upserted in its geometry, embedded in
+  batches first. Until now every live store ranked with a 64-dimension hashing
+  embedder, so the Class 2 Retrieval-Pivot Rate against a real store was measured
+  by shared tokens, not meaning. The default is unchanged. `semantic_retrieval`
+  stays withheld from live stores, so Classes 6 and 13 still read `NOT_COVERED`.
+- **`RunResult.vector_embedder`** records the geometry the vector slot's store
+  ranked in (`hashing-64`, the configured spec, or `null` for the built-in fake or
+  a run that scanned no vector surface), on both `probe` and `erasure` records.
+  Schema **0.8.0**.
+
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable
   scorecard carries the disclosure the text one prints.
@@ -63,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
+
+- **`detection.mode: local` failed open on `scenario.embedding_models`.** The
+  zero-egress gate covered only the detection embedder and judge, on the premise
+  that detection is the only stage that embeds tenant content; the Class 2 sweep
+  embeds the whole corpus and an `openai:`/`cohere:`/`voyage:`/`bedrock:` entry
+  passed silently. `local` mode now refuses a hosted spec there and on the new
+  `vector_store.embedder`.
 
 - **A failed anchor no longer makes `verify` accuse the previous pack.** The
   audit PDF was rendered straight to its final path, *before* the TSA/Rekor call
