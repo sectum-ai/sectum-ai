@@ -4094,9 +4094,8 @@ def baseline(
         # a closed list that did not contain it. The bracketed lines above are
         # printed from the same result and cannot drift from it.
         typer.echo(
-            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed or "
-            "escalated in severity, this run measured less than the baseline did, or "
-            "the scenario changed - the bracketed lines above name which.",
+            "BASELINE REGRESSION: the bracketed lines above name which comparison "
+            "regressed or could not be made.",
             err=True,
         )
         raise typer.Exit(code=2)

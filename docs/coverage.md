@@ -118,7 +118,8 @@ scanning adapter yet, so it is out of scope, not fake; see the
   performed, and the same shape as the erasure-fingerprint gap above. The built-in fake
   still runs them, which is what the walkthroughs demonstrate and what they say they
   demonstrate. Class 2 is not gated on the capability: with an `embedder` configured
-  it ranks, and its Retrieval-Pivot Rate is measured, in that model's geometry.
+  its vector-store steps rank in that model's geometry (its rate also pools the RAG
+  pipeline's steps, which the pipeline's own retriever ranks).
 - **Class 7 does not run against a live MCP server or a live agent.** Both halves of
   the class read back something *Sectum planted*: an MCP resource under a key it
   invents, and an agent lookup for an id it invents. Neither the MCP protocol nor
