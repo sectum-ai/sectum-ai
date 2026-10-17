@@ -193,7 +193,9 @@ def test_the_probe_run_records_the_geometry_its_store_actually_used(
     # Every renderer of the rate names its geometry, not just the signed record.
     assert "vector store ranked with: st:all-mpnet-base-v2" in text.output, text.output
     summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
-    assert json.loads(summary.stdout)["vector_embedder"] == "st:all-mpnet-base-v2"
+    payload = json.loads(summary.stdout)
+    assert payload["vector_embedder"] == "st:all-mpnet-base-v2"
+    assert payload["vector_embedder_note"] is None
 
 
 @pytest.mark.parametrize(
@@ -579,6 +581,10 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     assert "vector store ranked with: hash-128 (a deterministic hashing embedder" in text.output, (
         text.output
     )
+    import json
+
+    summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    assert "shared tokens" in json.loads(summary.stdout)["vector_embedder_note"]
 
 
 def test_a_run_that_ranked_nothing_names_no_geometry(
@@ -769,3 +775,13 @@ def test_the_scorecard_names_no_geometry_where_no_similarity_probe_fed_the_class
     class_2 = next(line for line in score.classes if line.class_id == 2)
     assert class_2.headline is not None
     assert "ranked by" not in class_2.headline, class_2.headline
+
+
+def test_a_query_already_indexed_as_a_document_is_not_embedded_again() -> None:
+    # It is served as the document either way, so a query-mode call is paid for
+    # nothing.
+    model = _Modes()
+    bridge = EmbedderBridge(model)
+    bridge.prefetch(["acme payroll"])
+    bridge.prefetch_queries(["acme payroll", "who owns the contract"])
+    assert model.queries == ["who owns the contract"]

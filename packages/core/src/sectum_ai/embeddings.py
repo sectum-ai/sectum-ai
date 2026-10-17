@@ -565,7 +565,10 @@ class EmbedderBridge:
         """Embed every query text not already cached in QUERY mode, in batches."""
         texts = list(dict.fromkeys(texts))
         self._query_texts.update(texts)
-        self._fill(self._queries, partial(embed_queries, self.model), texts)
+        # A text already indexed as a document is served as one (see the class
+        # docstring), so a query-mode call for it would be paid and never used.
+        unindexed = [text for text in texts if text not in self._documents]
+        self._fill(self._queries, partial(embed_queries, self.model), unindexed)
 
     def __call__(self, text: str) -> list[float]:
         """The cached vector for ``text``, else ``text`` embedded now as a document."""

@@ -1312,6 +1312,11 @@ def probe(
             "confirmed_findings": len(confirmed),
             "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
             "vector_embedder": run.vector_embedder,
+            # The disclosure the text, the scorecard and both PDFs carry: a hashing
+            # embedder's name alone reads as an embedding model.
+            "vector_embedder_note": (
+                lexical_caveat(run.vector_embedder) if run.vector_embedder is not None else None
+            ),
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
             # dashboard can show the rate's uncertainty, not a bare point estimate.
             "retrieval_pivot_n": run.metrics.retrieval_pivot_n,
@@ -1377,7 +1382,7 @@ def probe(
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         if run.vector_embedder is not None:
             # The geometry every similarity-ranked number above was measured in -
-            # the rate, and Classes 3, 6 and 10 - as the PDF states it.
+            # the rate, and Classes 3 and 10 - as the PDF states it.
             caveat = lexical_caveat(run.vector_embedder)
             lexical = f" ({caveat})" if caveat is not None else ""
             typer.echo(f"vector store ranked with: {untrusted(run.vector_embedder)}{lexical}")
@@ -1654,10 +1659,11 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
 def _register_queries(store: object, texts: Iterable[str]) -> None:
     """Embed ``texts`` in QUERY mode up front, when the store has a real model.
 
-    A failure here is not the run's: the texts stay registered as queries, so each
-    embeds on demand, in query mode, inside the containment of whatever step or
-    surface asks for it - which is where an erasure probe keeps one adapter's
-    failure from costing every other surface its verdict.
+    A failure here is not fatal by itself: the texts stay registered as queries, so
+    each embeds on demand, in query mode, where it is asked for. In an erasure that
+    is inside the probe's per-surface containment, which keeps one adapter's failure
+    from costing every other surface its verdict; in `probe` it is at the step, where
+    a failure that persists ends the run as any adapter failure does.
     """
     bridge = getattr(store, "embedder_bridge", None)
     if bridge is None:
@@ -3832,9 +3838,11 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
     before, after = (untrusted(name) for name in change)
     return (
         f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
-        f"one with {after}: the Retrieval-Pivot Rate is a property of the embedding "
-        "geometry, so the rates were taken with different instruments and their "
-        "difference cannot be attributed to a change in isolation; re-baseline deliberately"
+        f"one with {after}: whatever ranked by similarity over it - the Retrieval-Pivot "
+        "Rate, Classes 3 and 10, an erasure's vector residue scan, and those probes' "
+        "findings appearing or resolving - was taken with a different instrument, so "
+        "its difference cannot be attributed to a change in isolation; re-baseline "
+        "deliberately"
     )
 
 

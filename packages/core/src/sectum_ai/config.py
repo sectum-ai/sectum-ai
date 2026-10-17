@@ -90,6 +90,7 @@ from sectum_ai.spec import (
     ConfigError,
     DetectionProvenance,
     SurfaceProvenance,
+    is_hashing_embedder,
 )
 
 
@@ -726,7 +727,7 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         # A hash spec is recorded by its dim, not its spelling: `hash:64` and
         # `hash-64` are one geometry, and the recorded name is what `diff` compares.
         store.embedder_name = (
-            f"hash-{bridge.dim}" if bridge.name.startswith(("hash-", "hash:")) else bridge.name
+            f"hash-{bridge.dim}" if is_hashing_embedder(bridge.name) else bridge.name
         )
         store.embedder_bridge = bridge
     # `semantic_retrieval` stays WITHDRAWN for every live store in this release,

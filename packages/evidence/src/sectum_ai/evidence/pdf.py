@@ -775,7 +775,7 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
     auditor's PDF stated a rate measured by shared tokens in the same words as one
     measured by a production embedding model. The record names an embedder only
     when something ranked by similarity over the store, so the row qualifies
-    whatever did - the rate, Classes 3, 6 and 10, or an erasure's vector residue
+    whatever did - the rate, Classes 3 and 10, or an erasure's vector residue
     scan, a lexical one of which is a real caveat on that verdict too. Omitted where
     the record names none.
     """

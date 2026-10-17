@@ -1476,6 +1476,9 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     assert "[EMBEDDER CHANGED]" in text.output and "hashing-64" in text.output, text.output
     # It cannot know isolation did not change in the same interval.
     assert "cannot be attributed to a change in isolation" in text.output, text.output
+    # Not only the rates: the geometry probes' findings resolving or appearing are
+    # the instrument too, and an erasure record has no rate at all.
+    assert "findings appearing or resolving" in text.output, text.output
     assert "[ok]" not in text.output, text.output
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
     assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
