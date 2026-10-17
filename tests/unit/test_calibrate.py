@@ -312,7 +312,11 @@ def test_cli_calibrate_defaults_embedder_from_config(tmp_path: Path) -> None:
 def test_cli_calibrate_rejects_an_unknown_embedder_spec() -> None:
     result = _runner.invoke(app, ["calibrate", "--embedder", "bogus-embedder"])
     assert result.exit_code == 3
-    assert "does not name a real embedding model" in result.output
+    assert "unknown embedding model 'bogus-embedder'" in result.output
+    # One menu, which names calibrate's offline option and not the sweep's fake-*
+    # recall names it would refuse.
+    assert "or fake for the offline embedder" in result.output
+    assert "fake-<name>" not in result.output
 
 
 def test_cli_calibrate_rejects_sarif_output() -> None:

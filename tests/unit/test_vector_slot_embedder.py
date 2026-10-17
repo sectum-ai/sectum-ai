@@ -898,3 +898,30 @@ def test_the_json_note_carries_the_same_description_as_the_text(
     summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
     note = json.loads(summary.stdout)["vector_embedder_note"]
     assert "no embedding model was configured for the vector store" in note, note
+
+
+@pytest.mark.parametrize(
+    ("spec", "reason"),
+    [("", "unknown embedding model ''"), ("fake-mini", "sweep recall name")],
+)
+def test_the_store_embedder_names_a_real_model_at_load(spec: str, reason: str) -> None:
+    # An empty value was refused in local mode as egress, and a fake-* recall name
+    # loaded cleanly to fail only at build - after the error had told the operator
+    # to use one.
+    for mode in ("hosted", "local"):
+        with pytest.raises(ValueError, match=reason) as caught:
+            SectumConfig.model_validate(
+                {
+                    "detection": {"mode": mode},
+                    "adapters": {"vector_store": {"kind": "qdrant", "embedder": spec}},
+                }
+            )
+        assert "hosted AI API" not in str(caught.value)
+        assert "fake-<name>" not in str(caught.value)
+
+
+def test_resolving_a_malformed_spec_is_refused_at_the_source() -> None:
+    from sectum_ai.embeddings import resolve_embedding_model
+
+    with pytest.raises(ConfigError, match="missing a model name"):
+        resolve_embedding_model("openai:")

@@ -531,10 +531,9 @@ def is_hashing_embedder(name: str) -> bool:
 
 
 def lexical_caveat(name: str) -> str | None:
-    """The disclosure a hashing embedder's name needs wherever it is shown, else ``None``.
+    """The disclosure a hashing embedder's name needs, else ``None``.
 
-    One wording for the scorecard, the probe summary and both PDF engines, so the
-    disclosure cannot drift between the artifacts an auditor compares.
+    Composed into :func:`describe_vector_embedder`, which every renderer calls.
     """
     if not is_hashing_embedder(name):
         return None

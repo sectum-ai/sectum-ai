@@ -46,6 +46,7 @@ __all__ = [
     "is_hosted_embedding_spec",
     "resolve_embedding_model",
     "validate_embedding_spec",
+    "validate_model_spec",
 ]
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -422,6 +423,9 @@ def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
         ConfigError: for a malformed spec or a missing extra or key.
         AdapterError: when the provider library fails to construct the model.
     """
+    # At the source, not at each caller: `calibrate` forgot the pre-check once and
+    # built a client for `openai:` with an empty model name.
+    validate_embedding_spec(spec)
     try:
         return _construct_embedding_model(spec)
     except SectumError:
@@ -493,6 +497,29 @@ def validate_embedding_spec(spec: str) -> None:
         f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
         "st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
     )
+
+
+_MODEL_PREFIXES = ("st:", "openai:", "cohere:", "voyage:", "bedrock:", "hash-", "hash:")
+_MODEL_MENU = (
+    "hash-<dim>, st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
+)
+
+
+def validate_model_spec(spec: str) -> None:
+    """Raise :class:`~sectum_ai.spec.ConfigError` unless ``spec`` names a real embedding model.
+
+    :func:`validate_embedding_spec` also accepts the sweep's ``fake-*`` recall names,
+    which have no vectors to give a vector store or a calibration, and its error
+    lists them as an option - so the store, its load-time check and `calibrate` use
+    this instead, with one menu that names models only.
+    """
+    if spec.startswith("fake-"):
+        raise ConfigError(
+            f"{spec!r} is a sweep recall name, not an embedding model; use {_MODEL_MENU}"
+        )
+    if not spec.startswith(_MODEL_PREFIXES):
+        raise ConfigError(f"unknown embedding model {spec!r}; expected one of {_MODEL_MENU}")
+    validate_embedding_spec(spec)
 
 
 LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")

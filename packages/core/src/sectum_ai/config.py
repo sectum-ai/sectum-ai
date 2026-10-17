@@ -74,6 +74,7 @@ from sectum_ai.embeddings import (
     is_hosted_embedding_spec,
     resolve_embedding_model,
     validate_embedding_spec,
+    validate_model_spec,
 )
 from sectum_ai.probes import (
     AnthropicJudge,
@@ -343,11 +344,14 @@ class SectumConfig(BaseModel):
         """
         store = self.adapters.get("vector_store")
         spec = (store.model_extra or {}).get("embedder") if store else None
-        if isinstance(spec, str) and spec:
-            try:
-                validate_embedding_spec(spec)
-            except ConfigError as error:
-                raise ValueError(f"vector_store.embedder: {error}") from error
+        if spec is None:
+            return self
+        if not isinstance(spec, str):
+            raise ValueError(f"vector_store.embedder must be a model spec string, got {spec!r}")
+        try:
+            validate_model_spec(spec)
+        except ConfigError as error:
+            raise ValueError(f"vector_store.embedder: {error}") from error
         return self
 
     @model_validator(mode="after")
@@ -737,16 +741,14 @@ def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
     spec = (config.model_extra or {}).get("embedder")
     if spec is None:
         return None
-    if not isinstance(spec, str) or not spec:
+    if not isinstance(spec, str):
         raise ConfigError(f"vector_store.embedder must be a model spec string, got {spec!r}")
-    validate_embedding_spec(spec)
+    try:
+        validate_model_spec(spec)
+    except ConfigError as error:
+        raise ConfigError(f"vector_store.embedder: {error}") from error
     model = resolve_embedding_model(spec)
-    if model is None:
-        raise ConfigError(
-            f"vector_store.embedder {spec!r} is a sweep recall name, not an embedding "
-            "model; use hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
-            "voyage:<model> or bedrock:<model>"
-        )
+    assert model is not None  # validate_model_spec refuses the fake-* recall names
     return EmbedderBridge(model)
 
 

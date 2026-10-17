@@ -74,6 +74,7 @@ from sectum_ai.embeddings import (
     call_embedder,
     resolve_embedding_model,
     validate_embedding_spec,
+    validate_model_spec,
 )
 from sectum_ai.evidence import (
     PdfEngine,
@@ -467,8 +468,10 @@ detection:
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
   # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
   # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
-  # embedder provider is not local (ollama, lmstudio, huggingface). Adapters you
-  # point it at are the system under test and receive the synthetic data by design.
+  # embedder - or, with a graph store, the LLM feeding it - is not a local provider
+  # (ollama, lmstudio, huggingface / vllm, or openai with an explicit base URL).
+  # Adapters you point it at are the system under test and receive the synthetic
+  # data by design.
   # "hosted" (default) places no egress restriction.
   mode: hosted             # hosted | local
 """
@@ -3808,12 +3811,10 @@ def calibrate(
             # Validated in every mode: resolving `openai:` built a client with an
             # empty model name and sent the labeled set to the provider.
             try:
-                validate_embedding_spec(embedder)
+                validate_model_spec(embedder)
             except ConfigError as error:
                 raise ConfigError(
-                    f"--embedder {embedder!r} does not name a real embedding model ({error}); "
-                    "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
-                    "voyage:<model>, or bedrock:<model>"
+                    f"--embedder: {error}, or fake for the offline embedder"
                 ) from error
         refuse_hosted_embeddings(loaded, [embedder], "--embedder")
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
