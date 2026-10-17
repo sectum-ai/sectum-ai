@@ -841,26 +841,37 @@ def test_a_failed_plant_batch_does_not_end_the_run(capsys: pytest.CaptureFixture
     assert "planted documents embed on demand" in capsys.readouterr().err
 
 
-def test_local_mode_refuses_an_unknown_spec_as_unknown_not_as_egress(tmp_path: Path) -> None:
-    # The egress check ran before validation, so `hashing-64` (the name a run
-    # records) was refused as "would call a hosted AI API" - false, and the wrong
-    # fix to point an operator at.
+def test_an_unknown_spec_is_refused_as_unknown_at_load_in_every_mode(tmp_path: Path) -> None:
+    # Refused at load like scenario.embedding_models, so a typo surfaces before
+    # `seed`; in local mode it used to be refused as "would call a hosted AI API" -
+    # false, and the wrong fix to point an operator at.
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import app
     from sectum_ai.config import build_vector_slot
 
-    config = SectumConfig.model_validate(
-        _local(adapters={"vector_store": {"kind": "opensearch", "embedder": "hashing-64"}})
+    for mode in ("hosted", "local"):
+        with pytest.raises(ValueError, match="unknown embedding model") as caught:
+            SectumConfig.model_validate(
+                {
+                    "detection": {"mode": mode},
+                    "adapters": {"vector_store": {"kind": "opensearch", "embedder": "hashing-64"}},
+                }
+            )
+        assert "hosted" not in str(caught.value)
+    # `calibrate` validates its override in every mode: resolving `openai:` built a
+    # client with an empty model name and sent the labeled set to the provider.
+    for config in ([], ["--config", str(_local_config(tmp_path))]):
+        result = CliRunner().invoke(app, ["calibrate", *config, "--embedder", "openai:"])
+        assert result.exit_code == 3, result.output
+        assert "missing a model name" in result.output, result.output
+    # The built-in fake never reads an `embedder`: refused as an unread field, not
+    # as egress, even for a hosted spec in local mode.
+    fake = SectumConfig.model_validate(
+        _local(adapters={"vector_store": {"kind": "fake", "embedder": "openai:x-embed"}})
     )
-    with pytest.raises(ConfigError, match="unknown embedding model"):
-        build_vector_slot(config)
-    # `calibrate` resolved its override without validating it at all.
-    local = str(_local_config(tmp_path))
-    result = CliRunner().invoke(app, ["calibrate", "--config", local, "--embedder", "openai:"])
-    assert result.exit_code == 3, result.output
-    assert "missing a model name" in result.output, result.output
-    assert "hosted" not in result.output, result.output
+    with pytest.raises(ConfigError, match="does not read: embedder"):
+        build_vector_slot(fake)
 
 
 def test_the_json_note_carries_the_same_description_as_the_text(

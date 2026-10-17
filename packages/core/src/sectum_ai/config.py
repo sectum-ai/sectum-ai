@@ -334,6 +334,23 @@ class SectumConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
+    def _validate_vector_embedder(self) -> "SectumConfig":
+        """Refuse an unknown ``vector_store.embedder`` spec at load, in every mode.
+
+        `scenario.embedding_models` is checked at load by its field validator; this
+        is its sibling, so a typo surfaces before `seed` rather than at `probe`, and
+        the egress gate below never has to classify a spec nobody could resolve.
+        """
+        store = self.adapters.get("vector_store")
+        spec = (store.model_extra or {}).get("embedder") if store else None
+        if isinstance(spec, str) and spec:
+            try:
+                validate_embedding_spec(spec)
+            except ConfigError as error:
+                raise ValueError(f"vector_store.embedder: {error}") from error
+        return self
+
+    @model_validator(mode="after")
     def _enforce_zero_egress(self) -> "SectumConfig":
         """In ``detection.mode: local``, refuse every embedder that would leave the box.
 
@@ -358,9 +375,10 @@ class SectumConfig(BaseModel):
         offenders: list[str] = []
         store = self.adapters.get("vector_store")
         spec = (store.model_extra or {}).get("embedder") if store else None
-        # An unknown spec is left to the store's resolver, which validates before it
-        # resolves anything and refuses it as unknown; calling it egress was false.
-        if isinstance(spec, str) and _is_known_spec(spec) and is_hosted_embedding_spec(spec):
+        # The built-in fake never reads an `embedder` - the build refuses the field
+        # as unread - so nothing would leave the box and egress is the wrong reason.
+        live = store is not None and store.kind != "fake"
+        if live and isinstance(spec, str) and is_hosted_embedding_spec(spec):
             offenders.append(f"vector_store.embedder ({spec!r})")
         hosted = [m for m in self.scenario.embedding_models if is_hosted_embedding_spec(m)]
         if hosted:
@@ -427,14 +445,6 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             provider = block.get("provider") if isinstance(block, dict) else None
             offenders.append(f"memory mem0 {section} ({provider or 'default: openai'!r})")
     return offenders
-
-
-def _is_known_spec(spec: str) -> bool:
-    try:
-        validate_embedding_spec(spec)
-    except ConfigError:
-        return False
-    return True
 
 
 def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source: str) -> None:

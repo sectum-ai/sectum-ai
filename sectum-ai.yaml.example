@@ -279,8 +279,11 @@ detection:
   # Cosine-similarity gate for semantic candidates. The conservative default
   # suits the fake embedder; raise it once a real embedding model is configured.
   semantic_threshold: 0.62
-  # `local` ENFORCES the BYOC posture: the config fails fast on any stage that
-  # would send tenant content to a hosted AI API - the detection embedder or judge,
-  # the vector store's `embedder`, scenario.embedding_models, and a mem0 memory's
-  # embedder (plus the LLM feeding a mem0 graph store).
+  # `local` ENFORCES the BYOC posture: the config fails fast on any stage Sectum
+  # runs on its own behalf that would send tenant content to a hosted AI API - the
+  # detection embedder or judge, the vector store's `embedder`,
+  # scenario.embedding_models, and a mem0 memory's embedder (plus the LLM feeding a
+  # mem0 graph store). The adapters you point it at - a hosted vector database, an
+  # OpenAI-Assistants or Anthropic tool-use agent - are the system under test and
+  # receive the synthetic tenant data by design.
   mode: hosted   # hosted | local

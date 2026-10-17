@@ -161,7 +161,7 @@ from sectum_ai.spec import (
     canonical_hash,
     configure_logging,
     describe_vector_embedder,
-    lexical_caveat,
+    is_hashing_embedder,
     residual_present,
     sha256_hex,
     untrusted,
@@ -465,8 +465,10 @@ detection:
   semantic_threshold: 0.62  # 0.62 | <float> | auto
   # Deployment mode. "local" is the BYOC "no data leaves the box" guarantee: it
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
-  # or set a local `base_url`), and likewise a hosted vector_store `embedder`,
-  # scenario embedding_models entry, or mem0 embedder (use `st:` or `hash-`).
+  # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
+  # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
+  # embedder provider is not local (ollama, lmstudio, huggingface). Adapters you
+  # point it at are the system under test and receive the synthetic data by design.
   # "hosted" (default) places no egress restriction.
   mode: hosted             # hosted | local
 """
@@ -1320,7 +1322,7 @@ def probe(
             # embedder's name alone reads as an embedding model.
             "vector_embedder_note": (
                 describe_vector_embedder(run.vector_embedder)
-                if run.vector_embedder is not None and lexical_caveat(run.vector_embedder)
+                if run.vector_embedder is not None and is_hashing_embedder(run.vector_embedder)
                 else None
             ),
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
@@ -3802,6 +3804,10 @@ def calibrate(
     # substrate it builds, so it writes nothing and needs no prior `seed` run.
     _ = workdir if workdir is not None else loaded.workdir
     if embedder is not None:
+        if embedder != "fake":
+            # Validated in every mode: resolving `openai:` built a client with an
+            # empty model name and sent the labeled set to the provider.
+            validate_embedding_spec(embedder)
         refuse_hosted_embeddings(loaded, [embedder], "--embedder")
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(
