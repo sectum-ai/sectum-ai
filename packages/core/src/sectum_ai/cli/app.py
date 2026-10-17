@@ -1757,11 +1757,21 @@ def report(
     # so the on-disk file re-hashes to this pdf_ref and `sectum-ai verify` catches a
     # swap.
     pdf_path = workdir / "audit-pack.pdf"
+    # Rendered to a SIDE path and moved into place only once the pack that
+    # binds it is on disk. Writing it to its final path first meant a failure
+    # in `build_evidence_pack` - an unreachable TSA is enough - left a fresh
+    # PDF beside the PREVIOUS run's pack, whose `pdf_ref` binds the previous
+    # document. `verify` then reported "[FAIL] audit-pdf: ... altered or
+    # replaced after signing" over an artifact nobody touched: a network blip
+    # turned into a tamper accusation against the operator's own evidence,
+    # which is the worst false alarm this product can raise and the class
+    # `_PACK_SIBLINGS` exists to prevent, re-entered from the producer side.
+    pdf_staged = workdir / "audit-pack.pdf.staged"
     pdf_ref = render_audit_pack_and_hash(
         run,
         canonical_hash(substrate.manifest),
         controls,
-        pdf_path,
+        pdf_staged,
         engine=pdf_engine,
         # The INTENT, because the PDF is rendered before the token that would
         # prove it: `_resolve_timestamper` returns None for the local-dev default,
@@ -1769,16 +1779,24 @@ def report(
         # PDF's "any edit ... fails verification" sentence was not true of.
         anchors=(timestamper is not None, transparency_log is not None),
     )
-    pack = build_evidence_pack(
-        run,
-        substrate.manifest,
-        control_mappings=controls,
-        pdf_ref=pdf_ref,
-        timestamper=timestamper,
-        transparency_log=transparency_log,
-    )
-    json_path = workdir / "evidence.json"
-    json_path.write_text(pack.model_dump_json(indent=2))
+    try:
+        pack = build_evidence_pack(
+            run,
+            substrate.manifest,
+            control_mappings=controls,
+            pdf_ref=pdf_ref,
+            timestamper=timestamper,
+            transparency_log=transparency_log,
+        )
+        json_path = workdir / "evidence.json"
+        json_path.write_text(pack.model_dump_json(indent=2))
+        pdf_staged.replace(pdf_path)
+    finally:
+        # A no-op once `replace` succeeded. On failure it removes the staged
+        # render, which must not be left beside the pack: `verify` discovers a
+        # pack's siblings by name, and an unexplained extra file there is the
+        # kind of thing that machinery has to reason about.
+        pdf_staged.unlink(missing_ok=True)
     intoto_path = workdir / "attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
     # The DSSE envelope is the standard signable carrier of the in-toto statement
@@ -2829,23 +2847,37 @@ def _emit_erasure_attestation(
     # against a caller.
     timestamper = _resolve_timestamper(loaded.evidence, None)
     transparency_log = _resolve_transparency_log(loaded.evidence, False)
+    # Rendered to a SIDE path and moved into place only once the pack that
+    # binds it is on disk. Writing it to its final path first meant a failure
+    # in `build_evidence_pack` - an unreachable TSA is enough - left a fresh
+    # PDF beside the PREVIOUS run's pack, whose `pdf_ref` binds the previous
+    # document. `verify` then reported "[FAIL] audit-pdf: ... altered or
+    # replaced after signing" over an artifact nobody touched: a network blip
+    # turned into a tamper accusation against the operator's own evidence,
+    # which is the worst false alarm this product can raise and the class
+    # `_PACK_SIBLINGS` exists to prevent, re-entered from the producer side.
+    pdf_staged = pdf_path.with_suffix(pdf_path.suffix + ".staged")
     pdf_ref = render_audit_pack_and_hash(
         run,
         canonical_hash(substrate.manifest),
         controls,
-        pdf_path,
+        pdf_staged,
         anchors=(timestamper is not None, transparency_log is not None),
     )
-    pack = build_evidence_pack(
-        run,
-        substrate.manifest,
-        control_mappings=controls,
-        pdf_ref=pdf_ref,
-        timestamper=timestamper,
-        transparency_log=transparency_log,
-    )
-    json_path = workdir / "erasure-evidence.json"
-    json_path.write_text(pack.model_dump_json(indent=2))
+    try:
+        pack = build_evidence_pack(
+            run,
+            substrate.manifest,
+            control_mappings=controls,
+            pdf_ref=pdf_ref,
+            timestamper=timestamper,
+            transparency_log=transparency_log,
+        )
+        json_path = workdir / "erasure-evidence.json"
+        json_path.write_text(pack.model_dump_json(indent=2))
+        pdf_staged.replace(pdf_path)
+    finally:
+        pdf_staged.unlink(missing_ok=True)
     intoto_path = workdir / "erasure-attestation.intoto.json"
     intoto_path.write_text(json.dumps(to_in_toto_statement(pack), indent=2))
 

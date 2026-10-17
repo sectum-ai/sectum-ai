@@ -597,6 +597,41 @@ def coverage_gloss(run: RunResult, surface: str, verdict: str) -> str:
     return f"[synthetic surface - Sectum's built-in fake, not your stack] {gloss}"
 
 
+_MARKERLESS_NOTE: str = (
+    " Not every confirmed finding in this pack rests on a manifest marker: "
+    "{probes} confirm on a different basis - a statistical timing result, or a "
+    "routing assertion about which tenant's weights served an inference - and "
+    "those rows are rendered with 'marker n/a'. The manifest-grounding rule above "
+    "governs the content-matching classes; it does not describe these."
+)
+
+
+def _markerless_note(run: RunResult) -> str:
+    """Disclose confirmed findings that carry no manifest marker.
+
+    `_DETECTOR_TAIL` asserts "Confirmation requires the observed content to trace
+    back to a specific marker in the ground-truth manifest ... Confirmed findings
+    are therefore manifest-grounded". Class 5 confirms on a Welch t-test and
+    Class 9's routing assertion on which adapter served the step; neither carries
+    a `marker_id`. On the DEFAULT suite that sentence shipped three lines above
+    sixteen rows reading "marker n/a" in the same signed document.
+
+    `scope_methodology` already has an arm for a class that runs no detector -
+    `erasure_only`, because the Class 11 workflow never constructs one. These two
+    are the same shape and had none.
+    """
+    markerless = sorted(
+        {
+            finding.probe_id
+            for finding in run.findings
+            if finding.status is FindingStatus.CONFIRMED and not finding.marker_id
+        }
+    )
+    if not markerless:
+        return ""
+    return _MARKERLESS_NOTE.format(probes=", ".join(markerless))
+
+
 def scope_methodology(run: RunResult) -> tuple[str, ...]:
     """The methodology paragraphs, with the isolation claim only where it is earned.
 
@@ -634,7 +669,7 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
         # Nothing ran live, so there is no isolation of "those surfaces" to attest
         # - which is exactly what the paragraph above this one already says.
         head = _SCOPE_SYNTHETIC
-    return (head, detector, *_SCOPE_METHODOLOGY[2:])
+    return (head, detector + _markerless_note(run), *_SCOPE_METHODOLOGY[2:])
 
 
 def _finding_lines(findings: tuple[Finding, ...], run: RunResult | None = None) -> list[str]:

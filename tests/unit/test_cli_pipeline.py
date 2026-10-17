@@ -2425,3 +2425,42 @@ def test_the_recorded_extraction_efficiency_is_the_sequence_rate(tmp_path: Path)
     recorded = json.loads((tmp_path / "run.json").read_text())["metrics"]["extraction_efficiency"]
     assert recorded == pytest.approx(7 / 24), recorded
     assert recorded != pytest.approx(13 / 72), "that is the turn-based rate this replaced"
+
+
+def test_a_failed_anchor_does_not_make_verify_accuse_the_previous_pack(tmp_path: Path) -> None:
+    # The PDF was rendered straight to its final path, BEFORE the TSA/Rekor call
+    # that can fail and before the pack was written. So a failure in between left
+    # a fresh PDF beside the PREVIOUS run's pack, whose `pdf_ref` binds the
+    # previous document, and `verify` reported:
+    #
+    #   [FAIL] audit-pdf: ... it was altered or replaced after signing
+    #
+    # over an artifact nobody touched. A network blip became a tamper accusation
+    # against the operator's own evidence - the worst false alarm a tamper-evidence
+    # product can raise, and the class `_PACK_SIBLINGS` exists to prevent, re-entered
+    # from the producer side.
+    _seed_and_probe(tmp_path)
+    assert _runner.invoke(app, ["report", "--workdir", str(tmp_path)]).exit_code == 0
+
+    # A second report whose anchor cannot be obtained. Nothing else is touched.
+    failed = _runner.invoke(
+        app, ["report", "--workdir", str(tmp_path), "--tsa", "http://127.0.0.1:1/tsr"]
+    )
+    assert failed.exit_code != 0, failed.output
+
+    verified = _runner.invoke(
+        app,
+        [
+            "verify",
+            str(tmp_path / "evidence.json"),
+            "--allow-unanchored",
+            "--allow-synthetic",
+        ],
+    )
+    assert "altered or replaced after signing" not in verified.output, verified.output
+    assert verified.exit_code == 0, verified.output
+
+    # ...and the staged render must not be left beside the pack: `verify`
+    # discovers a pack's siblings by name, so an unexplained extra file there is
+    # the kind of thing that machinery then has to reason about.
+    assert not list(tmp_path.glob("*.staged")), sorted(p.name for p in tmp_path.iterdir())

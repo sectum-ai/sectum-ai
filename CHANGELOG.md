@@ -64,6 +64,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failed anchor no longer makes `verify` accuse the previous pack.** The
+  audit PDF was rendered straight to its final path, *before* the TSA/Rekor call
+  that can fail and before the pack was written — so a failure in between left a
+  fresh PDF beside the previous run's pack, whose `pdf_ref` binds the previous
+  document. `verify` then reported `[FAIL] audit-pdf: ... altered or replaced
+  after signing` over an artifact nobody touched: a network blip became a tamper
+  accusation against the operator's own evidence. Reproduced with an unreachable
+  TSA on both `report` and `erasure`. The render is now staged beside the target
+  and moved into place only once the pack that binds it is on disk, and removed
+  if it is not.
+
+- **A plant is not landed when the backend serves an empty read-back.**
+  `_plant_landed` accepted any non-`None` answer on the `vector.upsert` and
+  `cache.set` branches, so a backend replying to a by-id read with an empty
+  record, a tombstone or a stub had its plant recorded as landed:
+  `unconfirmed_plants` stayed empty, the probe entered `probe_versions`, and the
+  class graded PASS off a canary that was never stored — the vacuous pass the
+  guard exists to refuse. The `memory.write` sibling always compared the content,
+  and both payloads already carry it.
+- **The audit PDF no longer asserts every confirmation is manifest-grounded.** On
+  the default suite, 16 of 229 confirmed findings carry no `marker_id` — Class 5
+  confirms on a Welch t-test, Class 9's routing assertion on which adapter served
+  the step — and the pack printed `marker n/a` sixteen times three lines below
+  "Confirmed findings are therefore manifest-grounded". `scope_methodology`
+  already had an arm for a class that runs no detector (`erasure_only`); these two
+  are the same shape and had none. A run whose confirmations all carry a marker is
+  unchanged.
+
 - **A secret canary's residual no longer reaches the evidence pack verbatim.**
   `detection.redact_secret` exists so a pack — which leaves the box in BYOC mode —
   does not reproduce a credential, and its docstring notes the elision also stops

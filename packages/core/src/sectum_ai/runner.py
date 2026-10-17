@@ -256,12 +256,26 @@ class Runner:
         """
         tenant, user = step.actor_tenant_id, step.actor_user_id
         try:
+            # The planted CONTENT must come back, not merely a non-None envelope.
+            # `is not None` accepted a backend that answers a by-id read with an
+            # empty record, a tombstone or a stub: the plant was recorded as
+            # landed, `unconfirmed_plants` stayed empty, the probe entered
+            # `probe_versions`, and the class graded PASS off a canary that was
+            # never stored - the vacuous pass this guard exists to refuse. The
+            # `memory.write` sibling below always compared the content; both
+            # payloads carry it, so the check costs nothing. This file already
+            # treats "200 and empty" as its own category elsewhere, so it knows
+            # non-None is not presence.
             if step.action == "vector.upsert" and self._vector is not None:
                 doc_id = payload_required(step, "doc_id")
-                return self._vector.fetch(tenant, doc_id, user=user) is not None
+                hit = self._vector.fetch(tenant, doc_id, user=user)
+                content = payload_required(step, "content")
+                return hit is not None and residual_present(content, hit.content)
             if step.action == "cache.set" and self._cache is not None:
                 key = payload_required(step, "key")
-                return self._cache.get(tenant, key, user=user) is not None
+                cached = self._cache.get(tenant, key, user=user)
+                value = payload_required(step, "value")
+                return cached is not None and residual_present(value, cached)
             if step.action == "memory.write" and self._memory is not None:
                 text = payload_required(step, "text")
                 return any(
