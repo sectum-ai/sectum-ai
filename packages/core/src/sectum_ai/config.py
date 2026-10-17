@@ -373,9 +373,9 @@ class SectumConfig(BaseModel):
 # (`ollama_base_url`, `lmstudio_base_url`, a vLLM server, a local
 # sentence-transformers model). An `openai` provider with an explicit
 # `openai_base_url` is an OpenAI-compatible server the operator chose - the same
-# trust `detection`'s `base_url` gets - so it is local too. Except for an LLM while
-# `OPENROUTER_API_KEY` is set: mem0's OpenAI LLM then ignores `openai_base_url` and
-# calls openrouter.ai.
+# trust `detection`'s `base_url` gets - so it is local too. For an LLM while
+# `OPENROUTER_API_KEY` is set, mem0's OpenAI LLM ignores `openai_base_url` and calls
+# OpenRouter instead, so there it takes an explicit `openrouter_base_url`.
 _LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
     "llm": frozenset({"ollama", "lmstudio", "vllm"}),
     "embedder": frozenset({"ollama", "lmstudio", "huggingface"}),
@@ -387,9 +387,10 @@ def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) 
         return False
     provider = block.get("provider")
     settings = block.get("config")
-    pointed = isinstance(settings, dict) and bool(settings.get("openai_base_url"))
+    url_key = "openai_base_url"
     if llm and os.environ.get("OPENROUTER_API_KEY"):
-        pointed = False
+        url_key = "openrouter_base_url"
+    pointed = isinstance(settings, dict) and bool(settings.get(url_key))
     return provider in local or (provider == "openai" and pointed)
 
 

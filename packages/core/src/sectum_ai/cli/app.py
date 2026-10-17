@@ -3202,8 +3202,15 @@ def erasure(
         # The `app`-aware path, as above: the subject scan read `vector_store`
         # directly too.
         subject_store = build_vector_slot(loaded, fake_default)
-        # The content scan queries the manifest's vector fingerprints.
-        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
+        # The content scan queries the manifest's vector fingerprints. Contained: the
+        # probe isolates each surface's failure so one adapter cannot cost every
+        # other surface its verdict, and an embedder failure here, before the probe
+        # exists, would do exactly that. Unregistered, the phrases embed on demand
+        # inside the vector surface's own containment.
+        try:
+            _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
+        except AdapterError as error:
+            typer.echo(f"warning: {error}; the vector fingerprint scan embeds on demand", err=True)
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -3355,9 +3362,18 @@ def erasure(
 
     if _seeds(Surface.VECTOR_DB):
         _prefetch_corpus(store, substrate.documents)
-        # The residue scan's fingerprint queries are the target's document titles.
+        # The residue scan queries the title of each document holding one of the
+        # target's hard canaries - not every title the tenant has.
+        by_id = {doc.doc_id: doc for doc in substrate.documents}
         _register_queries(
-            store, (doc.title for doc in substrate.documents if doc.tenant_id == target)
+            store,
+            (
+                by_id[location.doc_id].title
+                for marker in substrate.manifest.markers
+                if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY
+                for location in marker.planted_locations
+                if location.doc_id in by_id
+            ),
         )
         for tenant in substrate.tenants:
             documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
@@ -3781,15 +3797,17 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
     )
 
 
-# The probes that rank by similarity in the vector store, so whose results move
-# with its embedding model. Class 1 fetches by id and is not among them.
+# The probes whose per-probe counts move with the vector store's embedding model:
+# the four that rank by similarity in it, and the pipeline-end bleed probe, whose
+# retriever ranks over the store Sectum seeded. Class 1 fetches by id and is not
+# among them. The erasure modes record no per-probe count; their vector surface is
+# scoped through `key_lost` below.
 _GEOMETRY_PROBES: tuple[str, ...] = (
     RagEntityBleedProbe.id,
+    RagPipelineBleedProbe.id,
     RagPoisoningProbe.id,
     EmbeddingInversionProbe.id,
     IkeaExtractionProbe.id,
-    ErasureProbe.id,
-    SubjectErasureProbe.id,
 )
 
 

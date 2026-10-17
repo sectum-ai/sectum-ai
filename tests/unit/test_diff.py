@@ -1580,7 +1580,8 @@ def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() ->
     querying = {
         probe.id
         for probe in _build_suite(build_detection_providers(DetectionConfig()))
-        if any(step.action == "vector.query" for step in probe.plan(substrate))
+        # `rag.ask` too: a pipeline's retriever ranks over the store Sectum seeded.
+        if any(step.action in ("vector.query", "rag.ask") for step in probe.plan(substrate))
     }
     assert querying
     assert querying <= set(_GEOMETRY_PROBES)

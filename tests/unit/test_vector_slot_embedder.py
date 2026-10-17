@@ -393,6 +393,9 @@ def test_byoc_local_mode_trusts_a_pointed_openai_provider_and_checks_the_graph_l
     monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic")
     with pytest.raises(ValueError, match="mem0 llm"):
         SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
+    # ...unless the OpenRouter endpoint is pointed too.
+    routed = {"provider": "openai", "config": {"openrouter_base_url": "http://localhost:8080/v1"}}
+    SectumConfig.model_validate(_mem0({"llm": routed, "embedder": local_embedder}))
     monkeypatch.delenv("OPENROUTER_API_KEY")
     # The graph store's own LLM sends memory content too.
     with pytest.raises(ValueError, match=r"graph_store\.llm"):
@@ -458,7 +461,15 @@ def test_both_erasure_modes_register_their_fingerprint_queries(
     runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     substrate = _load_substrate(tmp_path)
     target = substrate.tenants[0].tenant_id
-    titles = {doc.title for doc in substrate.documents if doc.tenant_id == target}
+    by_id = {doc.doc_id: doc for doc in substrate.documents}
+    # Only the titles the residue scan queries: those of the documents holding the
+    # target's hard canaries, not every title the tenant has.
+    titles = {
+        by_id[location.doc_id].title
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target and marker.marker_type.value == "HARD_CANARY"
+        for location in marker.planted_locations
+    }
     assert titles and set(canary.queries) == titles
 
     subject = _Modes()
@@ -467,3 +478,28 @@ def test_both_erasure_modes_register_their_fingerprint_queries(
     manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
     runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
     assert subject.queries == ["a subject phrase"]
+
+
+def test_a_failure_registering_subject_fingerprints_costs_no_surface_its_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The subject probe contains each surface's failure so one adapter cannot cost
+    # every other surface its verdict. Registering the fingerprints up front sat
+    # outside that, so a provider blip aborted the whole erasure at exit 3.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    class _QueryModeDown(_Modes):
+        def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("rate limited")
+
+    _bridged_slot(monkeypatch, _QueryModeDown())
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
+    result = runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
+    assert result.exit_code != 3, result.output
+    assert "embeds on demand" in result.output, result.output
+    assert (tmp_path / "erasure-evidence.json").exists()

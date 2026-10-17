@@ -24,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as do `probe`'s text and JSON summaries.
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
   vector stores ranked with different embedding models, and mark the metrics of
-  the probes that rank by similarity in the vector store — and its erasure counts
-  — as not measured: those were taken with different instruments, so one that
+  the probes that rank by similarity over the vector store (directly or through a
+  RAG pipeline) — and its erasure counts — as not measured: those were taken with different instruments, so one that
   fell across the swap is not a fix. A by-id fetch (Class 1) and metrics off the
   vector surface still compare.
 
@@ -94,9 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actually sweeps, which is the one fixed into the substrate at seed time rather
   than the config's. A `mem0` memory adapter is refused too unless its `llm`,
   `embedder` and any `graph_store.llm` providers are local (an `openai` provider
-  with an explicit `openai_base_url` counts, except an LLM while
-  `OPENROUTER_API_KEY` is set, which mem0 then sends to openrouter.ai); mem0
-  defaults the first two to OpenAI.
+  with an explicit `openai_base_url` counts — or, for an LLM while
+  `OPENROUTER_API_KEY` is set, which mem0 then routes to OpenRouter instead, an
+  explicit `openrouter_base_url`); mem0 defaults the first two to OpenAI.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked
