@@ -1170,11 +1170,11 @@ def test_both_engines_name_the_geometry_the_rate_was_measured_in(
     html = build_audit_html(pack)
     reportlab = "\n".join(_reportlab_paragraphs(pack, tmp_path, monkeypatch))
     if expected is None:
-        assert "Vector store embedding" not in html
-        assert "Vector store embedding" not in reportlab
+        assert "Vector-store steps ranked by" not in html
+        assert "Vector-store steps ranked by" not in reportlab
     else:
-        assert "Vector store embedding" in html and expected in html
-        assert "Vector store embedding" in reportlab and expected in reportlab
+        assert "Vector-store steps ranked by" in html and expected in html
+        assert "Vector-store steps ranked by" in reportlab and expected in reportlab
 
 
 def test_the_recorded_embedder_is_escaped_in_both_engines(
@@ -1193,8 +1193,8 @@ def test_the_geometry_row_qualifies_whatever_ranked_not_only_the_rate(
     # erasure's residue scan, Class 3 or 10 - and a lexical ranking is a caveat on
     # those verdicts too. Gating the row on a Retrieval-Pivot Rate hid it there.
     pack = _embedder_pack("hashing-64", with_rate=False)
-    assert "Vector store embedding" in build_audit_html(pack)
+    assert "Vector-store steps ranked by" in build_audit_html(pack)
     assert any(
-        "Vector store embedding" in text
+        "Vector-store steps ranked by" in text
         for text in _reportlab_paragraphs(pack, tmp_path, monkeypatch)
     )

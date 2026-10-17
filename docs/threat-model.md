@@ -147,8 +147,9 @@ timestamped; it is signed by a TSA only when one is configured.)
   API (a detection provider on `openai`/`anthropic` without a `base_url`, or an
   `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec, whether it comes from the
   config, a CLI override, or the list a substrate was seeded with). A `mem0` memory
-  adapter is refused too unless its LLM, embedder and any graph-store LLM are local
-  providers, since mem0 defaults the first two to OpenAI — so no stage Sectum runs
+  adapter is refused too unless its embedder — which mem0 defaults to OpenAI and
+  which embeds every write — is local, and, when a graph store is configured, the
+  LLM that feeds it — so no stage Sectum runs
   on its own behalf calls a third-party AI service. The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the

@@ -820,7 +820,7 @@ def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
         summary.append(("Retrieval-Pivot Rate", rpr_line))
     embedder_line = _vector_embedder_summary(run)
     if embedder_line is not None:
-        summary.append(("Vector store embedding", embedder_line))
+        summary.append(("Vector-store steps ranked by", embedder_line))
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in summary
     ]

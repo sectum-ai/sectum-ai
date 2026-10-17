@@ -94,18 +94,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `vector_store.embedder` — and wherever else one arrives: a `seed
   --embedding-model` or `calibrate --embedder` override, and the list `probe`
   actually sweeps, which is the one fixed into the substrate at seed time rather
-  than the config's. A `mem0` memory adapter is refused too unless its `llm`,
-  `embedder` and any `graph_store.llm` providers are local (an `openai` provider
-  with an explicit `openai_base_url` counts — or, for an LLM while
-  `OPENROUTER_API_KEY` is set, which mem0 then routes to OpenRouter instead, an
-  explicit `openrouter_base_url`); mem0 defaults the first two to OpenAI.
+  than the config's. A `mem0` memory adapter is refused too unless its embedder
+  (which mem0 defaults to OpenAI, and which embeds every write) is local, and —
+  with a graph store configured — the LLM that feeds it; Sectum stores memory
+  verbatim, so mem0's LLM runs for nothing else. An `openai` provider with an
+  explicit `openai_base_url` counts as local, or, for an LLM while
+  `OPENROUTER_API_KEY` is set (mem0 then routes to OpenRouter), an explicit
+  `openrouter_base_url`.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked
   its queries lower against the corpus than a production store would and
   under-reported the per-model gradient. Queries now use `search_query` / `query`,
   in the sweep, for the suite's planned queries against a live store, and for
-  both erasure modes' fingerprint queries.
+  both erasure modes' fingerprint queries. An `st:` model with its own query and
+  document prompts (e5, BGE, nomic) is encoded with them.
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
   every provider call — and loading a provider's model, such as a misspelled

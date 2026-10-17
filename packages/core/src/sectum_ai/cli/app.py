@@ -1385,7 +1385,7 @@ def probe(
             # the rate, and Classes 3 and 10 - as the PDF states it.
             caveat = lexical_caveat(run.vector_embedder)
             lexical = f" ({caveat})" if caveat is not None else ""
-            typer.echo(f"vector store ranked with: {untrusted(run.vector_embedder)}{lexical}")
+            typer.echo(f"vector-store steps ranked by: {untrusted(run.vector_embedder)}{lexical}")
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,
@@ -1646,14 +1646,19 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
             if step.action == "vector.query" and "query" in step.payload
         ),
     )
-    _prefetch_texts(
-        store,
-        (
-            f"{step.payload['doc_id']} {step.payload['content']}"
-            for step in steps
-            if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
-        ),
-    )
+    # An optimisation only (an unbatched plant embeds on demand, as a document), so
+    # a failure here must not cost the run what the query registration does not.
+    try:
+        _prefetch_texts(
+            store,
+            (
+                f"{step.payload['doc_id']} {step.payload['content']}"
+                for step in steps
+                if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
+            ),
+        )
+    except SectumError as error:
+        typer.echo(f"warning: {error}; planted documents embed on demand instead", err=True)
 
 
 def _register_queries(store: object, texts: Iterable[str]) -> None:

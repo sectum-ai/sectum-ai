@@ -347,8 +347,9 @@ class SectumConfig(BaseModel):
         ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
         three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
 
-        A ``mem0`` memory adapter brings its own LLM and embedder, and mem0 defaults
-        both to OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there.
+        A ``mem0`` memory adapter brings its own embedder, which mem0 defaults to
+        OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there (see
+        :func:`_hosted_mem0_providers` for when its LLM runs too).
         Specs that arrive from the command line or a seeded substrate rather than this
         file are gated where they are used, by :func:`refuse_hosted_embeddings`.
         """
@@ -398,21 +399,26 @@ def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) 
 
 
 def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
-    """The mem0 sections in ``memory`` whose model provider calls a hosted API.
+    """The mem0 model providers ``memory`` would call that are hosted.
 
-    ``llm`` and ``embedder`` default to OpenAI when absent. ``graph_store.llm``
-    overrides the LLM for graph memory and is checked only when it is given.
+    The embedder embeds every memory write, and defaults to OpenAI. The LLM does
+    not run for Sectum's writes - the adapter stores verbatim (``infer=False``) -
+    except to feed a graph store, which mem0 enables when ``graph_store`` has a
+    ``config``; its LLM is ``graph_store.llm``, else ``llm``, else OpenAI.
     """
     if memory is None or memory.kind != "mem0":
         return []
     mem0_config = (memory.model_extra or {}).get("config")
     sections = mem0_config if isinstance(mem0_config, dict) else {}
     blocks: list[tuple[str, object, frozenset[str]]] = [
-        (section, sections.get(section), local) for section, local in _LOCAL_MEM0_PROVIDERS.items()
+        ("embedder", sections.get("embedder"), _LOCAL_MEM0_PROVIDERS["embedder"])
     ]
     graph = sections.get("graph_store")
-    if isinstance(graph, dict) and graph.get("llm") is not None:
-        blocks.append(("graph_store.llm", graph["llm"], _LOCAL_MEM0_PROVIDERS["llm"]))
+    if isinstance(graph, dict) and graph.get("config"):
+        if graph.get("llm") is not None:
+            blocks.append(("graph_store.llm", graph["llm"], _LOCAL_MEM0_PROVIDERS["llm"]))
+        else:
+            blocks.append(("llm", sections.get("llm"), _LOCAL_MEM0_PROVIDERS["llm"]))
     offenders = []
     for section, block, local in blocks:
         if not _mem0_provider_is_local(block, local, llm=section != "embedder"):
@@ -677,6 +683,18 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
     )
 
 
+def _recorded_embedder_name(bridge: EmbedderBridge) -> str:
+    """The name `diff` compares: one spelling per geometry, where that is knowable.
+
+    A hash spec is its dim (`hash:64` and `hash-64` are one geometry), and an `st:`
+    model drops the `sentence-transformers/` namespace sentence-transformers itself
+    resolves a bare name to. Two spellings of one instrument read as a swap.
+    """
+    if is_hashing_embedder(bridge.name):
+        return f"hash-{bridge.dim}"
+    return bridge.name.replace("st:sentence-transformers/", "st:", 1)
+
+
 def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
     """The embedding model the operator configured for this store, if any.
 
@@ -726,9 +744,7 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         store = _build_vector_store(config, bridge, bridge.dim)
         # A hash spec is recorded by its dim, not its spelling: `hash:64` and
         # `hash-64` are one geometry, and the recorded name is what `diff` compares.
-        store.embedder_name = (
-            f"hash-{bridge.dim}" if is_hashing_embedder(bridge.name) else bridge.name
-        )
+        store.embedder_name = _recorded_embedder_name(bridge)
         store.embedder_bridge = bridge
     # `semantic_retrieval` stays WITHDRAWN for every live store in this release,
     # including one driven by a real model - deliberately. The capability is a

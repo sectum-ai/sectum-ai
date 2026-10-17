@@ -13,6 +13,7 @@ independent of `detection.embedder`, which is Sectum's own choice for grading.
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -191,7 +192,7 @@ def test_the_probe_run_records_the_geometry_its_store_actually_used(
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["vector_embedder"] == "st:all-mpnet-base-v2", record.get("vector_embedder")
     # Every renderer of the rate names its geometry, not just the signed record.
-    assert "vector store ranked with: st:all-mpnet-base-v2" in text.output, text.output
+    assert "vector-store steps ranked by: st:all-mpnet-base-v2" in text.output, text.output
     summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
     payload = json.loads(summary.stdout)
     assert payload["vector_embedder"] == "st:all-mpnet-base-v2"
@@ -343,28 +344,14 @@ def test_byoc_local_mode_refuses_hosted_specs_that_bypass_the_config(tmp_path: P
     assert "detection.mode 'local'" in calibrated.output, calibrated.output
 
 
-def test_byoc_local_mode_refuses_mem0_on_its_default_hosted_providers() -> None:
-    # mem0 defaults its LLM and embedder to OpenAI, so `memory: {kind: mem0}` alone
-    # sends every memory write off the box.
-    with pytest.raises(ValueError, match="mem0 llm"):
-        SectumConfig.model_validate(_local(adapters={"memory": {"kind": "mem0"}}))
+def test_byoc_local_mode_refuses_mem0_on_its_default_hosted_embedder() -> None:
+    # mem0 defaults its embedder to OpenAI, and every memory write is embedded, so
+    # `memory: {kind: mem0}` alone sends tenant content off the box.
     with pytest.raises(ValueError, match="mem0 embedder"):
-        SectumConfig.model_validate(
-            _local(adapters={"memory": {"kind": "mem0", "config": {"llm": {"provider": "ollama"}}}})
-        )
-    SectumConfig.model_validate(
-        _local(
-            adapters={
-                "memory": {
-                    "kind": "mem0",
-                    "config": {
-                        "llm": {"provider": "ollama"},
-                        "embedder": {"provider": "huggingface"},
-                    },
-                }
-            }
-        )
-    )
+        SectumConfig.model_validate(_local(adapters={"memory": {"kind": "mem0"}}))
+    # Its LLM does not run for Sectum's verbatim (`infer=False`) writes, so without
+    # a graph store a default LLM is not egress - refusing it was a false refusal.
+    SectumConfig.model_validate(_mem0({"embedder": {"provider": "huggingface"}}))
 
 
 def test_the_shared_hashing_name_states_the_hashing_embedders_real_dimension() -> None:
@@ -380,36 +367,40 @@ def _mem0(config: dict[str, object]) -> dict[str, object]:
     return _local(adapters={"memory": {"kind": "mem0", "config": config}})
 
 
-def test_byoc_local_mode_trusts_a_pointed_openai_provider_and_checks_the_graph_llm(
+def test_byoc_local_mode_checks_the_llm_that_feeds_a_graph_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    local_llm = {"provider": "ollama"}
+    # A graph store (one with a `config`) runs an LLM over every write: its own
+    # `graph_store.llm`, else the main `llm`, else OpenAI.
     local_embedder = {"provider": "huggingface"}
-    # An OpenAI-compatible server the operator pointed at is local - the same trust
-    # `detection`'s base_url gets. Refusing it was a false refusal.
-    pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:11434/v1"}}
+    neo4j = {"provider": "neo4j", "config": {"url": "bolt://localhost:7687"}}
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
-    # Unless mem0's OpenAI LLM will ignore the base URL: with an OpenRouter key in
-    # the environment it calls openrouter.ai instead.
-    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic")
     with pytest.raises(ValueError, match="mem0 llm"):
-        SectumConfig.model_validate(_mem0({"llm": pointed, "embedder": local_embedder}))
-    # ...unless the OpenRouter endpoint is pointed too.
-    routed = {"provider": "openai", "config": {"openrouter_base_url": "http://localhost:8080/v1"}}
-    SectumConfig.model_validate(_mem0({"llm": routed, "embedder": local_embedder}))
-    monkeypatch.delenv("OPENROUTER_API_KEY")
-    # The graph store's own LLM sends memory content too.
+        SectumConfig.model_validate(_mem0({"embedder": local_embedder, "graph_store": neo4j}))
     with pytest.raises(ValueError, match=r"graph_store\.llm"):
         SectumConfig.model_validate(
             _mem0(
                 {
-                    "llm": local_llm,
+                    "llm": {"provider": "ollama"},
                     "embedder": local_embedder,
-                    "graph_store": {"provider": "neo4j", "llm": {"provider": "openai"}},
+                    "graph_store": {**neo4j, "llm": {"provider": "openai"}},
                 }
             )
         )
+    # An OpenAI-compatible server the operator pointed at is local - the same trust
+    # `detection`'s base_url gets.
+    pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:11434/v1"}}
+    graphed = {"llm": pointed, "embedder": local_embedder, "graph_store": neo4j}
+    SectumConfig.model_validate(_mem0(graphed))
+    # Unless mem0's OpenAI LLM will ignore the base URL: with an OpenRouter key in
+    # the environment it routes to OpenRouter instead...
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic")
+    with pytest.raises(ValueError, match="mem0 llm"):
+        SectumConfig.model_validate(_mem0(graphed))
+    # ...unless the OpenRouter endpoint is pointed too.
+    routed = {"provider": "openai", "config": {"openrouter_base_url": "http://localhost:8080/v1"}}
+    SectumConfig.model_validate(_mem0({**graphed, "llm": routed}))
+    monkeypatch.delenv("OPENROUTER_API_KEY")
 
 
 def test_the_probe_command_registers_its_queries_before_running(
@@ -578,9 +569,9 @@ def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert "vector store ranked with: hash-128 (a deterministic hashing embedder" in text.output, (
-        text.output
-    )
+    assert (
+        "vector-store steps ranked by: hash-128 (a deterministic hashing embedder" in text.output
+    ), text.output
     import json
 
     summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
@@ -785,3 +776,58 @@ def test_a_query_already_indexed_as_a_document_is_not_embedded_again() -> None:
     bridge.prefetch(["acme payroll"])
     bridge.prefetch_queries(["acme payroll", "who owns the contract"])
     assert model.queries == ["who owns the contract"]
+
+
+def test_an_st_model_is_recorded_without_its_default_namespace() -> None:
+    # sentence-transformers resolves a bare name to its own namespace, so the two
+    # spellings are one model; recorded apart, a rename tripped [EMBEDDER CHANGED].
+    from sectum_ai.config import _recorded_embedder_name
+
+    assert _recorded_embedder_name(EmbedderBridge(HashingEmbedding("hash-16", dim=16))) == "hash-16"
+    renamed = SimpleNamespace(name="st:sentence-transformers/all-mpnet-base-v2", dim=768)
+    assert _recorded_embedder_name(renamed) == "st:all-mpnet-base-v2"  # type: ignore[arg-type]
+
+
+def test_st_models_use_their_own_query_and_document_prompts() -> None:
+    # e5-style models ship `query: `/`passage: ` prompts; encoding without them
+    # ranks a probe query differently from the production index built with them.
+    from sectum_ai.embeddings import SentenceTransformerEmbedding
+
+    calls: list[str | None] = []
+
+    class _Model:
+        def __init__(self, prompts: dict[str, str]) -> None:
+            self.prompts = prompts
+
+        def encode(self, texts: list[str], **kwargs: object) -> list[list[float]]:
+            calls.append(kwargs.get("prompt_name"))  # type: ignore[arg-type]
+            return [[1.0] for _ in texts]
+
+    for prompts, expected in (
+        ({"query": "query: ", "passage": "passage: "}, ["passage", "query"]),
+        ({}, [None, None]),
+    ):
+        calls.clear()
+        model = SentenceTransformerEmbedding.__new__(SentenceTransformerEmbedding)
+        model._model = _Model(prompts)
+        model.embed(["a document"])
+        model.embed_queries(["a query"])
+        assert calls == expected
+
+
+def test_a_failed_plant_batch_does_not_end_the_run(capsys: pytest.CaptureFixture[str]) -> None:
+    # Batching the planted poison is an optimisation: each plant embeds on demand
+    # if it fails, so a rate limit here must not end the run before any probe ran.
+    from sectum_ai.cli.app import _build_suite, _prefetch_queries
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    class _DocumentsDown(_Modes):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("rate limited")
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    suite = _build_suite(build_detection_providers(DetectionConfig()))
+    store = SimpleNamespace(embedder_bridge=EmbedderBridge(_DocumentsDown()))
+    _prefetch_queries(store, suite, substrate)
+    assert "planted documents embed on demand" in capsys.readouterr().err

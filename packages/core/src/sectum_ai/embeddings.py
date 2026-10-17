@@ -149,8 +149,24 @@ class SentenceTransformerEmbedding:
         self._model = SentenceTransformer(model_name)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Encode ``texts`` to normalised vectors with the local model."""
-        vectors = self._model.encode(texts, normalize_embeddings=True)
+        """Encode ``texts`` as documents to normalised vectors with the local model."""
+        return self._encode(texts, ("document", "passage"))
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Encode ``texts`` as retrieval queries, with the model's query prompt if it has one."""
+        return self._encode(texts, ("query",))
+
+    def _encode(self, texts: list[str], roles: tuple[str, ...]) -> list[list[float]]:
+        # An asymmetric model (e5 `query: `/`passage: `, BGE, nomic) ships its
+        # prompts in its own config; encoding without them ranks a query against
+        # the corpus differently from the production index built with them. A
+        # symmetric model has none, and is encoded as before.
+        prompts = getattr(self._model, "prompts", None) or {}
+        role = next((name for name in roles if name in prompts), None)
+        if role is None:
+            vectors = self._model.encode(texts, normalize_embeddings=True)
+        else:
+            vectors = self._model.encode(texts, normalize_embeddings=True, prompt_name=role)
         return [[float(value) for value in vector] for vector in vectors]
 
 

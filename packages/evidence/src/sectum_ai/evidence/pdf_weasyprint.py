@@ -185,7 +185,7 @@ def build_audit_html(pack: EvidencePack, anchor: str | None = None) -> str:
         summary_rows.append(("Retrieval-Pivot Rate", rpr_line))
     embedder_line = _vector_embedder_summary(run)
     if embedder_line is not None:
-        summary_rows.append(("Vector store embedding", embedder_line))
+        summary_rows.append(("Vector-store steps ranked by", embedder_line))
     summary = tuple(summary_rows)
     integrity = (
         ("Run digest (SHA-256, run identifier)", run_digest(run)),
