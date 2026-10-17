@@ -315,7 +315,7 @@ def test_cli_calibrate_rejects_an_unknown_embedder_spec() -> None:
     assert "unknown embedding model 'bogus-embedder'" in result.output
     # One menu, which names calibrate's offline option and not the sweep's fake-*
     # recall names it would refuse.
-    assert "or fake for the offline embedder" in result.output
+    assert "calibrate also accepts fake" in result.output
     assert "fake-<name>" not in result.output
 
 

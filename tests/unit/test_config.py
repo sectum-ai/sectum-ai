@@ -1462,9 +1462,9 @@ def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
     store = build_vector_store(AdapterConfig(kind="opensearch", host="example", port=9200))
     assert isinstance(store, OpenSearchVectorStore)
     assert not store.synthetic
-    # The capability is WITHDRAWN - the resolver backs every live kind with a
-    # bag-of-tokens `_hashing_embed`, and there is no config path to a real
-    # embedding model for a vector store.
+    # The capability is WITHDRAWN - this store has no `embedder`, so it is backed by
+    # the bag-of-tokens `_hashing_embed`; a store with one withholds it too, for the
+    # reasons at `build_vector_store`.
     assert not store.supports(Capability.SEMANTIC_RETRIEVAL)
     # ...and nothing else is: the withdrawal must not be over-broad.
     assert store.supports(Capability.PER_TENANT_NAMESPACE)

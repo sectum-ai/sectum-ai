@@ -28,6 +28,7 @@ import structlog
 structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL))
 
 from sectum_ai.embeddings import resolve_embedding_model  # noqa: E402
+from sectum_ai.spec import ConfigError  # noqa: E402
 from sectum_ai.substrate import build_substrate, default_scenario  # noqa: E402
 from sectum_ai.sweep import embedding_provider_sweep  # noqa: E402
 
@@ -43,7 +44,10 @@ SEED = 2026
 def sweep(specs: list[str]) -> dict[str, float]:
     """Return the per-model Retrieval-Pivot Rate for ``specs`` on the seeded corpus."""
     substrate = build_substrate(default_scenario(seed=SEED))
-    models = [resolve_embedding_model(spec) for spec in specs]
+    try:
+        models = [resolve_embedding_model(spec) for spec in specs]
+    except ConfigError as error:
+        raise SystemExit(f"every spec must name a real embedding model: {error}") from error
     if any(model is None for model in models):
         raise SystemExit(f"every spec must name a real embedding model; got {specs}")
     return embedding_provider_sweep(substrate, models)  # type: ignore[arg-type]

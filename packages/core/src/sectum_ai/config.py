@@ -464,8 +464,7 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     if config.detection.mode != "local":
         return
     specs = list(specs)
-    # Validated first: an unknown spec is refused for what it is, not as egress -
-    # and `calibrate` resolves its override without validating it.
+    # Validated first: an unknown spec is refused for what it is, not as egress.
     for spec in specs:
         if spec != "fake":
             validate_embedding_spec(spec)

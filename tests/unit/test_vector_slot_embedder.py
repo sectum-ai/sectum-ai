@@ -925,3 +925,30 @@ def test_resolving_a_malformed_spec_is_refused_at_the_source() -> None:
 
     with pytest.raises(ConfigError, match="missing a model name"):
         resolve_embedding_model("openai:")
+
+
+def test_an_unknown_seeded_embedding_model_is_refused_before_any_probe_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The sweep resolves the seeded list only while the record is built, so an
+    # unknown name failed after the whole suite had run against the stack.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+
+    def _never(*_: object) -> object:
+        raise AssertionError("the stack was reached before the seeded list was checked")
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _never)
+    path = tmp_path / "substrate.json"
+    substrate = json.loads(path.read_text())
+    substrate["scenario"]["embedding_models"] = ["fake-mini", "mini-lm"]
+    path.write_text(json.dumps(substrate))
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "unknown embedding model 'mini-lm'" in result.output, result.output

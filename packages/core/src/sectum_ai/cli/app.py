@@ -468,8 +468,9 @@ detection:
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
   # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
   # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
-  # embedder - or, with a graph store, the LLM feeding it - is not a local provider
-  # (ollama, lmstudio, huggingface / vllm, or openai with an explicit base URL).
+  # embedder is not ollama, lmstudio or huggingface - or, with a graph store, whose
+  # graph LLM is not ollama, lmstudio or vllm. Either may be openai with an explicit
+  # openai_base_url (an LLM needs openrouter_base_url while OPENROUTER_API_KEY is set).
   # Adapters you point it at are the system under test and receive the synthetic
   # data by design.
   # "hosted" (default) places no egress restriction.
@@ -1015,6 +1016,11 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
+    # Validated before anything runs, in every mode: the sweep resolves this list
+    # only while the record is built, so an unknown name failed after the whole
+    # suite had run against the stack, with no record written.
+    for model_spec in substrate.scenario.embedding_models:
+        validate_embedding_spec(model_spec)
     # The sweep embeds the list fixed into the substrate at seed time, not the
     # config's - so a substrate seeded with hosted models passed the config's gate.
     refuse_hosted_embeddings(
@@ -3632,12 +3638,7 @@ def _resolve_calibration_embedder(
         if spec == "fake":
             return FakeEmbeddingProvider(), "fake"
         model = resolve_embedding_model(spec)
-        if model is None:
-            raise ConfigError(
-                f"--embedder {spec!r} does not name a real embedding model; "
-                "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
-                "voyage:<model>, or bedrock:<model>"
-            )
+        assert model is not None  # `calibrate` refused the fake-* recall names already
         return _BatchToSingleEmbedder(model), model.name
     provider = build_embedder(detection_embedder)
     if provider is None:  # kind: fake -> the offline deterministic embedder
@@ -3814,7 +3815,7 @@ def calibrate(
                 validate_model_spec(embedder)
             except ConfigError as error:
                 raise ConfigError(
-                    f"--embedder: {error}, or fake for the offline embedder"
+                    f"--embedder: {error} (calibrate also accepts fake, the offline embedder)"
                 ) from error
         refuse_hosted_embeddings(loaded, [embedder], "--embedder")
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
