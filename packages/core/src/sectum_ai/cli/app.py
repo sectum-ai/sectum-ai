@@ -400,6 +400,7 @@ workdir: .sectum-ai
 adapters:
   vector_store:
     kind: fake  # fake|pgvector|chroma|weaviate|pinecone|qdrant|milvus|opensearch|azure-search
+    # embedder: st:all-mpnet-base-v2  # a live kind: the model your production index uses
     shared_index: true       # demo leak: one index serves every tenant
     # dsn_env: SECTUM_PGVECTOR_DSN
   cache:
@@ -463,8 +464,10 @@ detection:
   # one for your model). Raise it once a real embedding model is configured.
   semantic_threshold: 0.62  # 0.62 | <float> | auto
   # Deployment mode. "local" is the BYOC "no data leaves the box" guarantee: it
-  # fails fast if any embedder/judge above would call a hosted AI API (use `fake`,
-  # or set a local `base_url`). "hosted" (default) places no egress restriction.
+  # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
+  # or set a local `base_url`), and likewise a hosted vector_store `embedder`,
+  # scenario embedding_models entry, or mem0 embedder (use `st:` or `hash-`).
+  # "hosted" (default) places no egress restriction.
   mode: hosted             # hosted | local
 """
 
@@ -1316,7 +1319,9 @@ def probe(
             # The disclosure the text, the scorecard and both PDFs carry: a hashing
             # embedder's name alone reads as an embedding model.
             "vector_embedder_note": (
-                lexical_caveat(run.vector_embedder) if run.vector_embedder is not None else None
+                describe_vector_embedder(run.vector_embedder)
+                if run.vector_embedder is not None and lexical_caveat(run.vector_embedder)
+                else None
             ),
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
             # dashboard can show the rate's uncertainty, not a bare point estimate.

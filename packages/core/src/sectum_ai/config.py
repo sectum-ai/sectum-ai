@@ -358,7 +358,9 @@ class SectumConfig(BaseModel):
         offenders: list[str] = []
         store = self.adapters.get("vector_store")
         spec = (store.model_extra or {}).get("embedder") if store else None
-        if isinstance(spec, str) and is_hosted_embedding_spec(spec):
+        # An unknown spec is left to the store's resolver, which validates before it
+        # resolves anything and refuses it as unknown; calling it egress was false.
+        if isinstance(spec, str) and _is_known_spec(spec) and is_hosted_embedding_spec(spec):
             offenders.append(f"vector_store.embedder ({spec!r})")
         hosted = [m for m in self.scenario.embedding_models if is_hosted_embedding_spec(m)]
         if hosted:
@@ -427,6 +429,14 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     return offenders
 
 
+def _is_known_spec(spec: str) -> bool:
+    try:
+        validate_embedding_spec(spec)
+    except ConfigError:
+        return False
+    return True
+
+
 def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source: str) -> None:
     """Refuse hosted embedding ``specs`` under ``detection.mode: local``.
 
@@ -439,6 +449,12 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     """
     if config.detection.mode != "local":
         return
+    specs = list(specs)
+    # Validated first: an unknown spec is refused for what it is, not as egress -
+    # and `calibrate` resolves its override without validating it.
+    for spec in specs:
+        if spec != "fake":
+            validate_embedding_spec(spec)
     hosted = [spec for spec in specs if is_hosted_embedding_spec(spec)]
     if hosted:
         raise ConfigError(

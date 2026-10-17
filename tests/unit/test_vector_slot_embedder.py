@@ -839,3 +839,51 @@ def test_a_failed_plant_batch_does_not_end_the_run(capsys: pytest.CaptureFixture
     store = SimpleNamespace(embedder_bridge=EmbedderBridge(_DocumentsDown()))
     _prefetch_queries(store, suite, substrate)
     assert "planted documents embed on demand" in capsys.readouterr().err
+
+
+def test_local_mode_refuses_an_unknown_spec_as_unknown_not_as_egress(tmp_path: Path) -> None:
+    # The egress check ran before validation, so `hashing-64` (the name a run
+    # records) was refused as "would call a hosted AI API" - false, and the wrong
+    # fix to point an operator at.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_vector_slot
+
+    config = SectumConfig.model_validate(
+        _local(adapters={"vector_store": {"kind": "opensearch", "embedder": "hashing-64"}})
+    )
+    with pytest.raises(ConfigError, match="unknown embedding model"):
+        build_vector_slot(config)
+    # `calibrate` resolved its override without validating it at all.
+    local = str(_local_config(tmp_path))
+    result = CliRunner().invoke(app, ["calibrate", "--config", local, "--embedder", "openai:"])
+    assert result.exit_code == 3, result.output
+    assert "missing a model name" in result.output, result.output
+    assert "hosted" not in result.output, result.output
+
+
+def test_the_json_note_carries_the_same_description_as_the_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # For the default the description says no model was configured for the store;
+    # the JSON note dropped that clause, so a dashboard could not tell the default
+    # from a deliberately configured hash spec.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+
+    def _default(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_name = "hashing-64"
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _default)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    summary = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--output", "json"])
+    note = json.loads(summary.stdout)["vector_embedder_note"]
+    assert "no embedding model was configured for the vector store" in note, note
