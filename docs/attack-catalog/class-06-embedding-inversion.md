@@ -25,7 +25,7 @@ per-tenant store returns nothing for a foreign fragment.
 The probe only runs against a vector-slot adapter that reports the `semantic_retrieval`
 capability. A backend that matches on substrings can return a whole document for a
 fragment query with no embedding involved, and that keyword hit would be recorded here
-as `AML.T0024.001 Invert ML Model`, a real result attributed to a mechanism the backend
+as `AML.T0024.001 Invert AI Model`, a real result attributed to a mechanism the backend
 does not have. Wherever the capability is absent this probe is **skipped** and the class
 scores `NOT_COVERED`, never `PASS`.
 

@@ -46,7 +46,7 @@ def test_it_declares_the_api_surface_not_the_slot_it_fills() -> None:
 
 def test_it_declares_no_semantic_retrieval() -> None:
     # An application's search is not an embedding space. Without this, a substring
-    # hit would be recorded as AML.T0024.001 "Invert ML Model".
+    # hit would be recorded as AML.T0024.001 "Invert AI Model".
     bundle = build_adapters(_config(app=AdapterConfig(kind="fake")))
     assert not bundle.vector.supports(Capability.SEMANTIC_RETRIEVAL)
 

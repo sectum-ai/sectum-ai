@@ -25,7 +25,7 @@ class EmbeddingInversionProbe(DetectingProbe):
     # Only meaningful against a store that ranks by embedding similarity. A
     # backend that matches on substrings can return the full document for a
     # fragment query without any embedding being involved, and this probe would
-    # record that keyword hit as AML.T0024.001 "Invert ML Model" - a real result
+    # record that keyword hit as AML.T0024.001 "Invert AI Model" - a real result
     # attributed to a mechanism the backend does not have. Skipped there, which
     # scores the class NOT_COVERED rather than PASS.
     requires_any_capability: tuple[Capability, ...] = (Capability.SEMANTIC_RETRIEVAL,)

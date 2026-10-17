@@ -106,7 +106,7 @@ scanning adapter yet, so it is out of scope, not fake; see the
 - **Classes 6 and 13 do not run against any live vector store.** Both need a vector
   slot that reports the `semantic_retrieval` capability, because a backend matching on
   substrings can return a document for a fragment query with no embedding involved and
-  that keyword hit would be recorded as `AML.T0024.001 Invert ML Model` — a real finding
+  that keyword hit would be recorded as `AML.T0024.001 Invert AI Model` — a real finding
   attributed to a mechanism the backend does not have. There is no path from
   `sectum-ai.yaml` to a real embedding model for a vector store (`embedding_model`
   configures the *detection* pipeline), so every live kind the CLI builds is backed by a
