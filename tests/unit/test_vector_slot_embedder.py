@@ -462,15 +462,23 @@ def test_both_erasure_modes_register_their_fingerprint_queries(
     substrate = _load_substrate(tmp_path)
     target = substrate.tenants[0].tenant_id
     by_id = {doc.doc_id: doc for doc in substrate.documents}
-    # Only the titles the residue scan queries: those of the documents holding the
-    # target's hard canaries, not every title the tenant has.
+    # Exactly the titles the residue scan queries: those of the documents holding
+    # ANY of the target's markers - the probe scans every type, and registering only
+    # the hard canaries left the entity and secret canaries in document mode.
     titles = {
+        by_id[location.doc_id].title
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target
+        for location in marker.planted_locations
+    }
+    hard_only = {
         by_id[location.doc_id].title
         for marker in substrate.manifest.markers
         if marker.owner_tenant_id == target and marker.marker_type.value == "HARD_CANARY"
         for location in marker.planted_locations
     }
-    assert titles and set(canary.queries) == titles
+    assert titles != hard_only
+    assert set(canary.queries) == titles
 
     subject = _Modes()
     _bridged_slot(monkeypatch, subject)
@@ -501,5 +509,71 @@ def test_a_failure_registering_subject_fingerprints_costs_no_surface_its_verdict
     manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
     result = runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
     assert result.exit_code != 3, result.output
-    assert "embeds on demand" in result.output, result.output
+    assert "embed on demand" in result.output, result.output
     assert (tmp_path / "erasure-evidence.json").exists()
+
+
+def test_a_failed_query_registration_still_embeds_those_texts_as_queries(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Containing the failure is only safe if the texts keep their mode: falling
+    # back to document mode on demand silently under-ranked an erasure scan's
+    # queries, which can read a residual document as erased.
+    from types import SimpleNamespace
+
+    from sectum_ai.cli.app import _register_queries
+
+    class _FlakyQueries(_Modes):
+        def __init__(self) -> None:
+            super().__init__()
+            self.failed = False
+
+        def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("rate limited")
+            return super().embed_queries(texts)
+
+    model = _FlakyQueries()
+    bridge = EmbedderBridge(model)
+    _register_queries(SimpleNamespace(embedder_bridge=bridge), ["who owns the contract"])
+    assert "embed on demand" in capsys.readouterr().err
+    bridge("who owns the contract")
+    assert model.queries == ["who owns the contract"]
+    assert model.documents == []
+
+
+def test_a_provider_that_fails_to_load_is_a_typed_adapter_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A misspelled `st:` model fails its download inside the constructor - outside
+    # every call path - and escaped as a raw traceback.
+    import sectum_ai.embeddings as embeddings
+    from sectum_ai.spec import AdapterError
+
+    def _missing(name: str) -> object:
+        raise OSError(f"{name} is not a valid model identifier")
+
+    monkeypatch.setattr(embeddings, "SentenceTransformerEmbedding", _missing)
+    with pytest.raises(AdapterError, match="OSError"):
+        embeddings.resolve_embedding_model("st:all-mpnet-base-v3")
+
+
+def test_the_probe_summary_says_a_hashing_geometry_is_lexical(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+
+    def _hashed(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_name = "hash-128"
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _hashed)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    text = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "measured in: hash-128 (a hashing embedder" in text.output, text.output

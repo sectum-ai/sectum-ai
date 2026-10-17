@@ -30,14 +30,19 @@ from typing import Any, Protocol, runtime_checkable
 from sectum_ai.spec import AdapterError, ConfigError, SectumError
 
 __all__ = [
+    "HOSTED_EMBEDDING_PREFIXES",
     "BedrockEmbedding",
     "CohereEmbedding",
+    "EmbedderBridge",
     "EmbeddingModel",
     "HashingEmbedding",
     "OpenAIEmbedding",
     "SentenceTransformerEmbedding",
     "VoyageEmbedding",
+    "call_embedder",
     "cosine",
+    "embed_queries",
+    "is_hosted_embedding_spec",
     "resolve_embedding_model",
     "validate_embedding_spec",
 ]
@@ -390,6 +395,30 @@ def _hash_dim(spec: str) -> int:
 def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
     """Resolve a scenario embedding-model name to a real :class:`EmbeddingModel`, or ``None``.
 
+    See :func:`_construct_embedding_model` for the specs. Construction can fail
+    inside a provider library - a misspelled ``st:`` model fails its download, a
+    ``bedrock:`` model with no region fails in boto3 - and that escaped as a raw
+    traceback and exit 1, so it is mapped like a call: :class:`AdapterError`
+    naming the exception type only.
+
+    Raises:
+        ConfigError: for a malformed spec or a missing extra or key.
+        AdapterError: when the provider library fails to construct the model.
+    """
+    try:
+        return _construct_embedding_model(spec)
+    except SectumError:
+        raise
+    except Exception as error:
+        raise AdapterError(
+            f"embedding model {spec!r} could not be loaded ({type(error).__name__}); "
+            "check its name, credentials and region"
+        ) from error
+
+
+def _construct_embedding_model(spec: str) -> EmbeddingModel | None:
+    """Resolve a scenario embedding-model name to a real :class:`EmbeddingModel`, or ``None``.
+
     Returns ``None`` for the legacy deterministic recall fakes (``fake-*``), which
     the sweep models through :class:`~sectum_ai.adapters.fakes.FakeVectorStore` recall
     rather than real embeddings. Real specs:
@@ -514,6 +543,10 @@ class EmbedderBridge:
         # lists of boxed floats for the whole run.
         self._documents: dict[str, array[float]] = {}
         self._queries: dict[str, array[float]] = {}
+        # Every text registered as a query, embedded or not: a registration whose
+        # embedding failed still embeds later in QUERY mode, rather than falling
+        # back to document mode - which would silently under-rank it.
+        self._query_texts: set[str] = set()
         self._dim: int | None = None
 
     def prefetch(self, texts: Iterable[str]) -> None:
@@ -525,7 +558,9 @@ class EmbedderBridge:
 
     def prefetch_queries(self, texts: Iterable[str]) -> None:
         """Embed every query text not already cached in QUERY mode, in batches."""
-        missing = [text for text in dict.fromkeys(texts) if text not in self._queries]
+        texts = list(dict.fromkeys(texts))
+        self._query_texts.update(texts)
+        missing = [text for text in texts if text not in self._queries]
         for start in range(0, len(missing), self._batch_size):
             chunk = missing[start : start + self._batch_size]
             self._store(self._queries, chunk, self._embed(self._embed_queries, chunk))
@@ -535,6 +570,9 @@ class EmbedderBridge:
         cached = self._documents.get(text)
         if cached is None:
             cached = self._queries.get(text)
+        if cached is None and text in self._query_texts:
+            self.prefetch_queries([text])
+            cached = self._queries[text]
         if cached is None:
             self.prefetch([text])
             cached = self._documents[text]

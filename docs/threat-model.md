@@ -148,8 +148,12 @@ timestamped; it is signed by a TSA only when one is configured.)
   `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec, whether it comes from the
   config, a CLI override, or the list a substrate was seeded with). A `mem0` memory
   adapter is refused too unless its LLM, embedder and any graph-store LLM are local
-  providers, since mem0 defaults the first two to OpenAI — so Sectum makes no call to a third-party AI
-  service. A `base_url` you configure is
+  providers, since mem0 defaults the first two to OpenAI — so no stage Sectum runs
+  on its own behalf calls a third-party AI service. The adapters you point it at
+  are the system under test and receive the synthetic tenant data by design: a
+  hosted vector database, or an agent adapter driving an OpenAI Assistant or the
+  Anthropic Messages API, sends it to that provider because that is what is being
+  tested. A `base_url` you configure is
   trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
   server); that target is your trust boundary, not Sectum's.
 

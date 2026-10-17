@@ -106,8 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both erasure modes' fingerprint queries.
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
-  every provider call now fails as a typed adapter error (exit 3) naming only the
-  exception type.
+  every provider call — and loading a provider's model, such as a misspelled
+  `st:` name or a `bedrock:` model with no region — now fails as a typed adapter
+  error (exit 3) naming only the exception type.
 
 - **A failed anchor no longer makes `verify` accuse the previous pack.** The
   audit PDF was rendered straight to its final path, *before* the TSA/Rekor call

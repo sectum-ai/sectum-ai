@@ -183,7 +183,10 @@ kind is driven by a deterministic 64-dimension hashing embedder that ranks by
 shared tokens, not meaning. A collection, table or index the run creates is created
 at the model's own output dimension; one left by an earlier run at a different
 dimension (the default is 64) is **reused as it is**, and the backend rejects the
-upsert — remove it, or run `sectum-ai erasure`, before switching models. The corpus
+upsert. Drop what the earlier run created before switching models — pgvector's one
+shared table, or the per-tenant collections or indexes on the other stores.
+`sectum-ai erasure` does not do this: it deletes one tenant's data, and pgvector's
+column keeps its declared dimension. The corpus
 is embedded in batches before the upsert, as documents, and so are the suite's
 planned queries and the erasure scans' fingerprint queries, as queries — which matters for the asymmetric Cohere and Voyage
 models. Any other text, such as a document a probe plants mid-run, is embedded as
@@ -356,8 +359,13 @@ spec on the other two, wherever it is given — the config, a `seed` or `calibra
 override, or the list a substrate was seeded with. A `mem0` memory adapter brings
 its own LLM and embedder, and mem0 defaults both to OpenAI; `local` mode refuses
 it unless its `config` sets both — and any `graph_store.llm` — to a local
-provider. Together these guarantee it
-makes no call to a third-party AI service. A `base_url` you set is trusted to point at an endpoint
+provider. Together these guarantee that no stage Sectum runs on its own behalf —
+grading, embedding the corpus for the store, the sweep — calls a third-party AI
+service. The adapters you point it at are the system under test and receive the
+synthetic tenant data by design: a hosted vector database, or an agent adapter
+driving an OpenAI Assistant or the Anthropic Messages API, sends it to that
+provider because that is what is being tested; keep them inside your boundary if
+nothing may leave it. A `base_url` you set is trusted to point at an endpoint
 inside your own boundary; that target is your trust boundary, not Sectum's (see
 the [threat model](threat-model.md)).
 

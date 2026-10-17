@@ -49,6 +49,7 @@ from sectum_ai.spec.models import (
     Substrate,
     SyntheticTenantSpec,
     SyntheticUserSpec,
+    is_hashing_embedder,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
@@ -106,6 +107,7 @@ __all__ = [
     "canonical_hash",
     "configure_logging",
     "get_logger",
+    "is_hashing_embedder",
     "json_schemas",
     "normal_quantile",
     "normalize_for_match",

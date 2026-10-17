@@ -1154,6 +1154,9 @@ def _reportlab_paragraphs(
     [
         ("st:all-mpnet-base-v2", "st:all-mpnet-base-v2"),
         ("hashing-64", "ranks by shared tokens rather than meaning"),
+        # A configured hash spec is the same kind of instrument; bare, it read as a
+        # model.
+        ("hash-256", "ranks by shared tokens rather than meaning"),
         (None, None),
     ],
 )

@@ -521,6 +521,15 @@ Shared so the CLI that records it and the renderers that explain it cannot drift
 """
 
 
+def is_hashing_embedder(name: str) -> bool:
+    """Whether ``name`` is a hashing embedder: the default, or a ``hash-<dim>`` spec.
+
+    Either ranks by shared tokens rather than meaning, so every renderer that
+    names one has to say so - a bare ``hash-256`` reads as an embedding model.
+    """
+    return name == HASHING_EMBEDDER_NAME or name.startswith(("hash-", "hash:"))
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 

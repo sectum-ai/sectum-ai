@@ -160,6 +160,7 @@ from sectum_ai.spec import (
     SurfaceProvenance,
     canonical_hash,
     configure_logging,
+    is_hashing_embedder,
     residual_present,
     sha256_hex,
     untrusted,
@@ -1370,7 +1371,12 @@ def probe(
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
             if run.vector_embedder is not None:
                 # The geometry the rate was measured in, as the PDF states it.
-                typer.echo(f"  measured in: {untrusted(run.vector_embedder)}")
+                lexical = (
+                    " (a hashing embedder: shared tokens, not meaning)"
+                    if is_hashing_embedder(run.vector_embedder)
+                    else ""
+                )
+                typer.echo(f"  measured in: {untrusted(run.vector_embedder)}{lexical}")
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,
@@ -1621,10 +1627,20 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
 
 
 def _register_queries(store: object, texts: Iterable[str]) -> None:
-    """Embed ``texts`` in QUERY mode up front, when the store has a real model."""
+    """Embed ``texts`` in QUERY mode up front, when the store has a real model.
+
+    A failure here is not the run's: the texts stay registered as queries, so each
+    embeds on demand, in query mode, inside the containment of whatever step or
+    surface asks for it - which is where an erasure probe keeps one adapter's
+    failure from costing every other surface its verdict.
+    """
     bridge = getattr(store, "embedder_bridge", None)
-    if bridge is not None:
+    if bridge is None:
+        return
+    try:
         bridge.prefetch_queries(texts)
+    except SectumError as error:
+        typer.echo(f"warning: {error}; the queries embed on demand instead", err=True)
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
@@ -3202,15 +3218,8 @@ def erasure(
         # The `app`-aware path, as above: the subject scan read `vector_store`
         # directly too.
         subject_store = build_vector_slot(loaded, fake_default)
-        # The content scan queries the manifest's vector fingerprints. Contained: the
-        # probe isolates each surface's failure so one adapter cannot cost every
-        # other surface its verdict, and an embedder failure here, before the probe
-        # exists, would do exactly that. Unregistered, the phrases embed on demand
-        # inside the vector surface's own containment.
-        try:
-            _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
-        except AdapterError as error:
-            typer.echo(f"warning: {error}; the vector fingerprint scan embeds on demand", err=True)
+        # The content scan queries the manifest's vector fingerprints.
+        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -3363,14 +3372,15 @@ def erasure(
     if _seeds(Surface.VECTOR_DB):
         _prefetch_corpus(store, substrate.documents)
         # The residue scan queries the title of each document holding one of the
-        # target's hard canaries - not every title the tenant has.
+        # target's markers - every type, as the probe scans every type - not every
+        # title the tenant has.
         by_id = {doc.doc_id: doc for doc in substrate.documents}
         _register_queries(
             store,
             (
                 by_id[location.doc_id].title
                 for marker in substrate.manifest.markers
-                if marker.owner_tenant_id == target and marker.marker_type is MarkerType.HARD_CANARY
+                if marker.owner_tenant_id == target
                 for location in marker.planted_locations
                 if location.doc_id in by_id
             ),
@@ -3793,7 +3803,7 @@ def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
         f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
         f"one with {after}: the Retrieval-Pivot Rate is a property of the embedding "
         "geometry, so the rates were taken with different instruments and their "
-        "difference is not a change in isolation; re-baseline deliberately"
+        "difference cannot be attributed to a change in isolation; re-baseline deliberately"
     )
 
 

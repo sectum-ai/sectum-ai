@@ -35,6 +35,7 @@ from sectum_ai.spec import (
     FindingStatus,
     RunResult,
     SurfaceProvenance,
+    is_hashing_embedder,
     rate_from_counts,
     sha256_hex,
     wilson_interval,
@@ -783,6 +784,11 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
         return (
             f"{HASHING_EMBEDDER_NAME} - Sectum's deterministic hashing embedder, which "
             "ranks by shared tokens rather than meaning; no embedding model was configured"
+        )
+    if is_hashing_embedder(run.vector_embedder):
+        return (
+            f"{run.vector_embedder} - a deterministic hashing embedder, which ranks by "
+            "shared tokens rather than meaning"
         )
     return run.vector_embedder
 
