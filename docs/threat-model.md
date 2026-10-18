@@ -128,7 +128,9 @@ Sectum AI is synthetic by default — the substrate is fabricated. When pointed 
 a real stack, the probes read whatever that stack returns. In **BYOC** mode the
 CLI runs inside the customer environment and only markers, the evidence spans of
 findings, and the timestamped evidence pack leave it; the bulk of retrieved
-content stays on-box. Note that **unverified** findings ship too, and an evidence
+content stays on-box. The exception is a hosted vector-store `embedder` (refused
+under `detection.mode: local`): it receives the synthetic corpus, and in
+`erasure --subject` the data subject's real `vector_db` fingerprint text. Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
 content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)

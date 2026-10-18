@@ -188,7 +188,8 @@ shared table, or the per-tenant collections or indexes on the other stores.
 `sectum-ai erasure` does not do this: it deletes one tenant's data, and pgvector's
 column keeps its declared dimension. The corpus
 is embedded in batches before the upsert, as documents, and so are the suite's
-planned queries and the erasure scans' fingerprint queries, as queries — which matters for the asymmetric Cohere and Voyage
+planned queries and the erasure scans' queries (the canary scan's document titles,
+a subject's fingerprints), as queries — which matters for the asymmetric Cohere and Voyage
 models. Any other text, such as a document a probe plants mid-run, is embedded as
 a document. The run
 records the model as `vector_embedder` in its signed `RunResult`

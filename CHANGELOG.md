@@ -17,7 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live store ranked with a 64-dimension hashing embedder, so the Class 2
   Retrieval-Pivot Rate against a real store was measured by shared tokens, not
   meaning. The default is unchanged. `semantic_retrieval` stays withheld from live
-  stores, so Classes 6 and 13 still read `NOT_COVERED`.
+  stores, so Classes 6 and 13 still read `NOT_COVERED`. A hosted spec sends the
+  synthetic corpus to its provider - and, in `erasure --subject`, the data
+  subject's real `vector_db` fingerprint text, which the CLI warns about; `local`
+  mode refuses a hosted embedder.
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec - a hash spec by its dim - or
   `null` for the built-in fake or
@@ -122,14 +125,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its queries lower against the corpus than a production store would and
   under-reported the per-model gradient. Queries now use `search_query` / `query`,
   in the sweep, for the suite's planned queries against a live store, and for
-  both erasure modes' fingerprint queries. An `st:` model whose
+  both erasure modes' queries (the canary scan's document titles, a subject's
+  fingerprints). An `st:` model whose
   sentence-transformers config ships query and document prompts is encoded with
   them; checkpoints that document their prefixes only in the model card (many e5
   and BGE ones) ship none and are encoded without.
 - **The Class 2 sweep sent an OpenAI model the whole corpus in one request**, and
   OpenAI rejects more than 2,048 inputs, so a gradient over a corpus past 512
-  documents per tenant failed outright. Every model is now sent 64 texts per
-  request.
+  documents per tenant failed outright. Every model is now sent at most 64 texts
+  per request (Titan still takes one per call).
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
   every provider call — and loading a provider's model, such as a misspelled
