@@ -160,12 +160,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have changed on a live store. `erasure` contains it like every other surface
   and embeds and loads the target's corpus first, then the other tenants' - which
   crowd the target's residue page on a shared index, as a production index
-  would. Refused anywhere - in full or part-way - what landed of the target's
-  corpus is cleared, so `vector_db` shows no baseline, reads NOT_COVERED and the
-  run ends ERASURE INCONCLUSIVE (exit 3) like any unseeded surface, the others
-  keeping their verdicts; if the clearing fails too, the surface is recorded as
-  not seeded rather than scanned over a partial load, and the leftover is
-  warned about. A canary write refused part-way on another surface now warns
+  would. Refused anywhere - in full or part-way - `vector_db` is recorded as not
+  seeded rather than scanned over a partial load, so it reads NOT_COVERED and the
+  run cannot attest it, the other surfaces keeping their verdicts; what landed of
+  the target's corpus is cleared as cleanup, with a warning if that fails. A canary write refused part-way on another surface now warns
   that the surface is attested over the target's canaries that landed, not that
   it reads NOT_COVERED beside an ERASED verdict.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The

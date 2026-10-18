@@ -1774,19 +1774,21 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
 
 
 @pytest.mark.parametrize(
-    ("refused_calls", "partial", "delete_fails", "vector_verdict"),
+    ("refused_calls", "partial", "delete_mode"),
     [
-        # The target's own corpus refused: nothing it could rest on, so NOT_COVERED.
-        ({1}, False, False, "NOT_COVERED"),
+        # The target's own corpus refused: nothing it could rest on.
+        ({1}, False, "clears"),
         # Refused part-way through the target's own batch: half of it landed, and a
-        # scan over that attested ERASED - so what landed is cleared first.
-        ({1}, True, False, "NOT_COVERED"),
-        # ...and if that cleanup fails too, the surface is recorded as not seeded
-        # rather than scanned over the partial load, and the leftover is said.
-        ({1}, True, True, "NOT_COVERED"),
+        # scan over that attested ERASED.
+        ({1}, True, "clears"),
+        # ...and the clearing fails: the leftover is said.
+        ({1}, True, "fails"),
+        # ...or a soft-deleting store "clears" and keeps it: scanned, it read
+        # RESIDUAL over a partial load.
+        ({1}, True, "keeps"),
         # Another tenant's refused after the target's landed: the index is short of
-        # the conditions the run set up, so the target's load is cleared too.
-        ({2}, False, False, "NOT_COVERED"),
+        # the conditions the run set up.
+        ({2}, False, "clears"),
     ],
 )
 def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
@@ -1794,8 +1796,7 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
     monkeypatch: pytest.MonkeyPatch,
     refused_calls: set[int],
     partial: bool,
-    delete_fails: bool,
-    vector_verdict: str,
+    delete_mode: str,
 ) -> None:
     # Contained like every other surface's seeding - but an upsert lands per tenant,
     # and over a partial load the probe attested ERASED beside a warning that said
@@ -1817,12 +1818,17 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             raise ValueError(_BACKEND)
         return real_upsert(self, tenant, documents)
 
-    def _no_delete(self: FakeVectorStore, tenant: Any) -> None:
+    def _delete_fails(self: FakeVectorStore, tenant: Any) -> None:
         raise ConnectionError("delete refused")
 
+    def _delete_keeps(self: FakeVectorStore, tenant: Any) -> None:
+        return None
+
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
-    if delete_fails:
-        monkeypatch.setattr(FakeVectorStore, "delete", _no_delete)
+    if delete_mode == "fails":
+        monkeypatch.setattr(FakeVectorStore, "delete", _delete_fails)
+    if delete_mode == "keeps":
+        monkeypatch.setattr(FakeVectorStore, "delete", _delete_keeps)
     monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
@@ -1830,23 +1836,21 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), *scope])
         calls["n"] = 0
         assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
+        assert erased.exit_code == 3, erased.output
         assert "pw@h" not in erased.output, erased.output
         pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
         record = pack["run_result"]
-        assert record["metrics"]["erasure_coverage"]["vector_db"] == vector_verdict, erased.output
-        if vector_verdict == "NOT_COVERED":
-            # As for any surface that could not be seeded: present, LIVE or not,
-            # unestablished - so the run is INCONCLUSIVE, never VERIFIED, and names
-            # no geometry for a store nothing ranked over.
-            assert erased.exit_code == 3, erased.output
-            assert "ERASURE VERIFIED" not in erased.output, erased.output
-            assert "could not seed the vector_db canary" in erased.output, erased.output
-            assert (
-                "not seeded: the vector store refused the corpus" in erased.output
-            ) is delete_fails, erased.output
-            assert ("part of it may remain" in erased.output) is delete_fails, erased.output
-            assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
-            assert record["vector_embedder"] is None
+        # Recorded as not seeded, whatever the clearing did: present, unestablished,
+        # NOT_COVERED, never scanned - so never VERIFIED, and no geometry named for a
+        # store nothing ranked over.
+        assert record["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED", erased.output
+        assert "ERASURE VERIFIED" not in erased.output, erased.output
+        assert "RESIDUAL" not in erased.output, erased.output
+        assert "could not seed the vector_db canary" in erased.output, erased.output
+        assert "not seeded: the vector store refused the corpus" in erased.output
+        assert ("part of it may remain" in erased.output) is (delete_mode == "fails")
+        assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
+        assert record["vector_embedder"] is None
 
 
 def test_erasure_embeds_and_loads_the_targets_corpus_first(
@@ -1859,10 +1863,15 @@ def test_erasure_embeds_and_loads_the_targets_corpus_first(
 
     from sectum_ai.cli.app import _load_substrate, app
 
+    model = _Modes()
+    _bridged_slot(monkeypatch, model)
     loaded: list[Any] = []
+    embedded_before_first_load: list[int] = []
     real_upsert = FakeVectorStore.upsert
 
     def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        if not loaded:
+            embedded_before_first_load.append(len(model.documents))
         loaded.append(tenant)
         return real_upsert(self, tenant, documents)
 
@@ -1874,6 +1883,10 @@ def test_erasure_embeds_and_loads_the_targets_corpus_first(
     tenants = [tenant.tenant_id for tenant in substrate.tenants]
     assert loaded[0] == tenants[0], erased.output
     assert sorted(loaded, key=str) == sorted(tenants, key=str), erased.output
+    # Only the target's documents were embedded before its load was tried.
+    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == tenants[0]}
+    first = model.documents[: embedded_before_first_load[0]]
+    assert first and set(first) <= own, erased.output
 
 
 def test_erasure_on_a_shared_index_reads_as_crowded_as_main(tmp_path: Path) -> None:

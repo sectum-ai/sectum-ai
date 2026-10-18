@@ -1801,9 +1801,10 @@ def _seed_erasure_surface(
     The seeding runs before the probe, so an exception here aborts the whole
     command - losing every other surface's verdict, which is exactly what
     `_erase_surface`'s containment exists to prevent one step later. A backend
-    that refuses the write leaves its surface unseeded: the probe then attests it
-    over whatever of the target's canaries did land, and reads it NOT_COVERED if
-    none did.
+    that refuses the write leaves its surface unseeded: for a marker write the
+    probe then attests it over whatever of the target's canaries did land, and
+    reads it NOT_COVERED if none did. (The vector store's caller hands it to the
+    probe as not seeded instead: a corpus loads in parts.)
     """
     # A surface outside `--scope` is not scanned, not erased and not reported, so
     # writing to it would leave a canary in a live backend nobody comes back for.
@@ -3524,18 +3525,17 @@ def erasure(
 
     # Contained like every other surface. But a corpus loads in parts, and scanned
     # over a partial load - the target's, or an index short of the others - the
-    # verdict rested on conditions the run did not set up: so what of the target's
-    # corpus landed is cleared, and the probe finds no baseline - NOT_COVERED, LIVE,
-    # INCONCLUSIVE, as for any surface that could not be seeded. Only if that
-    # clearing fails too is the surface handed over as not seeded, to be recorded
-    # unestablished rather than scanned.
+    # verdict rested on conditions the run did not set up. So the surface is handed
+    # to the probe as not seeded - recorded unestablished, NOT_COVERED, never
+    # scanned - whatever the clearing below achieves: a soft-deleting store keeps
+    # what it is told to delete. The clearing is cleanup only.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
     not_seeded: dict[Surface, str] = {}
     if Surface.VECTOR_DB in unseedable:
+        not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
         try:
             store.delete(target)
         except Exception as error:
-            not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
             typer.echo(
                 f"warning: clearing what landed of the target's corpus failed too "
                 f"({type(error).__name__}); part of it may remain in the vector store",
@@ -3629,12 +3629,13 @@ def erasure(
 
     for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
         # Said out loud: silent, an unseeded surface is indistinguishable from one
-        # nobody configured. The vector store's partial load was cleared above, so it
+        # nobody configured. The vector store is handed over as not seeded, so it
         # reads NOT_COVERED. A marker write is per canary: the target's that landed
         # are scanned and erased, and the surface is attested over them -
         # NOT_COVERED only if none did.
         consequence = (
-            "so that surface reads NOT_COVERED rather than erased"
+            "so that surface is recorded as not seeded and reads NOT_COVERED (Sectum "
+            "cleared what of the target's corpus had landed)"
             if unseeded is Surface.VECTOR_DB
             else "so that surface is attested only over the target's canaries that "
             "did land, and reads NOT_COVERED if none did"
