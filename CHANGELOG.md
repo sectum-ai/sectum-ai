@@ -139,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
-  zero-egress gate covered only the detection embedder and judge, on the premise
+  local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep
   embeds the whole corpus and an `openai:`/`cohere:`/`voyage:`/`bedrock:` entry
   passed silently. `local` mode now refuses a hosted spec there and on the new

@@ -149,7 +149,9 @@ timestamped; it is signed by a TSA only when one is configured.)
 - **BYOC (bring-your-own-cloud).** The customer runs the CLI inside their own
   environment. Only the substrate's markers, the findings' evidence spans (which
   can include a judge rationale restating observed content — see *Customer data*
-  above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
+  above), and the hash-bound, timestamped evidence pack cross the boundary from Sectum's
+  own stages. Set `detection.mode: local` to **enforce** that none of them sends tenant
+  content to a third-party AI service:
   five stages embed or judge tenant content — detection, the vector store's
   `embedder` (the whole corpus), the Class 2 sweep's `embedding_models`,
   `calibrate --embedder` (the labelled set), and a

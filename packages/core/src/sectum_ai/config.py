@@ -356,7 +356,7 @@ class SectumConfig(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_zero_egress(self) -> "SectumConfig":
-        """In ``detection.mode: local``, refuse every embedder that would leave the box.
+        """In ``detection.mode: local``, refuse a stage sending tenant content to a hosted AI API.
 
         ``DetectionConfig._enforce_local_mode`` gates the detection embedder and
         judge, and the guarantee used to rest on it alone, on the premise that
@@ -392,17 +392,17 @@ class SectumConfig(BaseModel):
         offenders += _hosted_mem0_providers(self.adapters.get("memory"))
         if offenders:
             raise ValueError(
-                f"detection.mode 'local' forbids sending tenant content off the box, but "
+                f"detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
+                f"third-party AI service, but "
                 f"{'; '.join(offenders)} would call a hosted AI API or cannot be shown "
                 "not to. Use a local model (st:<model>, hash-<dim>, or a local mem0 "
                 "provider) instead."
             )
         if _mem0_telemetry_on(self.adapters.get("memory")):
             raise ValueError(
-                "detection.mode 'local' keeps the run on the box, but the mem0 memory would "
-                "post mem0's usage telemetry (run metadata, not tenant content) to its "
-                "PostHog project: mem0 sends it unless MEM0_TELEMETRY is false. Set "
-                "MEM0_TELEMETRY=False."
+                "detection.mode 'local' refuses a mem0 memory while mem0's own usage "
+                "telemetry is on: mem0 posts run metadata (not tenant content) to its "
+                "PostHog project unless MEM0_TELEMETRY is false. Set MEM0_TELEMETRY=False."
             )
         return self
 
@@ -554,7 +554,8 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     hosted = [spec for spec in specs if is_hosted_embedding_spec(spec)]
     if hosted:
         raise ConfigError(
-            f"detection.mode 'local' forbids sending tenant content off the box, but "
+            f"detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
+            f"third-party AI service, but "
             f"{source} ({', '.join(map(repr, hosted))}) names a hosted embedding API, "
             "refused whether or not this run would reach it. Use a local model "
             "(st:<model>) or the deterministic hash-<dim> instead."

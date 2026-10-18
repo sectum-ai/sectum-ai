@@ -144,7 +144,8 @@ def _local(**overrides: object) -> dict[str, object]:
 
 
 def test_byoc_local_mode_refuses_a_hosted_vector_slot_embedder() -> None:
-    # `detection.mode: local` is the "no data leaves the box" guarantee. The vector
+    # `detection.mode: local` guarantees no tenant content reaches a third-party AI
+    # service from Sectum's own stages. The vector
     # slot embeds the WHOLE CORPUS, so a hosted embedder there is the largest
     # egress in the product - and the gate, being a validator on `DetectionConfig`,
     # never saw it.
@@ -166,7 +167,7 @@ def test_byoc_local_mode_refuses_hosted_scenario_embedding_models() -> None:
 
 def test_byoc_local_mode_still_accepts_local_embedders() -> None:
     # The false-alarm half: sentence-transformers runs on the box, so it is the
-    # real embedder a zero-egress deployment should be able to use.
+    # real embedder a local-mode deployment should be able to use.
     SectumConfig.model_validate(
         _local(
             adapters={"vector_store": {"kind": "opensearch", "embedder": "st:all-mpnet-base-v2"}},
