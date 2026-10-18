@@ -371,7 +371,9 @@ class SectumConfig(BaseModel):
 
         A ``mem0`` memory adapter brings its own embedder, which mem0 defaults to
         OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there (see
-        :func:`_hosted_mem0_providers` for its LLM and vector-store rules too).
+        :func:`_hosted_mem0_providers` for its LLM and vector-store rules too), and
+        mem0 posts its own usage telemetry unless ``MEM0_TELEMETRY`` is false, which
+        is refused on its own reason (:func:`_mem0_telemetry_on`).
         Specs that arrive from the command line or a seeded substrate rather than this
         file are gated where they are used, by :func:`refuse_hosted_embeddings`.
         """

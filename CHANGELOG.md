@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fell across the swap is not a fix. So is the pipeline-end bleed probe's on a
   live pipeline, which may read the store the run seeded - withheld, never named
   as ranked in it (a run fed by a live pipeline alone records no geometry, so a
-  swap between two such runs is not detected); a by-id fetch (Class 1), the
+  swap is not detected where either run is such a run); a by-id fetch (Class 1), the
   built-in pipeline and metrics off the vector surface still compare, and the
   banner names only what ranked, or may have ranked, over the store in those runs.
   `diff --output json` carries it as `embedder_changed` (`[earlier, later]`, or

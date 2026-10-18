@@ -1537,22 +1537,17 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
         "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"},
     }
+    # As `probe` writes them: a clean probe has no count, and the finding sits on
+    # the pipeline's surface.
+    leak = _finding("p", probe_id="rag-pipeline-bleed").model_copy(
+        update={"surface": Surface.RAG_PIPELINE}
+    )
     earlier, later = _swap(
-        _run(
-            metrics=RunMetrics(per_probe_findings={"rag-poisoning": 0, "rag-pipeline-bleed": 0})
-        ).model_copy(update=exercised),
-        _run(
-            _finding("p", probe_id="rag-pipeline-bleed"),
-            metrics=RunMetrics(
-                confirmed_findings=1,
-                per_probe_findings={"rag-poisoning": 0, "rag-pipeline-bleed": 1},
-            ),
-        ).model_copy(update=exercised),
+        _run().model_copy(update=exercised), _run(leak).model_copy(update=exercised)
     )
     assert diff_runs(earlier, later).embedder_scoped == ("rag-poisoning",)
     output = _diff_output(tmp_path, earlier, later)
     assert "[REGRESSED] per_probe_findings[rag-pipeline-bleed]" in output, output
-    assert "[not measured] per_probe_findings[rag-poisoning]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
     assert "over it - Class 3, and the" in banner, banner
     assert "Retrieval-Pivot Rate" not in banner, banner
