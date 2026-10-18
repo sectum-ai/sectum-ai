@@ -51,6 +51,7 @@ from sectum_ai.spec.models import (
     SyntheticTenantSpec,
     SyntheticUserSpec,
     describe_vector_embedder,
+    hash_spec_dim,
     is_hashing_embedder,
     vector_embedder_note,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "configure_logging",
     "describe_vector_embedder",
     "get_logger",
+    "hash_spec_dim",
     "is_hashing_embedder",
     "json_schemas",
     "normal_quantile",

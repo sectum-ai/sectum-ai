@@ -538,7 +538,24 @@ def is_hashing_embedder(name: str) -> bool:
     a well-formed spec: a record ``diff`` did not write may carry any string, and
     the caveat asserts what the geometry is.
     """
-    return name == HASHING_EMBEDDER_NAME or re.fullmatch(r"hash[-:]0*[1-9][0-9]*", name) is not None
+    return name == HASHING_EMBEDDER_NAME or hash_spec_dim(name) is not None
+
+
+def hash_spec_dim(name: str) -> int | None:
+    """The dimension of a well-formed ``hash-<dim>`` / ``hash:<dim>`` spec, or ``None``.
+
+    The one parser behind validating a spec, merging its spellings and captioning
+    it: ASCII digits only (``int`` alone also takes ``6_4``, `` 64`` and other
+    scripts' digits), a positive value, and within ``int``'s digit limit.
+    """
+    match = re.fullmatch(r"hash[-:]([0-9]+)", name)
+    if match is None:
+        return None
+    try:
+        dim = int(match.group(1))
+    except ValueError:
+        return None
+    return dim if dim > 0 else None
 
 
 def vector_embedder_note(name: str | None) -> str | None:

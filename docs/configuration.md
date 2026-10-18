@@ -378,7 +378,11 @@ metadata, not tenant content — unless `MEM0_TELEMETRY=False`, so `local` mode
 refuses a mem0 memory until it is set. Together these guarantee that no stage Sectum runs on its own behalf —
 grading, embedding the corpus for the store, the sweep, calibration, writing to a
 mem0 memory —
-calls a third-party AI service. The adapters you point it at are the system under test and receive the
+sends tenant content to a third-party AI service. A local model is still fetched
+on first use: an `st:` model (and mem0's `huggingface` embedder) from the Hugging
+Face Hub unless it is already cached, and an `ollama` model by its server — no
+content, but a call off the box; pre-cache the models and set `HF_HUB_OFFLINE=1`
+to keep the run itself offline. The adapters you point it at are the system under test and receive the
 synthetic tenant data by design: a hosted vector database, or an agent adapter
 driving an OpenAI Assistant or the Anthropic Messages API, sends it to that
 provider because that is what is being tested; keep them inside your boundary if

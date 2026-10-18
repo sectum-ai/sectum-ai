@@ -162,7 +162,10 @@ timestamped; it is signed by a TSA only when one is configured.)
   local, and its vector store is on an allow-list of stores known to keep the
   vectors mem0 gives them rather than embed server-side, and its own usage
   telemetry is off (`MEM0_TELEMETRY=False`) — so no stage Sectum runs
-  on its own behalf calls a third-party AI service. The adapters you point it at
+  on its own behalf sends tenant content to a third-party AI service. (A local
+  model is still fetched on first use — an `st:` model from the Hugging Face Hub
+  unless cached, an `ollama` model by its server; pre-cache them and set
+  `HF_HUB_OFFLINE=1` to keep the run offline.) The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the
   Anthropic Messages API, sends it to that provider because that is what is being
