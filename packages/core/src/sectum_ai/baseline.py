@@ -435,6 +435,10 @@ class RunDiff:
         passed here would report "no regression" for a run that quietly stopped
         testing whole attack classes, via a narrowed ``--suite`` or a probe skipped
         for a missing adapter. Re-baseline deliberately to change what is covered.
+
+        So does a change of what was measured against: another scenario (a re-seed,
+        other tenants or users), or another embedding model for the vector store,
+        whose similarity-ranked numbers were taken with a different instrument.
         """
         return (
             self.metrics.regressed

@@ -343,10 +343,12 @@ class SectumConfig(BaseModel):
         the egress gate below never has to classify a spec nobody could resolve.
         """
         store = self.adapters.get("vector_store")
-        spec = (store.model_extra or {}).get("embedder") if store else None
-        if spec is not None:
+        extras = (store.model_extra or {}) if store else {}
+        # Present but blank (`embedder:` with no value) is refused, not read as
+        # absent: the run would fall back to the hashing default with no error.
+        if "embedder" in extras:
             try:
-                _check_vector_embedder(spec)
+                _check_vector_embedder(extras["embedder"])
             except ConfigError as error:
                 raise ValueError(str(error)) from error
         return self
@@ -410,7 +412,9 @@ _LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
 def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) -> bool:
     if not isinstance(block, dict):
         return False
-    provider = block.get("provider")
+    # An omitted provider is mem0's default, openai - which a base URL can point
+    # at a local server like any explicit openai block.
+    provider = block.get("provider") or "openai"
     settings = block.get("config")
     url_key = "openai_base_url"
     if llm and os.environ.get("OPENROUTER_API_KEY"):
@@ -737,10 +741,10 @@ def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
     `scenario.embedding_models`, rather than a third provider menu. A `fake-*`
     name is refused: it is a sweep RECALL name with no vectors to give a store.
     """
-    spec = (config.model_extra or {}).get("embedder")
-    if spec is None:
+    extras = config.model_extra or {}
+    if "embedder" not in extras:
         return None
-    spec = _check_vector_embedder(spec)
+    spec = _check_vector_embedder(extras["embedder"])
     model = resolve_embedding_model(spec)
     assert model is not None  # validate_model_spec refuses the fake-* recall names
     return EmbedderBridge(model)

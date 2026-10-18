@@ -1322,3 +1322,19 @@ def test_a_subject_scan_warns_when_a_hosted_embedder_receives_real_data(
     manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
     result = runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
     assert "sends the data subject's fingerprint text to openai:" in result.output, result.output
+
+
+def test_a_blank_embedder_key_is_refused_not_read_as_absent() -> None:
+    # `embedder:` with no value fell back to the hashing default with no error -
+    # a knob that changes nothing, which every other knob refuses.
+    with pytest.raises(ValueError, match="must be a model spec string, got None"):
+        SectumConfig.model_validate(
+            {"adapters": {"vector_store": {"kind": "qdrant", "embedder": None}}}
+        )
+
+
+def test_an_omitted_mem0_provider_pointed_at_a_local_server_is_local() -> None:
+    # An omitted provider is mem0's default, openai; pointed at a local server it
+    # sends nothing off the box, and refusing it claimed egress that does not occur.
+    local_server = {"config": {"openai_base_url": "http://localhost:8080/v1"}}
+    SectumConfig.model_validate(_mem0({"embedder": local_server}))
