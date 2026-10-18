@@ -57,5 +57,6 @@ and their probe sets are validated against the live catalog in CI.
   the markers, the configuration, the findings' evidence spans (which can include
   a judge rationale restating observed content) and the timestamped evidence pack
   leave the box — unless a stage is configured with a hosted AI provider, which
-  `detection.mode: local` refuses (see the
-  [threat model](threat-model.md)).
+  `detection.mode: local` refuses, or an adapter under test is itself hosted (a
+  hosted vector database, an agent driving OpenAI Assistants), which receives the
+  synthetic tenant data by design (see the [threat model](threat-model.md)).

@@ -180,9 +180,11 @@ class OpenAIEmbedding:
     """OpenAI embeddings (opt-in extra ``sectum-ai[openai]``).
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
-    a missing package or key is a config error. Note this sends the substrate's
-    synthetic corpus to OpenAI, so it is not BYOC-safe - prefer
-    :class:`SentenceTransformerEmbedding` when data must stay on the box.
+    a missing package or key is a config error. Note this sends what it embeds to
+    OpenAI - the synthetic corpus, and as a vector-store embedder in
+    ``erasure --subject`` a data subject's real fingerprint text - so it is not
+    BYOC-safe; prefer :class:`SentenceTransformerEmbedding` when data must stay on
+    the box.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "OPENAI_API_KEY") -> None:
@@ -221,7 +223,8 @@ class CohereEmbedding:
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
-    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
     ``embed`` uses ``input_type="search_document"``; :meth:`embed_queries` uses
     ``search_query``, the mode a production store embeds its queries in.
     """
@@ -268,7 +271,8 @@ class VoyageEmbedding:
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
-    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
     ``embed`` uses ``input_type="document"`` and :meth:`embed_queries` ``query``. Voyage caps a
     single request at 1000 texts (and a per-model token budget) and does not
     auto-batch, so a direct call is chunked in ``_VOYAGE_BATCH``-sized requests;
@@ -331,7 +335,8 @@ class BedrockEmbedding:
 
     Credentials and region come from boto3's standard chain (env ``AWS_REGION`` /
     profile / instance role); ``region`` overrides it. Like :class:`OpenAIEmbedding`,
-    this sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    this sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
     """
 
     def __init__(

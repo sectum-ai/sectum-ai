@@ -130,8 +130,9 @@ CLI runs inside the customer environment and only markers, the evidence spans of
 findings, and the timestamped evidence pack leave it; the bulk of retrieved
 content stays on-box. The exceptions are Sectum's own hosted stages, each refused
 under `detection.mode: local`: a hosted detection embedder or judge (sent the
-observations it grades), the sweep's hosted `embedding_models` and a mem0
-embedder, and a hosted vector-store `embedder` — which receives the synthetic
+observations it grades), the sweep's hosted `embedding_models`, a hosted
+`calibrate --embedder`, a mem0 embedder and graph-store LLM, and a hosted
+vector-store `embedder` — which receives the synthetic
 corpus and, in `erasure --subject`, the data subject's real `vector_db`
 fingerprint text. Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
