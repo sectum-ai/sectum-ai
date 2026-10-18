@@ -56,5 +56,6 @@ and their probe sets are validated against the live catalog in CI.
 - **BYOC (bring-your-own-cloud)** — the CLI runs inside your environment; only
   the markers, the configuration, the findings' evidence spans (which can include
   a judge rationale restating observed content) and the timestamped evidence pack
-  leave the box (see the
+  leave the box — unless a stage is configured with a hosted AI provider, which
+  `detection.mode: local` refuses (see the
   [threat model](threat-model.md)).
