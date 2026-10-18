@@ -59,7 +59,9 @@ live store is driven by its configured
 index was built with — and otherwise by a deterministic hashing embedder that ranks
 by shared tokens rather than meaning. The run records which one as
 `vector_embedder` in its signed `RunResult`, so two rates measured in different
-geometries cannot be mistaken for the same measurement.
+geometries cannot be mistaken for the same measurement — except between two runs fed
+only by a live RAG pipeline, which record none (the run cannot tell whether that
+pipeline reads the store).
 
 ## Embedding-model sweep
 

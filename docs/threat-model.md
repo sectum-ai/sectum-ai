@@ -159,7 +159,8 @@ timestamped; it is signed by a TSA only when one is configured.)
   adapter is refused too unless its embedder — which mem0 defaults to OpenAI and
   which embeds every write — is local, every LLM that could feed a graph store is
   local, and its vector store is on an allow-list of stores known to keep the
-  vectors mem0 gives them rather than embed server-side — so no stage Sectum runs
+  vectors mem0 gives them rather than embed server-side, and its own usage
+  telemetry is off (`MEM0_TELEMETRY=False`) — so no stage Sectum runs
   on its own behalf calls a third-party AI service. The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the

@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in pipeline and metrics off the vector surface still compare, and the
   banner names only what ranked, or may have ranked, over the store in those runs.
   `diff --output json` carries it as `embedder_changed` (`[earlier, later]`, or
-  `null`) and `embedder_ranked`.
+  `null`) and `embedder_scoped`.
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable
@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every live store it builds (`hashing-64` without an `embedder`), leaving `None`
   for the built-in fake, the `app` adapter, or a store built outside it - and
   `embedder_bridge`, set only when an `embedder` is configured. `RunDiff` gains
-  `embedder_changed` and `embedder_ranked` (the probes either run exercised whose
+  `embedder_changed` and `embedder_scoped` (the probes either run exercised whose
   results the swap may have moved, which its `[not measured]` is scoped to), and
   `RunDiff.regressed` is true on an embedder swap. `Runner.steps_to_send(probe)`
   returns the steps `run_per_step` will send, after its user-scope drops. New
@@ -147,7 +147,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without `enable_embeddings`). Sectum stores memory verbatim, so mem0's LLM runs for
   nothing else; and mem0 pairs one LLM block's provider with the other's config, so
   a graph LLM gets no base-URL allowance. A block the gate cannot read is refused as
-  unclassifiable. An embedding spec counts as local only by an allow-list
+  unclassifiable. mem0 also posts its own usage telemetry (run metadata, not tenant
+  content) to its PostHog project unless `MEM0_TELEMETRY` is false, so `local` mode
+  refuses a mem0 memory until it is set to `False`. An embedding spec counts as local only by an allow-list
   (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
   refused until classified.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,

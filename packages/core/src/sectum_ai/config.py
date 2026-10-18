@@ -396,6 +396,13 @@ class SectumConfig(BaseModel):
                 "not to. Use a local model (st:<model>, hash-<dim>, or a local mem0 "
                 "provider) instead."
             )
+        if _mem0_telemetry_on(self.adapters.get("memory")):
+            raise ValueError(
+                "detection.mode 'local' keeps the run on the box, but the mem0 memory would "
+                "post mem0's usage telemetry (run metadata, not tenant content) to its "
+                "PostHog project: mem0 sends it unless MEM0_TELEMETRY is false. Set "
+                "MEM0_TELEMETRY=False."
+            )
         return self
 
 
@@ -422,6 +429,13 @@ _PASSIVE_MEM0_STORES = frozenset(
         "opensearch", "supabase", "weaviate", "faiss",
     }
 )  # fmt: skip
+
+
+def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
+    """Whether a mem0 ``memory`` would post mem0's usage telemetry, by mem0's own parse."""
+    if memory is None or memory.kind != "mem0":
+        return False
+    return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
 
 
 def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
@@ -537,7 +551,7 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     if hosted:
         raise ConfigError(
             f"detection.mode 'local' forbids sending tenant content off the box, but "
-            f"{source} ({', '.join(map(repr, hosted))}) name a hosted embedding API, "
+            f"{source} ({', '.join(map(repr, hosted))}) names a hosted embedding API, "
             "refused whether or not this run would reach it. Use a local model "
             "(st:<model>) or the deterministic hash-<dim> instead."
         )

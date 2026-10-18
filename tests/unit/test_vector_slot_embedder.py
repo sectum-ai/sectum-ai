@@ -411,6 +411,36 @@ def _mem0(config: dict[str, object]) -> dict[str, object]:
     return _local(adapters={"memory": {"kind": "mem0", "config": config}})
 
 
+@pytest.fixture(autouse=True)
+def _mem0_telemetry_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The local-mode mem0 cases below are about its model blocks; telemetry is
+    # pinned on its own.
+    monkeypatch.setenv("MEM0_TELEMETRY", "False")
+
+
+@pytest.mark.parametrize(
+    ("value", "refused"),
+    [(None, True), ("True", True), ("1", True), ("yes", True), ("False", False), ("off", False)],
+)
+def test_byoc_local_mode_refuses_mem0_with_its_telemetry_on(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, refused: bool
+) -> None:
+    # mem0 posts usage metadata to its PostHog project unless MEM0_TELEMETRY reads
+    # false - on by default - so a local-mode run with an all-local mem0 still
+    # sent data off the box. Read as mem0 reads it; only mem0 is affected.
+    if value is None:
+        monkeypatch.delenv("MEM0_TELEMETRY", raising=False)
+    else:
+        monkeypatch.setenv("MEM0_TELEMETRY", value)
+    local_mem0 = _mem0({"embedder": {"provider": "huggingface"}})
+    if refused:
+        with pytest.raises(ValueError, match="MEM0_TELEMETRY=False"):
+            SectumConfig.model_validate(local_mem0)
+    else:
+        SectumConfig.model_validate(local_mem0)
+    SectumConfig.model_validate(_local())
+
+
 def test_the_probe_command_registers_its_queries_before_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -414,10 +414,9 @@ class RunDiff:
     embedder_changed: tuple[str, str] | None = None
     # The probes either run exercised whose results the swap may have moved, when
     # ``embedder_changed`` is set: the geometry probes, and the pipeline-end bleed
-    # probe on a live pipeline. A headline fed by none of them (the built-in
-    # pipeline's RPR beside Class 3) is still a measurement, and its regression
-    # read `[not measured]`.
-    embedder_ranked: tuple[str, ...] = ()
+    # probe on a live pipeline. A metric fed by none of them (the built-in
+    # pipeline's findings beside Class 3) is still a measurement.
+    embedder_scoped: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -559,7 +558,7 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
         embedder_changed=embedder_changed,
-        embedder_ranked=(
+        embedder_scoped=(
             tuple(sorted(_swap_scoped(earlier) | _swap_scoped(later)))
             if embedder_changed is not None
             else ()

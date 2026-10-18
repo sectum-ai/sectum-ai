@@ -3911,8 +3911,6 @@ def _delta_range(delta: MetricDelta) -> str:
 # In class order, the order the banner names them.
 _GEOMETRY_LABELS: dict[str, str] = {
     "rag-entity-bleed": "the Retrieval-Pivot Rate (Class 2)",
-    "rag-pipeline-bleed": "the Retrieval-Pivot Rate (Class 2, through a live RAG pipeline that "
-    "may read the store)",
     "rag-poisoning": "Class 3",
     "embedding-inversion": "Class 6",
     "ikea-extraction": "Class 10",
@@ -3922,26 +3920,34 @@ _GEOMETRY_LABELS: dict[str, str] = {
 def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
     """The banner for two runs whose vector stores ranked in different embedding models."""
     before, after = (untrusted(name) for name in change)
-    # Only what ranked over the store in THESE runs: the verdicts are scoped to
-    # `embedder_ranked`, and a banner naming the Retrieval-Pivot Rate regardless
+    # Only what these runs ranked over the store: the verdicts are scoped to
+    # `embedder_scoped`, and a banner naming the Retrieval-Pivot Rate regardless
     # told the reader to discount a built-in pipeline's RPR regression printed
-    # above it. Both Class 2 probes feed the one pooled rate, named once.
-    ranked_ids = set(result.embedder_ranked)
-    if "rag-entity-bleed" in ranked_ids:
-        ranked_ids.discard("rag-pipeline-bleed")
-    ranked = [label for probe_id, label in _GEOMETRY_LABELS.items() if probe_id in ranked_ids]
+    # above it.
+    ranked = [
+        label for probe_id, label in _GEOMETRY_LABELS.items() if probe_id in result.embedder_scoped
+    ]
     vector_keys = {
         f"{name}[{Surface.VECTOR_DB.value}]" for name in ("erasure_residue", "erasure_caveats")
     }
     if any(delta.name in vector_keys for delta in result.metrics.deltas):
         ranked.append("an erasure's vector residue scan")
     what = ", ".join(ranked) or "its similarity ranking"
+    # A live pipeline MAY read the store, which the run cannot tell, so its rate is
+    # withheld in its own words rather than named among what certainly ranked.
+    may = (
+        "; a live RAG pipeline may read the store too, so the Retrieval-Pivot Rate it "
+        "feeds is withheld rather than compared"
+        if "rag-pipeline-bleed" in result.embedder_scoped
+        and "rag-entity-bleed" not in result.embedder_scoped
+        else ""
+    )
     return (
         f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
         f"one with {after}: whatever ranked by similarity over it - {what}, and the "
         "findings appearing or resolving there - was taken with a different instrument, "
-        "so its difference cannot be attributed to a change in isolation; re-baseline "
-        "deliberately"
+        f"so its difference cannot be attributed to a change in isolation{may}; "
+        "re-baseline deliberately"
     )
 
 
@@ -3954,7 +3960,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     swapped = result.embedder_changed is not None
     return _delta_verdict(
         delta,
-        (*result.coverage_lost, *result.embedder_ranked),
+        (*result.coverage_lost, *result.embedder_scoped),
         (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
         (
@@ -4416,7 +4422,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "embedder_changed": (
             list(result.embedder_changed) if result.embedder_changed is not None else None
         ),
-        "embedder_ranked": list(result.embedder_ranked),
+        "embedder_scoped": list(result.embedder_scoped),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
