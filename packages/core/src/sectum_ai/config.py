@@ -488,8 +488,15 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         elif kind == "upstash_vector":
             if not isinstance(store_config, dict):
                 offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
-            elif store_config.get("enable_embeddings"):
+            elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
+            elif store_config.get("enable_embeddings") not in (None, False):
+                # Anything but a boolean (a quoted "false", a 1) is mem0's to coerce;
+                # refused as unread rather than named as a cause it may not be.
+                value = store_config["enable_embeddings"]
+                offenders.append(
+                    f"memory mem0 vector_store (enable_embeddings cannot be classified: {value!r})"
+                )
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):
         offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")

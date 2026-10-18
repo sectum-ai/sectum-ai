@@ -1499,3 +1499,14 @@ def test_an_upstash_store_without_config_is_unclassifiable_not_misattributed() -
             )
         )
     assert "enable_embeddings" not in str(caught.value)
+
+
+def test_a_non_boolean_upstash_flag_is_unclassifiable_not_named_as_enabled() -> None:
+    upstash = {
+        "provider": "upstash_vector",
+        "config": {"url": "u", "token": "t", "enable_embeddings": "false"},
+    }
+    with pytest.raises(ValueError, match="enable_embeddings cannot be classified"):
+        SectumConfig.model_validate(
+            _mem0({"embedder": {"provider": "ollama"}, "vector_store": upstash})
+        )
