@@ -828,6 +828,11 @@ def _with_name(name: str) -> object:
         ("hash:128", True),
         ("hash-0", False),
         ("hash-064", True),
+        ("hash-6_4", False),
+        ("hash- 64", False),
+        ("hash-+64", False),
+        ("hash-\u0666\u0664", False),
+        ("hash-64\n", False),
         ("hash-anything", False),
         ("hash-64\x1b[31m", False),
         ("st:all-mpnet-base-v2", False),
@@ -841,6 +846,17 @@ def test_only_a_well_formed_hash_spec_is_captioned_as_one(name: str, hashing: bo
     assert is_hashing_embedder(name) is hashing
     assert (vector_embedder_note(name) is not None) is hashing
     assert vector_embedder_note(None) is None
+    # And `diff` merges spellings by the same rule it captions them by.
+    from sectum_ai.embeddings import canonical_embedding_spec
+    from sectum_ai.spec import ConfigError
+
+    if name.startswith(("hash-", "hash:")):
+        try:
+            canonical_embedding_spec(name)
+            parsed = True
+        except ConfigError:
+            parsed = False
+        assert parsed is hashing, name
 
 
 def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:

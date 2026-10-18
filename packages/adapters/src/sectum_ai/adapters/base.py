@@ -189,7 +189,7 @@ class VectorStoreAdapter(Adapter):
     """
 
     embedder_name: str | None = None
-    """The embedding model this store was driven with, as the run should record it.
+    """The embedding geometry this store was driven with, as the run should record it.
 
     Set by the CLI resolver: ``hashing-64`` for the built-in deterministic default,
     the configured spec (``st:all-mpnet-base-v2``; a hash spec by its dim) for a

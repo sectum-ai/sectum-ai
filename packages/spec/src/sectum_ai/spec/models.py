@@ -62,7 +62,7 @@ flagship metric: a small-``n`` rate can never read as a precise point estimate.
 
 (newest first)
 
-0.8.0 — :class:`RunResult` records ``vector_embedder``: the embedding model the
+0.8.0 — :class:`RunResult` records ``vector_embedder``: the embedding geometry the
 vector slot's store was driven with. A Retrieval-Pivot Rate is a property of the
 geometry it was measured in, and the vector slot can now be driven by a real
 model rather than only the deterministic hashing embedder. Without this field a

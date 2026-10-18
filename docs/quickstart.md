@@ -307,5 +307,5 @@ model, or the hashing default —
 live RAG pipeline alone may or may not read the store), and when the slot is
 the built-in fake (this demo's), whose ranking is a lexical stand-in the run
 already discloses as synthetic — and `vector_embedder_note` carries the caveat
-when that model is a hashing embedder, which ranks by shared tokens rather than
+when that geometry is a hashing embedder, which ranks by shared tokens rather than
 meaning, so a dashboard cannot read a lexical live rate as a semantic one.

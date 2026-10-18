@@ -766,7 +766,7 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
 
 
 def _vector_embedder_summary(run: RunResult) -> str | None:
-    """Name the embedding model the vector store ranked in, or ``None`` if unrecorded.
+    """Name the embedding geometry the vector store ranked in, or ``None`` if unrecorded.
 
     The Retrieval-Pivot Rate is a property of that geometry: without this row the
     auditor's PDF stated a rate measured by shared tokens in the same words as one

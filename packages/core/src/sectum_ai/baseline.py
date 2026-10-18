@@ -448,7 +448,7 @@ class RunDiff:
         for a missing adapter. Re-baseline deliberately to change what is covered.
 
         So does a change of what was measured against: another scenario (a re-seed,
-        other tenants or users), or another embedding model for the vector store,
+        other tenants or users), or another embedding geometry for the vector store,
         whose similarity-ranked numbers were taken with a different instrument.
         """
         return (
@@ -531,7 +531,8 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         (earlier.vector_embedder, later.vector_embedder)
         if earlier.vector_embedder is not None
         and later.vector_embedder is not None
-        and _geometry(earlier.vector_embedder) != _geometry(later.vector_embedder)
+        and _canonical_geometry(earlier.vector_embedder)
+        != _canonical_geometry(later.vector_embedder)
         else None
     )
     return RunDiff(
@@ -570,7 +571,7 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     )
 
 
-def _geometry(name: str) -> str:
+def _canonical_geometry(name: str) -> str:
     """``name`` in its one spelling per geometry, or as recorded where it has none.
 
     ``hash:128`` and ``hash-128`` are one geometry; a record ``diff`` did not write

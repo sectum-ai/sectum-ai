@@ -409,14 +409,15 @@ def _hash_dim(spec: str) -> int:
 
     Rejects a non-positive dimension here, at config-validation time - otherwise
     ``hash-0`` / ``hash--3`` would pass ``validate_embedding_spec`` and fail only
-    when the sweep instantiates the embedder, defeating the early check.
+    when the sweep instantiates the embedder, defeating the early check. ASCII
+    digits only, as ``spec.is_hashing_embedder`` reads one: ``int`` also takes
+    ``6_4``, `` 64`` and other scripts' digits, so ``diff`` merged a spelling the
+    caption then declined to call hashing.
     """
-    try:
-        dim = int(spec[len("hash-") :])
-    except ValueError as error:
-        raise ConfigError(
-            f"malformed hashing-embedding spec {spec!r}; expected hash-<dim>"
-        ) from error
+    digits = spec[len("hash-") :]
+    if not re.fullmatch(r"[0-9]+", digits):
+        raise ConfigError(f"malformed hashing-embedding spec {spec!r}; expected hash-<dim>")
+    dim = int(digits)
     if dim <= 0:
         raise ConfigError(f"hashing-embedding dimension must be positive, got {spec!r}")
     return dim

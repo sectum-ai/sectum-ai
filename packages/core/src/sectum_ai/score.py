@@ -290,10 +290,10 @@ GEOMETRY_PROBES: frozenset[str] = frozenset(
 )
 """The probes that rank by similarity over the vector slot's store.
 
-Their results move with its embedding model, so a probe run records the model only
+Their results move with its embedding geometry, so a probe run records it only
 when one of them ran, `diff` scopes an embedder swap to them (and to the erasure
-checks' vector scans, `spec.ERASURE_WORKFLOW_IDS`, whose records name the model
-when they scanned the store), and the scorecard names the geometry on their
+checks' vector scans, `spec.ERASURE_WORKFLOW_IDS`, whose records name it when
+they scanned the store), and the scorecard names the geometry on their
 classes' headlines. Class 1 fetches by id; the pipeline-end bleed probe asks the
 RAG pipeline - the built-in one ranks over its own index, and a live one may or
 may not read the store, which the run cannot tell, so `diff` withholds its rate
