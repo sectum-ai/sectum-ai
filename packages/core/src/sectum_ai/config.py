@@ -209,20 +209,18 @@ class DetectionConfig(BaseModel):
     # blind spot. 0.0 stays legal: it admits every candidate to the judge, which
     # errs toward surfacing rather than away from it.
     semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)] | Literal["auto"] = 0.62
-    # Detection deployment mode. "hosted" (default) permits hosted embedder/judge
-    # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that
-    # no tenant content reaches a third-party AI service: it fails fast if any
-    # configured embedder or judge would call a default third-party AI API. Only
-    # the offline `fake` providers, and providers explicitly pointed at an
-    # operator-controlled `base_url` (a local
-    # or in-VPC endpoint), are allowed — so Sectum itself makes no call to a hosted
-    # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
-    # the threat model documents this. Detection is NOT the only stage that embeds
-    # tenant content: the vector store's `embedder`, the Class 2 sweep and a mem0
-    # memory adapter are gated by `SectumConfig._enforce_zero_egress`; specs from a
-    # CLI override or a seeded substrate are gated where used, by
-    # `refuse_hosted_embeddings`. The no-tenant-content claim rests on all three - a new
-    # command that embeds specs from a flag or a substrate must call the last.
+    # Detection deployment mode. "hosted" (default) permits hosted embedder/judge providers (the
+    # real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that no tenant content reaches
+    # a third-party AI service: it fails fast if any configured embedder or judge would call a
+    # default third-party AI API. Only the offline `fake` providers, and providers explicitly
+    # pointed at an operator-controlled `base_url` (a local or in-VPC endpoint), are allowed -
+    # so Sectum itself makes no call to a hosted AI API. The `base_url` target is the operator's
+    # trust boundary, not Sectum's; the threat model documents this. Detection is NOT the only
+    # stage that embeds tenant content: the vector store's `embedder`, the Class 2 sweep and a
+    # mem0 memory adapter are gated by `SectumConfig._enforce_zero_egress`; specs from a CLI
+    # override or a seeded substrate are gated where used, by `refuse_hosted_embeddings`. The
+    # no-tenant-content claim rests on all three - a new command that embeds specs from a flag
+    # or a substrate must call the last.
     mode: Literal["hosted", "local"] = "hosted"
 
     @model_validator(mode="after")
