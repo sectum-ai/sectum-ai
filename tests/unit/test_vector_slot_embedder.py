@@ -1784,6 +1784,9 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
         # ...and if that cleanup fails too, the surface is recorded as not seeded
         # rather than scanned over the partial load, and the leftover is said.
         ({1}, True, True, "NOT_COVERED"),
+        # Another tenant's refused after the target's landed: the index is short of
+        # the conditions the run set up, so the target's load is cleared too.
+        ({2}, False, False, "NOT_COVERED"),
     ],
 )
 def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
@@ -1846,20 +1849,16 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             assert record["vector_embedder"] is None
 
 
-def test_erasure_embeds_and_loads_only_the_targets_corpus(
+def test_erasure_embeds_and_loads_the_targets_corpus_first(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Every store's residue scan reads the target's own tenant, so the other
-    # tenants' corpora were embedded - with a hosted model, sent and billed - and
-    # left in the live store for nothing the verdict reads.
-    import json
-
+    # The target's corpus first, so a refusal there costs no other tenant's
+    # embedding; then the rest, which crowd the target's residue page on a shared
+    # index as a production index would - left out, the verdict came easier.
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import _load_substrate, app
 
-    model = _Modes()
-    _bridged_slot(monkeypatch, model)
     loaded: list[Any] = []
     real_upsert = FakeVectorStore.upsert
 
@@ -1872,12 +1871,33 @@ def test_erasure_embeds_and_loads_only_the_targets_corpus(
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     substrate = _load_substrate(tmp_path)
-    target = substrate.tenants[0].tenant_id
-    assert loaded == [target], erased.output
-    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == target}
-    assert set(model.documents) <= own and model.documents, erased.output
+    tenants = [tenant.tenant_id for tenant in substrate.tenants]
+    assert loaded[0] == tenants[0], erased.output
+    assert sorted(loaded, key=str) == sorted(tenants, key=str), erased.output
+
+
+def test_erasure_on_a_shared_index_reads_as_crowded_as_main(tmp_path: Path) -> None:
+    # The `init` template's shared index: the other tenants' documents fill the
+    # target's residue page, so absence cannot be established. Loading only the
+    # target's corpus turned the same config's NOT VERIFIED into ERASED.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("adapters:\n  vector_store:\n    kind: fake\n    shared_index: true\n")
+    runner = CliRunner()
+    seeded = runner.invoke(app, ["seed", "--workdir", str(tmp_path), "--config", str(config)])
+    assert seeded.exit_code == 0, seeded.output
+    erased = runner.invoke(
+        app,
+        ["erasure", "--workdir", str(tmp_path), "--config", str(config), "--scope", "vector_db"],
+    )
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
-    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
+    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED"
+    assert "NOT VERIFIED" in erased.output, erased.output
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

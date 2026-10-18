@@ -654,7 +654,7 @@ def test_a_canary_write_refused_part_way_is_attested_over_what_landed(
         _runner.invoke(app, ["seed", "--workdir", str(workdir)])
         result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
     assert "semantic_cache: 1 markers before, 0 after -> ERASED" in result.output, result.output
-    assert "attested only over the canaries that did land" in result.output, result.output
+    assert "attested only over the target's canaries that did land" in result.output
     assert "semantic_cache canary, so that surface reads NOT_COVERED" not in result.output
 
 

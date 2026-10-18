@@ -1801,8 +1801,9 @@ def _seed_erasure_surface(
     The seeding runs before the probe, so an exception here aborts the whole
     command - losing every other surface's verdict, which is exactly what
     `_erase_surface`'s containment exists to prevent one step later. A backend
-    that refuses the write leaves its surface unseeded, and unseeded is
-    NOT_COVERED: the probe finds no markers before, so it attests nothing.
+    that refuses the write leaves its surface unseeded: the probe then attests it
+    over whatever of the target's canaries did land, and reads it NOT_COVERED if
+    none did.
     """
     # A surface outside `--scope` is not scanned, not erased and not reported, so
     # writing to it would leave a canary in a live backend nobody comes back for.
@@ -3505,23 +3506,30 @@ def erasure(
     unseedable: dict[Surface, str] = {}
 
     def _seed_vector() -> None:
-        # The target's corpus first, embedded and loaded: it is what the verdict
-        # rests on, and a refusal here costs no other tenant's embedding.
+        # The target's corpus first, embedded and loaded, so a refusal there costs no
+        # other tenant's embedding; then the rest. The other tenants' documents are
+        # part of the conditions: on a shared index they crowd the target's residue
+        # page as a production index would, and leaving them out made the verdict
+        # easier to reach than the stack is.
         _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id == target])
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
         _load_corpus(store, substrate, [target])
+        _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
+        _load_corpus(
+            store,
+            substrate,
+            [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target],
+        )
 
-    # Contained like every other surface. But an upsert can land in part, and
-    # scanned over a partial load the probe attested ERASED beside a warning that
-    # said otherwise: so what landed is cleared, and the probe finds no baseline -
-    # NOT_COVERED, LIVE, INCONCLUSIVE, as for any surface that could not be seeded.
-    # Only if that cleanup fails too is the surface handed over as not seeded, to be
-    # recorded unestablished rather than scanned.
+    # Contained like every other surface. But a corpus loads in parts, and scanned
+    # over a partial load - the target's, or an index short of the others - the
+    # verdict rested on conditions the run did not set up: so what of the target's
+    # corpus landed is cleared, and the probe finds no baseline - NOT_COVERED, LIVE,
+    # INCONCLUSIVE, as for any surface that could not be seeded. Only if that
+    # clearing fails too is the surface handed over as not seeded, to be recorded
+    # unestablished rather than scanned.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
-    # Only the target's corpus is loaded: every store's residue scan reads the
-    # target's own tenant, so the other tenants' corpora were embedded - with a
-    # hosted model, sent and billed - for nothing the verdict reads.
     not_seeded: dict[Surface, str] = {}
     if Surface.VECTOR_DB in unseedable:
         try:
@@ -3620,17 +3628,16 @@ def erasure(
         )
 
     for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
-        # Said out loud: an unseeded surface has no markers before, so the probe
-        # attests nothing there and the coverage block reads NOT_COVERED. Silent,
-        # that is indistinguishable from a surface nobody configured.
-        # The vector store's partial load was cleared above, so it reads NOT_COVERED.
-        # A marker write is per canary: those that landed are scanned and erased,
-        # and the surface is attested over them - NOT_COVERED only if none did.
+        # Said out loud: silent, an unseeded surface is indistinguishable from one
+        # nobody configured. The vector store's partial load was cleared above, so it
+        # reads NOT_COVERED. A marker write is per canary: the target's that landed
+        # are scanned and erased, and the surface is attested over them -
+        # NOT_COVERED only if none did.
         consequence = (
             "so that surface reads NOT_COVERED rather than erased"
             if unseeded is Surface.VECTOR_DB
-            else "so that surface is attested only over the canaries that did land, "
-            "and reads NOT_COVERED if none did"
+            else "so that surface is attested only over the target's canaries that "
+            "did land, and reads NOT_COVERED if none did"
         )
         typer.echo(
             f"warning: could not seed the {unseeded.value} canary, {consequence}: "
