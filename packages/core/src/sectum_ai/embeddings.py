@@ -43,6 +43,7 @@ __all__ = [
     "call_embedder",
     "canonical_embedding_spec",
     "cosine",
+    "embed_batched",
     "embed_queries",
     "is_hosted_embedding_spec",
     "resolve_embedding_model",
@@ -585,6 +586,28 @@ def call_embedder(
     return vectors
 
 
+EMBED_BATCH_SIZE = 64
+"""Texts per provider request: under every provider's cap (OpenAI's is 2,048)."""
+
+
+def embed_batched(
+    name: str,
+    embed: Callable[[list[str]], list[list[float]]],
+    texts: list[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> list[list[float]]:
+    """:func:`call_embedder` over ``texts`` in ``batch_size`` chunks, in input order.
+
+    The Class 2 sweep handed a model the whole corpus as one request, and OpenAI
+    rejects more than 2,048 inputs - a corpus over 512 documents per tenant failed
+    the gradient outright.
+    """
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), batch_size):
+        vectors.extend(call_embedder(name, embed, texts[start : start + batch_size]))
+    return vectors
+
+
 class EmbedderBridge:
     """Adapt a batch :class:`EmbeddingModel` to the single-text callable a store takes.
 
@@ -606,7 +629,7 @@ class EmbedderBridge:
     the store keeps.
     """
 
-    def __init__(self, model: EmbeddingModel, *, batch_size: int = 64) -> None:
+    def __init__(self, model: EmbeddingModel, *, batch_size: int = EMBED_BATCH_SIZE) -> None:
         self.model = model
         self.name = model.name
         self._batch_size = batch_size
@@ -660,9 +683,7 @@ class EmbedderBridge:
         texts: Iterable[str],
     ) -> None:
         missing = [text for text in dict.fromkeys(texts) if text not in cache]
-        for start in range(0, len(missing), self._batch_size):
-            chunk = missing[start : start + self._batch_size]
-            vectors = call_embedder(self.name, embed, chunk)
-            cache.update(
-                (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
-            )
+        vectors = embed_batched(self.name, embed, missing, self._batch_size)
+        cache.update(
+            (text, array("d", vector)) for text, vector in zip(missing, vectors, strict=True)
+        )

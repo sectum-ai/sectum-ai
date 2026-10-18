@@ -12,11 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A real embedding model for the vector slot.** Every live `vector_store` kind
   takes an optional `embedder` (`st:<model>`, `hash-<dim>`, `openai:<model>`,
   `cohere:<model>`, `voyage:<model>`, `bedrock:<model>`): a store Sectum creates is
-  created at that model's dimension (a Pinecone index must already exist at it) and the corpus is upserted in its geometry, embedded in
-  batches first. Until now every live store ranked with a 64-dimension hashing
-  embedder, so the Class 2 Retrieval-Pivot Rate against a real store was measured
-  by shared tokens, not meaning. The default is unchanged. `semantic_retrieval`
-  stays withheld from live stores, so Classes 6 and 13 still read `NOT_COVERED`.
+  created at that model's dimension (a Pinecone index must already exist at it) and
+  the corpus is upserted in its geometry, embedded in batches first. Until now every
+  live store ranked with a 64-dimension hashing embedder, so the Class 2
+  Retrieval-Pivot Rate against a real store was measured by shared tokens, not
+  meaning. The default is unchanged. `semantic_retrieval` stays withheld from live
+  stores, so Classes 6 and 13 still read `NOT_COVERED`.
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec - a hash spec by its dim - or
   `null` for the built-in fake or

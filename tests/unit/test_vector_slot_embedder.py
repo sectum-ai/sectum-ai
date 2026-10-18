@@ -13,11 +13,11 @@ independent of `detection.embedder`, which is Sectum's own choice for grading.
 """
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from sectum_ai.adapters import Capability
+from sectum_ai.adapters.fakes import FakeVectorStore
 from sectum_ai.config import AdapterConfig, SectumConfig, build_vector_store
 from sectum_ai.embeddings import EmbedderBridge, HashingEmbedding, is_hosted_embedding_spec
 from sectum_ai.spec import ConfigError
@@ -253,6 +253,13 @@ class _Modes(HashingEmbedding):
         return super().embed(texts)
 
 
+def _bridged_store(bridge: EmbedderBridge) -> FakeVectorStore:
+    """A built-in fake carrying ``bridge``, as the CLI's helpers receive a store."""
+    store = FakeVectorStore()
+    store.embedder_bridge = bridge
+    return store
+
+
 def test_only_registered_queries_embed_in_query_mode() -> None:
     # The store embeds documents and queries through one callable, so the bridge
     # cannot tell them apart by the call. Defaulting an unknown text to QUERY mode
@@ -275,7 +282,6 @@ def test_only_registered_queries_embed_in_query_mode() -> None:
 
 
 def test_the_probe_registers_every_planned_vector_query() -> None:
-    from types import SimpleNamespace
 
     from sectum_ai.cli.app import _build_suite, _prefetch_queries
     from sectum_ai.config import DetectionConfig, build_detection_providers
@@ -284,7 +290,7 @@ def test_the_probe_registers_every_planned_vector_query() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
     model = _Modes()
-    _prefetch_queries(SimpleNamespace(embedder_bridge=EmbedderBridge(model)), suite, substrate)
+    _prefetch_queries(_bridged_store(EmbedderBridge(model)), suite, substrate)
     planned = {
         step.payload["query"]
         for probe in suite
@@ -519,7 +525,6 @@ def test_a_failed_query_registration_still_embeds_those_texts_as_queries(
     # Containing the failure is only safe if the texts keep their mode: falling
     # back to document mode on demand silently under-ranked an erasure scan's
     # queries, which can read a residual document as erased.
-    from types import SimpleNamespace
 
     from sectum_ai.cli.app import _register_queries
 
@@ -536,7 +541,7 @@ def test_a_failed_query_registration_still_embeds_those_texts_as_queries(
 
     model = _FlakyQueries()
     bridge = EmbedderBridge(model)
-    _register_queries(SimpleNamespace(embedder_bridge=bridge), ["who owns the contract"])
+    _register_queries(_bridged_store(bridge), ["who owns the contract"])
     assert "embed on demand" in capsys.readouterr().err
     bridge("who owns the contract")
     assert model.queries == ["who owns the contract"]
@@ -718,7 +723,6 @@ def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:
 def test_the_planted_poison_is_batched_as_documents() -> None:
     # Class 3 plants its poison mid-run; each plant embedded on demand, one provider
     # call per document.
-    from types import SimpleNamespace
 
     from sectum_ai.cli.app import _build_suite, _prefetch_queries
     from sectum_ai.config import DetectionConfig, build_detection_providers
@@ -727,7 +731,7 @@ def test_the_planted_poison_is_batched_as_documents() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
     model = _Modes()
-    _prefetch_queries(SimpleNamespace(embedder_bridge=EmbedderBridge(model)), suite, substrate)
+    _prefetch_queries(_bridged_store(EmbedderBridge(model)), suite, substrate)
     planted = {
         f"{step.payload['doc_id']} {step.payload['content']}"
         for probe in suite
@@ -837,7 +841,7 @@ def test_a_failed_plant_batch_does_not_end_the_run(capsys: pytest.CaptureFixture
 
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
-    store = SimpleNamespace(embedder_bridge=EmbedderBridge(_DocumentsDown()))
+    store = _bridged_store(EmbedderBridge(_DocumentsDown()))
     _prefetch_queries(store, suite, substrate)
     assert "planted documents embed on demand" in capsys.readouterr().err
 
@@ -1235,3 +1239,37 @@ def test_a_fake_listed_twice_warns_like_a_real_one(
     )
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
     assert "the list names only one" in capsys.readouterr().err
+
+
+def test_subject_fingerprints_are_not_embedded_before_the_other_adapters_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A typo in another adapter block is a cheap config error; registering first
+    # sent the data subject's text to a hosted embedder before it was reported.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    model = _Modes()
+    _bridged_slot(monkeypatch, model)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    config = tmp_path / "sectum-ai.yaml"
+    config.write_text("adapters:\n  cache:\n    kind: fake\n    shared_idx: true\n")
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
+    result = runner.invoke(
+        app,
+        [
+            "erasure",
+            "--subject",
+            str(manifest),
+            "--workdir",
+            str(tmp_path),
+            "--config",
+            str(config),
+        ],
+    )
+    assert result.exit_code == 3, result.output
+    assert "does not read: shared_idx" in result.output, result.output
+    assert model.queries == []

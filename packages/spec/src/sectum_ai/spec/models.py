@@ -530,25 +530,15 @@ def is_hashing_embedder(name: str) -> bool:
     return name == HASHING_EMBEDDER_NAME or name.startswith(("hash-", "hash:"))
 
 
-def lexical_caveat(name: str) -> str | None:
-    """The disclosure a hashing embedder's name needs, else ``None``.
-
-    Composed into :func:`describe_vector_embedder`, which every renderer calls.
-    """
-    if not is_hashing_embedder(name):
-        return None
-    return "a deterministic hashing embedder, which ranks by shared tokens rather than meaning"
-
-
 def describe_vector_embedder(name: str) -> str:
     """``name`` as every renderer shows it: with its caveat, in one wording.
 
     The scorecard, the probe summary and both PDF engines all call this, so the
     artifacts an auditor compares cannot describe one geometry three ways.
     """
-    caveat = lexical_caveat(name)
-    if caveat is None:
+    if not is_hashing_embedder(name):
         return name
+    caveat = "a deterministic hashing embedder, which ranks by shared tokens rather than meaning"
     if name == HASHING_EMBEDDER_NAME:
         return f"{name} - {caveat}; no embedding model was configured for the vector store"
     return f"{name} - {caveat}"

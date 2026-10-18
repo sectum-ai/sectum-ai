@@ -1297,7 +1297,7 @@ def probe(
         # narrowed suite of by-id fetches or timing measured nothing in any
         # geometry, and naming one let a swap gate `diff` over unaffected numbers.
         vector_embedder=(
-            getattr(vector, "embedder_name", None)
+            vector.embedder_name
             if {result[0].probe_id for result in step_results} & GEOMETRY_PROBES
             else None
         ),
@@ -1646,7 +1646,7 @@ def _erasure_provenance_lines(
     ]
 
 
-def _prefetch_corpus(store: object, documents: Iterable[CorpusDocument]) -> None:
+def _prefetch_corpus(store: VectorStoreAdapter, documents: Iterable[CorpusDocument]) -> None:
     """Batch-embed a corpus before it is upserted, when the store has a real model.
 
     Every live store embeds ``f"{document.title} {document.content}"`` once per
@@ -1659,13 +1659,14 @@ def _prefetch_corpus(store: object, documents: Iterable[CorpusDocument]) -> None
     _prefetch_texts(store, (f"{document.title} {document.content}" for document in documents))
 
 
-def _prefetch_texts(store: object, texts: Iterable[str]) -> None:
-    bridge = getattr(store, "embedder_bridge", None)
-    if bridge is not None:
-        bridge.prefetch(texts)
+def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
+    if store.embedder_bridge is not None:
+        store.embedder_bridge.prefetch(texts)
 
 
-def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrate) -> None:
+def _prefetch_queries(
+    store: VectorStoreAdapter, suite: Iterable[Probe], substrate: Substrate
+) -> None:
     """Embed the suite's planned vector texts up front: queries as QUERIES, plants in batches.
 
     Not only an optimisation: the store embeds queries and documents through one
@@ -1676,7 +1677,7 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
     documents, in the text the runner hands the store (`title` is the doc id).
     Planning is deterministic, so these are the texts the runner will send.
     """
-    if getattr(store, "embedder_bridge", None) is None:
+    if store.embedder_bridge is None:
         return
     steps = [
         step
@@ -1707,7 +1708,7 @@ def _prefetch_queries(store: object, suite: Iterable[Probe], substrate: Substrat
         typer.echo(f"warning: {error}; planted documents embed on demand instead", err=True)
 
 
-def _register_queries(store: object, texts: Iterable[str]) -> None:
+def _register_queries(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
     """Embed ``texts`` in QUERY mode up front, when the store has a real model.
 
     A failure here is not fatal by itself: the texts stay registered as queries, so
@@ -1716,11 +1717,10 @@ def _register_queries(store: object, texts: Iterable[str]) -> None:
     from costing every other surface its verdict; in `probe` it is at the step, where
     a failure that persists ends the run as any adapter failure does.
     """
-    bridge = getattr(store, "embedder_bridge", None)
-    if bridge is None:
+    if store.embedder_bridge is None:
         return
     try:
-        bridge.prefetch_queries(texts)
+        store.embedder_bridge.prefetch_queries(texts)
     except SectumError as error:
         typer.echo(f"warning: {error}; the queries embed on demand instead", err=True)
 
@@ -3300,8 +3300,6 @@ def erasure(
         # The `app`-aware path, as above: the subject scan read `vector_store`
         # directly too.
         subject_store = build_vector_slot(loaded, fake_default)
-        # The content scan queries the manifest's vector fingerprints.
-        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
         with adapter_config(loaded, "cache", fake_default) as cfg:
             subject_cache = build_cache(cfg)
         with adapter_config(loaded, "observability", fake_default) as cfg:
@@ -3312,6 +3310,10 @@ def erasure(
             subject_memory = build_memory(cfg)
         with adapter_config(loaded, "search_index", fake_default) as cfg:
             subject_search = build_search_index(cfg)
+        # The content scan queries the manifest's vector fingerprints - embedded only
+        # once every adapter block has passed its config check, so a typo elsewhere
+        # does not first send the subject's text to a hosted embedder.
+        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -3401,7 +3403,7 @@ def erasure(
             # Only a content scan ranks; a by-id `fetch` of the record ids measures
             # nothing in any geometry.
             vector_embedder=(
-                getattr(subject_store, "embedder_name", None)
+                subject_store.embedder_name
                 if manifest.fingerprints.get(Surface.VECTOR_DB)
                 else None
             ),
@@ -3606,7 +3608,7 @@ def erasure(
         started=started,
         finished=finished,
         surface_provenance=provenance,
-        vector_embedder=getattr(store, "embedder_name", None),
+        vector_embedder=store.embedder_name,
     )
 
 

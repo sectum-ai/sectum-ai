@@ -398,3 +398,23 @@ def test_a_short_provider_response_is_a_typed_error_on_every_path() -> None:
         embedding_provider_sweep(
             substrate, [_Short("hash-16", dim=16), HashingEmbedding("hash-32", dim=32)]
         )
+
+
+def test_the_provider_sweep_batches_its_requests() -> None:
+    # The whole corpus went to the provider as one request; OpenAI rejects more than
+    # 2,048 inputs, so a large corpus failed the gradient outright.
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _Counting(HashingEmbedding):
+        def __init__(self, name: str, dim: int) -> None:
+            super().__init__(name, dim=dim)
+            self.sizes: list[int] = []
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.sizes.append(len(texts))
+            return super().embed(texts)
+
+    models = [_Counting("hash-32", 32), _Counting("hash-64", 64)]
+    embedding_provider_sweep(substrate, models)
+    assert len(substrate.documents) > 64
+    assert max(models[0].sizes) == 64
