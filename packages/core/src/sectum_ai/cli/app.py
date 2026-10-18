@@ -1426,8 +1426,8 @@ def probe(
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
         if run.vector_embedder is not None:
-            # The geometry every similarity-ranked number above was measured in -
-            # the rate, and Classes 3 and 10 - as the PDF states it.
+            # The geometry the similarity-ranked numbers were measured in - the rate
+            # above, and the Class 3 and 10 rates below - as the PDF states it.
             typer.echo(
                 "vector-store steps ranked by: "
                 f"{untrusted(describe_vector_embedder(run.vector_embedder))}"

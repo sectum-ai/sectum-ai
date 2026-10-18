@@ -1636,6 +1636,52 @@ def test_every_live_kind_is_driven_by_the_bridge_it_records(
         assert 128 in passed, passed
 
 
+def test_an_unreadable_mem0_block_is_refused_without_echoing_its_contents(
+    tmp_path: Path,
+) -> None:
+    # A block may hold an inline key, and the refusal reaches stderr and CI logs:
+    # the gate printed the whole block, and `load_config` printed pydantic's
+    # `input_value` - for this whole-config check, the whole config.
+    import yaml
+
+    from sectum_ai.config import load_config
+    from sectum_ai.spec import ConfigError
+
+    secret = "sk-SECRET123"
+    configs: list[dict[str, object]] = [
+        {"embedder": {"provider": "openai", "config": {"api_key": secret, "openai_base_url": ""}}},
+        {"embedder": {"provider": "ollama"}, "vector_store": [secret]},
+        {
+            "embedder": {"provider": "ollama"},
+            "vector_store": {"provider": "upstash_vector", "config": secret},
+        },
+        {"embedder": {"provider": "ollama"}, "llm": [secret], "graph_store": {"config": {}}},
+        {"embedder": {"provider": "ollama"}, "graph_store": secret},
+    ]
+    documents: list[dict[str, object]] = [_mem0(config) for config in configs]
+    documents.append(_local(adapters={"memory": {"kind": "mem0", "config": secret}}))
+    # Even a refusal that names no block: the rest of the config rides along.
+    documents.append(
+        _local(
+            adapters={
+                # Last, so pydantic's truncated `input_value` keeps it in view.
+                "vector_store": {
+                    "kind": "azure-search",
+                    "endpoint": "https://x",
+                    "embedder": "openai:text-embedding-3-small",
+                    "api_key": secret,
+                }
+            }
+        )
+    )
+    path = tmp_path / "sectum-ai.yaml"
+    for document in documents:
+        path.write_text(yaml.safe_dump(document, sort_keys=False))
+        with pytest.raises(ConfigError) as caught:
+            load_config(path)
+        assert secret not in str(caught.value), caught.value
+
+
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:
     # No `config` block is mem0 0.1.116's default, `enable_embeddings=False`: a store
     # the docs allow was refused as "cannot be classified".

@@ -10,11 +10,9 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
-from sectum_ai.embeddings import canonical_embedding_spec
 from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     ERASURE_WORKFLOW_IDS,
-    ConfigError,
     Finding,
     FindingStatus,
     RunMetrics,
@@ -22,6 +20,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    hash_spec_dim,
     rate_from_counts,
 )
 
@@ -575,13 +574,10 @@ def _canonical_geometry(name: str) -> str:
     """``name`` in its one spelling per geometry, or as recorded where it has none.
 
     ``hash:128`` and ``hash-128`` are one geometry; a record ``diff`` did not write
-    may spell it either way, or carry a string no spec parses - compared as is
-    rather than refused.
+    may spell it either way, or carry a string no spec parses - compared as is.
     """
-    try:
-        return canonical_embedding_spec(name)
-    except ConfigError:
-        return name
+    dim = hash_spec_dim(name)
+    return f"hash-{dim}" if dim is not None else name
 
 
 def _swap_scoped(run: RunResult) -> set[str]:

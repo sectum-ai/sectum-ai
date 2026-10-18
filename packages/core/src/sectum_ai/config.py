@@ -440,6 +440,20 @@ def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
     return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
 
 
+def _unreadable(section: str, block: object) -> str:
+    """A mem0 block the gate cannot classify, named by its shape and never its contents.
+
+    A block may hold an inline ``api_key`` or a connection string; an error message
+    reaches stderr and CI logs.
+    """
+    shape = (
+        "a mapping with an unreadable provider or config, or a blank *_base_url"
+        if isinstance(block, dict)
+        else f"a {type(block).__name__}, not a mapping"
+    )
+    return f"memory mem0 {section} (cannot be classified: {shape})"
+
+
 def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     """The mem0 model blocks ``memory`` would send writes through that may be hosted.
 
@@ -458,7 +472,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     if mem0_config is None:
         mem0_config = {}
     if not isinstance(mem0_config, dict):
-        return [f"memory mem0 config (not a mapping, so it cannot be classified: {mem0_config!r})"]
+        return [_unreadable("config", mem0_config)]
 
     def _provider(block: object, default: str) -> str | None:
         if block is None:
@@ -486,7 +500,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     settings = embedder.get("config") if isinstance(embedder, dict) else None
     pointed = isinstance(settings, dict) and "openai_base_url" in settings
     if provider is None:
-        offenders.append(f"memory mem0 embedder (cannot be classified: {embedder!r})")
+        offenders.append(_unreadable("embedder", embedder))
     elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
         offenders.append(f"memory mem0 embedder ({provider!r})")
     # A vector store that embeds server-side is a hosted embedder too. Absent, it
@@ -496,7 +510,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         kind = store.get("provider", "qdrant") if isinstance(store, dict) else None
         store_config = store.get("config") if isinstance(store, dict) else None
         if not isinstance(kind, str):
-            offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
+            offenders.append(_unreadable("vector_store", store))
         elif kind not in _PASSIVE_MEM0_STORES:
             offenders.append(
                 f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
@@ -506,7 +520,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             if store_config is None:
                 pass
             elif not isinstance(store_config, dict):
-                offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
+                offenders.append(_unreadable("vector_store", store))
             elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
             elif store_config.get("enable_embeddings") not in (None, False):
@@ -514,11 +528,12 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
                 # refused as unread rather than named as a cause it may not be.
                 value = store_config["enable_embeddings"]
                 offenders.append(
-                    f"memory mem0 vector_store (enable_embeddings cannot be classified: {value!r})"
+                    "memory mem0 vector_store (enable_embeddings cannot be classified: "
+                    f"a {type(value).__name__}, not a boolean)"
                 )
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):
-        offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")
+        offenders.append(_unreadable("graph_store", graph))
     # Any present `config` enables the graph, even an empty one: mem0 parses it into
     # a config model that may well be truthy (a kuzu store's `{}` defaults to an
     # in-memory database), and its LLM then runs over every write.
@@ -529,7 +544,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         for section, block in llm_blocks:
             provider = _provider(block, "openai")
             if provider is None:
-                offenders.append(f"memory mem0 {section} (cannot be classified: {block!r})")
+                offenders.append(_unreadable(section, block))
             elif provider not in _LOCAL_MEM0_LLMS:
                 offenders.append(f"memory mem0 {section} ({provider!r})")
     return offenders
@@ -583,7 +598,14 @@ def load_config(path: Path) -> SectumConfig:
     try:
         return SectumConfig.model_validate(raw)
     except ValidationError as error:
-        raise ConfigError(f"invalid config in {path}: {error}") from error
+        # Location and message only: pydantic's own text carries each error's
+        # `input_value`, which for a whole-config check is the whole config - an
+        # inline `api_key` included - and this message reaches stderr and CI logs.
+        problems = "; ".join(
+            f"{'.'.join(map(str, problem['loc'])) or 'config'}: {problem['msg']}"
+            for problem in error.errors(include_url=False, include_input=False)
+        )
+        raise ConfigError(f"invalid config in {path}: {problems}") from None
 
 
 # --- adapter resolver -------------------------------------------------------
@@ -1223,7 +1245,9 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
         soft_delete = _bool(extras, "soft_delete", False)
         mem0_config = extras.get("config")
         if mem0_config is not None and not isinstance(mem0_config, dict):
-            raise ConfigError(f"memory 'config' must be a mapping, got {mem0_config!r}")
+            raise ConfigError(
+                f"memory 'config' must be a mapping, got a {type(mem0_config).__name__}"
+            )
         with _optional_extra("mem0"):
             from sectum_ai.adapters.memory.mem0 import Mem0Memory
 
