@@ -69,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A `hash-<dim>` spec takes ASCII digits only.** Python's `int` also read
+  `hash- 64`, `hash-6_4`, `hash-+64` and other scripts' digits as `hash-64`, so
+  those spellings validated; they are now refused as malformed, as the caption
+  that names a hashing geometry already read them.
 - **SDK contracts.** `resolve_embedding_model` validates its spec: it raises
   `ConfigError` for an unknown or malformed one (an unknown spec returned `None`,
   which only `fake-*` recall names still do; `openai:` built a client) and
