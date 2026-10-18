@@ -1744,29 +1744,39 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
         load_config(tmp_path / "a\x00b.yaml")
 
 
+@pytest.mark.parametrize("live", [True, False])
 def test_a_store_refusing_the_corpus_is_a_typed_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, live: bool
 ) -> None:
-    # A store re-pointed at another embedder keeps the index an earlier run created
-    # at the old dimension, and the backend's own exception escaped as a raw
-    # traceback (exit 1) from both commands that load the corpus.
+    # A store whose `embedder` changed keeps the index an earlier run created at the
+    # old dimension, and the backend's own exception escaped as a raw traceback
+    # (exit 1). Named by type only - a backend message can carry a DSN or key - with
+    # the dimension hint on a live store alone.
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import app
 
+    backend = "expected 64 dimensions, not 768 (dsn=postgres://u:pw@h/db)"
+
     def _refuse(*_: object, **__: object) -> None:
-        raise ValueError("expected 64 dimensions, not 768")
+        raise ValueError(backend)
 
     # Every store either command builds - `probe`'s bundle and `erasure`'s slot.
     monkeypatch.setattr(FakeVectorStore, "upsert", _refuse)
-    monkeypatch.setattr(FakeVectorStore, "embedder_bridge", EmbedderBridge(_Modes()))
+    monkeypatch.setattr(FakeVectorStore, "synthetic", not live)
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    for command in (["probe"], ["erasure", "--scope", "vector_db"]):
-        result = runner.invoke(app, [*command, "--workdir", str(tmp_path)])
-        assert result.exit_code == 3, (command, result.output)
-        assert "refused the corpus (ValueError)" in result.output, result.output
-        assert "vector dimension may no longer match" in result.output, result.output
+    probed = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert probed.exit_code == 3, probed.output
+    assert "refused the corpus (ValueError)" in probed.output, probed.output
+    assert ("vector dimension changed" in probed.output) is live, probed.output
+    # `erasure` contains it like every other surface: the vector store reads
+    # NOT_COVERED, said out loud, and the run goes on.
+    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
+    assert "could not seed the vector_db canary" in erased.output, erased.output
+    assert "Traceback" not in erased.output, erased.output
+    for output in (probed.output, erased.output):
+        assert "pw@h" not in output and "768" not in output, output
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

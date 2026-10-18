@@ -1666,9 +1666,10 @@ def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
 def _load_corpus(store: VectorStoreAdapter, substrate: Substrate) -> None:
     """Upsert each tenant's corpus, a backend's own failure as a typed error.
 
-    A store the operator re-pointed at another `embedder` keeps the index an
-    earlier run created at the old dimension, and the backend refuses the upsert
-    with its own exception - a raw traceback and exit 1. Named by type only.
+    A store whose `embedder` changed keeps the index an earlier run created at the
+    old dimension, and the backend refuses the upsert with its own exception - a
+    raw traceback and exit 1. Named by type only: a backend's message can carry a
+    DSN or key.
     """
     for tenant in substrate.tenants:
         documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
@@ -1677,10 +1678,12 @@ def _load_corpus(store: VectorStoreAdapter, substrate: Substrate) -> None:
         except SectumError:
             raise
         except Exception as error:
+            # Any live store: its dimension follows the config either way - an
+            # `embedder` added, changed, or removed back to the 64-dim default.
             hint = (
-                "; if its embedder changed since the index was created, the index's "
-                "vector dimension may no longer match - recreate it or use a new one"
-                if store.embedder_bridge is not None
+                "; if the vector dimension changed since the index was created (an "
+                "`embedder` added, changed or removed), recreate it or use a new one"
+                if not store.synthetic
                 else ""
             )
             raise AdapterError(
@@ -3496,12 +3499,17 @@ def erasure(
     def _seeds(surface: Surface) -> bool:
         return in_scope is None or surface in in_scope
 
-    if _seeds(Surface.VECTOR_DB):
+    unseedable: dict[Surface, str] = {}
+
+    def _seed_vector() -> None:
         _prefetch_corpus(store, substrate.documents)
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
         _load_corpus(store, substrate)
-    unseedable: dict[Surface, str] = {}
+
+    # Contained like every other surface: a store that refuses the corpus (an index
+    # left at another dimension) reads NOT_COVERED, and the rest keep their verdicts.
+    _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue

@@ -431,8 +431,9 @@ _PASSIVE_MEM0_STORES = frozenset(
 )  # fmt: skip
 
 
-# How every local-mode egress refusal opens: the config gate and the gate on specs
-# from a flag or a substrate are two halves of one guarantee.
+# How the two refusals of a hosted embedding spec open - the config gate and the
+# gate on specs from a flag or a substrate are two halves of one rule. (Detection's
+# own refusal and the mem0 telemetry refusal word theirs separately.)
 _LOCAL_MODE_REFUSAL = (
     "detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
     "third-party AI service, but "
