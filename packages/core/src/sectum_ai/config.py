@@ -502,8 +502,11 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
                 f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
             )
         elif kind == "upstash_vector":
-            if not isinstance(store_config, dict):
+            # No `config` block is mem0's default, `enable_embeddings=False`.
+            if store_config is not None and not isinstance(store_config, dict):
                 offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
+            elif store_config is None:
+                pass
             elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
             elif store_config.get("enable_embeddings") not in (None, False):

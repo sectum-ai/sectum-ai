@@ -467,15 +467,16 @@ detection:
   # per-model preset for the embedder above (run `sectum-ai calibrate` to derive
   # one for your model). Raise it once a real embedding model is configured.
   semantic_threshold: 0.62  # 0.62 | <float> | auto
-  # Deployment mode. "local" is the BYOC "no data leaves the box" guarantee: it
+  # Deployment mode. "local" is the BYOC guarantee that no tenant content reaches a
+  # third-party AI service: it
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
   # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
   # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
   # embedder is not ollama, lmstudio, huggingface or base-URL-pointed openai; with a
   # graph store, whose llm or graph_store.llm is not ollama, lmstudio or vllm (no
   # llm block means openai); or whose vector_store is not known to leave embedding
-  # to mem0 (an allow-list of most mem0 0.1.116 stores: not, for example, langchain,
-  # baidu, databricks, or upstash_vector with enable_embeddings); or any mem0 memory
+  # to mem0 (an allow-list of most mem0 0.1.116 stores: not langchain or baidu, nor a
+  # newer store such as databricks, nor upstash_vector with enable_embeddings); or any mem0 memory
   # while mem0's own usage telemetry is on (set MEM0_TELEMETRY=False).
   # Adapters you point it at are the system under test and receive the synthetic
   # data by design.

@@ -92,7 +92,8 @@ Each entry is resolved to an embedding model:
   (opt-in extra `sectum-ai[sentence-transformers]`). The research pair is
   `st:all-MiniLM-L6-v2` (weaker) vs `st:all-mpnet-base-v2` (stronger); sweeping
   them reproduces the published gradient (arXiv:2602.08668). Runs locally, so no
-  data leaves the box (BYOC-safe).
+  tenant content leaves the box (BYOC-safe; loading the model calls the Hugging
+  Face Hub unless `HF_HUB_OFFLINE=1`).
 - `openai:<model>` — OpenAI embeddings (opt-in extra `sectum-ai[openai]`, key in
   `OPENAI_API_KEY`). Sends the synthetic corpus to OpenAI, so it is not BYOC-safe.
 - `cohere:<model>` — Cohere embeddings (opt-in extra `sectum-ai[cohere]`, key in

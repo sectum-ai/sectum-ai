@@ -136,7 +136,8 @@ vector store, and a hosted
 vector-store `embedder` — which receives the synthetic
 corpus and, in `erasure --subject`, the data subject's real `vector_db`
 fingerprint text — and mem0's own usage telemetry (run metadata, not content,
-unless `MEM0_TELEMETRY=False`). Note that **unverified** findings ship too, and an evidence
+unless `MEM0_TELEMETRY=False`). Loading a local model also calls its hub (no
+content; `HF_HUB_OFFLINE=1` with the model cached keeps the run offline). Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
 content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)
@@ -162,10 +163,10 @@ timestamped; it is signed by a TSA only when one is configured.)
   local, and its vector store is on an allow-list of stores known to keep the
   vectors mem0 gives them rather than embed server-side, and its own usage
   telemetry is off (`MEM0_TELEMETRY=False`) — so no stage Sectum runs
-  on its own behalf sends tenant content to a third-party AI service. (A local
-  model is still fetched on first use — an `st:` model from the Hugging Face Hub
-  unless cached, an `ollama` model by its server; pre-cache them and set
-  `HF_HUB_OFFLINE=1` to keep the run offline.) The adapters you point it at
+  on its own behalf sends tenant content to a third-party AI service. (Loading a
+  local model still calls its hub — an `st:` model checks the Hugging Face Hub on
+  every load and downloads it if not cached, an `ollama` model is pulled by its
+  server; pre-cache them and set `HF_HUB_OFFLINE=1` to keep the run offline.) The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the
   Anthropic Messages API, sends it to that provider because that is what is being

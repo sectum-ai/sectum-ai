@@ -138,8 +138,10 @@ class SentenceTransformerEmbedding:
 
     The research pair is ``all-MiniLM-L6-v2`` (weaker) versus ``all-mpnet-base-v2``
     (stronger); sweeping the two reproduces the "stronger embeddings leak more"
-    gradient (arXiv:2602.08668). The model runs locally, so no data leaves the box
-    (BYOC-safe). Construction loads the model; an absent extra is a config error.
+    gradient (arXiv:2602.08668). The model runs locally, so no tenant content leaves
+    the box (BYOC-safe; loading it calls the Hugging Face Hub unless
+    ``HF_HUB_OFFLINE``). Construction loads the model; an absent extra is a config
+    error.
     """
 
     def __init__(self, model_name: str) -> None:
@@ -554,7 +556,8 @@ LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")
 `calibrate --embedder fake` names the offline fake by the bare word, which is
 local too.
 
-`detection.mode: local` - the "no data leaves the box" guarantee - refuses every
+`detection.mode: local` - the guarantee that no tenant content reaches a
+third-party AI service - refuses every
 other spec. An allow-list, so a provider added later is hosted until someone
 says otherwise: a deny-list of the hosted ones failed OPEN for any prefix it
 was not updated with.

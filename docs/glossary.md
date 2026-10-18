@@ -110,7 +110,9 @@ and the timestamped evidence pack leave the box — unless a stage is configured
 AI provider (a detection embedder or judge, the sweep, `calibrate --embedder`, a mem0
 embedder, graph LLM or server-side-embedding vector store, or the vector store's `embedder`, which in `erasure --subject` is sent the subject's real
 fingerprint text) or mem0's own usage telemetry is on (run metadata, unless
-`MEM0_TELEMETRY=False`); `detection.mode: local` refuses those. The adapters under test are not
+`MEM0_TELEMETRY=False`); `detection.mode: local` refuses those. Loading a local
+model also calls its hub (no content; set `HF_HUB_OFFLINE=1` with the model cached
+to keep the run offline). The adapters under test are not
 refused: a hosted vector database or an agent driving OpenAI Assistants receives the
 synthetic tenant data because it is the system being tested. The alternative is *hosted* mode, where Sectum
 runs the synthetic tenants against the customer's reachable endpoints.

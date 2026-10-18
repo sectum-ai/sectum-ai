@@ -1635,16 +1635,55 @@ def test_every_live_kind_is_driven_by_the_bridge_it_records(
         assert 128 in passed, passed
 
 
-def test_an_upstash_store_without_config_is_unclassifiable_not_misattributed() -> None:
-    # Refused fail-closed, but the reason "with enable_embeddings" was false: the
-    # flag was never set.
-    with pytest.raises(ValueError, match="cannot be classified") as caught:
+def test_an_upstash_store_without_config_takes_mem0s_default() -> None:
+    # No `config` block is mem0 0.1.116's default, `enable_embeddings=False`: a store
+    # the docs allow was refused as "cannot be classified".
+    SectumConfig.model_validate(
+        _mem0({"embedder": {"provider": "ollama"}, "vector_store": {"provider": "upstash_vector"}})
+    )
+    with pytest.raises(ValueError, match="cannot be classified"):
         SectumConfig.model_validate(
             _mem0(
-                {"embedder": {"provider": "ollama"}, "vector_store": {"provider": "upstash_vector"}}
+                {
+                    "embedder": {"provider": "ollama"},
+                    "vector_store": {"provider": "upstash_vector", "config": "on"},
+                }
             )
         )
-    assert "enable_embeddings" not in str(caught.value)
+
+
+def test_a_hash_dimension_past_ints_digit_limit_is_a_typed_refusal(tmp_path: Path) -> None:
+    # `int()` refuses more than 4300 digits with a raw ValueError, which escaped
+    # seed, calibrate and config load as exit 1 instead of a config error.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.embeddings import validate_embedding_spec
+    from sectum_ai.spec import ConfigError
+
+    huge = "hash-" + "1" * 5000
+    with pytest.raises(ConfigError, match="malformed"):
+        validate_embedding_spec(huge)
+    with pytest.raises(ValueError, match="malformed"):
+        SectumConfig.model_validate(
+            {"adapters": {"vector_store": {"kind": "opensearch", "embedder": huge}}}
+        )
+    runner = CliRunner()
+    seeded = runner.invoke(
+        app,
+        [
+            "seed",
+            "--workdir",
+            str(tmp_path),
+            "--embedding-model",
+            huge,
+            "--embedding-model",
+            "hash-8",
+        ],
+    )
+    assert seeded.exit_code == 3, seeded.output
+    calibrated = runner.invoke(app, ["calibrate", "--embedder", huge])
+    assert calibrated.exit_code == 3, calibrated.output
 
 
 def test_a_non_boolean_upstash_flag_is_unclassifiable_not_named_as_enabled() -> None:

@@ -58,6 +58,7 @@ and their probe sets are validated against the live catalog in CI.
   a judge rationale restating observed content) and the timestamped evidence pack
   leave the box — unless a stage is configured with a hosted AI provider, or a mem0
   memory's own usage telemetry is on (run metadata, unless `MEM0_TELEMETRY=False`),
-  both of which `detection.mode: local` refuses, or an adapter under test is itself hosted (a
+  both of which `detection.mode: local` refuses (loading a local model still calls
+  its hub — no content — unless `HF_HUB_OFFLINE=1`), or an adapter under test is itself hosted (a
   hosted vector database, an agent driving OpenAI Assistants), which receives the
   synthetic tenant data by design (see the [threat model](threat-model.md)).

@@ -181,7 +181,8 @@ class ClipImageEmbedding:
     CLIP embeds images and text into one space, so it is the natural production
     multi-modal retriever; sweeping two or more CLIP models measures the real
     embedding-strength gradient on actual vectors (unlike the deterministic
-    :class:`ImageHashEmbedding` proxy). Runs locally (BYOC-safe): no data leaves the box.
+    :class:`ImageHashEmbedding` proxy). Runs locally (BYOC-safe): no tenant content leaves
+    the box; loading the model calls the Hugging Face Hub unless ``HF_HUB_OFFLINE``.
     The default model is ``clip-ViT-B-32``.
     """
 

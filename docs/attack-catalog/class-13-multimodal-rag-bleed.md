@@ -65,7 +65,8 @@ Each spec resolves to an image model:
 - `clip:<model>` — real [CLIP](https://www.sbert.net/examples/applications/image-search/README.html)
   image embeddings via sentence-transformers (opt-in extra `sectum-ai[clip]`, default
   `clip:clip-ViT-B-32`). CLIP embeds images and text into one space and runs locally, so
-  no data leaves the box (BYOC-safe); sweeping two or more CLIP models measures the real
+  no tenant content leaves the box (BYOC-safe; loading the model calls the Hugging Face
+  Hub unless `HF_HUB_OFFLINE=1`); sweeping two or more CLIP models measures the real
   embedding-strength gradient.
 
 The [`multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed)
