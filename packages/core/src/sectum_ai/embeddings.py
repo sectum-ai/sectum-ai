@@ -526,11 +526,11 @@ def canonical_embedding_spec(spec: str) -> str:
     Nothing else is merged. ``st:<m>`` and ``st:sentence-transformers/<m>`` are
     usually one hub model, but a bare name resolves to a local folder of that name
     first - so treating them as one could hide a real model change behind a
-    comparison, which is worse than asking for a re-baseline.
+    comparison, which is worse than asking for a re-baseline. Never raises: a
+    string no spec parses - a record ``diff`` did not write - comes back as is.
     """
-    if spec.startswith(("hash-", "hash:")):
-        return f"hash-{_hash_dim(spec)}"
-    return spec
+    dim = hash_spec_dim(spec)
+    return f"hash-{dim}" if dim is not None else spec
 
 
 def validate_model_spec(spec: str) -> None:

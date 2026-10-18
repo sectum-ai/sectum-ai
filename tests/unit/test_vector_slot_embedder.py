@@ -850,15 +850,10 @@ def test_only_a_well_formed_hash_spec_is_captioned_as_one(name: str, hashing: bo
     assert vector_embedder_note(None) is None
     # And `diff` merges spellings by the same rule it captions them by.
     from sectum_ai.embeddings import canonical_embedding_spec
-    from sectum_ai.spec import ConfigError
 
     if name.startswith(("hash-", "hash:")):
-        try:
-            canonical_embedding_spec(name)
-            parsed = True
-        except ConfigError:
-            parsed = False
-        assert parsed is hashing, name
+        merged = f"hash-{int(name[5:])}" if hashing else name
+        assert canonical_embedding_spec(name) == merged, name
 
 
 def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:
@@ -1481,7 +1476,7 @@ def test_a_subject_scan_warns_when_a_hosted_embedder_receives_real_data(
 def test_a_blank_embedder_key_is_refused_not_read_as_absent() -> None:
     # `embedder:` with no value fell back to the hashing default with no error -
     # a knob that changes nothing, which every other knob refuses.
-    with pytest.raises(ValueError, match="must be a model spec string, got None"):
+    with pytest.raises(ValueError, match="must be a model spec string, got a NoneType"):
         SectumConfig.model_validate(
             {"adapters": {"vector_store": {"kind": "qdrant", "embedder": None}}}
         )
@@ -1660,6 +1655,17 @@ def test_an_unreadable_mem0_block_is_refused_without_echoing_its_contents(
     ]
     documents: list[dict[str, object]] = [_mem0(config) for config in configs]
     documents.append(_local(adapters={"memory": {"kind": "mem0", "config": secret}}))
+    # A mapping where a spec string belongs, as a mem0 block would be written.
+    documents.append(
+        {
+            "adapters": {
+                "vector_store": {
+                    "kind": "opensearch",
+                    "embedder": {"model": "st:all-MiniLM-L6-v2", "api_key": secret},
+                }
+            }
+        }
+    )
     # Even a refusal that names no block: the rest of the config rides along.
     documents.append(
         _local(

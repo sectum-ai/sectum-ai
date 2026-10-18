@@ -10,6 +10,7 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sectum_ai.embeddings import canonical_embedding_spec
 from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     ERASURE_WORKFLOW_IDS,
@@ -20,7 +21,6 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
-    hash_spec_dim,
     rate_from_counts,
 )
 
@@ -530,8 +530,8 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         (earlier.vector_embedder, later.vector_embedder)
         if earlier.vector_embedder is not None
         and later.vector_embedder is not None
-        and _canonical_geometry(earlier.vector_embedder)
-        != _canonical_geometry(later.vector_embedder)
+        and canonical_embedding_spec(earlier.vector_embedder)
+        != canonical_embedding_spec(later.vector_embedder)
         else None
     )
     return RunDiff(
@@ -568,16 +568,6 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             else ()
         ),
     )
-
-
-def _canonical_geometry(name: str) -> str:
-    """``name`` in its one spelling per geometry, or as recorded where it has none.
-
-    ``hash:128`` and ``hash-128`` are one geometry; a record ``diff`` did not write
-    may spell it either way, or carry a string no spec parses - compared as is.
-    """
-    dim = hash_spec_dim(name)
-    return f"hash-{dim}" if dim is not None else name
 
 
 def _swap_scoped(run: RunResult) -> set[str]:

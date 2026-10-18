@@ -440,17 +440,17 @@ def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
     return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
 
 
-def _unreadable(section: str, block: object) -> str:
+def _unreadable(
+    section: str,
+    block: object,
+    why: str = "a non-string provider, a non-mapping config, or a blank *_base_url",
+) -> str:
     """A mem0 block the gate cannot classify, named by its shape and never its contents.
 
     A block may hold an inline ``api_key`` or a connection string; an error message
-    reaches stderr and CI logs.
+    reaches stderr and CI logs. ``why`` names what the gate reads in that section.
     """
-    shape = (
-        "a mapping with an unreadable provider or config, or a blank *_base_url"
-        if isinstance(block, dict)
-        else f"a {type(block).__name__}, not a mapping"
-    )
+    shape = why if isinstance(block, dict) else f"a {type(block).__name__}, not a mapping"
     return f"memory mem0 {section} (cannot be classified: {shape})"
 
 
@@ -510,7 +510,9 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         kind = store.get("provider", "qdrant") if isinstance(store, dict) else None
         store_config = store.get("config") if isinstance(store, dict) else None
         if not isinstance(kind, str):
-            offenders.append(_unreadable("vector_store", store))
+            offenders.append(
+                _unreadable("vector_store", store, "a non-string provider, or a non-mapping config")
+            )
         elif kind not in _PASSIVE_MEM0_STORES:
             offenders.append(
                 f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
@@ -520,7 +522,11 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             if store_config is None:
                 pass
             elif not isinstance(store_config, dict):
-                offenders.append(_unreadable("vector_store", store))
+                offenders.append(
+                    _unreadable(
+                        "vector_store", store, "a non-string provider, or a non-mapping config"
+                    )
+                )
             elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
             elif store_config.get("enable_embeddings") not in (None, False):
@@ -827,7 +833,10 @@ def _check_vector_embedder(spec: object) -> str:
     store built straight from an :class:`AdapterConfig` reaches without the first.
     """
     if not isinstance(spec, str):
-        raise ConfigError(f"vector_store.embedder must be a model spec string, got {spec!r}")
+        # The type only: a mapping here may well hold an inline key.
+        raise ConfigError(
+            f"vector_store.embedder must be a model spec string, got a {type(spec).__name__}"
+        )
     try:
         validate_model_spec(spec)
     except ConfigError as error:
