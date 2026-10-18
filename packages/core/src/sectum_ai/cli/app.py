@@ -792,35 +792,9 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
-def _real_model_names(names: Sequence[str]) -> list[str]:
-    """The specs that name real models; ``fake-*`` names carry a modelled recall."""
-    return [name for name in names if not name.startswith("fake-")]
-
-
-def _resolve_sweep(substrate: Substrate) -> list[EmbeddingModel]:
-    """Build the sweep's models before the suite runs, or ``[]`` when none will be used.
-
-    A missing extra or key, or a model that fails to load, otherwise surfaced only
-    while the record was built - after every probe had run against the stack -
-    and no record was written. Only the models a comparison will use are built:
-    one real model beside the fakes is not a gradient, and an all-fake list runs
-    the recall illustration, which needs no model at all.
-    """
-    real = _real_model_names(substrate.scenario.embedding_models)
-    if len(real) < 2:
-        return []
-    models: list[EmbeddingModel] = []
-    for name in real:
-        model = resolve_embedding_model(name)
-        assert model is not None  # every validated non-fake spec resolves to a model
-        models.append(model)
-    return models
-
-
 def _per_model_rpr(
     substrate: Substrate,
     vector: VectorStoreAdapter,
-    resolved: list[EmbeddingModel] | None = None,
 ) -> dict[str, float]:
     """Per-embedding-model retrieval gradient for the run, or ``{}`` if not applicable.
 
@@ -846,8 +820,11 @@ def _per_model_rpr(
     names = substrate.scenario.embedding_models
     if len(names) <= 1:
         return {}
-    real_names = _real_model_names(names)
-    modelled_only = [name for name in names if name not in real_names]
+    # Distinct models, not entries: a spec listed twice is one model, and a
+    # "gradient" over it is the one-model comparison refused below.
+    distinct = list(dict.fromkeys(names))
+    real_names = [name for name in distinct if not name.startswith("fake-")]
+    modelled_only = [name for name in distinct if name.startswith("fake-")]
     if real_names and modelled_only:
         # Dropping these was silent: an operator who configured 3 models could be
         # shown a 2-model gradient with nothing saying the third was excluded.
@@ -859,7 +836,11 @@ def _per_model_rpr(
             err=True,
         )
     if len(real_names) > 1:
-        models = resolved if resolved is not None else _resolve_sweep(substrate)
+        models: list[EmbeddingModel] = []
+        for name in real_names:
+            model = resolve_embedding_model(name)
+            assert model is not None  # every validated non-fake spec resolves to a model
+            models.append(model)
         return embedding_provider_sweep(substrate, models)
     if real_names:
         # One real model is not a gradient. Emitting it produced a single-entry
@@ -1099,10 +1080,12 @@ def probe(
         suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
     bundle = build_adapters(loaded)
-    # After every argument and adapter-config check, before the first write to the
-    # stack: an unloadable sweep model otherwise failed only after the whole suite
-    # had run, with no record written.
-    sweep_models = _resolve_sweep(substrate)
+    # The gradient builds its own index from the substrate and never touches the
+    # stack, so it runs here, before the suite: run at record time, a model that
+    # failed to load or a provider that failed mid-sweep threw away every probe's
+    # measurement, with no record written. After the argument and adapter-config
+    # checks, so a cheap mistake still reports first.
+    per_model_rpr = _per_model_rpr(substrate, bundle.vector)
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
         typer.echo(
@@ -1313,7 +1296,7 @@ def probe(
             # Real embedding providers (st:/openai:/hash-) record a genuine
             # per-model gradient for any stack; legacy fake names fall back to the
             # in-memory recall illustration. See _per_model_rpr.
-            retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector, sweep_models),
+            retrieval_pivot_rate_by_model=per_model_rpr,
             per_probe_findings=_per_probe_counts(confirmed),
             user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
             unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())),

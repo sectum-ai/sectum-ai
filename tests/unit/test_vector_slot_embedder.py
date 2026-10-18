@@ -954,7 +954,7 @@ def test_an_unknown_seeded_embedding_model_is_refused_before_any_probe_runs(
     assert "unknown embedding model 'mini-lm'" in result.output, result.output
 
 
-def test_a_seeded_model_that_cannot_load_fails_before_the_stack_is_reached(
+def test_a_seeded_model_that_cannot_load_fails_before_the_suite_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Well-formed but unloadable (an extra or key missing): it passed the name
@@ -980,7 +980,7 @@ def test_a_seeded_model_that_cannot_load_fails_before_the_stack_is_reached(
     assert seeded.exit_code == 0, seeded.output
 
     def _never(*_: object) -> object:
-        raise AssertionError("the stack was written before the sweep's models loaded")
+        raise AssertionError("the corpus was upserted before the sweep's models loaded")
 
     monkeypatch.setattr("sectum_ai.cli.app._prefetch_corpus", _never)
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
@@ -1111,3 +1111,49 @@ def test_an_adapter_config_error_reports_before_the_sweep_models_load(
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--config", str(config)])
     assert result.exit_code == 3, result.output
     assert "does not read: shared_idx" in result.output, result.output
+
+
+def test_a_provider_failing_mid_sweep_fails_before_the_suite_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A constructor checks no credential, so a revoked key or a quota fails at the
+    # first embed - which, at record time, threw away every probe's measurement.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.embeddings import resolve_embedding_model as real_resolve
+
+    class _Revoked(HashingEmbedding):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("401")
+
+    def _resolve(spec: str) -> object:
+        return _Revoked(spec, dim=256) if spec == "hash-256" else real_resolve(spec)
+
+    def _never(*_: object) -> object:
+        raise AssertionError("the corpus was upserted before the sweep ran")
+
+    runner = CliRunner()
+    seed_args = ["--embedding-model", "hash-16", "--embedding-model", "hash-256"]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _resolve)
+    monkeypatch.setattr("sectum_ai.cli.app._prefetch_corpus", _never)
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code == 3, result.output
+    assert "embedder 'hash-256' failed" in result.output, result.output
+
+
+def test_a_spec_listed_twice_is_one_model_not_a_gradient(tmp_path: Path) -> None:
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    seed_args = ["--embedding-model", "hash-32", "--embedding-model", "hash-32"]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert "only one was configured" in result.output, result.output
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert record["metrics"]["retrieval_pivot_rate_by_model"] == {}

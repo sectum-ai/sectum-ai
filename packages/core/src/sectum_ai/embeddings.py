@@ -478,9 +478,10 @@ def validate_embedding_spec(spec: str) -> None:
     entry at config-load / CLI-parse time rather than letting it silently become a
     no-op sweep. Accepts the legacy ``fake-*`` recall names, a deterministic
     ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` / ``cohere:``
-    / ``voyage:`` / ``bedrock:`` provider prefixes with a non-empty model name. Their
-    install and key are checked when the model is built: the vector store's at
-    build, the sweep's before `probe` runs its suite.
+    / ``voyage:`` / ``bedrock:`` provider prefixes with a non-empty model name. A
+    missing extra or env key fails when the model is built, and a credential the
+    provider rejects only at its first call; `probe` runs the sweep, and builds the
+    vector store's model, before its suite, so either fails before any probe runs.
     """
     for prefix in ("st:", "openai:", "cohere:", "voyage:", "bedrock:"):
         if spec.startswith(prefix):
