@@ -380,42 +380,6 @@ def _mem0(config: dict[str, object]) -> dict[str, object]:
     return _local(adapters={"memory": {"kind": "mem0", "config": config}})
 
 
-def test_byoc_local_mode_checks_the_llm_that_feeds_a_graph_store(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # A graph store (one with a `config`) runs an LLM over every write: its own
-    # `graph_store.llm`, else the main `llm`, else OpenAI.
-    local_embedder = {"provider": "huggingface"}
-    neo4j = {"provider": "neo4j", "config": {"url": "bolt://localhost:7687"}}
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="mem0 llm"):
-        SectumConfig.model_validate(_mem0({"embedder": local_embedder, "graph_store": neo4j}))
-    with pytest.raises(ValueError, match=r"graph_store\.llm"):
-        SectumConfig.model_validate(
-            _mem0(
-                {
-                    "llm": {"provider": "ollama"},
-                    "embedder": local_embedder,
-                    "graph_store": {**neo4j, "llm": {"provider": "openai"}},
-                }
-            )
-        )
-    # An OpenAI-compatible server the operator pointed at is local - the same trust
-    # `detection`'s base_url gets.
-    pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:11434/v1"}}
-    graphed = {"llm": pointed, "embedder": local_embedder, "graph_store": neo4j}
-    SectumConfig.model_validate(_mem0(graphed))
-    # Unless mem0's OpenAI LLM will ignore the base URL: with an OpenRouter key in
-    # the environment it routes to OpenRouter instead...
-    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic")
-    with pytest.raises(ValueError, match="mem0 llm"):
-        SectumConfig.model_validate(_mem0(graphed))
-    # ...unless the OpenRouter endpoint is pointed too.
-    routed = {"provider": "openai", "config": {"openrouter_base_url": "http://localhost:8080/v1"}}
-    SectumConfig.model_validate(_mem0({**graphed, "llm": routed}))
-    monkeypatch.delenv("OPENROUTER_API_KEY")
-
-
 def test_the_probe_command_registers_its_queries_before_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1340,62 +1304,43 @@ def test_an_omitted_mem0_provider_pointed_at_a_local_server_is_local() -> None:
     SectumConfig.model_validate(_mem0({"embedder": local_server}))
 
 
-@pytest.mark.parametrize(
-    ("block", "reason"),
-    [
-        ({"provider": ["ollama"]}, "embedder.provider must be a provider name"),
-        ({"provider": ""}, "embedder.provider must be a provider name"),
-        ({"provider": None}, "embedder.provider must be a provider name"),
-        ({"provider": "openai", "config": "x"}, "embedder.config must be a mapping"),
-        ("ollama", "embedder must be a mapping"),
-    ],
-)
-def test_a_malformed_mem0_block_is_refused_for_what_it_is_in_every_mode(
-    block: object, reason: str
-) -> None:
-    # Not a traceback, and not "would call a hosted AI API" - mem0 rejects these
-    # before any call, so no egress is possible.
-    for mode in ("hosted", "local"):
-        config = {
-            "detection": {"mode": mode},
-            "adapters": {"memory": {"kind": "mem0", "config": {"embedder": block}}},
-        }
-        with pytest.raises(ValueError, match=reason) as caught:
-            SectumConfig.model_validate(config)
-        assert "hosted AI API" not in str(caught.value)
+_NEO4J = {"provider": "neo4j", "config": {"url": "bolt://localhost:7687"}}
 
 
-def test_mem0_model_config_follows_mem0s_own_rules() -> None:
-    # A non-mapping `config` is refused for what it is, not as egress.
-    for mode in ("hosted", "local"):
-        with pytest.raises(ValueError, match="memory 'config' must be a mapping") as caught:
-            SectumConfig.model_validate(
-                {
-                    "detection": {"mode": mode},
-                    "adapters": {"memory": {"kind": "mem0", "config": "x"}},
-                }
-            )
-        assert "hosted AI API" not in str(caught.value)
-    # An empty graph-LLM provider is mem0's "use `llm`", which mem0 accepts.
-    local = {"provider": "ollama"}
-    neo4j = {"provider": "neo4j", "config": {"url": "bolt://localhost:7687"}}
+def test_byoc_local_mode_requires_every_llm_feeding_a_graph_store_to_be_local() -> None:
+    # A graph store (one with a `config`) runs an LLM over every write. mem0 pairs
+    # one LLM block's provider with the other block's config, so the gate requires
+    # BOTH `llm` and `graph_store.llm` to name a local provider - no openai-with-
+    # base-URL allowance, which mem0 can route around.
+    embedder = {"provider": "huggingface"}
+    pointed = {"provider": "openai", "config": {"openai_base_url": "http://localhost:8000/v1"}}
     SectumConfig.model_validate(
-        _mem0(
-            {
-                "llm": local,
-                "embedder": {"provider": "huggingface"},
-                "graph_store": {**neo4j, "llm": {"provider": ""}},
-            }
-        )
+        _mem0({"llm": {"provider": "ollama"}, "embedder": embedder, "graph_store": _NEO4J})
     )
-    # A graph-LLM block with no provider is LlmConfig's default, openai - not `llm`.
-    with pytest.raises(ValueError, match=r"graph_store\.llm"):
+    refused = [
+        # The default llm is openai.
+        {"embedder": embedder, "graph_store": _NEO4J},
+        # An empty graph provider defers to `llm`'s provider but keeps its own
+        # config, so llm's base URL never reaches the call.
+        {"llm": pointed, "embedder": embedder, "graph_store": {**_NEO4J, "llm": {"provider": ""}}},
+        # Neptune pairs graph_store.llm's provider with llm's config.
+        {
+            "llm": {"provider": "ollama"},
+            "embedder": embedder,
+            "graph_store": {**_NEO4J, "llm": pointed},
+        },
+    ]
+    for config in refused:
+        with pytest.raises(ValueError, match="mem0"):
+            SectumConfig.model_validate(_mem0(config))
+
+
+def test_byoc_local_mode_refuses_a_mem0_block_it_cannot_classify() -> None:
+    # Refused as unclassifiable, never as a definite egress; outside local mode a
+    # malformed block is mem0's to reject, as before.
+    for block in ({"provider": ["ollama"]}, "ollama", {"provider": None}):
+        with pytest.raises(ValueError, match="cannot be classified"):
+            SectumConfig.model_validate(_mem0({"embedder": block}))
         SectumConfig.model_validate(
-            _mem0(
-                {
-                    "llm": local,
-                    "embedder": {"provider": "huggingface"},
-                    "graph_store": {**neo4j, "llm": {"config": {"model": "x"}}},
-                }
-            )
+            {"adapters": {"memory": {"kind": "mem0", "config": {"embedder": block}}}}
         )

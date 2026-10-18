@@ -354,22 +354,6 @@ class SectumConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_mem0_models(self) -> "SectumConfig":
-        """Refuse a malformed mem0 model config at load, in every mode.
-
-        Rejected by mem0 later anyway; checked here it is refused for what it is,
-        and the egress gate below classifies only blocks mem0 could load. The
-        rules are mem0's own - see :func:`_mem0_model_blocks`.
-        """
-        memory = self.adapters.get("memory")
-        if memory is not None and memory.kind == "mem0":
-            try:
-                _mem0_model_blocks(memory)
-            except ConfigError as error:
-                raise ValueError(str(error)) from error
-        return self
-
-    @model_validator(mode="after")
     def _enforce_zero_egress(self) -> "SectumConfig":
         """In ``detection.mode: local``, refuse every embedder that would leave the box.
 
@@ -406,107 +390,72 @@ class SectumConfig(BaseModel):
         if offenders:
             raise ValueError(
                 f"detection.mode 'local' forbids sending tenant content off the box, but "
-                f"{'; '.join(offenders)} would call a hosted AI API. Use a local "
-                "model (st:<model>, hash-<dim>, or a local mem0 provider) instead."
+                f"{'; '.join(offenders)} would call a hosted AI API or cannot be shown "
+                "not to. Use a local model (st:<model>, hash-<dim>, or a local mem0 "
+                "provider) instead."
             )
         return self
 
 
-# mem0 providers that run on the box or on an endpoint the operator points them at
-# (`ollama_base_url`, `lmstudio_base_url`, a vLLM server, a local
-# sentence-transformers model). An `openai` provider with an explicit
-# `openai_base_url` is an OpenAI-compatible server the operator chose - the same
-# trust `detection`'s `base_url` gets - so it is local too. For an LLM while
-# `OPENROUTER_API_KEY` is set, mem0's OpenAI LLM ignores `openai_base_url` and calls
-# OpenRouter instead, so there it takes an explicit `openrouter_base_url`.
-_LOCAL_MEM0_PROVIDERS: dict[str, frozenset[str]] = {
-    "llm": frozenset({"ollama", "lmstudio", "vllm"}),
-    "embedder": frozenset({"ollama", "lmstudio", "huggingface"}),
-}
+# mem0 providers that run on the box (or on an endpoint the operator points them
+# at): ollama, lmstudio and vLLM default to localhost; huggingface embeds with a
+# local sentence-transformers model. An `openai` EMBEDDER with an explicit
+# `openai_base_url` is an OpenAI-compatible server the operator chose - the trust
+# `detection`'s `base_url` gets. No such allowance for a graph LLM: mem0 pairs one
+# LLM block's provider with the other block's config (differently per graph
+# store), so a base URL on one block cannot be relied on to reach the call.
+_LOCAL_MEM0_EMBEDDERS = frozenset({"ollama", "lmstudio", "huggingface"})
+_LOCAL_MEM0_LLMS = frozenset({"ollama", "lmstudio", "vllm"})
 
 
-def _mem0_provider_is_local(
-    block: dict[str, Any] | None, local: frozenset[str], *, llm: bool
-) -> bool:
-    if block is None:
-        return False  # mem0's default: openai, unpointed
-    # An omitted provider is mem0's default, openai - which a base URL can point
-    # at a local server like any explicit openai block.
-    provider = block.get("provider") or "openai"
-    settings = block.get("config")
-    url_key = "openai_base_url"
-    if llm and os.environ.get("OPENROUTER_API_KEY"):
-        url_key = "openrouter_base_url"
-    pointed = isinstance(settings, dict) and bool(settings.get(url_key))
-    return provider in local or (provider == "openai" and pointed)
+def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
+    """The mem0 model blocks ``memory`` would send writes through that may be hosted.
 
-
-def _mem0_model_blocks(memory: AdapterConfig) -> list[tuple[str, dict[str, Any] | None]]:
-    """The mem0 model blocks Sectum's writes reach, validated as mem0 validates them.
-
-    The embedder embeds every write. The LLM runs only to feed a graph store -
-    the adapter stores verbatim (``infer=False``) - which mem0 enables when
-    ``graph_store`` has a ``config``; mem0 then uses ``graph_store.llm`` if its
-    provider is set, else ``llm``. A ``None`` block is mem0's OpenAI default.
-
-    Raises:
-        ConfigError: for a shape mem0 would reject - a non-mapping ``config`` or
-            block, a block's non-mapping ``config``, or a provider that is not a
-            name (``graph_store.llm`` may leave it empty, meaning "use ``llm``").
+    Fail closed, without modelling mem0's internals: the embedder embeds every
+    write, and must be local (or `openai` pointed at a base URL). The LLM runs only
+    to feed a graph store - Sectum stores memory verbatim (``infer=False``) - which
+    mem0 enables when ``graph_store`` has a ``config``; then every LLM block mem0
+    might use, ``llm`` and ``graph_store.llm``, must name a local provider. A block
+    the gate cannot read is refused as unclassifiable, not as egress.
     """
+    if memory is None or memory.kind != "mem0":
+        return []
     mem0_config = (memory.model_extra or {}).get("config")
     if mem0_config is None:
         mem0_config = {}
     if not isinstance(mem0_config, dict):
-        raise ConfigError(f"memory 'config' must be a mapping, got {mem0_config!r}")
+        return [f"memory mem0 config (not a mapping, so it cannot be classified: {mem0_config!r})"]
 
-    def _block(section: str, value: object, *, may_defer: bool) -> dict[str, Any] | None:
-        if value is None:
+    def _provider(block: object, default: str) -> str | None:
+        if block is None:
+            return default
+        if not isinstance(block, dict):
             return None
-        if not isinstance(value, dict):
-            raise ConfigError(f"memory mem0 {section} must be a mapping, got {value!r}")
-        if "provider" in value:
-            provider = value["provider"]
-            named = isinstance(provider, str) and (bool(provider) or may_defer)
-            if not named:
-                raise ConfigError(
-                    f"memory mem0 {section}.provider must be a provider name, got {provider!r}"
-                )
-        if "config" in value and not isinstance(value["config"], dict):
-            raise ConfigError(
-                f"memory mem0 {section}.config must be a mapping, got {value['config']!r}"
-            )
-        return value
+        provider = block.get("provider", default)
+        return provider if isinstance(provider, str) else None
 
-    llm = _block("llm", mem0_config.get("llm"), may_defer=False)
-    embedder = _block("embedder", mem0_config.get("embedder"), may_defer=False)
+    offenders: list[str] = []
+    embedder = mem0_config.get("embedder")
+    provider = _provider(embedder, "openai")
+    settings = embedder.get("config") if isinstance(embedder, dict) else None
+    pointed = isinstance(settings, dict) and bool(settings.get("openai_base_url"))
+    if provider is None:
+        offenders.append(f"memory mem0 embedder (cannot be classified: {embedder!r})")
+    elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
+        offenders.append(f"memory mem0 embedder ({provider!r})")
     graph = mem0_config.get("graph_store")
-    graph_llm = (
-        _block("graph_store.llm", graph.get("llm"), may_defer=True)
-        if isinstance(graph, dict)
-        else None
-    )
-    blocks: list[tuple[str, dict[str, Any] | None]] = [("embedder", embedder)]
-    if isinstance(graph, dict) and graph.get("config"):
-        # A graph LLM block with no provider key is LlmConfig's default, openai;
-        # only an explicitly empty provider defers to `llm`.
-        if graph_llm is not None and graph_llm.get("provider", "openai"):
-            blocks.append(("graph_store.llm", graph_llm))
-        else:
-            blocks.append(("llm", llm))
-    return blocks
-
-
-def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
-    """The mem0 model providers ``memory`` would call that are hosted."""
-    if memory is None or memory.kind != "mem0":
-        return []
-    offenders = []
-    for section, block in _mem0_model_blocks(memory):
-        local = _LOCAL_MEM0_PROVIDERS["embedder" if section == "embedder" else "llm"]
-        if not _mem0_provider_is_local(block, local, llm=section != "embedder"):
-            provider = block.get("provider") if block is not None else None
-            offenders.append(f"memory mem0 {section} ({provider or 'default: openai'!r})")
+    if graph is not None and not isinstance(graph, dict):
+        offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")
+    elif isinstance(graph, dict) and graph.get("config"):
+        llm_blocks = [("llm", mem0_config.get("llm"))]
+        if graph.get("llm") is not None:
+            llm_blocks.append(("graph_store.llm", graph["llm"]))
+        for section, block in llm_blocks:
+            provider = _provider(block, "openai")
+            if provider is None:
+                offenders.append(f"memory mem0 {section} (cannot be classified: {block!r})")
+            elif provider and provider not in _LOCAL_MEM0_LLMS:
+                offenders.append(f"memory mem0 {section} ({provider!r})")
     return offenders
 
 

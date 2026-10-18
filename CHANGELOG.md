@@ -111,15 +111,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   --embedding-model` or `calibrate --embedder` override, and the list `probe`
   actually sweeps, which is the one fixed into the substrate at seed time rather
   than the config's. A `mem0` memory adapter is refused too unless its embedder
-  (which mem0 defaults to OpenAI, and which embeds every write) is local, and —
-  with a graph store configured — the LLM that feeds it; Sectum stores memory
-  verbatim, so mem0's LLM runs for nothing else. An `openai` provider with an
-  explicit `openai_base_url` counts as local, or, for an LLM while
-  `OPENROUTER_API_KEY` is set (mem0 then routes to OpenRouter), an explicit
-  `openrouter_base_url`. A malformed mem0 `llm` / `embedder` / `graph_store.llm`
-  block - not a mapping, a non-mapping `config`, or a provider that is not a name -
-  is now refused at config load in every mode, as mem0 would refuse it later. An
-  embedding spec counts as local only by an allow-list
+  (which mem0 defaults to OpenAI, and which embeds every write) is ollama, lmstudio,
+  huggingface, or openai with an explicit `openai_base_url` - and, with a graph
+  store configured, every LLM block mem0 might use (`llm` and `graph_store.llm`) is
+  ollama, lmstudio or vllm. Sectum stores memory verbatim, so mem0's LLM runs for
+  nothing else; and mem0 pairs one LLM block's provider with the other's config, so
+  a graph LLM gets no base-URL allowance. A block the gate cannot read is refused as
+  unclassifiable. An embedding spec counts as local only by an allow-list
   (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
   refused until classified.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
