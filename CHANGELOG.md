@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK contracts.** `resolve_embedding_model` raises `ConfigError` for an unknown
+  spec (it returned `None`, which only `fake-*` recall names still do), and
+  `AdapterError` when a provider library fails to load the model.
+  `VectorStoreAdapter` gains `embedder_name` and `embedder_bridge`, which the CLI's
+  resolver sets on a live store it builds with an `embedder`.
+
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
   seeded `embedding_models` are validated before anything else: an unknown name was
   silently treated as a `fake-*` recall name. And the gradient - which builds its

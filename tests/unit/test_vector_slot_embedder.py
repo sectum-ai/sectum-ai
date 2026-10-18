@@ -807,8 +807,10 @@ def test_an_st_model_is_recorded_as_spelled(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_st_models_use_their_own_query_and_document_prompts() -> None:
-    # e5-style models ship `query: `/`passage: ` prompts; encoding without them
-    # ranks a probe query differently from the production index built with them.
+    # A model whose sentence-transformers config ships `query` / `passage` prompts
+    # (nomic v2, mxbai, arctic) is encoded with them; without them a probe query
+    # ranks differently from an index built with them. (Many e5/BGE checkpoints
+    # ship none, and are encoded without.)
     from sectum_ai.embeddings import SentenceTransformerEmbedding
 
     calls: list[str | None] = []

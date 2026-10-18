@@ -218,8 +218,10 @@ class DetectionConfig(BaseModel):
     # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
     # the threat model documents this. Detection is NOT the only stage that embeds
     # tenant content: the vector store's `embedder`, the Class 2 sweep and a mem0
-    # memory adapter are gated by `SectumConfig._enforce_zero_egress`, and the
-    # zero-egress claim rests on both validators.
+    # memory adapter are gated by `SectumConfig._enforce_zero_egress`; specs from a
+    # CLI override or a seeded substrate are gated where used, by
+    # `refuse_hosted_embeddings`. The zero-egress claim rests on all three - a new
+    # command that embeds specs from a flag or a substrate must call the last.
     mode: Literal["hosted", "local"] = "hosted"
 
     @model_validator(mode="after")
