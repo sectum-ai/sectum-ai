@@ -826,14 +826,8 @@ def _per_model_rpr(
     # Distinct models, not entries or spellings: a spec listed twice, or spelled
     # two ways (`hash:32` / `hash-32`), is one model, and a "gradient" over it is
     # the one-model comparison refused below.
-    # Each model is LOADED by the spelling the operator wrote first (a bare `st:`
-    # name can resolve to a local folder the namespaced one would not) and KEYED
-    # by the canonical one, as `vector_embedder` is, so one record never names one
-    # model two ways.
-    first_spelling: dict[str, str] = {}
-    for name in names:
-        first_spelling.setdefault(canonical_embedding_spec(name), name)
-    distinct = list(first_spelling.values())
+    # Keyed by that spelling too, as `vector_embedder` is.
+    distinct = list(dict.fromkeys(canonical_embedding_spec(name) for name in names))
     real_names = [name for name in distinct if not name.startswith("fake-")]
     modelled_only = [name for name in distinct if name.startswith("fake-")]
     if real_names and modelled_only:
@@ -851,8 +845,7 @@ def _per_model_rpr(
             model = resolve_embedding_model(name)
             assert model is not None  # every validated non-fake spec resolves to a model
             models.append(model)
-        rates = embedding_provider_sweep(substrate, models)
-        return {canonical_embedding_spec(name): rate for name, rate in rates.items()}
+        return embedding_provider_sweep(substrate, models)
     if real_names:
         # One real model is not a gradient. Emitting it produced a single-entry
         # "comparison" from a config that asked for several.

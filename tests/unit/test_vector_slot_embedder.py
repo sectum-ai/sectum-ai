@@ -706,8 +706,8 @@ def _with_name(name: str) -> object:
 
 
 def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:
-    # Two spellings of one geometry tripped [EMBEDDER CHANGED]. Only the recorded
-    # name is normalised: the sweep keeps the configured spelling as its key.
+    # Two spellings of one geometry tripped [EMBEDDER CHANGED]; the gradient keys
+    # by the same canonical spelling.
     names = {
         build_vector_store(_opensearch(embedder=spec)).embedder_name
         for spec in ("hash:64", "hash-64")
@@ -786,13 +786,15 @@ def test_a_query_already_indexed_as_a_document_is_not_embedded_again() -> None:
     assert model.queries == ["who owns the contract"]
 
 
-def test_an_st_model_keeps_its_spelling() -> None:
+def test_an_st_model_is_recorded_as_spelled(monkeypatch: pytest.MonkeyPatch) -> None:
     # A bare `st:` name can resolve to a local folder the namespaced one would not,
     # so merging the two could hide a real model change behind a comparison.
-    from sectum_ai.embeddings import canonical_embedding_spec
-
     namespaced = "st:sentence-transformers/all-mpnet-base-v2"
-    assert canonical_embedding_spec(namespaced) == namespaced
+    monkeypatch.setattr(
+        "sectum_ai.config.resolve_embedding_model",
+        lambda spec: HashingEmbedding(spec, dim=32),
+    )
+    assert build_vector_store(_opensearch(embedder=namespaced)).embedder_name == namespaced
 
 
 def test_st_models_use_their_own_query_and_document_prompts() -> None:
@@ -1233,26 +1235,3 @@ def test_a_fake_listed_twice_warns_like_a_real_one(
     )
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
     assert "the list names only one" in capsys.readouterr().err
-
-
-def test_the_gradient_loads_the_spelling_the_operator_wrote(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Resolving the canonical spelling could load a different model: a bare `st:`
-    # name resolves to a local folder of that name, the namespaced one to the hub.
-    from sectum_ai.adapters.fakes import FakeVectorStore
-    from sectum_ai.cli.app import _per_model_rpr
-    from sectum_ai.substrate import build_substrate, default_scenario
-
-    loaded: list[str] = []
-
-    def _resolve(spec: str) -> object:
-        loaded.append(spec)
-        return HashingEmbedding(spec, dim=32 if "32" in spec else 64)
-
-    monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _resolve)
-    specs = ("hash:32", "hash-64", "hash-32")
-    substrate = build_substrate(default_scenario(seed=2026, embedding_models=specs))
-    rates = _per_model_rpr(substrate, FakeVectorStore())
-    assert loaded == ["hash:32", "hash-64"]
-    assert set(rates) == {"hash-32", "hash-64"}

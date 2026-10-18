@@ -764,7 +764,7 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         store.embedder_name = HASHING_EMBEDDER_NAME
     else:
         store = _build_vector_store(config, bridge, bridge.dim)
-        # The name `diff` compares, so one spelling per geometry (see the function).
+        # The name `diff` compares: a hash spec by its dim (see the function).
         store.embedder_name = canonical_embedding_spec(bridge.name)
         store.embedder_bridge = bridge
     # `semantic_retrieval` stays WITHDRAWN for every live store in this release,

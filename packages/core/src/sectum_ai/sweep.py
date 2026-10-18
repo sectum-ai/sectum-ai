@@ -85,8 +85,9 @@ def embedding_provider_sweep(
     gradient therefore reflects the actual embeddings ("stronger embeddings leak
     more"), so it is recorded for any configured stack, not only the fake.
 
-    Documents and queries are each embedded in one batch per model to keep a remote
-    provider to two calls per model.
+    Documents and queries are each handed to a model as one list, which the provider
+    may still split: Voyage per 1,000 texts, Cohere-on-Bedrock per 96, and Titan one
+    call per text - so a Titan sweep of the default corpus is ~2,000 calls, not two.
     """
     probe = RagEntityBleedProbe()
     steps = probe.plan(substrate)
