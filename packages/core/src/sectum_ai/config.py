@@ -619,10 +619,12 @@ def load_config(path: Path) -> SectumConfig:
         ConfigError: if the file is missing, contains malformed YAML, or fails
             schema validation.
     """
-    if not path.exists():
-        raise ConfigError(f"config file not found: {path}")
+    # One try for every way the read can fail: a separate `exists()` check raised
+    # its own untyped OSError for a parent it cannot traverse or an over-long name.
     try:
         text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ConfigError(f"config file not found: {path}") from None
     except UnicodeDecodeError:
         raise ConfigError(f"config file is not UTF-8 text: {path}") from None
     except OSError as error:

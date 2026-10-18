@@ -1736,9 +1736,14 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
     path.write_bytes(b"api_key: \xff\xfe\n")
     with pytest.raises(ConfigError, match="not UTF-8 text"):
         load_config(path)
-    # And a path that exists but cannot be read is typed too, not a raw traceback.
+    # And a path that cannot be read, or even checked, is typed too, not a raw
+    # traceback.
     with pytest.raises(ConfigError, match="cannot read config file"):
         load_config(tmp_path)
+    with pytest.raises(ConfigError, match="cannot read config file"):
+        load_config(tmp_path / ("x" * 300 + ".yaml"))
+    with pytest.raises(ConfigError, match="config file not found"):
+        load_config(tmp_path / "absent.yaml")
 
 
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:
