@@ -3512,20 +3512,30 @@ def erasure(
         _register_queries(store, vector_residue_queries(substrate, target))
         _load_corpus(store, substrate, [target])
 
-    # Contained like every other surface, and told to the probe: an upsert can land
-    # in part, and scanned over a partial load the probe attested ERASED beside a
-    # warning that said otherwise - now the surface reads NOT_COVERED, LIVE, and the
-    # run ends INCONCLUSIVE, as for any surface that could not be seeded.
+    # Contained like every other surface. But an upsert can land in part, and
+    # scanned over a partial load the probe attested ERASED beside a warning that
+    # said otherwise: so what landed is cleared, and the probe finds no baseline -
+    # NOT_COVERED, LIVE, INCONCLUSIVE, as for any surface that could not be seeded.
+    # Only if that cleanup fails too is the surface handed over as not seeded, to be
+    # recorded unestablished rather than scanned.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
-    if Surface.VECTOR_DB not in unseedable and _seeds(Surface.VECTOR_DB):
+    not_seeded: dict[Surface, str] = {}
+    if Surface.VECTOR_DB in unseedable:
+        try:
+            store.delete(target)
+        except Exception:
+            not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
+    elif _seeds(Surface.VECTOR_DB):
         others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
         try:
             _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
             _load_corpus(store, substrate, others)
-        except AdapterError as error:
-            # The target's corpus landed in full, so its verdict stands.
+        except Exception as error:
+            # The target's corpus landed in full, so its verdict stands. Typed
+            # failures say why; anything else is named by type only.
+            why = str(error) if isinstance(error, SectumError) else type(error).__name__
             typer.echo(
-                f"warning: the other tenants' corpus did not all load ({error}); the "
+                f"warning: the other tenants' corpus did not all load ({why}); the "
                 "target's did, so the vector_db verdict stands",
                 err=True,
             )
@@ -3635,7 +3645,7 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(target, scope=erasure_scope, unseeded=unseedable)
+    ).run(target, scope=erasure_scope, unseeded=not_seeded or None)
     finished = datetime.now(UTC)
 
     _emit_erasure_attestation(

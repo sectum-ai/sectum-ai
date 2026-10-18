@@ -384,7 +384,8 @@ class ErasureProbe:
 
         Returns:
             An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
-            surfaces and whose ``coverage()`` reports a verdict for *every*
+            surfaces and any ``unseeded`` one, and whose ``coverage()`` reports a
+            verdict for *every*
             erasure surface, so the attestation never implies more coverage than
             it verified.
         """

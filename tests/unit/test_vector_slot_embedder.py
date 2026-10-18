@@ -1774,15 +1774,18 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
 
 
 @pytest.mark.parametrize(
-    ("refused_calls", "partial", "vector_verdict"),
+    ("refused_calls", "partial", "delete_fails", "vector_verdict"),
     [
         # The target's own corpus refused: nothing it could rest on, so NOT_COVERED.
-        ({1}, False, "NOT_COVERED"),
+        ({1}, False, False, "NOT_COVERED"),
         # Refused part-way through the target's own batch: half of it landed, and a
-        # scan over that attested ERASED - so the surface is left out of the scan.
-        ({1}, True, "NOT_COVERED"),
+        # scan over that attested ERASED - so what landed is cleared first.
+        ({1}, True, False, "NOT_COVERED"),
+        # ...and if that cleanup fails too, the surface is recorded as not seeded
+        # rather than scanned over the partial load.
+        ({1}, True, True, "NOT_COVERED"),
         # Another tenant's refused after the target's landed in full: it stands.
-        ({2}, False, "ERASED"),
+        ({2}, False, False, "ERASED"),
     ],
 )
 def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
@@ -1790,6 +1793,7 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
     monkeypatch: pytest.MonkeyPatch,
     refused_calls: set[int],
     partial: bool,
+    delete_fails: bool,
     vector_verdict: str,
 ) -> None:
     # Contained like every other surface's seeding - but an upsert lands per tenant,
@@ -1812,7 +1816,12 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             raise ValueError(_BACKEND)
         return real_upsert(self, tenant, documents)
 
+    def _no_delete(self: FakeVectorStore, tenant: Any) -> None:
+        raise ConnectionError("delete refused")
+
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    if delete_fails:
+        monkeypatch.setattr(FakeVectorStore, "delete", _no_delete)
     monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
@@ -1831,13 +1840,46 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             assert erased.exit_code == 3, erased.output
             assert "ERASURE VERIFIED" not in erased.output, erased.output
             assert "could not seed the vector_db canary" in erased.output, erased.output
-            assert "not seeded: the vector store refused the corpus" in erased.output
+            assert (
+                "not seeded: the vector store refused the corpus" in erased.output
+            ) is delete_fails, erased.output
             assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
             assert record["vector_embedder"] is None
         else:
             assert "could not seed the vector_db canary" not in erased.output, erased.output
             assert "the vector_db verdict stands" in erased.output, erased.output
             assert record["vector_embedder"] == "st:all-mpnet-base-v2"
+
+
+def test_a_typed_failure_embedding_the_other_tenants_leaves_the_target_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Embedding the other tenants' corpus can fail with any SectumError (a provider
+    # answering with no vectors is a ConfigError); caught as AdapterError only, it
+    # aborted the run after the target's corpus was already in the store.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli import app as cli
+    from sectum_ai.spec import ConfigError
+
+    real_prefetch = cli._prefetch_corpus
+    calls = {"n": 0}
+
+    def _prefetch(store: Any, documents: Any) -> None:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ConfigError("the provider answered with no vectors")
+        real_prefetch(store, documents)
+
+    monkeypatch.setattr(cli, "_prefetch_corpus", _prefetch)
+    runner = CliRunner()
+    assert runner.invoke(cli.app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    erased = runner.invoke(cli.app, ["erasure", "--workdir", str(tmp_path)])
+    assert "the vector_db verdict stands" in erased.output, erased.output
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
