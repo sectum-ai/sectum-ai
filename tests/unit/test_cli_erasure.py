@@ -612,7 +612,8 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     # The seeding runs BEFORE the probe, so an exception there aborts the whole
     # command and loses every other surface's verdict - the harm
     # `_erase_surface`'s containment prevents one step later. An unseeded surface
-    # has no markers before, so it attests nothing and reads NOT_COVERED.
+    # is recorded as not established (not "no baseline found": nothing was looked
+    # for), so it attests nothing and reads NOT_COVERED.
     class _RefusesTheWrite(_LiveCacheBase):
         def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
             raise ConnectionError("redis: connection refused")
@@ -626,7 +627,11 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     # which is what ERASURE INCONCLUSIVE means. Before this, the seeding raised
     # and the command died with no report at all.
     assert result.exit_code == 3, result.output
-    assert "ERASURE INCONCLUSIVE: no baseline on semantic_cache" in result.output, result.output
+    assert (
+        "ERASURE INCONCLUSIVE: semantic_cache could not establish that the tenant's markers"
+        in result.output
+    ), result.output
+    assert "not seeded: redis: connection refused" in result.output, result.output
     assert "could not seed the semantic_cache canary" in result.output, result.output
     assert "connection refused" in result.output, result.output
     # ...and every other surface still got its verdict.

@@ -356,7 +356,13 @@ class ErasureProbe:
         self._partial: list[Marker] = []
         self._decided = 0
 
-    def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
+    def run(
+        self,
+        target: UUID,
+        *,
+        scope: Iterable[Surface] | None = None,
+        unseeded: Mapping[Surface, str] | None = None,
+    ) -> ErasureReport:
         """Confirm the target's markers, run the erasure, and re-scan each surface.
 
         Args:
@@ -370,6 +376,11 @@ class ErasureProbe:
                 Surfaces in ``scope`` that have no configured adapter are simply
                 not scanned (they too read ``NOT_COVERED``); the vector store is
                 always present.
+            unseeded: Surfaces the caller could not seed, with why. Each is
+                recorded as present but unestablished - not scanned, since a seed
+                that landed in part leaves a baseline the verdict cannot rest on -
+                so it reads ``NOT_COVERED`` and the run cannot attest it, exactly
+                as a surface whose scan failed.
 
         Returns:
             An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
@@ -432,6 +443,18 @@ class ErasureProbe:
             # A scope skips a surface entirely - it is left out of ``surfaces`` so
             # the coverage block marks it NOT_COVERED rather than scanning it.
             if in_scope is not None and surface not in in_scope:
+                continue
+            if unseeded and surface in unseeded:
+                surfaces.append(
+                    SurfaceErasure(
+                        surface=surface,
+                        markers_before=0,
+                        residual_after=0,
+                        # None of the target's markers was established there.
+                        unverifiable_after=len(markers),
+                        unverifiable_reason=f"not seeded: {unseeded[surface]}",
+                    )
+                )
                 continue
             surface_result, surface_findings = self._erase_surface(
                 target, markers, surface, scan, delete

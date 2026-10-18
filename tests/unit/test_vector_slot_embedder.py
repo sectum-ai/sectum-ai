@@ -1813,20 +1813,31 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         return real_upsert(self, tenant, documents)
 
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
-    assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
-    assert "pw@h" not in erased.output, erased.output
-    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
-    coverage = pack["run_result"]["metrics"]["erasure_coverage"]
-    assert coverage["vector_db"] == vector_verdict, (coverage, erased.output)
-    if vector_verdict == "NOT_COVERED":
-        assert "could not seed the vector_db canary" in erased.output, erased.output
-        assert pack["run_result"]["vector_embedder"] is None
-    else:
-        assert "could not seed the vector_db canary" not in erased.output, erased.output
-        assert "the vector_db verdict stands" in erased.output, erased.output
+    for scope in ([], ["--scope", "vector_db"]):
+        erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), *scope])
+        calls["n"] = 0
+        assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
+        assert "pw@h" not in erased.output, erased.output
+        pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+        record = pack["run_result"]
+        assert record["metrics"]["erasure_coverage"]["vector_db"] == vector_verdict, erased.output
+        if vector_verdict == "NOT_COVERED":
+            # As for any surface that could not be seeded: present, LIVE or not,
+            # unestablished - so the run is INCONCLUSIVE, never VERIFIED, and names
+            # no geometry for a store nothing ranked over.
+            assert erased.exit_code == 3, erased.output
+            assert "ERASURE VERIFIED" not in erased.output, erased.output
+            assert "could not seed the vector_db canary" in erased.output, erased.output
+            assert "not seeded: the vector store refused the corpus" in erased.output
+            assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
+            assert record["vector_embedder"] is None
+        else:
+            assert "could not seed the vector_db canary" not in erased.output, erased.output
+            assert "the vector_db verdict stands" in erased.output, erased.output
+            assert record["vector_embedder"] == "st:all-mpnet-base-v2"
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

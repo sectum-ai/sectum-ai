@@ -3505,20 +3505,22 @@ def erasure(
     unseedable: dict[Surface, str] = {}
 
     def _seed_vector() -> None:
-        _prefetch_corpus(store, substrate.documents)
+        # The target's corpus first, embedded and loaded: it is what the verdict
+        # rests on, and a refusal here costs no other tenant's embedding.
+        _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id == target])
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
-        # The target's corpus first: it is what the verdict rests on.
         _load_corpus(store, substrate, [target])
 
-    # Contained like every other surface: a store that refuses the target's corpus
-    # (an index left at another dimension) reads NOT_COVERED, and the rest keep their
-    # verdicts. Unlike a marker write, an upsert can land in part, so the probe is
-    # told: scanned over a partial load, it attested ERASED beside this warning.
+    # Contained like every other surface, and told to the probe: an upsert can land
+    # in part, and scanned over a partial load the probe attested ERASED beside a
+    # warning that said otherwise - now the surface reads NOT_COVERED, LIVE, and the
+    # run ends INCONCLUSIVE, as for any surface that could not be seeded.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
     if Surface.VECTOR_DB not in unseedable and _seeds(Surface.VECTOR_DB):
         others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
         try:
+            _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
             _load_corpus(store, substrate, others)
         except AdapterError as error:
             # The target's corpus landed in full, so its verdict stands.
@@ -3633,18 +3635,7 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(
-        target,
-        scope=(
-            [
-                surface
-                for surface in (erasure_scope or ERASURE_SURFACES)
-                if surface is not Surface.VECTOR_DB
-            ]
-            if Surface.VECTOR_DB in unseedable
-            else erasure_scope
-        ),
-    )
+    ).run(target, scope=erasure_scope, unseeded=unseedable)
     finished = datetime.now(UTC)
 
     _emit_erasure_attestation(
@@ -3667,7 +3658,8 @@ def erasure(
         started=started,
         finished=finished,
         surface_provenance=provenance,
-        vector_embedder=store.embedder_name,
+        # An unseeded store is reported but nothing ranked over it.
+        vector_embedder=None if Surface.VECTOR_DB in unseedable else store.embedder_name,
     )
 
 

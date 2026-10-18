@@ -96,7 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RunDiff.regressed` is true on an embedder swap. `Runner.steps_to_send(probe)`
   returns the steps `run_per_step` will send, after its user-scope drops, and
   `sectum_ai.probes.vector_residue_queries(substrate, target)` the texts the
-  erasure probe's vector scan queries, which the CLI registers as queries. New
+  erasure probe's vector scan queries, which the CLI registers as queries;
+  `ErasureProbe.run` takes `unseeded` (surface -> why), recording each as not
+  established instead of scanning it. New
   public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
   `embed_batched`, `iter_batches`, `EMBED_BATCH_SIZE`, `embed_queries`, `validate_model_spec`,
   `canonical_embedding_spec`, `is_hosted_embedding_spec`,
@@ -156,10 +158,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw traceback (exit 1). `probe` now stops with an adapter error (exit 3)
   naming only the exception's type, with a hint that the index's dimension may
   have changed on a live store. `erasure` contains it like every other surface
-  and loads the target's corpus first: refused there - in full or part-way -
-  `vector_db` is left out of the scan and reads NOT_COVERED while the other
-  surfaces keep their verdicts; refused only for another tenant, the target's
-  verdict stands, with a warning.
+  and embeds and loads the target's corpus first: refused there - in full or
+  part-way - `vector_db` is recorded as not seeded rather than scanned over what
+  landed, so it reads NOT_COVERED and the run ends ERASURE INCONCLUSIVE (exit 3)
+  while the other surfaces keep their verdicts; refused only for another tenant,
+  the target's verdict stands, with a warning.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep
