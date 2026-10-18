@@ -31,6 +31,7 @@ from typing import Any, Protocol, runtime_checkable
 from sectum_ai.spec import AdapterError, ConfigError, SectumError
 
 __all__ = [
+    "EMBED_BATCH_SIZE",
     "LOCAL_EMBEDDING_PREFIXES",
     "BedrockEmbedding",
     "CohereEmbedding",
@@ -679,7 +680,8 @@ class EmbedderBridge:
         self._fill(self._queries, partial(embed_queries, self.model), unindexed)
 
     def __call__(self, text: str) -> list[float]:
-        """The cached vector for ``text``, else ``text`` embedded now as a document."""
+        """The cached vector for ``text``; else it is embedded now - as a query if it was
+        registered as one (a failed :meth:`prefetch_queries`), otherwise as a document."""
         cached = self._documents.get(text)
         if cached is None:
             cached = self._queries.get(text)

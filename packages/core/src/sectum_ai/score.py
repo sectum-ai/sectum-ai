@@ -89,6 +89,7 @@ from sectum_ai.spec import (
 
 __all__ = [
     "CATALOG",
+    "GEOMETRY_PROBES",
     "METHODOLOGY_VERSION",
     "PROBE_SURFACES",
     "SEVERITY_WEIGHTS",

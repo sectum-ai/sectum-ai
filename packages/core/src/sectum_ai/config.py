@@ -837,7 +837,7 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     # it would let both run where neither measures what its name says; withdrawn,
     # they read NOT_COVERED. Class 2 does not gate on it - it simply queries, and
     # its retrieval now ranks in the configured model's geometry.
-    return store if store.synthetic else _without_semantic_retrieval(store)
+    return _without_semantic_retrieval(store)
 
 
 def _without_semantic_retrieval(store: VectorStoreAdapter) -> VectorStoreAdapter:
