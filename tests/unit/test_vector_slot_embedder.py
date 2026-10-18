@@ -1686,6 +1686,11 @@ def test_an_unreadable_mem0_block_is_refused_without_echoing_its_contents(
         with pytest.raises(ConfigError) as caught:
             load_config(path)
         assert secret not in str(caught.value), caught.value
+    # Nor does a YAML syntax error, whose PyYAML text quotes the offending line.
+    path.write_text(f'adapters:\n  vector_store:\n    api_key: "{secret}\n')
+    with pytest.raises(ConfigError, match=r"invalid YAML .* at line \d+") as caught:
+        load_config(path)
+    assert secret not in str(caught.value), caught.value
 
 
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:

@@ -440,10 +440,17 @@ def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
     return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
 
 
+# What the gate reads of a mem0 `vector_store` block, named when it cannot.
+_VECTOR_STORE_READS = "a non-string provider, or a non-mapping config"
+
+
 def _unreadable(
     section: str,
     block: object,
-    why: str = "a non-string provider, a non-mapping config, or a blank *_base_url",
+    why: str = (
+        "a non-string provider, a non-mapping config, a non-string config key, or a blank "
+        "*_base_url"
+    ),
 ) -> str:
     """A mem0 block the gate cannot classify, named by its shape and never its contents.
 
@@ -510,9 +517,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         kind = store.get("provider", "qdrant") if isinstance(store, dict) else None
         store_config = store.get("config") if isinstance(store, dict) else None
         if not isinstance(kind, str):
-            offenders.append(
-                _unreadable("vector_store", store, "a non-string provider, or a non-mapping config")
-            )
+            offenders.append(_unreadable("vector_store", store, _VECTOR_STORE_READS))
         elif kind not in _PASSIVE_MEM0_STORES:
             offenders.append(
                 f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
@@ -522,11 +527,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             if store_config is None:
                 pass
             elif not isinstance(store_config, dict):
-                offenders.append(
-                    _unreadable(
-                        "vector_store", store, "a non-string provider, or a non-mapping config"
-                    )
-                )
+                offenders.append(_unreadable("vector_store", store, _VECTOR_STORE_READS))
             elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
             elif store_config.get("enable_embeddings") not in (None, False):
@@ -596,7 +597,12 @@ def load_config(path: Path) -> SectumConfig:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as error:
-        raise ConfigError(f"invalid YAML in {path}: {error}") from error
+        # The problem and where, not PyYAML's text: it quotes the offending line,
+        # which may be the one holding a key.
+        mark = getattr(error, "problem_mark", None)
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        problem = getattr(error, "problem", None) or type(error).__name__
+        raise ConfigError(f"invalid YAML in {path}: {problem}{where}") from None
     if raw is None:
         return SectumConfig()
     if not isinstance(raw, dict):

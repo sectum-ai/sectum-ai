@@ -72,8 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A config error no longer echoes the config.** `load_config` printed
   pydantic's own text, which carries each error's input - for a whole-config
   check, the whole config, an inline `api_key` included - to stderr and CI logs.
-  It now prints each error's location and message only, and the `mem0` gate names
-  a block it cannot read by its shape, never its contents.
+  It now prints each error's location and message only - a YAML syntax error its
+  problem, line and column, not the quoted line - and the `mem0` gate names a
+  block it cannot read by its shape, never its contents.
 - **A `hash-<dim>` spec takes ASCII digits only.** Python's `int` also read
   `hash- 64`, `hash-6_4`, `hash-+64` and other scripts' digits as `hash-64`, so
   those spellings validated; they are now refused as malformed, as the caption
