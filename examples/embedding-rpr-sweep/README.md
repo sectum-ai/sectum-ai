@@ -77,7 +77,7 @@ that measures the configured store; keep the two apart, or a modelled gradient
 reads as a measured leak rate.
 
 The same sweep runs as part of `sectum-ai probe` when the scenario configures two
-or more `embedding_models`; the per-model RPR is recorded in the run's evidence
+or more distinct `embedding_models`; the per-model RPR is recorded in the run's evidence
 pack under `metrics.retrieval_pivot_rate_by_model`:
 
 ```yaml

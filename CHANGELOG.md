@@ -58,13 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
-  seeded `embedding_models` are validated before anything else, and the gradient -
-  which builds its own index from the substrate and never touches the stack - runs
-  right after the adapters are built. On main an unknown or unloadable model, or a
-  provider failing mid-sweep (a revoked key, a quota), failed only after every
-  probe had run against the stack, with no record written. Its warnings still
-  print beside the run summary. A comparison needs two or more *distinct* real
-  models: a spec listed twice, or spelled two ways, is one model, so no gradient.
+  seeded `embedding_models` are validated before anything else: an unknown name was
+  silently treated as a `fake-*` recall name. And the gradient - which builds its
+  own index from the substrate and never touches the stack - runs right after the
+  adapters are built: an unloadable model, or a provider failing mid-sweep (a
+  revoked key, a quota), failed only after every probe had run against the stack,
+  with no record written. Its warnings still print beside the run summary. A
+  comparison needs two or more *distinct* models: a spec listed twice, or spelled
+  two ways, is one model, so no gradient - and a recorded gradient is keyed by each
+  model's canonical spelling (`hash:32` is `hash-32`), as `vector_embedder` is.
 
 - **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something
   a run did *less* of than it planned, both inside the canonical hash.

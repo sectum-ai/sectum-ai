@@ -826,10 +826,9 @@ def _per_model_rpr(
     # Distinct models, not entries or spellings: a spec listed twice, or spelled
     # two ways (`hash:32` / `hash-32`), is one model, and a "gradient" over it is
     # the one-model comparison refused below.
-    first_spelling: dict[str, str] = {}
-    for name in names:
-        first_spelling.setdefault(canonical_embedding_spec(name), name)
-    distinct = list(first_spelling.values())
+    # Keyed by that canonical spelling too, as `vector_embedder` is, so one record
+    # never names one model two ways.
+    distinct = list(dict.fromkeys(canonical_embedding_spec(name) for name in names))
     real_names = [name for name in distinct if not name.startswith("fake-")]
     modelled_only = [name for name in distinct if name.startswith("fake-")]
     if real_names and modelled_only:
@@ -853,12 +852,19 @@ def _per_model_rpr(
         # "comparison" from a config that asked for several.
         say(
             "warning: no embedding-model gradient recorded - a comparison needs "
-            "two or more real embedding models, and only one was configured"
+            "two or more distinct real embedding models, and the list names only one"
         )
         return {}
-    if isinstance(vector, FakeVectorStore) and len(modelled_only) > 1:
-        return embedding_model_sweep(substrate, tuple(modelled_only))
-    return {}
+    if not isinstance(vector, FakeVectorStore):
+        return {}
+    if len(modelled_only) < 2:
+        # The same rule for the recall illustration: one fake listed twice is one.
+        say(
+            "warning: no embedding-model gradient recorded - a comparison needs "
+            "two or more distinct models, and the list names only one"
+        )
+        return {}
+    return embedding_model_sweep(substrate, tuple(modelled_only))
 
 
 def _format_rpr(metrics: RunMetrics) -> str:

@@ -1058,7 +1058,7 @@ def test_a_model_the_sweep_would_discard_is_never_built(
     monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _never)
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code in (0, 2), result.output
-    assert "only one was configured" in result.output, result.output
+    assert "the list names only one" in result.output, result.output
 
 
 def test_the_cli_sweeps_the_real_models_of_a_mixed_list_it_resolved_up_front(
@@ -1154,7 +1154,7 @@ def test_a_spec_listed_twice_is_one_model_not_a_gradient(tmp_path: Path) -> None
     seed_args = ["--embedding-model", "hash-32", "--embedding-model", "hash-32"]
     runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert "only one was configured" in result.output, result.output
+    assert "the list names only one" in result.output, result.output
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["metrics"]["retrieval_pivot_rate_by_model"] == {}
 
@@ -1203,3 +1203,34 @@ def test_the_gradients_warnings_print_beside_the_summary_not_above_the_suite(
     result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     warning = result.output.index("fake-mini excluded from the embedding-model gradient")
     assert warning > result.output.index("SUITE-STARTED"), result.output
+
+
+def test_the_gradient_is_keyed_by_the_canonical_spelling(tmp_path: Path) -> None:
+    # Keyed by the first raw spelling, one record named one model two ways: the
+    # gradient's `hash:32` beside the store's `hash-32`.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    seed_args = ["--embedding-model", "hash:32", "--embedding-model", "hash-256"]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert set(record["metrics"]["retrieval_pivot_rate_by_model"]) == {"hash-32", "hash-256"}
+
+
+def test_a_fake_listed_twice_warns_like_a_real_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from sectum_ai.adapters.fakes import FakeVectorStore
+    from sectum_ai.cli.app import _per_model_rpr
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(
+        default_scenario(seed=2026, embedding_models=("fake-mini", "fake-mini"))
+    )
+    assert _per_model_rpr(substrate, FakeVectorStore()) == {}
+    assert "the list names only one" in capsys.readouterr().err
