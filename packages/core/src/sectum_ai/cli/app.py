@@ -3506,6 +3506,10 @@ def erasure(
 
     unseedable: dict[Surface, str] = {}
 
+    # Which load a refusal hit: the warning must not report a target canary that
+    # did land as one that did not.
+    target_loaded: list[bool] = []
+
     def _seed_vector() -> None:
         # The target's corpus first, embedded and loaded, so a refusal there costs no
         # other tenant's embedding; then the rest. The other tenants' documents are
@@ -3516,6 +3520,7 @@ def erasure(
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
         _load_corpus(store, substrate, [target])
+        target_loaded.append(True)
         _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
         _load_corpus(
             store,
@@ -3638,8 +3643,13 @@ def erasure(
         # are scanned and erased, and the surface is attested over them -
         # NOT_COVERED only if none did.
         vector = unseeded is Surface.VECTOR_DB
+        crowding = (
+            " (the target's corpus landed, but not the other tenants' that crowd its residue page)"
+            if vector and target_loaded
+            else ""
+        )
         consequence = (
-            "so that surface is recorded as not seeded and reads NOT_COVERED"
+            f"so that surface is recorded as not seeded and reads NOT_COVERED{crowding}"
             if vector
             else "so that surface is attested only over the target's canaries that "
             "did land, and reads NOT_COVERED if none did"

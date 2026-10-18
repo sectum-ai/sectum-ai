@@ -1453,6 +1453,15 @@ def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
     assert _delta_verdict(bounded, (), (), (), ()) == "not measured"
 
 
+def _residue(
+    finding_id: str, surface: Surface, status: FindingStatus = FindingStatus.CONFIRMED
+) -> Finding:
+    """An erasure finding as `erasure` writes one: the target's own marker, on it."""
+    return _finding(finding_id, probe_id="gdpr-erasure-verification", status=status).model_copy(
+        update={"surface": surface, "observed_in_tenant_id": UUID(int=1)}
+    )
+
+
 def _on(surface: Surface, finding: Finding) -> Finding:
     """A finding on the surface its probe reports, as `probe` writes it."""
     return finding.model_copy(update={"surface": surface})
@@ -1615,10 +1624,15 @@ def test_an_erasure_swap_banner_names_the_vector_scan_it_discounted(tmp_path: Pa
         "probe_versions": {"gdpr-erasure-verification": "1.0"},
         "surface_provenance": {"vector_db": "LIVE"},
     }
-    earlier, later = _swap(
-        _run(metrics=RunMetrics(erasure_caveats={"vector_db": 1})).model_copy(update=exercised),
-        _run(metrics=RunMetrics(erasure_caveats={"vector_db": 1})).model_copy(update=exercised),
-    )
+
+    # As `erasure` writes them: each retained marker itemized as an unverified caveat.
+    def _caveated() -> RunResult:
+        caveat = _residue("erasure-caveat-1", Surface.VECTOR_DB, FindingStatus.UNVERIFIED)
+        record = _run(caveat)
+        metrics = RunMetrics(erasure_caveats={"vector_db": 1})
+        return record.model_copy(update={**exercised, "metrics": metrics})
+
+    earlier, later = _swap(_caveated(), _caveated())
     banner = next(
         line
         for line in _diff_output(tmp_path, earlier, later).splitlines()
@@ -1703,10 +1717,7 @@ def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: 
     }
 
     def _erasure(surface: Surface, count: int, residue: dict[str, int]) -> RunResult:
-        findings = [
-            _on(surface, _finding(f"{surface.value}-{n}", probe_id="gdpr-erasure-verification"))
-            for n in range(count)
-        ]
+        findings = [_residue(f"{surface.value}-{n}", surface) for n in range(count)]
         record = _run(*findings)
         metrics = RunMetrics(confirmed_findings=count, erasure_residue=residue)
         return record.model_copy(update={**exercised, "metrics": metrics})

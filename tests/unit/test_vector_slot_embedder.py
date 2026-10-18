@@ -1847,6 +1847,8 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             line for line in erased.output.splitlines() if "could not seed the vector_db" in line
         )
         refusal = warning.index("the vector store refused the corpus")
+        # Which load was refused: the target's canaries, or the others that crowd it.
+        assert ("the target's corpus landed" in warning) is (refused_calls == {2}), warning
         outcome = (
             "failed too"
             if delete_mode == "fails"
@@ -1932,6 +1934,29 @@ def test_erasure_on_a_shared_index_reads_as_crowded_as_main(tmp_path: Path) -> N
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED"
     assert "NOT VERIFIED" in erased.output, erased.output
+
+
+def test_an_erasure_pdf_says_the_vector_store_is_read_by_ranking() -> None:
+    # The summary row names the store's geometry, and the methodology beside it said
+    # the workflow read every surface directly, with no semantic tier in any verdict.
+    from datetime import UTC, datetime
+
+    from sectum_ai.evidence.pdf import scope_methodology
+    from sectum_ai.spec import RunResult
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    base = RunResult(
+        run_id="erasure-1",
+        scenario_hash="s",
+        manifest_hash="m",
+        started_at=now,
+        finished_at=now,
+        probe_versions={"gdpr-erasure-verification": "1"},
+        surface_provenance={"vector_db": "LIVE"},
+    )
+    ranked = base.model_copy(update={"vector_embedder": "st:all-mpnet-base-v2"})
+    assert "ranked in its own embedding geometry" in " ".join(scope_methodology(ranked))
+    assert "ranked in its own embedding geometry" not in " ".join(scope_methodology(base))
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

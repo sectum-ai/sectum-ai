@@ -373,6 +373,18 @@ _DETECTOR_EXACT = (
     "so no semantic or adjudicated tier contributed to any verdict here. "
 ) + _DETECTOR_TAIL
 
+# The same, where the record names the vector store's geometry: that surface is
+# read through similarity queries ranked in it, so whether a marker surfaces there
+# at all is a ranking - the summary row names the model, and this must not say
+# the store was read directly beside it.
+_DETECTOR_EXACT_RANKED = (
+    "Each observation is matched against the ground-truth manifest by exact "
+    "content. Detection invoked no embedding model and no judge, so no semantic "
+    "or adjudicated tier contributed to any verdict here. The vector store, though, "
+    "is read through similarity queries ranked in its own embedding geometry, "
+    "named above: whether a marker surfaces there depends on that ranking. "
+) + _DETECTOR_TAIL
+
 # The same sentence, minus the attestation claim. `provenance_statement` already
 # ends "This pack is a demonstration, not an attestation." for an all-synthetic
 # run, and this paragraph is rendered directly beneath it - so the two read, back
@@ -648,7 +660,7 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
     if erasure_only:
         # No detector ran at all, whatever the config says: the erasure workflow
         # never constructs one.
-        detector = _DETECTOR_EXACT
+        detector = _DETECTOR_EXACT if run.vector_embedder is None else _DETECTOR_EXACT_RANKED
     elif run.detection is None:
         # A record from before `detection` was recorded. Which tiers ran cannot be
         # read off it, so say only what holds for any run - the manifest-grounding
