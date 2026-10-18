@@ -447,6 +447,16 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             return default
         if not isinstance(block, dict):
             return None
+        settings = block.get("config")
+        if settings is not None and not isinstance(settings, dict):
+            return None
+        # A base URL set but blank is not "unset": an lmstudio embedder given
+        # `lmstudio_base_url: null` builds an OpenAI client that falls back to
+        # api.openai.com. Unreadable rather than modelled per provider.
+        if isinstance(settings, dict) and any(
+            key.endswith("_base_url") and not value for key, value in settings.items()
+        ):
+            return None
         provider = block.get("provider", default)
         return provider if isinstance(provider, str) else None
 
