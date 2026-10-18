@@ -33,6 +33,8 @@ from sectum_ai.spec import (
     canonical_hash,
 )
 
+_REAL_EMBEDDER_TIER = "semantic similarity against the configured detection embedding model"
+
 
 def _run_result(manifest: GroundTruthManifest, *, with_finding: bool) -> RunResult:
     findings: tuple[Finding, ...] = ()
@@ -595,7 +597,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     assert "no judge" in offline_para, offline_para
     assert claims_a_judge not in offline_para, offline_para
     assert "lexical overlap rather than meaning" in offline_para, offline_para
-    assert "semantic similarity against the configured embedding model" in real_para, real_para
+    assert _REAL_EMBEDDER_TIER in real_para, real_para
     assert claims_a_judge in real_para, real_para
 
     # A record written before `detection` existed asserts neither: the first tier
@@ -621,7 +623,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
         ),
     )
     mixed = scope_methodology(real_embedder_only)[1]
-    assert "semantic similarity against the configured embedding model" in mixed, mixed
+    assert _REAL_EMBEDDER_TIER in mixed, mixed
     assert claims_a_judge not in mixed, mixed
     assert "not a calibrated judge" in mixed, mixed
 
@@ -633,7 +635,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     )
     other = scope_methodology(real_judge_only)[1]
     assert claims_a_judge in other, other
-    assert "semantic similarity against the configured embedding model" not in other, other
+    assert _REAL_EMBEDDER_TIER not in other, other
     assert "lexical overlap rather than meaning" in other, other
 
 

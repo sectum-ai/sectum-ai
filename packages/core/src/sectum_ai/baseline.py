@@ -10,6 +10,7 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sectum_ai.probes import ErasureProbe, SubjectErasureProbe
 from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     Finding,
@@ -569,15 +570,22 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
 def _swap_scoped(run: RunResult) -> set[str]:
     """The probes a run exercised whose results an embedder swap may have moved.
 
-    The geometry probes, and the pipeline-end bleed probe on a LIVE pipeline: one
-    may read the store the run seeded, and the run cannot tell whether it did, so
-    its rate is withheld across a swap rather than compared. Withheld only - the
-    record names no geometry for it (``score.GEOMETRY_PROBES``).
+    The geometry probes; the two erasure checks, whose vector scans query the store
+    by similarity and whose finding counts pool that scan with the other surfaces'
+    (an erasure record names an embedder only when it scanned the store); and the
+    pipeline-end bleed probe on a LIVE pipeline: one may read the store the run
+    seeded, and the run cannot tell whether it did, so its rate is withheld across
+    a swap rather than compared. Withheld only - the record names no geometry for
+    it (``score.GEOMETRY_PROBES``).
     """
     live_pipeline = (
         run.surface_provenance.get(Surface.RAG_PIPELINE.value) == SurfaceProvenance.LIVE.value
     )
-    scoped = GEOMETRY_PROBES | ({"rag-pipeline-bleed"} if live_pipeline else set())
+    scoped = (
+        GEOMETRY_PROBES
+        | {ErasureProbe.id, SubjectErasureProbe.id}
+        | ({"rag-pipeline-bleed"} if live_pipeline else set())
+    )
     return _exercised_probes(run) & scoped
 
 

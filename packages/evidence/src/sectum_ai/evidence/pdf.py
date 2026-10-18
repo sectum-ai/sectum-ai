@@ -314,7 +314,7 @@ _TIER_EMBEDDER = {
         "model, so the second tier was Sectum's hashing vector, which measures "
         "lexical overlap rather than meaning"
     ),
-    False: "semantic similarity against the configured embedding model",
+    False: "semantic similarity against the configured detection embedding model",
 }
 _TIER_JUDGE = {
     True: (
@@ -338,7 +338,7 @@ def _detector_tiers(
     recorded for precisely this ("a pack where the semantic tier was gated shut
     ... was indistinguishable from one where it ran") and no renderer read it, so
     the paragraph was byte-identical at 0.62 and at 1.0 while telling the auditor
-    "then semantic similarity against the configured embedding model".
+    "then semantic similarity against the configured detection embedding model".
     """
     tail = (
         " A paraphrase an offline stage cannot see is not reported as absent - it "

@@ -1452,21 +1452,24 @@ def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
     assert _delta_verdict(bounded, (), (), (), ()) == "not measured"
 
 
+def _on(surface: Surface, finding: Finding) -> Finding:
+    """A finding on the surface its probe reports, as `probe` writes it."""
+    return finding.model_copy(update={"surface": surface})
+
+
 def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path) -> None:
     # The Retrieval-Pivot Rate is a property of the embedding geometry, so a swap
-    # moves it with no change to isolation. Without the gate a rate that fell across
-    # the swap read `[ok]` - a fix nobody made - and one that rose read as a
-    # regression in the stack rather than in the instrument.
+    # moves it with no change to isolation. Without the gate a leak that resolved
+    # across the swap read `[ok]` - a fix nobody made - and one that appeared read
+    # as a regression in the stack rather than in the instrument.
     exercised = {
         "probe_versions": {"rag-entity-bleed": "1.0"},
         "surface_provenance": {"vector_db": "LIVE"},
     }
-    earlier = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
+    earlier = _run(_on(Surface.VECTOR_DB, _finding("a"))).model_copy(
         update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"}
     )
-    later = _run(metrics=RunMetrics(per_probe_findings={"rag-entity-bleed": 0})).model_copy(
-        update={**exercised, "vector_embedder": "hashing-64"}
-    )
+    later = _run().model_copy(update={**exercised, "vector_embedder": "hashing-64"})
     result = diff_runs(earlier, later)
     assert result.embedder_changed == ("st:all-mpnet-base-v2", "hashing-64")
     assert result.regressed
@@ -1480,6 +1483,7 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     # the instrument too, and an erasure record has no rate at all.
     assert "findings appearing or resolving" in text.output, text.output
     assert "Retrieval-Pivot Rate (Class 2)" in text.output, text.output
+    assert "[not measured] per_probe_findings[rag-entity-bleed]: 1 -> 0" in text.output
     assert "[ok]" not in text.output, text.output
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
     assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
@@ -1503,17 +1507,11 @@ def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
         "probe_versions": {"rag-entity-bleed": "1.0", "semantic-cache-contamination": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "semantic_cache": "LIVE"},
     }
-    earlier = _run(
-        metrics=RunMetrics(
-            per_probe_findings={"rag-entity-bleed": 0, "semantic-cache-contamination": 0}
-        )
-    ).model_copy(update={**exercised, "vector_embedder": "hashing-64"})
+    earlier = _run(_on(Surface.VECTOR_DB, _finding("a"))).model_copy(
+        update={**exercised, "vector_embedder": "hashing-64"}
+    )
     later = _run(
-        _finding("c", probe_id="semantic-cache-contamination"),
-        metrics=RunMetrics(
-            confirmed_findings=1,
-            per_probe_findings={"rag-entity-bleed": 0, "semantic-cache-contamination": 1},
-        ),
+        _on(Surface.SEMANTIC_CACHE, _finding("c", probe_id="semantic-cache-contamination"))
     ).model_copy(update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"})
     cli = runner.invoke(
         app,
@@ -1648,33 +1646,60 @@ def _diff_output(tmp_path: Path, earlier: RunResult, later: RunResult) -> str:
 
 
 def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> None:
-    # The vector surface's erasure count is a similarity scan, so it moved with the
-    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0` asserted an erasure fix.
-    # Class 1 fetches by id and the tracing surface has no embedder, so a
-    # regression there is still a regression.
+    # Class 1 fetches by id, so beside a probe that ranked over the store its new
+    # leak is still a regression.
     exercised = {
-        "probe_versions": {"tenant-boundary-fetch": "1.0"},
+        "probe_versions": {"rag-entity-bleed": "1.0", "tenant-boundary-fetch": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(
+        _run().model_copy(update=exercised),
+        _run(_on(Surface.VECTOR_DB, _finding("b", probe_id="tenant-boundary-fetch"))).model_copy(
+            update=exercised
+        ),
+    )
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[REGRESSED] per_probe_findings[tenant-boundary-fetch]" in output, output
+
+
+def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: Path) -> None:
+    # The vector residue scan queries the store by similarity, so it moved with the
+    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0`, and the erasure's
+    # pooled finding count beside it, asserted a purge nobody made. The tracing
+    # surface has no embedder, so a residue there is still a regression.
+    exercised = {
+        "probe_versions": {"gdpr-erasure-verification": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "tracing": "LIVE"},
     }
-    earlier = _run(
-        metrics=RunMetrics(
-            per_probe_findings={"tenant-boundary-fetch": 0},
-            erasure_residue={"vector_db": 3, "tracing": 0},
-        )
-    ).model_copy(update=exercised)
-    later = _run(
-        _finding("b", probe_id="tenant-boundary-fetch"),
-        metrics=RunMetrics(
-            confirmed_findings=1,
-            per_probe_findings={"tenant-boundary-fetch": 1},
-            erasure_residue={"vector_db": 0, "tracing": 2},
-        ),
-    ).model_copy(update=exercised)
-    output = _diff_output(tmp_path, *_swap(earlier, later))
-    assert "[ok] erasure_residue[vector_db]" not in output, output
+
+    def _residue(surface: Surface, count: int) -> list[Finding]:
+        return [
+            _on(surface, _finding(f"{surface.value}-{n}", probe_id="gdpr-erasure-verification"))
+            for n in range(count)
+        ]
+
+    earlier, later = _swap(
+        _run(
+            *_residue(Surface.VECTOR_DB, 3),
+            metrics=RunMetrics(
+                confirmed_findings=3,
+                per_probe_findings={"gdpr-erasure-verification": 3},
+                erasure_residue={"vector_db": 3, "tracing": 0},
+            ),
+        ).model_copy(update=exercised),
+        _run(
+            *_residue(Surface.TRACING, 2),
+            metrics=RunMetrics(
+                confirmed_findings=2,
+                per_probe_findings={"gdpr-erasure-verification": 2},
+                erasure_residue={"vector_db": 0, "tracing": 2},
+            ),
+        ).model_copy(update=exercised),
+    )
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[ok]" not in output, output
     assert "[REGRESSED] erasure_residue[tracing]" in output, output
-    assert "[REGRESSED] per_probe_findings[tenant-boundary-fetch]" in output, output
-    # Nothing ranked over the store but the residue scan, and the banner says so.
+    assert "[not measured] per_probe_findings[gdpr-erasure-verification]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
     assert "over it - an erasure's vector residue scan, and the" in banner, banner
 

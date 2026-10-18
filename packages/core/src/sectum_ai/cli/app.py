@@ -3915,6 +3915,8 @@ _GEOMETRY_LABELS: dict[str, str] = {
     "rag-poisoning": "Class 3",
     "embedding-inversion": "Class 6",
     "ikea-extraction": "Class 10",
+    ErasureProbe.id: "an erasure's vector residue scan",
+    SubjectErasureProbe.id: "a subject erasure's vector fingerprint scan",
 }
 
 
@@ -3928,11 +3930,6 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
     ranked = [
         label for probe_id, label in _GEOMETRY_LABELS.items() if probe_id in result.embedder_scoped
     ]
-    vector_keys = {
-        f"{name}[{Surface.VECTOR_DB.value}]" for name in ("erasure_residue", "erasure_caveats")
-    }
-    if any(delta.name in vector_keys for delta in result.metrics.deltas):
-        ranked.append("an erasure's vector residue scan")
     what = ", ".join(ranked) or "its similarity ranking"
     # A live pipeline MAY read the store, which the run cannot tell, so its rate is
     # withheld in its own words rather than named among what certainly ranked.
