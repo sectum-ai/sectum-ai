@@ -33,8 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vector stores ranked with different embedding models, and mark the metrics of
   the probes that rank by similarity over the vector store — and its erasure
   counts — as not measured: those were taken with different instruments, so one that
-  fell across the swap is not a fix. A by-id fetch (Class 1) and metrics off the
-  vector surface still compare. `diff --output json` carries it as
+  fell across the swap is not a fix. A by-id fetch (Class 1), the pipeline-end
+  bleed probe and metrics off the vector surface still compare, and the banner
+  names only what ranked over the store in those runs. `diff --output json` carries it as
   `embedder_changed` (`[earlier, later]`, or `null`).
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed

@@ -1479,6 +1479,7 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     # Not only the rates: the geometry probes' findings resolving or appearing are
     # the instrument too, and an erasure record has no rate at all.
     assert "findings appearing or resolving" in text.output, text.output
+    assert "Retrieval-Pivot Rate (Class 2)" in text.output, text.output
     assert "[ok]" not in text.output, text.output
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
     assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
@@ -1544,6 +1545,9 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
     assert diff_runs(earlier, later).embedder_ranked == ("rag-poisoning",)
     output = _diff_output(tmp_path, earlier, later)
     assert "[REGRESSED] retrieval_pivot_rate" in output, output
+    # And the banner below it does not tell the reader to discount that line.
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "Class 3" in banner and "Retrieval-Pivot Rate" not in banner, banner
 
 
 def _swap(earlier: RunResult, later: RunResult) -> tuple[RunResult, RunResult]:
@@ -1591,6 +1595,9 @@ def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> 
     assert "[ok] erasure_residue[vector_db]" not in output, output
     assert "[REGRESSED] erasure_residue[tracing]" in output, output
     assert "[REGRESSED] per_probe_findings[tenant-boundary-fetch]" in output, output
+    # Nothing ranked over the store but the residue scan, and the banner says so.
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "over it - an erasure's vector residue scan, and the" in banner, banner
 
 
 def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:

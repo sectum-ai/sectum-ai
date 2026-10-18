@@ -136,7 +136,6 @@ class Runner:
         """
         self.preflight(probe)
         planned_steps = list(probe.plan(self._substrate))
-        _droppable = self._droppable
 
         if self._drops_whole_probe(planned_steps):
             # Nothing this probe would have JUDGED can run, so it asks the stack
@@ -154,7 +153,7 @@ class Runner:
         planted = unconfirmed = 0
         for planned in planned_steps:
             step = planned
-            if _droppable(step):
+            if self._droppable(step):
                 if step.action not in _PLANT_ACTIONS:
                     dropped += 1
                     continue
@@ -305,8 +304,10 @@ class Runner:
         adapter that cannot carry a user is dropped, a user-level plant is sent as
         the tenant, and a probe none of whose judged steps can run sends nothing.
         For a caller that prepares for the run - the CLI embeds these texts up
-        front - so it neither misses a step nor pays for one never sent.
+        front - so it neither misses a step nor pays for one never sent. Raises
+        what :meth:`run_per_step` raises for a probe this runner cannot run.
         """
+        self.preflight(probe)
         planned_steps = list(probe.plan(self._substrate))
         if self._drops_whole_probe(planned_steps):
             return []

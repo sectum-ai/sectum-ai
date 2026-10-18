@@ -3908,15 +3908,32 @@ def _delta_range(delta: MetricDelta) -> str:
     return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
-def _embedder_changed_banner(change: tuple[str, str], earlier: str) -> str:
+_GEOMETRY_LABELS: dict[str, str] = {
+    "rag-entity-bleed": "the vector store's Retrieval-Pivot Rate (Class 2)",
+    "rag-poisoning": "Class 3",
+    "embedding-inversion": "Class 6",
+    "ikea-extraction": "Class 10",
+}
+
+
+def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
     """The banner for two runs whose vector stores ranked in different embedding models."""
     before, after = (untrusted(name) for name in change)
+    # Only what ranked over the store in THESE runs: the verdicts are scoped to
+    # `embedder_ranked`, and a banner naming the Retrieval-Pivot Rate regardless
+    # told the reader to discount a pipeline-fed RPR regression printed above it.
+    ranked = [_GEOMETRY_LABELS.get(probe_id, probe_id) for probe_id in result.embedder_ranked]
+    if any(
+        delta.name == f"erasure_residue[{Surface.VECTOR_DB.value}]"
+        for delta in result.metrics.deltas
+    ):
+        ranked.append("an erasure's vector residue scan")
+    what = ", ".join(ranked) or "its similarity ranking"
     return (
         f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
-        f"one with {after}: whatever ranked by similarity over it - the Retrieval-Pivot "
-        "Rate, Classes 3 and 10, an erasure's vector residue scan, and those probes' "
-        "findings appearing or resolving - was taken with a different instrument, so "
-        "its difference cannot be attributed to a change in isolation; re-baseline "
+        f"one with {after}: whatever ranked by similarity over it - {what}, and the "
+        "findings appearing or resolving there - was taken with a different instrument, "
+        "so its difference cannot be attributed to a change in isolation; re-baseline "
         "deliberately"
     )
 
@@ -4152,7 +4169,7 @@ def baseline(
             "baseline found may simply have nowhere to appear; re-baseline deliberately"
         )
     if result.embedder_changed is not None:
-        typer.echo(_embedder_changed_banner(result.embedder_changed, "baseline"))
+        typer.echo(_embedder_changed_banner(result.embedder_changed, result, "baseline"))
     # The other CI-facing command. Both were silent about a run describing the
     # built-in fakes, where every other command discloses it.
     _warn_on_synthetic_surfaces(run.surface_provenance)
@@ -4339,7 +4356,7 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "earlier run found may simply have nowhere to appear"
         )
     if result.embedder_changed is not None:
-        typer.echo(_embedder_changed_banner(result.embedder_changed, "earlier"))
+        typer.echo(_embedder_changed_banner(result.embedder_changed, result, "earlier"))
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
