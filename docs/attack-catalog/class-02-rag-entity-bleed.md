@@ -82,7 +82,7 @@ and reports `retrieval_pivot_rate_by_model`, keyed by each model's canonical spe
 
     Legacy `fake-*` names carry a modelled recall rather than real vectors, so they
     cannot share a sweep with a real provider: a mixed config drops them and says
-    so, and a gradient needs two or more *real* models or none is recorded.
+    so, and a gradient needs two or more distinct *real* models or none is recorded.
 
 Each entry is resolved to an embedding model:
 

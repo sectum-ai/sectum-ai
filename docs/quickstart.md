@@ -266,8 +266,8 @@ The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays th
 canonical record.
 
 The summary carries the `run_id`, the probe count, the confirmed-finding
-count, the headline Retrieval-Pivot Rate (and, when two or more real embedding
-models are configured, a **modelled** embedding-model gradient over the sweep's
+count, the headline Retrieval-Pivot Rate (and, when two or more distinct real
+embedding models are configured, a **modelled** embedding-model gradient over the sweep's
 own shared index — not a breakdown of the measured rate), the per-probe finding
 counts, the run's
 `surface_provenance` with `confirmed_on_live_surfaces` (the confirmed findings

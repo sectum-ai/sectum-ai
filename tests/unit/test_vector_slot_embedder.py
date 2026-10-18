@@ -1234,3 +1234,26 @@ def test_a_fake_listed_twice_warns_like_a_real_one(
     )
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
     assert "the list names only one" in capsys.readouterr().err
+
+
+def test_the_gradient_loads_the_spelling_the_operator_wrote(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Resolving the canonical spelling could load a different model: a bare `st:`
+    # name resolves to a local folder of that name, the namespaced one to the hub.
+    from sectum_ai.adapters.fakes import FakeVectorStore
+    from sectum_ai.cli.app import _per_model_rpr
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    loaded: list[str] = []
+
+    def _resolve(spec: str) -> object:
+        loaded.append(spec)
+        return HashingEmbedding(spec, dim=32 if "MiniLM" in spec else 64)
+
+    monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _resolve)
+    specs = ("st:sentence-transformers/all-MiniLM-L6-v2", "st:all-mpnet-base-v2")
+    substrate = build_substrate(default_scenario(seed=2026, embedding_models=specs))
+    rates = _per_model_rpr(substrate, FakeVectorStore())
+    assert loaded == list(specs)
+    assert set(rates) == {"st:all-MiniLM-L6-v2", "st:all-mpnet-base-v2"}
