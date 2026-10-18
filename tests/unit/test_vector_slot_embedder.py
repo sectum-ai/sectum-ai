@@ -1357,6 +1357,7 @@ def test_byoc_local_mode_refuses_a_mem0_block_it_cannot_classify() -> None:
         # A blank base URL is not unset: lmstudio then falls back to api.openai.com.
         {"provider": "lmstudio", "config": {"lmstudio_base_url": None}},
         {"provider": "ollama", "config": "x"},
+        {"provider": "ollama", "config": {8080: "x"}},
     ):
         with pytest.raises(ValueError, match="cannot be classified"):
             SectumConfig.model_validate(_mem0({"embedder": block}))

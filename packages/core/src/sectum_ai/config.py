@@ -454,7 +454,8 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         # `lmstudio_base_url: null` builds an OpenAI client that falls back to
         # api.openai.com. Unreadable rather than modelled per provider.
         if isinstance(settings, dict) and any(
-            key.endswith("_base_url") and not value for key, value in settings.items()
+            not isinstance(key, str) or (key.endswith("_base_url") and not value)
+            for key, value in settings.items()
         ):
             return None
         provider = block.get("provider", default)
@@ -463,8 +464,9 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     offenders: list[str] = []
     embedder = mem0_config.get("embedder")
     provider = _provider(embedder, "openai")
+    # A blank base URL was refused as unclassifiable above, so presence is enough.
     settings = embedder.get("config") if isinstance(embedder, dict) else None
-    pointed = isinstance(settings, dict) and bool(settings.get("openai_base_url"))
+    pointed = isinstance(settings, dict) and "openai_base_url" in settings
     if provider is None:
         offenders.append(f"memory mem0 embedder (cannot be classified: {embedder!r})")
     elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
