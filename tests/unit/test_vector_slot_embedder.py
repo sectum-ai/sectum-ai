@@ -325,7 +325,9 @@ def _local_config(tmp_path: Path) -> Path:
     return path
 
 
-def test_byoc_local_mode_refuses_hosted_specs_that_bypass_the_config(tmp_path: Path) -> None:
+def test_byoc_local_mode_refuses_hosted_specs_that_bypass_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The config validator only sees the config. `probe` sweeps the list fixed into
     # the substrate at seed time, and `seed`/`calibrate` take overrides - each of
     # which passed a `local` config untouched and sent the corpus to the provider.
@@ -342,9 +344,17 @@ def test_byoc_local_mode_refuses_hosted_specs_that_bypass_the_config(tmp_path: P
     assert seeded.exit_code == 3, seeded.output
     assert "--embedding-model" in seeded.output
 
-    # Seeded under a hosted config, then probed under the local one.
+    # Seeded under a hosted config with TWO hosted models - a real sweep - then
+    # probed under the local one: refused before any model is built, not after
+    # the sweep has already embedded the corpus with both.
     workdir = str(tmp_path / "b")
-    assert runner.invoke(app, ["seed", "--workdir", workdir, *hosted]).exit_code == 0
+    two_hosted = [*hosted, "--embedding-model", "cohere:embed-english-v3.0"]
+    assert runner.invoke(app, ["seed", "--workdir", workdir, *two_hosted]).exit_code == 0
+
+    def _never(spec: str) -> object:
+        raise AssertionError(f"{spec} was built before the local-mode refusal")
+
+    monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _never)
     probed = runner.invoke(app, ["probe", "--workdir", workdir, "--config", local])
     assert probed.exit_code == 3, probed.output
     assert "seeded scenario" in probed.output
@@ -1510,3 +1520,42 @@ def test_a_non_boolean_upstash_flag_is_unclassifiable_not_named_as_enabled() -> 
         SectumConfig.model_validate(
             _mem0({"embedder": {"provider": "ollama"}, "vector_store": upstash})
         )
+
+
+def test_queries_the_runner_drops_are_not_embedded() -> None:
+    # One tenant with two users: every foreign principal is a user, so on a store
+    # that cannot carry a user the runner drops every query - and embedding them
+    # in advance was paid for nothing.
+    from uuid import UUID
+
+    from sectum_ai.cli.app import _build_suite, _prefetch_queries
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+    from sectum_ai.substrate import build_substrate
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="users-only",
+            seed=7,
+            tenants=(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=1),
+                    display_name="Acme",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=11), display_name="Alice"),
+                        SyntheticUserSpec(user_id=UUID(int=12), display_name="Bob"),
+                    ),
+                ),
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    suite = _build_suite(build_detection_providers(DetectionConfig()))
+    for carries_user, expect_any in ((False, False), (True, True)):
+        model = _Modes()
+        store = _bridged_store(EmbedderBridge(model))
+        store.carries_user = carries_user
+        _prefetch_queries(store, suite, substrate)
+        assert bool(model.queries) is expect_any, (carries_user, model.queries)

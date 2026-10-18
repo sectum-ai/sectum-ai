@@ -1679,7 +1679,9 @@ def _prefetch_queries(
     than the customer's store would, under-reporting the Retrieval-Pivot Rate.
     The documents a probe plants mid-run (Class 3's poison) are batched as
     documents, in the text the runner hands the store (`title` is the doc id).
-    Planning is deterministic, so these are the texts the runner will send.
+    Planning is deterministic, so these are the texts the runner will send - less
+    the user-level steps it drops on a store that cannot carry a user, which would
+    be embedded and billed for nothing.
     """
     if store.embedder_bridge is None:
         return
@@ -1688,6 +1690,7 @@ def _prefetch_queries(
         for probe in suite
         for step in probe.plan(substrate)
         if step.action in ("vector.query", "vector.upsert")
+        and (step.actor_user_id is None or store.carries_user)
     ]
     _register_queries(
         store,
