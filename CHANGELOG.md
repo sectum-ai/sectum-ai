@@ -72,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `embedder_bridge`, set only when an `embedder` is configured. `RunDiff` gains
   `embedder_changed`, and `RunDiff.regressed` is true on an embedder swap. New
   public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
-  `embed_batched`, `iter_batches`, `embed_queries`, `validate_model_spec`,
+  `embed_batched`, `iter_batches`, `EMBED_BATCH_SIZE`, `embed_queries`, `validate_model_spec`,
   `canonical_embedding_spec`, `is_hosted_embedding_spec`,
   `LOCAL_EMBEDDING_PREFIXES`), `sectum_ai.spec` (`HASHING_EMBEDDER_NAME`,
   `describe_vector_embedder`, `is_hashing_embedder`), `sectum_ai.config`
