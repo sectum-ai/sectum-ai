@@ -3526,12 +3526,16 @@ def erasure(
     # NOT_COVERED, never scanned - whatever the clearing below achieves: a
     # soft-deleting store keeps what it is told to delete. The clearing is cleanup.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_target, in_scope=in_scope)
+    # The reason names the load that failed, once, for the warning and the record.
+    if Surface.VECTOR_DB in unseedable:
+        unseedable[Surface.VECTOR_DB] = (
+            f"the target's corpus did not load: {unseedable[Surface.VECTOR_DB]}"
+        )
     # Then the other tenants' - on a shared index only, where they crowd the target's
     # residue page as a production index would: left out, the verdict came easier
     # than the stack is, so a refusal there voids the surface too. A per-tenant
     # store scopes the scan to the target, so there they would be embedded (with a
     # hosted model, billed) and left in the store for nothing the verdict reads.
-    crowding_refused = False
     if (
         Surface.VECTOR_DB not in unseedable
         and _seeds(Surface.VECTOR_DB)
@@ -3543,8 +3547,10 @@ def erasure(
             _load_corpus(store, substrate, others)
         except Exception as error:
             why = str(error) if isinstance(error, SectumError) else type(error).__name__
-            unseedable[Surface.VECTOR_DB] = why
-            crowding_refused = True
+            unseedable[Surface.VECTOR_DB] = (
+                "the other tenants' corpus that crowds the target's on this shared index "
+                f"did not load: {why}"
+            )
     # Said in the seeding warning below, beside the refusal it follows: Sectum only
     # asks for the delete, and a soft-deleting store may keep what it is told to.
     clearing = ""
@@ -3653,22 +3659,16 @@ def erasure(
         # are scanned and erased, and the surface is attested over them -
         # NOT_COVERED only if none did.
         vector = unseeded is Surface.VECTOR_DB
-        # Which load was refused: the target's own canaries, or - on a shared index -
-        # the other tenants' corpus that crowds its residue page.
-        what = (
-            "load the other tenants' corpus that crowds the target's on this shared index"
-            if vector and crowding_refused
-            else f"seed the {unseeded.value} canary"
-        )
         consequence = (
-            "so vector_db is recorded as not seeded and reads NOT_COVERED"
+            "so it is recorded as not seeded and reads NOT_COVERED"
             if vector
             else "so that surface is attested only over the target's canaries that "
             "did land, and reads NOT_COVERED if none did"
         )
+        what = "vector_db" if vector else f"the {unseeded.value} canary"
         # The refusal first, then what the cleanup did about it.
         typer.echo(
-            f"warning: could not {what}, {consequence}: {untrusted(reason)}"
+            f"warning: could not seed {what}, {consequence}: {untrusted(reason)}"
             + (f"; {clearing}" if vector else ""),
             err=True,
         )
@@ -3687,17 +3687,9 @@ def erasure(
         target,
         scope=erasure_scope,
         # The vector store only: a marker write that partly landed is scanned and
-        # attested over what did, as the seeding warning says. The reason names the
-        # load that was refused - the target's canaries, or the crowding corpus.
+        # attested over what did, as the seeding warning says.
         unseeded=(
-            {
-                Surface.VECTOR_DB: (
-                    "the other tenants' corpus that crowds it on this shared index did "
-                    f"not load: {unseedable[Surface.VECTOR_DB]}"
-                    if crowding_refused
-                    else f"not seeded: {unseedable[Surface.VECTOR_DB]}"
-                )
-            }
+            {Surface.VECTOR_DB: unseedable[Surface.VECTOR_DB]}
             if Surface.VECTOR_DB in unseedable
             else None
         ),

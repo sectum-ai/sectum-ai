@@ -1841,9 +1841,7 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         # And says only what it knows - a delete was asked for, which a soft-deleting
         # store may ignore, or it failed - on the one warning, after the refusal.
         warning = next(
-            line
-            for line in erased.output.splitlines()
-            if "could not seed the vector_db" in line or "crowds the target's" in line
+            line for line in erased.output.splitlines() if "could not seed vector_db" in line
         )
         refusal = warning.index("the vector store refused the corpus")
         outcome = (
@@ -1866,17 +1864,29 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         assert record["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED", erased.output
         assert "ERASURE VERIFIED" not in erased.output, erased.output
         assert "RESIDUAL" not in erased.output, erased.output
-        assert "so vector_db is recorded as not seeded" in erased.output, erased.output
-        assert "not seeded: the vector store refused the corpus" in erased.output
+        assert "could not seed vector_db, so it is recorded as not seeded" in erased.output
+        assert "the target's corpus did not load: the vector store refused" in erased.output
         assert ("part of it may remain" in erased.output) is (delete_mode == "fails")
         assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
         assert record["vector_embedder"] is None
 
 
+class _ErasureLoads:
+    """What a vector-only erasure on the fake store did, as the tests read it."""
+
+    def __init__(self) -> None:
+        self.loaded: list[Any] = []
+        self.deleted: list[Any] = []
+        self.embedded_before_first_load = 0
+        self.embedded: list[str] = []
+        self.record: dict[str, Any] = {}
+        self.output = ""
+
+
 def _erasure_loads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, shared: bool, refuse: int = 0
-) -> tuple[list[Any], list[str], Any, str]:
-    """Seed and run a vector-only erasure on the fake store, recording each upsert."""
+) -> _ErasureLoads:
+    """Seed and run a vector-only erasure on the fake store, recording each call."""
     import json
 
     from typer.testing import CliRunner
@@ -1885,16 +1895,25 @@ def _erasure_loads(
 
     model = _Modes()
     _bridged_slot(monkeypatch, model)
-    loaded: list[Any] = []
+    seen = _ErasureLoads()
     real_upsert = FakeVectorStore.upsert
+    real_delete = FakeVectorStore.delete
 
     def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
-        loaded.append(tenant)
-        if len(loaded) == refuse:
+        if not seen.loaded:
+            seen.embedded_before_first_load = len(model.documents)
+        seen.loaded.append(tenant)
+        if len(seen.loaded) == refuse:
             raise ValueError(_BACKEND)
         return real_upsert(self, tenant, documents)
 
+    def _delete(self: FakeVectorStore, tenant: Any) -> Any:
+        seen.deleted.append(tenant)
+        return real_delete(self, tenant)
+
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    monkeypatch.setattr(FakeVectorStore, "delete", _delete)
+    monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     config = tmp_path / "sectum-ai.yaml"
     flag = "true" if shared else "false"
     config.write_text(f"adapters:\n  vector_store:\n    kind: fake\n    shared_index: {flag}\n")
@@ -1902,8 +1921,18 @@ def _erasure_loads(
     args = ["--workdir", str(tmp_path), "--config", str(config)]
     assert runner.invoke(app, ["seed", *args]).exit_code == 0
     erased = runner.invoke(app, ["erasure", *args, "--scope", "vector_db"])
-    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
-    return loaded, model.documents, pack["run_result"], erased.output
+    seen.record = json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
+    seen.embedded = model.documents
+    seen.output = erased.output
+    return seen
+
+
+def _own_texts(tmp_path: Path, tenant_index: int = 0) -> tuple[Any, set[str]]:
+    from sectum_ai.cli.app import _load_substrate
+
+    substrate = _load_substrate(tmp_path)
+    tenant = substrate.tenants[tenant_index].tenant_id
+    return tenant, {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == tenant}
 
 
 def test_erasure_on_a_per_tenant_store_loads_only_the_targets_corpus(
@@ -1912,15 +1941,11 @@ def test_erasure_on_a_per_tenant_store_loads_only_the_targets_corpus(
     # A per-tenant store scopes the scan to the target: the others' corpora were
     # embedded (with a hosted model, billed) and left in the store for nothing the
     # verdict reads.
-    from sectum_ai.cli.app import _load_substrate
-
-    loaded, embedded, record, output = _erasure_loads(tmp_path, monkeypatch, shared=False)
-    substrate = _load_substrate(tmp_path)
-    target = substrate.tenants[0].tenant_id
-    assert loaded == [target], output
-    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == target}
-    assert embedded and set(embedded) <= own, output
-    assert record["metrics"]["erasure_coverage"]["vector_db"] == "ERASED", output
+    seen = _erasure_loads(tmp_path, monkeypatch, shared=False)
+    target, own = _own_texts(tmp_path)
+    assert seen.loaded == [target], seen.output
+    assert seen.embedded and set(seen.embedded) <= own, seen.output
+    assert seen.record["metrics"]["erasure_coverage"]["vector_db"] == "ERASED", seen.output
 
 
 def test_erasure_on_a_shared_index_loads_the_target_first_then_the_crowd(
@@ -1928,23 +1953,35 @@ def test_erasure_on_a_shared_index_loads_the_target_first_then_the_crowd(
 ) -> None:
     from sectum_ai.cli.app import _load_substrate
 
-    loaded, _, _, output = _erasure_loads(tmp_path, monkeypatch, shared=True)
+    seen = _erasure_loads(tmp_path, monkeypatch, shared=True)
     tenants = [tenant.tenant_id for tenant in _load_substrate(tmp_path).tenants]
-    assert loaded[0] == tenants[0], output
-    assert sorted(loaded, key=str) == sorted(tenants, key=str), output
+    target, own = _own_texts(tmp_path)
+    assert seen.loaded[0] == target, seen.output
+    assert sorted(seen.loaded, key=str) == sorted(tenants, key=str), seen.output
+    # Only the target's documents were embedded before its load was tried.
+    first = seen.embedded[: seen.embedded_before_first_load]
+    assert first and set(first) <= own, seen.output
 
 
 def test_a_refused_crowding_corpus_voids_a_shared_index_verdict_and_says_so(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # On a real shared index the others' documents crowd the target's page; refused
-    # after the target's landed, the surface is voided - and named for that load,
-    # not as a target canary that did not land.
-    _, _, record, output = _erasure_loads(tmp_path, monkeypatch, shared=True, refuse=2)
+    # after the target's landed, the surface is voided - named for that load, not as
+    # a target canary that did not land - its geometry left unnamed, and the
+    # target's load cleaned up.
+    seen = _erasure_loads(tmp_path, monkeypatch, shared=True, refuse=2)
+    target, _ = _own_texts(tmp_path)
+    record, output = seen.record, seen.output
     assert record["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED", output
-    assert "corpus that crowds the target's on this shared index" in output, output
-    assert "crowds it on this shared index did not load" in output, output
-    assert "not seeded:" not in output, output
+    crowd = "the other tenants' corpus that crowds the target's on this shared index did not load"
+    warning = next(line for line in output.splitlines() if "could not seed vector_db" in line)
+    assert crowd in warning, warning
+    assert crowd in output.split(warning, 1)[1], output
+    assert "the target's corpus did not load" not in output, output
+    assert seen.deleted == [target], seen.deleted
+    assert "asked the store to delete" in warning, warning
+    assert record["vector_embedder"] is None
     assert "pw@h" not in output, output
 
 
@@ -2011,6 +2048,7 @@ def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
 ) -> None:
     # The prefetch is an optimisation, and a failed batch (a rate limit) stopped the
     # run - or voided a verdict the upsert could still reach by embedding on demand.
+    # Driven through a store that embeds each document on upsert, as live ones do.
     import json
 
     from typer.testing import CliRunner
@@ -2020,16 +2058,29 @@ def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
 
     model = _Modes()
     _bridged_slot(monkeypatch, model)
+    real_prefetch = EmbedderBridge.prefetch
+    real_upsert = FakeVectorStore.upsert
 
     def _prefetch(self: EmbedderBridge, texts: Any) -> None:
-        raise AdapterError("the embedding provider failed (RateLimitError)")
+        texts = list(texts)
+        if len(texts) > 1:  # the batch prefetch, not one text embedded on demand
+            raise AdapterError("the embedding provider failed (RateLimitError)")
+        real_prefetch(self, texts)
+
+    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        assert self.embedder_bridge is not None
+        for document in documents:
+            self.embedder_bridge(f"{document.title} {document.content}")
+        return real_upsert(self, tenant, documents)
 
     monkeypatch.setattr(EmbedderBridge, "prefetch", _prefetch)
+    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     assert "the corpus embeds on demand instead" in erased.output, erased.output
-    # And the run went on to its verdict rather than voiding the surface.
+    # Every document still embedded - one at a time - and the verdict reached.
+    assert model.documents, erased.output
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 
