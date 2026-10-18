@@ -284,7 +284,7 @@ detection:
   # runs on its own behalf that would send tenant content to a hosted AI API - the
   # detection embedder or judge, the vector store's `embedder`,
   # scenario.embedding_models, and a mem0 memory's embedder (plus the LLM feeding a
-  # mem0 graph store). The adapters you point it at - a hosted vector database, an
+  # mem0 graph store, and any mem0 vector store not known to leave embedding to mem0). The adapters you point it at - a hosted vector database, an
   # OpenAI-Assistants or Anthropic tool-use agent - are the system under test and
   # receive the synthetic tenant data by design.
   mode: hosted   # hosted | local

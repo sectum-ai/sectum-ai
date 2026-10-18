@@ -114,8 +114,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (which mem0 defaults to OpenAI, and which embeds every write) is ollama, lmstudio,
   huggingface, or openai with an explicit `openai_base_url` - and, with a graph
   store configured, every LLM block mem0 might use (`llm` and `graph_store.llm`) is
-  ollama, lmstudio or vllm - and its vector store does not embed server-side
-  (`upstash_vector` with `enable_embeddings`). Sectum stores memory verbatim, so mem0's LLM runs for
+  ollama, lmstudio or vllm - and its vector store is on an allow-list of stores known
+  to keep the vectors mem0 gives them rather than embed server-side (not
+  `langchain`, `baidu` or a newer store such as `databricks`; `upstash_vector` only
+  without `enable_embeddings`). Sectum stores memory verbatim, so mem0's LLM runs for
   nothing else; and mem0 pairs one LLM block's provider with the other's config, so
   a graph LLM gets no base-URL allowance. A block the gate cannot read is refused as
   unclassifiable. An embedding spec counts as local only by an allow-list

@@ -369,7 +369,7 @@ class SectumConfig(BaseModel):
 
         A ``mem0`` memory adapter brings its own embedder, which mem0 defaults to
         OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there (see
-        :func:`_hosted_mem0_providers` for when its LLM runs too).
+        :func:`_hosted_mem0_providers` for its LLM and vector-store rules too).
         Specs that arrive from the command line or a seeded substrate rather than this
         file are gated where they are used, by :func:`refuse_hosted_embeddings`.
         """
@@ -428,8 +428,10 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     write, and must be local (or `openai` pointed at a base URL). The LLM runs only
     to feed a graph store - Sectum stores memory verbatim (``infer=False``) - which
     mem0 enables when ``graph_store`` has a ``config``; then every LLM block mem0
-    might use, ``llm`` and ``graph_store.llm``, must name a local provider. A block
-    the gate cannot read is refused as unclassifiable, not as egress.
+    might use, ``llm`` and ``graph_store.llm``, must name a local provider. The
+    ``vector_store`` must be on :data:`_PASSIVE_MEM0_STORES` (Upstash only without
+    ``enable_embeddings``). A block the gate cannot read is refused as
+    unclassifiable, not as egress.
     """
     if memory is None or memory.kind != "mem0":
         return []
