@@ -136,14 +136,9 @@ class Runner:
         """
         self.preflight(probe)
         planned_steps = list(probe.plan(self._substrate))
+        _droppable = self._droppable
 
-        def _droppable(step: ProbeStep) -> bool:
-            return (
-                step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
-            )
-
-        judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
-        if judged and all(_droppable(step) for step in judged):
+        if self._drops_whole_probe(planned_steps):
             # Nothing this probe would have JUDGED can run, so it asks the stack
             # nothing: its plants go too, wherever they sit. Suppressing only the
             # droppable plants left a plant on a user-carrying adapter running, and
@@ -293,6 +288,36 @@ class Runner:
     def run(self, probe: Probe) -> list[Finding]:
         """Plan the probe, execute every step, and return all findings."""
         return [finding for _, findings in self.run_per_step(probe) for finding in findings]
+
+    def _droppable(self, step: ProbeStep) -> bool:
+        """A user-level step on an adapter that cannot carry a user."""
+        return step.actor_user_id is not None and not self._adapter_for(step.action).carries_user
+
+    def _drops_whole_probe(self, planned_steps: list[ProbeStep]) -> bool:
+        """Whether no judged step can run, so the probe runs nothing - plants too."""
+        judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
+        return bool(judged) and all(self._droppable(step) for step in judged)
+
+    def steps_to_send(self, probe: Probe) -> list[ProbeStep]:
+        """The steps :meth:`run_per_step` will send for ``probe``, as it will send them.
+
+        The same rules, from the same helpers: a user-level judged step on an
+        adapter that cannot carry a user is dropped, a user-level plant is sent as
+        the tenant, and a probe none of whose judged steps can run sends nothing.
+        For a caller that prepares for the run - the CLI embeds these texts up
+        front - so it neither misses a step nor pays for one never sent.
+        """
+        planned_steps = list(probe.plan(self._substrate))
+        if self._drops_whole_probe(planned_steps):
+            return []
+        steps: list[ProbeStep] = []
+        for step in planned_steps:
+            if self._droppable(step):
+                if step.action not in _PLANT_ACTIONS:
+                    continue
+                step = step.model_copy(update={"actor_user_id": None})
+            steps.append(step)
+        return steps
 
     def _adapter_for(self, action: str) -> Adapter:
         family = action.split(".", 1)[0]

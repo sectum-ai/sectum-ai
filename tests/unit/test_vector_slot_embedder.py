@@ -21,7 +21,8 @@ from sectum_ai.adapters import Capability
 from sectum_ai.adapters.fakes import FakeVectorStore
 from sectum_ai.config import AdapterConfig, SectumConfig, build_vector_store
 from sectum_ai.embeddings import EmbedderBridge, HashingEmbedding, is_hosted_embedding_spec
-from sectum_ai.spec import ConfigError
+from sectum_ai.runner import Runner
+from sectum_ai.spec import ConfigError, Substrate
 
 
 def _opensearch(**extra: object) -> AdapterConfig:
@@ -261,6 +262,24 @@ def _bridged_store(bridge: EmbedderBridge) -> FakeVectorStore:
     return store
 
 
+def _runner_for(substrate: Substrate, store: FakeVectorStore) -> Runner:
+    """A runner over ``store`` with the built-in fakes for every other family."""
+    from sectum_ai.config import build_adapters
+
+    bundle = build_adapters(SectumConfig())
+    return Runner(
+        substrate,
+        vector=store,
+        cache=bundle.cache,
+        model=bundle.model,
+        mcp=bundle.mcp,
+        memory=bundle.memory,
+        rag=bundle.rag,
+        observability=bundle.observability,
+        agent=bundle.agent,
+    )
+
+
 def test_only_registered_queries_embed_in_query_mode() -> None:
     # The store embeds documents and queries through one callable, so the bridge
     # cannot tell them apart by the call. Defaulting an unknown text to QUERY mode
@@ -291,7 +310,8 @@ def test_the_probe_registers_every_planned_vector_query() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
     model = _Modes()
-    _prefetch_queries(_bridged_store(EmbedderBridge(model)), suite, substrate)
+    store = _bridged_store(EmbedderBridge(model))
+    _prefetch_queries(store, _runner_for(substrate, store), suite)
     planned = {
         step.payload["query"]
         for probe in suite
@@ -746,7 +766,8 @@ def test_the_planted_poison_is_batched_as_documents() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
     model = _Modes()
-    _prefetch_queries(_bridged_store(EmbedderBridge(model)), suite, substrate)
+    store = _bridged_store(EmbedderBridge(model))
+    _prefetch_queries(store, _runner_for(substrate, store), suite)
     planted = {
         f"{step.payload['doc_id']} {step.payload['content']}"
         for probe in suite
@@ -859,7 +880,7 @@ def test_a_failed_plant_batch_does_not_end_the_run(capsys: pytest.CaptureFixture
     substrate = build_substrate(default_scenario(seed=2026))
     suite = _build_suite(build_detection_providers(DetectionConfig()))
     store = _bridged_store(EmbedderBridge(_DocumentsDown()))
-    _prefetch_queries(store, suite, substrate)
+    _prefetch_queries(store, _runner_for(substrate, store), suite)
     assert "planted documents embed on demand" in capsys.readouterr().err
 
 
@@ -1557,5 +1578,59 @@ def test_queries_the_runner_drops_are_not_embedded() -> None:
         model = _Modes()
         store = _bridged_store(EmbedderBridge(model))
         store.carries_user = carries_user
-        _prefetch_queries(store, suite, substrate)
+        _prefetch_queries(store, _runner_for(substrate, store), suite)
         assert bool(model.queries) is expect_any, (carries_user, model.queries)
+
+
+def test_a_store_without_users_still_batches_the_plants_the_runner_re_scopes() -> None:
+    # With two tenants the probes keep their tenant-level steps, so the runner
+    # drops only the user-level QUERIES and sends the user-level PLANTS as the
+    # tenant. Filtering on the step alone dropped those plants from the batch too.
+    from uuid import UUID
+
+    from sectum_ai.cli.app import _build_suite, _prefetch_queries
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+    from sectum_ai.substrate import build_substrate
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="tenants-with-users",
+            seed=7,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=tenant),
+                    display_name=name,
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=tenant * 10 + 1), display_name="Alice"),
+                        SyntheticUserSpec(user_id=UUID(int=tenant * 10 + 2), display_name="Bob"),
+                    ),
+                )
+                for tenant, name in ((1, "Acme"), (2, "Globex"))
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+    suite = _build_suite(build_detection_providers(DetectionConfig()))
+    planned = [step for probe in suite for step in probe.plan(substrate)]
+
+    user_plants = {
+        f"{step.payload['doc_id']} {step.payload['content']}"
+        for step in planned
+        if step.action == "vector.upsert" and step.actor_user_id is not None
+    }
+    assert user_plants
+    model = _Modes()
+    store = _bridged_store(EmbedderBridge(model))
+    store.carries_user = False
+    _prefetch_queries(store, _runner_for(substrate, store), suite)
+    # A user-level query here asks what its tenant-level twin asks, so the texts
+    # embedded as queries are exactly the tenant-level ones.
+    assert set(model.queries) == {
+        step.payload["query"]
+        for step in planned
+        if step.action == "vector.query" and step.actor_user_id is None
+    }
+    assert user_plants <= set(model.documents)

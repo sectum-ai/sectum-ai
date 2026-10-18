@@ -10,6 +10,7 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     Finding,
     FindingStatus,
@@ -410,6 +411,11 @@ class RunDiff:
     # here - it is refused outright), and losing a live store is `scope_lost`'s to
     # report. ``(earlier, later)`` when they differ.
     embedder_changed: tuple[str, str] | None = None
+    # The geometry probes either run exercised, when ``embedder_changed`` is set:
+    # the swap changes the instrument only for those. A headline fed by a geometry
+    # probe neither run ran (the pipeline-end bleed probe's RPR beside Class 3) is
+    # still a measurement, and its regression read `[not measured]`.
+    embedder_ranked: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -516,6 +522,13 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     ``later`` is the run under scrutiny, matching the argument order of
     :func:`compare_metrics`.
     """
+    embedder_changed = (
+        (earlier.vector_embedder, later.vector_embedder)
+        if earlier.vector_embedder is not None
+        and later.vector_embedder is not None
+        and earlier.vector_embedder != later.vector_embedder
+        else None
+    )
     return RunDiff(
         metrics=compare_metrics(earlier.metrics, later.metrics),
         findings=diff_findings(earlier.findings, later.findings),
@@ -543,12 +556,11 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             )
         ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
-        embedder_changed=(
-            (earlier.vector_embedder, later.vector_embedder)
-            if earlier.vector_embedder is not None
-            and later.vector_embedder is not None
-            and earlier.vector_embedder != later.vector_embedder
-            else None
+        embedder_changed=embedder_changed,
+        embedder_ranked=(
+            tuple(sorted(GEOMETRY_PROBES & (_exercised_probes(earlier) | _exercised_probes(later))))
+            if embedder_changed is not None
+            else ()
         ),
     )
 

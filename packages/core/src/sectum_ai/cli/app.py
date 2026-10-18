@@ -1163,7 +1163,7 @@ def probe(
         agent=bundle.agent,
     )
 
-    _prefetch_queries(vector, suite, substrate)
+    _prefetch_queries(vector, runner, suite)
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
     # A single probe stays serial regardless of --max-concurrency (a pool is only
@@ -1668,10 +1668,8 @@ def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
         store.embedder_bridge.prefetch(texts)
 
 
-def _prefetch_queries(
-    store: VectorStoreAdapter, suite: Iterable[Probe], substrate: Substrate
-) -> None:
-    """Embed the suite's planned vector texts up front: queries as QUERIES, plants in batches.
+def _prefetch_queries(store: VectorStoreAdapter, runner: Runner, suite: Iterable[Probe]) -> None:
+    """Embed the suite's vector texts up front: queries as QUERIES, plants in batches.
 
     Not only an optimisation: the store embeds queries and documents through one
     callable, so this is how the bridge knows which texts are queries. An
@@ -1679,18 +1677,16 @@ def _prefetch_queries(
     than the customer's store would, under-reporting the Retrieval-Pivot Rate.
     The documents a probe plants mid-run (Class 3's poison) are batched as
     documents, in the text the runner hands the store (`title` is the doc id).
-    Planning is deterministic, so these are the texts the runner will send - less
-    the user-level steps it drops on a store that cannot carry a user, which would
-    be embedded and billed for nothing.
+    The steps come from the runner itself (:meth:`Runner.steps_to_send`), so the
+    texts are exactly the ones it will send - none it drops, none it re-scopes.
     """
     if store.embedder_bridge is None:
         return
     steps = [
         step
         for probe in suite
-        for step in probe.plan(substrate)
+        for step in runner.steps_to_send(probe)
         if step.action in ("vector.query", "vector.upsert")
-        and (step.actor_user_id is None or store.carries_user)
     ]
     _register_queries(
         store,
@@ -3934,7 +3930,7 @@ def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     swapped = result.embedder_changed is not None
     return _delta_verdict(
         delta,
-        (*result.coverage_lost, *(sorted(GEOMETRY_PROBES) if swapped else ())),
+        (*result.coverage_lost, *result.embedder_ranked),
         (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
         (

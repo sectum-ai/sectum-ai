@@ -1527,6 +1527,25 @@ def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
     assert "[not measured] per_probe_findings[rag-entity-bleed]" in cli.output, cli.output
 
 
+def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) -> None:
+    # The pipeline-end bleed probe asks the RAG pipeline, which ranks with its own
+    # retriever, so beside Class 3 its Retrieval-Pivot Rate is a measurement the
+    # swap did not touch. Every geometry probe was marked lost, rag-entity-bleed
+    # included though neither run ran it, and the RPR regression read
+    # `[not measured]`.
+    exercised = {
+        "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(
+        _run(metrics=RunMetrics(retrieval_pivot_rate=0.1)).model_copy(update=exercised),
+        _run(metrics=RunMetrics(retrieval_pivot_rate=0.6)).model_copy(update=exercised),
+    )
+    assert diff_runs(earlier, later).embedder_ranked == ("rag-poisoning",)
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[REGRESSED] retrieval_pivot_rate" in output, output
+
+
 def _swap(earlier: RunResult, later: RunResult) -> tuple[RunResult, RunResult]:
     return (
         earlier.model_copy(update={"vector_embedder": "hashing-64"}),
