@@ -301,7 +301,8 @@ place and the JSON summary carries the same words in
 headline.
 
 `vector_embedder` names the embedding model a live vector store ranked with —
-`null` when nothing in the run ranked by similarity over it, and when the slot is
+`null` when nothing in the run is known to have ranked by similarity over it (a
+live RAG pipeline alone may or may not read the store), and when the slot is
 the built-in fake (this demo's), whose ranking is a lexical stand-in the run
 already discloses as synthetic — and `vector_embedder_note` carries the caveat
 when that model is a hashing embedder, which ranks by shared tokens rather than

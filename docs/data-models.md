@@ -36,8 +36,9 @@ added `RunResult.vector_embedder`: the embedding model the vector slot's store w
 driven with (`hashing-64` for the built-in deterministic default, the configured
 spec such as `st:all-mpnet-base-v2` for a real model — a hash spec by its dim, so
 `hash:128` is recorded `hash-128` — `null` where the slot was the
-built-in fake or the `app` API — neither embeds — or nothing in the run ranked by
-similarity over the store, such as a suite narrowed to by-id fetches). A Retrieval-Pivot Rate is a
+built-in fake or the `app` API — neither embeds — or nothing in the run is known to
+have ranked by similarity over the store, such as a suite narrowed to by-id fetches,
+or one fed only by a live RAG pipeline, which may or may not read the store). A Retrieval-Pivot Rate is a
 property of the geometry it was measured in, so a signed pack has to say which one.
 It is independent of `detection`: that is the model Sectum *grades* with, this is
 the one the customer's store *ranks* in.

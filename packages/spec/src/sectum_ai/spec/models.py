@@ -577,7 +577,8 @@ class RunResult(SectumModel):
     (``st:all-mpnet-base-v2``) for a real model - a hash spec by its dim, so
     ``hash:128`` is recorded ``hash-128`` - and ``None`` where the record does
     not say - a pre-0.8.0 record, a run whose vector slot was the built-in fake, or
-    a run in which nothing ranked by similarity over the store (a narrowed suite of
+    a run in which nothing is known to have ranked by similarity over the store (a
+    live RAG pipeline alone may or may not read it; a narrowed suite of
     by-id fetches, an erasure scoped away from the vector surface). Independent of
     ``detection``: that is the model Sectum GRADES with, this is the geometry the
     customer's store RANKS in.

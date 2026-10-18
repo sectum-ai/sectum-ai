@@ -353,10 +353,11 @@ is read from the environment, never inlined. A local OpenAI-compatible server �
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
 
-Set `detection.mode: local` to **enforce** that offline posture. Four stages
+Set `detection.mode: local` to **enforce** that offline posture. Five stages
 embed or judge tenant content: detection, the vector store's
 [`embedder`](#vector_store) (which embeds the whole corpus), the Class 2
-sweep's `scenario.embedding_models`, and a `mem0` memory adapter's own embedder
+sweep's `scenario.embedding_models`, `calibrate --embedder` (the labelled set),
+and a `mem0` memory adapter's own embedder
 (and graph LLM, and a vector store that embeds server-side). In `local` mode Sectum fails fast on any of
 them that would reach a hosted API — a detection embedder or judge on
 `openai`/`anthropic` without a `base_url`, or any embedding spec that does not run on
@@ -372,7 +373,8 @@ mem0 might use (`llm` and `graph_store.llm`) must be ollama, lmstudio or vllm. I
 mem0 gives them rather than embed server-side (most mem0 0.1.116 stores; not
 `langchain` or `baidu`, nor a newer one such as `databricks`; `upstash_vector` only
 without `enable_embeddings`). Together these guarantee that no stage Sectum runs on its own behalf —
-grading, embedding the corpus for the store, the sweep, writing to a mem0 memory —
+grading, embedding the corpus for the store, the sweep, calibration, writing to a
+mem0 memory —
 calls a third-party AI service. The adapters you point it at are the system under test and receive the
 synthetic tenant data by design: a hosted vector database, or an agent adapter
 driving an OpenAI Assistant or the Anthropic Messages API, sends it to that

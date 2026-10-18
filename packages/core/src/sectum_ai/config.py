@@ -537,8 +537,9 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     if hosted:
         raise ConfigError(
             f"detection.mode 'local' forbids sending tenant content off the box, but "
-            f"{source} ({', '.join(map(repr, hosted))}) would call a hosted embedding "
-            "API. Use a local model (st:<model>) or the deterministic hash-<dim> instead."
+            f"{source} ({', '.join(map(repr, hosted))}) name a hosted embedding API, "
+            "refused whether or not this run would reach it. Use a local model "
+            "(st:<model>) or the deterministic hash-<dim> instead."
         )
 
 

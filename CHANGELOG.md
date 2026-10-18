@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
   ranked in (`hashing-64`, the configured spec - a hash spec by its dim - or
   `null` for the built-in fake or
-  a run in which nothing ranked by similarity over the store), on both `probe` and
+  a run in which nothing is known to have ranked by similarity over the store -
+  a live RAG pipeline alone may or may not read it), on both `probe` and
   `erasure` records. The scorecard's Class 2, 3 and 10 headlines name it too
   (Class 6 never runs against a live store).
   Schema **0.8.0**. Both audit-PDF engines name it in the summary, as do
