@@ -201,7 +201,10 @@ built-in `fake` store, which does not embed.
 This is independent of `detection.embedder`: that is the model Sectum *grades*
 observations with; this is the one the customer's store *ranks* in. Hosted specs
 send the whole synthetic corpus to the provider and are refused under
-`detection.mode: local`. Configuring a real embedder does **not** yet enable Class 6
+`detection.mode: local`. They also receive **real personal data** in one workflow:
+`erasure --subject` queries the store for the data subject's vector fingerprints,
+so a hosted embedder is sent that subject's fingerprint text in the clear and
+becomes a processor of it (the CLI warns when it does). Configuring a real embedder does **not** yet enable Class 6
 or Class 13 against a live store — see
 [Class 6](attack-catalog/class-06-embedding-inversion.md#runs-when).
 

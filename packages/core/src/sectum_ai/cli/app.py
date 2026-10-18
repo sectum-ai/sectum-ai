@@ -73,6 +73,7 @@ from sectum_ai.embeddings import (
     EmbeddingModel,
     call_embedder,
     canonical_embedding_spec,
+    is_hosted_embedding_spec,
     resolve_embedding_model,
     validate_embedding_spec,
     validate_model_spec,
@@ -952,7 +953,8 @@ def seed(
             "--embedding-model",
             help=(
                 "Embedding model for the Class 2 per-model sweep; repeat for two or "
-                "more to record a per-model Retrieval-Pivot Rate. Overrides the config. "
+                "more distinct models to record a per-model Retrieval-Pivot Rate. "
+                "Overrides the config. "
                 "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>, "
                 "cohere:<model>, voyage:<model>, bedrock:<model>."
             ),
@@ -3313,7 +3315,20 @@ def erasure(
         # The content scan queries the manifest's vector fingerprints - embedded only
         # once every adapter block has passed its config check, so a typo elsewhere
         # does not first send the subject's text to a hosted embedder.
-        _register_queries(subject_store, manifest.fingerprints.get(Surface.VECTOR_DB, ()))
+        phrases = manifest.fingerprints.get(Surface.VECTOR_DB, ())
+        hosted = subject_store.embedder_bridge is not None and is_hosted_embedding_spec(
+            subject_store.embedder_bridge.name
+        )
+        if phrases and hosted:
+            # The one path where a hosted embedder receives REAL personal data, not
+            # the synthetic corpus: the subject's own fingerprint text, in the clear.
+            typer.echo(
+                f"warning: the vector fingerprint scan sends the data subject's "
+                f"fingerprint text to {untrusted(subject_store.embedder_bridge.name)}, "
+                "the vector store's embedder, to query the store",
+                err=True,
+            )
+        _register_queries(subject_store, phrases)
         unsupported = [
             surface.value
             for surface in manifest.records

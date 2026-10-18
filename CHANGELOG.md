@@ -126,9 +126,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence-transformers config ships query and document prompts is encoded with
   them; checkpoints that document their prefixes only in the model card (many e5
   and BGE ones) ship none and are encoded without.
-- **The Class 2 sweep sent each model the whole corpus in one request.** Cohere
-  caps a request at 96 texts and OpenAI at 2,048, so a gradient over a larger
-  corpus failed outright. It now sends 64 texts per request.
+- **The Class 2 sweep sent an OpenAI model the whole corpus in one request**, and
+  OpenAI rejects more than 2,048 inputs, so a gradient over a corpus past 512
+  documents per tenant failed outright. Every model is now sent 64 texts per
+  request.
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
   every provider call — and loading a provider's model, such as a misspelled

@@ -155,7 +155,10 @@ timestamped; it is signed by a TSA only when one is configured.)
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the
   Anthropic Messages API, sends it to that provider because that is what is being
-  tested. A `base_url` you configure is
+  tested. One workflow sends **real** personal data instead: `erasure --subject`
+  embeds the data subject's vector fingerprints with the store's `embedder` to
+  query the store, so a hosted embedder receives that text in the clear (the CLI
+  warns; `local` mode refuses a hosted embedder). A `base_url` you configure is
   trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
   server); that target is your trust boundary, not Sectum's.
 

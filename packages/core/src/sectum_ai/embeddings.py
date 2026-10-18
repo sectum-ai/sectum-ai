@@ -24,7 +24,7 @@ import math
 import os
 import re
 from array import array
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from functools import partial
 from typing import Any, Protocol, runtime_checkable
 
@@ -46,6 +46,7 @@ __all__ = [
     "embed_batched",
     "embed_queries",
     "is_hosted_embedding_spec",
+    "iter_batches",
     "resolve_embedding_model",
     "validate_embedding_spec",
     "validate_model_spec",
@@ -240,7 +241,7 @@ class CohereEmbedding:
         self._client = cohere.Client(api_key)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed ``texts`` in one request and return the vectors in input order."""
+        """Embed ``texts`` (the client splits them into 96-text requests), in input order."""
         response = self._client.embed(texts=texts, model=self._model, input_type="search_document")
         return self._vectors(response)
 
@@ -605,10 +606,23 @@ def embed_batched(
     rejects more than 2,048 inputs - a corpus over 512 documents per tenant failed
     the gradient outright.
     """
-    vectors: list[list[float]] = []
+    return [vector for _, batch in iter_batches(name, embed, texts, batch_size) for vector in batch]
+
+
+def iter_batches(
+    name: str,
+    embed: Callable[[list[str]], list[list[float]]],
+    texts: list[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> Iterator[tuple[list[str], list[list[float]]]]:
+    """Yield each ``batch_size`` chunk of ``texts`` with its vectors, as it is embedded.
+
+    One loop for the sweep and the bridge, which caches each batch as it arrives so
+    a later failure keeps the batches before it.
+    """
     for start in range(0, len(texts), batch_size):
-        vectors.extend(call_embedder(name, embed, texts[start : start + batch_size]))
-    return vectors
+        chunk = texts[start : start + batch_size]
+        yield chunk, call_embedder(name, embed, chunk)
 
 
 class EmbedderBridge:
@@ -688,9 +702,7 @@ class EmbedderBridge:
         missing = [text for text in dict.fromkeys(texts) if text not in cache]
         # Cached batch by batch: a batch that fails keeps the ones before it, so a
         # contained failure does not re-bill them as one-text calls on demand.
-        for start in range(0, len(missing), self._batch_size):
-            chunk = missing[start : start + self._batch_size]
-            vectors = call_embedder(self.name, embed, chunk)
+        for chunk, vectors in iter_batches(self.name, embed, missing, self._batch_size):
             cache.update(
                 (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
             )

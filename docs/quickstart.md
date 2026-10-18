@@ -149,7 +149,9 @@ attestation, using two methods:
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the
-attestation, never in the clear:
+attestation, never in the clear. To query a vector store the content is embedded
+with the store's `embedder`, so a hosted one (`openai:`, `cohere:`, ...) is sent the
+subject's fingerprint text; the CLI warns when it is:
 
 ```yaml
 subject_ref: "dsr-2026-00042"   # your opaque reference for the request; no PII

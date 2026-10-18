@@ -1296,3 +1296,29 @@ def test_a_failed_batch_keeps_the_batches_before_it() -> None:
     assert len(model.queries) == 20
     bridge("query 5")  # served from the cache, not re-embedded
     assert len(model.queries) == 20
+
+
+def test_a_subject_scan_warns_when_a_hosted_embedder_receives_real_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The one path where a hosted embedder receives the data subject's REAL text,
+    # not the synthetic corpus - which no doc or output said.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_vector_slot as real_build
+
+    def _hosted(*args: object, **kwargs: object) -> object:
+        model = _Modes()
+        model.name = "openai:text-embedding-3-small"
+        store = real_build(*args, **kwargs)  # type: ignore[arg-type]
+        store.embedder_bridge = EmbedderBridge(model)
+        return store
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_vector_slot", _hosted)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    manifest = tmp_path / "subject.yaml"
+    manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
+    result = runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
+    assert "sends the data subject's fingerprint text to openai:" in result.output, result.output
