@@ -498,6 +498,7 @@ def test_both_erasure_modes_register_their_fingerprint_queries(
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import _load_substrate, app
+    from sectum_ai.probes import vector_residue_queries
 
     runner = CliRunner()
     canary = _Modes()
@@ -507,23 +508,18 @@ def test_both_erasure_modes_register_their_fingerprint_queries(
     substrate = _load_substrate(tmp_path)
     target = substrate.tenants[0].tenant_id
     by_id = {doc.doc_id: doc for doc in substrate.documents}
-    # Exactly the titles the residue scan queries: those of the documents holding
-    # ANY of the target's markers - the probe scans every type, and registering only
-    # the hard canaries left the entity and secret canaries in document mode.
-    titles = {
-        by_id[location.doc_id].title
-        for marker in substrate.manifest.markers
-        if marker.owner_tenant_id == target
-        for location in marker.planted_locations
-    }
+    # Exactly what the residue scan queries, by the probe's own rule - which takes
+    # ANY of the target's markers: registering only the hard canaries left the
+    # entity and secret canaries in document mode.
+    scanned = set(vector_residue_queries(substrate, target))
     hard_only = {
         by_id[location.doc_id].title
         for marker in substrate.manifest.markers
         if marker.owner_tenant_id == target and marker.marker_type.value == "HARD_CANARY"
         for location in marker.planted_locations
     }
-    assert titles != hard_only
-    assert set(canary.queries) == titles
+    assert scanned != hard_only
+    assert set(canary.queries) == scanned
 
     subject = _Modes()
     _bridged_slot(monkeypatch, subject)

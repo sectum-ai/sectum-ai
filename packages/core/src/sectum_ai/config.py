@@ -618,7 +618,8 @@ def load_config(path: Path) -> SectumConfig:
     Raises:
         ConfigError: if the file is missing or cannot be read (a directory, no
             permission, an invalid path), is not UTF-8 text, contains malformed
-            YAML, or fails schema validation - never quoting the config's text.
+            YAML, or fails schema validation - never echoing the YAML source or a
+            config block; a refused field may name its own scalar value.
     """
     # One try for every way the read can fail: a separate `exists()` check raised
     # its own untyped OSError for a parent it cannot traverse or an over-long name.
