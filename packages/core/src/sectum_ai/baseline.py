@@ -414,9 +414,10 @@ class RunDiff:
     # report. ``(earlier, later)`` when they differ.
     embedder_changed: tuple[str, str] | None = None
     # The probes either run exercised whose results the swap may have moved, when
-    # ``embedder_changed`` is set: the geometry probes, and the pipeline-end bleed
-    # probe on a live pipeline. A metric fed by none of them (the built-in
-    # pipeline's findings beside Class 3) is still a measurement.
+    # ``embedder_changed`` is set: the geometry probes, the erasure checks' vector
+    # scans, and the pipeline-end bleed probe on a live pipeline. A metric fed by
+    # none of them (the built-in pipeline's findings beside Class 3) is still a
+    # measurement.
     embedder_scoped: tuple[str, ...] = ()
 
     @property
@@ -567,12 +568,17 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     )
 
 
+#: The erasure workflows' probe ids: the records `erasure` and `erasure --subject` write.
+ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
+
+
 def _swap_scoped(run: RunResult) -> set[str]:
     """The probes a run exercised whose results an embedder swap may have moved.
 
     The geometry probes; the two erasure checks, whose vector scans query the store
-    by similarity and whose finding counts pool that scan with the other surfaces'
-    (an erasure record names an embedder only when it scanned the store); and the
+    by similarity (an erasure record names an embedder only when it scanned the
+    store, and its counts are keyed by surface, so this names the scan in the
+    banner and the JSON while ``key_lost`` withholds the counts); and the
     pipeline-end bleed probe on a LIVE pipeline: one may read the store the run
     seeded, and the run cannot tell whether it did, so its rate is withheld across
     a swap rather than compared. Withheld only - the record names no geometry for
@@ -583,7 +589,7 @@ def _swap_scoped(run: RunResult) -> set[str]:
     )
     scoped = (
         GEOMETRY_PROBES
-        | {ErasureProbe.id, SubjectErasureProbe.id}
+        | ERASURE_WORKFLOW_IDS
         | ({"rag-pipeline-bleed"} if live_pipeline else set())
     )
     return _exercised_probes(run) & scoped

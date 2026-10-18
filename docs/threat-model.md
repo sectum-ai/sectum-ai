@@ -135,7 +135,8 @@ observations it grades), the sweep's hosted `embedding_models`, a hosted
 vector store, and a hosted
 vector-store `embedder` — which receives the synthetic
 corpus and, in `erasure --subject`, the data subject's real `vector_db`
-fingerprint text. Note that **unverified** findings ship too, and an evidence
+fingerprint text — and mem0's own usage telemetry (run metadata, not content,
+unless `MEM0_TELEMETRY=False`). Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
 content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)

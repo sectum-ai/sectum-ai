@@ -33,8 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
   vector stores ranked with different embedding models, and mark the metrics of
   the probes that rank by similarity over the vector store — and its erasure
-  counts, and an erasure check's finding count, which pools its vector scan — as
-  not measured: those were taken with different instruments, so one that
+  counts — as not measured: those were taken with different instruments, so one that
   fell across the swap is not a fix. So is the pipeline-end bleed probe's on a
   live pipeline, which may read the store the run seeded - withheld, never named
   as ranked in it (a run fed by a live pipeline alone records no geometry, so a

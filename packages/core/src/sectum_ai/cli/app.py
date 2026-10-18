@@ -41,7 +41,13 @@ from sectum_ai.adapters import (
 from sectum_ai.adapters import (
     version as _adapters_version,
 )
-from sectum_ai.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
+from sectum_ai.baseline import (
+    ERASURE_WORKFLOW_IDS,
+    FindingChange,
+    MetricDelta,
+    RunDiff,
+    diff_runs,
+)
 from sectum_ai.config import (
     AdapterBundle,
     AdapterConfig,
@@ -680,9 +686,6 @@ def _refuse_other_schema_line(recorded: object, what: str) -> None:
         )
 
 
-_ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
-
-
 def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
     """Refuse a record whose headline counts disagree with its own findings.
 
@@ -747,7 +750,7 @@ def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
         )
     counted = _per_probe_counts(confirmed)
     recorded_counts = run.metrics.per_probe_findings
-    erasure_only = not recorded_counts and set(counted) <= _ERASURE_WORKFLOW_IDS
+    erasure_only = not recorded_counts and set(counted) <= ERASURE_WORKFLOW_IDS
     disagreeing = (
         []
         if erasure_only

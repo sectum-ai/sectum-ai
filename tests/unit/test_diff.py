@@ -1664,42 +1664,34 @@ def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> 
 
 def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: Path) -> None:
     # The vector residue scan queries the store by similarity, so it moved with the
-    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0`, and the erasure's
-    # pooled finding count beside it, asserted a purge nobody made. The tracing
-    # surface has no embedder, so a residue there is still a regression.
+    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0` asserted a purge nobody
+    # made. The tracing surface has no embedder, so a residue there is still a
+    # regression. Records as `erasure` writes them: counts keyed by surface, no
+    # `per_probe_findings`.
     exercised = {
         "probe_versions": {"gdpr-erasure-verification": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "tracing": "LIVE"},
     }
 
-    def _residue(surface: Surface, count: int) -> list[Finding]:
-        return [
+    def _erasure(surface: Surface, count: int, residue: dict[str, int]) -> RunResult:
+        findings = [
             _on(surface, _finding(f"{surface.value}-{n}", probe_id="gdpr-erasure-verification"))
             for n in range(count)
         ]
+        record = _run(*findings)
+        metrics = RunMetrics(confirmed_findings=count, erasure_residue=residue)
+        return record.model_copy(update={**exercised, "metrics": metrics})
 
     earlier, later = _swap(
-        _run(
-            *_residue(Surface.VECTOR_DB, 3),
-            metrics=RunMetrics(
-                confirmed_findings=3,
-                per_probe_findings={"gdpr-erasure-verification": 3},
-                erasure_residue={"vector_db": 3, "tracing": 0},
-            ),
-        ).model_copy(update=exercised),
-        _run(
-            *_residue(Surface.TRACING, 2),
-            metrics=RunMetrics(
-                confirmed_findings=2,
-                per_probe_findings={"gdpr-erasure-verification": 2},
-                erasure_residue={"vector_db": 0, "tracing": 2},
-            ),
-        ).model_copy(update=exercised),
+        _erasure(Surface.VECTOR_DB, 3, {"vector_db": 3, "tracing": 0}),
+        _erasure(Surface.TRACING, 2, {"vector_db": 0, "tracing": 2}),
     )
+    assert "gdpr-erasure-verification" in diff_runs(earlier, later).embedder_scoped
     output = _diff_output(tmp_path, earlier, later)
+    assert "per_probe_findings" not in output, output
     assert "[ok]" not in output, output
+    assert "[not measured] erasure_residue[vector_db]" in output, output
     assert "[REGRESSED] erasure_residue[tracing]" in output, output
-    assert "[not measured] per_probe_findings[gdpr-erasure-verification]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
     assert "over it - an erasure's vector residue scan, and the" in banner, banner
 
