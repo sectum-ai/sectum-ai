@@ -392,12 +392,10 @@ class SectumConfig(BaseModel):
         offenders += _hosted_mem0_providers(self.adapters.get("memory"))
         if offenders:
             raise ValueError(
-                f"detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
-                f"third-party AI service, but "
-                f"{'; '.join(offenders)} would call a hosted AI API or cannot be shown "
-                "not to. Use a local model (st:<model>, hash-<dim>), or for a mem0 block a "
-                "local provider or a store the gate allows (see the configuration "
-                "reference), instead."
+                f"{_LOCAL_MODE_REFUSAL}{'; '.join(offenders)} would call a hosted AI API "
+                "or cannot be shown not to. Use a local model (st:<model>, hash-<dim>), "
+                "or for a mem0 block a local provider or a store the gate allows (see "
+                "the configuration reference), instead."
             )
         if _mem0_telemetry_on(self.adapters.get("memory")):
             raise ValueError(
@@ -431,6 +429,14 @@ _PASSIVE_MEM0_STORES = frozenset(
         "opensearch", "supabase", "weaviate", "faiss",
     }
 )  # fmt: skip
+
+
+# How every local-mode egress refusal opens: the config gate and the gate on specs
+# from a flag or a substrate are two halves of one guarantee.
+_LOCAL_MODE_REFUSAL = (
+    "detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
+    "third-party AI service, but "
+)
 
 
 def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
@@ -577,11 +583,9 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
     hosted = [spec for spec in specs if is_hosted_embedding_spec(spec)]
     if hosted:
         raise ConfigError(
-            f"detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
-            f"third-party AI service, but "
-            f"{source} ({', '.join(map(repr, hosted))}) names a hosted embedding API, "
-            "refused whether or not this run would reach it. Use a local model "
-            "(st:<model>) or the deterministic hash-<dim> instead."
+            f"{_LOCAL_MODE_REFUSAL}{source} ({', '.join(map(repr, hosted))}) names a "
+            "hosted embedding API, refused whether or not this run would reach it. Use "
+            "a local model (st:<model>) or the deterministic hash-<dim> instead."
         )
 
 

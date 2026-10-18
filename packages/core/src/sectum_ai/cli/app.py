@@ -1119,9 +1119,7 @@ def probe(
     mcp = bundle.mcp
     memory = bundle.memory
     _prefetch_corpus(vector, substrate.documents)
-    for tenant in substrate.tenants:
-        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-        vector.upsert(tenant.tenant_id, documents)
+    _load_corpus(vector, substrate)
     if isinstance(mcp, FakeMCP):
         for marker in substrate.manifest.markers:
             if marker.marker_type is MarkerType.HARD_CANARY:
@@ -1663,6 +1661,31 @@ def _prefetch_corpus(store: VectorStoreAdapter, documents: Iterable[CorpusDocume
 def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
     if store.embedder_bridge is not None:
         store.embedder_bridge.prefetch(texts)
+
+
+def _load_corpus(store: VectorStoreAdapter, substrate: Substrate) -> None:
+    """Upsert each tenant's corpus, a backend's own failure as a typed error.
+
+    A store the operator re-pointed at another `embedder` keeps the index an
+    earlier run created at the old dimension, and the backend refuses the upsert
+    with its own exception - a raw traceback and exit 1. Named by type only.
+    """
+    for tenant in substrate.tenants:
+        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+        try:
+            store.upsert(tenant.tenant_id, documents)
+        except SectumError:
+            raise
+        except Exception as error:
+            hint = (
+                "; if its embedder changed since the index was created, the index's "
+                "vector dimension may no longer match - recreate it or use a new one"
+                if store.embedder_bridge is not None
+                else ""
+            )
+            raise AdapterError(
+                f"the vector store refused the corpus ({type(error).__name__}){hint}"
+            ) from error
 
 
 def _prefetch_queries(store: VectorStoreAdapter, runner: Runner, suite: Iterable[Probe]) -> None:
@@ -3477,9 +3500,7 @@ def erasure(
         _prefetch_corpus(store, substrate.documents)
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
-        for tenant in substrate.tenants:
-            documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-            store.upsert(tenant.tenant_id, documents)
+        _load_corpus(store, substrate)
     unseedable: dict[Surface, str] = {}
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:

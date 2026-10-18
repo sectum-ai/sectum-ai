@@ -1744,6 +1744,31 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
         load_config(tmp_path / "a\x00b.yaml")
 
 
+def test_a_store_refusing_the_corpus_is_a_typed_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A store re-pointed at another embedder keeps the index an earlier run created
+    # at the old dimension, and the backend's own exception escaped as a raw
+    # traceback (exit 1) from both commands that load the corpus.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    def _refuse(*_: object, **__: object) -> None:
+        raise ValueError("expected 64 dimensions, not 768")
+
+    # Every store either command builds - `probe`'s bundle and `erasure`'s slot.
+    monkeypatch.setattr(FakeVectorStore, "upsert", _refuse)
+    monkeypatch.setattr(FakeVectorStore, "embedder_bridge", EmbedderBridge(_Modes()))
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    for command in (["probe"], ["erasure", "--scope", "vector_db"]):
+        result = runner.invoke(app, [*command, "--workdir", str(tmp_path)])
+        assert result.exit_code == 3, (command, result.output)
+        assert "refused the corpus (ValueError)" in result.output, result.output
+        assert "vector dimension may no longer match" in result.output, result.output
+
+
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
     # The helper the CLI registers from must be the scan's own rule: the CLI copied
     # the probe's selection, so a change to what the scan queries would have left

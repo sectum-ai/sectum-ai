@@ -150,6 +150,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A store that refuses the corpus is a typed error.** Re-pointing a live store
+  at another `embedder` leaves the index an earlier run created at the old
+  dimension, and the backend's own exception escaped `probe` and `erasure` as a
+  raw traceback (exit 1); it is now an adapter error (exit 3) naming the
+  exception's type and, with an `embedder` set, the dimension as a likely cause.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep
