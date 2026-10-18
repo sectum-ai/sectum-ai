@@ -130,6 +130,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ranking. A canary write refused part-way on another surface now warns that the
   surface is attested over the target's canaries that landed, not that it reads
   NOT_COVERED beside an ERASED verdict.
+- **`erasure` no longer leaves the other tenants' canaries in live backends.**
+  The canary seeding wrote every tenant's hard canaries to agent memory, the
+  semantic cache, the search index, the eval set and the backup store, but the
+  probe scans and deletes only the target's - so the rest (six per surface on the
+  default four-tenant substrate) stayed in the operator's backends after every
+  run. None of those surfaces' verdicts needs them: each backend lists the
+  target's own scope, and a shared-mode memory or cache matches without ranking
+  (in mem0's capped shared listing they could only push a miss toward refusal).
+  Only the target's canaries are written now. That also removes a failure
+  point: a backend refusing another tenant's canary marked the surface unseeded
+  and could stop the target's own write, so the surface read NOT_COVERED. On a
+  shared index the vector store still loads the other tenants' corpora, which
+  crowd the target's residue page.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep

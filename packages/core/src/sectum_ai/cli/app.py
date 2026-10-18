@@ -3596,7 +3596,15 @@ def erasure(
                 f"({type(error).__name__}); part of it may remain in the vector store"
             )
     for marker in substrate.manifest.markers:
-        if marker.marker_type is not MarkerType.HARD_CANARY:
+        # The target's canaries only. Unlike the vector store's ranked page above,
+        # no marker surface's verdict needs another tenant's: the probe scans and
+        # deletes the target's markers, each backend here lists the target's own
+        # scope (key, index, dataset, prefix), and a shared one matches without
+        # ranking - mem0's capped listing counts rows, so the others could only
+        # push a miss toward its refusal. Written anyway, they were left in the
+        # operator's backends after every run, and each could refuse and mark the
+        # surface unseeded before the target's own had landed.
+        if marker.marker_type is not MarkerType.HARD_CANARY or marker.owner_tenant_id != target:
             continue
         if _seeds(Surface.TRACING) and isinstance(obs, FakeObservability):
             obs.record(

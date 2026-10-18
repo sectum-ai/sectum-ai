@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from sectum_ai.adapters.base import CacheAdapter, MemoryAdapter
 from sectum_ai.cli.app import app
+from sectum_ai.spec import MarkerType
 
 _runner = CliRunner()
 
@@ -812,6 +813,104 @@ def test_scope_restricts_the_seeding_and_not_only_the_scan(
         "agent_memory",
         "model_adapter",
     }, writes
+
+
+def test_each_surface_receives_only_the_tenants_its_verdict_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The probe scans and deletes the TARGET's markers only, and each marker
+    # surface reads the target's own scope, so another tenant's canary there
+    # shapes no verdict - it was left behind in the operator's backends after
+    # every run, about six per surface. The vector store differs only on a shared
+    # index, where the other tenants' documents crowd the target's residue page;
+    # the fake here is per-tenant (the shared case is test_vector_slot_embedder's).
+    # A non-first target, so "the first tenant" cannot pass for "the target".
+    import sectum_ai.adapters as adapters
+    from sectum_ai.cli.app import _load_substrate
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    substrate = _load_substrate(tmp_path)
+    target = substrate.tenants[1]
+    target_canaries = {
+        marker.plaintext
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target.tenant_id
+        and marker.marker_type is MarkerType.HARD_CANARY
+    }
+
+    received: dict[str, list[tuple[UUID, str]]] = {}
+    for label, cls, method in (
+        ("vector_db", adapters.FakeVectorStore, "upsert"),
+        ("tracing", adapters.FakeObservability, "record"),
+        ("agent_memory", adapters.FakeMemory, "remember"),
+        ("semantic_cache", adapters.FakeCache, "set"),
+        ("model_adapter", adapters.FakeModel, "train_adapter"),
+        ("search_index", adapters.FakeSearchIndex, "index"),
+        ("eval_set", adapters.FakeEvalSet, "add"),
+        ("backup", adapters.FakeBackup, "add"),
+    ):
+        real = getattr(cls, method)
+
+        def _recorded(
+            self: object,
+            tenant: UUID,
+            *args: object,
+            _label: str = label,
+            _real: object = real,
+            **kwargs: object,
+        ) -> object:
+            received.setdefault(_label, []).append((tenant, repr(args)))
+            return _real(self, tenant, *args, **kwargs)  # type: ignore[operator]
+
+        monkeypatch.setattr(cls, method, _recorded)
+
+    result = _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", target.display_name]
+    )
+    assert result.exit_code == 0, result.output
+
+    vector_tenants = {tenant for tenant, _ in received.pop("vector_db")}
+    assert vector_tenants == {target.tenant_id}
+    assert set(received) == {
+        "tracing",
+        "agent_memory",
+        "semantic_cache",
+        "model_adapter",
+        "search_index",
+        "eval_set",
+        "backup",
+    }, received
+    for surface, writes in received.items():
+        assert {tenant for tenant, _ in writes} == {target.tenant_id}, surface
+        assert len(writes) == len(target_canaries), surface
+        written = " ".join(text for _, text in writes)
+        assert all(canary in written for canary in target_canaries), surface
+
+
+def test_another_tenants_refused_canary_does_not_cost_the_target_its_surface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every extra write was another failure point: the first refusal marks the
+    # surface unseeded and stops its writes, so a backend refusing a canary the
+    # verdict never reads cost the target its baseline - NOT_COVERED, exit 3.
+    from sectum_ai.cli.app import _load_substrate
+
+    _runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    target = _load_substrate(tmp_path).tenants[1]
+
+    class _RefusesOtherTenants(_LiveCacheBase):
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            if tenant != target.tenant_id:
+                raise ConnectionError("redis: connection refused")
+            super().set(tenant, key, value, user=user)
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_cache", lambda _cfg: _RefusesOtherTenants())
+    result = _runner.invoke(
+        app, ["erasure", "--workdir", str(tmp_path), "--target-tenant", target.display_name]
+    )
+    assert result.exit_code == 0, result.output
+    assert "could not seed" not in result.output, result.output
+    assert "semantic_cache: 2 markers before, 0 after -> ERASED" in result.output, result.output
 
 
 def test_the_verified_verdict_names_its_subject_on_its_own_stream(tmp_path: Path) -> None:
