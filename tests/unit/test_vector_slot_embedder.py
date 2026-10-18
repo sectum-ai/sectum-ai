@@ -2088,36 +2088,60 @@ def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
 
 
 @pytest.mark.parametrize(
-    ("probe_id", "loads"),
+    ("probe_id", "live_rag", "loads"),
     [
-        ("semantic-cache-contamination", False),
-        # A live pipeline is kept only if it reads back the canary loaded here.
-        ("rag-pipeline-bleed", True),
-        ("rag-entity-bleed", True),
+        ("semantic-cache-contamination", False, False),
+        ("memory-contamination", False, False),
+        # The built-in pipeline ranks over its own index; a live one is kept only if
+        # it reads back the canary loaded into the store.
+        ("rag-pipeline-bleed", False, False),
+        ("rag-pipeline-bleed", True, True),
+        ("rag-entity-bleed", False, True),
+        ("tenant-boundary-fetch", False, True),
     ],
 )
 def test_probe_loads_the_corpus_only_when_something_reads_the_store(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, probe_id: str, loads: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, probe_id: str, live_rag: bool, loads: bool
 ) -> None:
-    # A suite of cache or memory probes embedded the whole corpus - with a hosted
-    # model, sent and billed - and loaded it into the store for nothing measured.
+    # A suite that never reads the store embedded the whole corpus - with a hosted
+    # model, sent and billed - and loaded it, and then fetched from it to ask
+    # whether a load nobody made had landed.
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
 
+    model = _Modes()
     upserts: list[Any] = []
-    real_upsert = FakeVectorStore.upsert
+    fetches: list[Any] = []
+    real_upsert, real_fetch = FakeVectorStore.upsert, FakeVectorStore.fetch
+
+    def _built(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_bridge = EmbedderBridge(model)
+        bundle.vector.synthetic = False  # a live store: its landed-check runs
+        bundle.rag.synthetic = not live_rag
+        return bundle
 
     def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
         upserts.append(tenant)
         return real_upsert(self, tenant, documents)
 
+    def _fetch(self: FakeVectorStore, *args: Any, **kwargs: Any) -> Any:
+        fetches.append(args)
+        return real_fetch(self, *args, **kwargs)
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _built)
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    monkeypatch.setattr(FakeVectorStore, "fetch", _fetch)
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     probed = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", probe_id])
     assert probed.exception is None or isinstance(probed.exception, SystemExit), probed.output
     assert bool(upserts) is loads, (probe_id, len(upserts))
+    assert bool(model.documents) is loads, (probe_id, len(model.documents))
+    if not loads:
+        assert fetches == [], (probe_id, len(fetches))
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

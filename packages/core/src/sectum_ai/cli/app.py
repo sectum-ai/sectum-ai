@@ -232,7 +232,11 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
 
 
 def _skip_unseedable(
-    suite: tuple[Probe, ...], bundle: AdapterBundle, substrate: Substrate
+    suite: tuple[Probe, ...],
+    bundle: AdapterBundle,
+    substrate: Substrate,
+    *,
+    vector_loaded: bool = True,
 ) -> tuple[tuple[Probe, ...], list[tuple[str, str]]]:
     """Drop probes whose canary this stack has no way to receive.
 
@@ -255,18 +259,18 @@ def _skip_unseedable(
     rather than assumed - a same-tenant read for a marker the seeding placed. What
     comes back decides it, which is `_plant_landed`'s rule one layer out.
 
-    The fourth slot is the VECTOR STORE, and it was the one this guard did not
-    ask - the slot the most classes stand on. `upsert` IS a write primitive, so
-    the corpus is loaded into a live store unconditionally; nothing then read it
-    back. A store that acknowledges the bulk load and serves none of it - a
-    quota, the wrong namespace, a read-side ACL, an index that never settles;
-    `pinecone.upsert` settles on the last id of a batch only and `weaviate.upsert`
-    settles not at all - left Classes 1, 2, 6 and 10 querying an empty index and
-    grading **PASS** off it, with `0.0% reconstruction` and `0.0% extraction
-    efficiency` printed as measurements. The planting probes (3, 4, 8, 9) were
-    guarded all along, because their bait is a `ProbeStep` that `_plant_landed`
-    reads back; the corpus is a direct adapter call, which `_plant_landed` never
-    sees.
+    The fourth slot is the VECTOR STORE, and it was the one this guard did not ask -
+    the slot the most classes stand on. `upsert` IS a write primitive, so the corpus
+    is loaded into a live store whenever a probe reads it (a vector probe, or a live
+    RAG pipeline); nothing then read it back. A store that acknowledges the bulk
+    load and serves none of it - a quota, the wrong namespace, a read-side ACL, an
+    index that never settles; `pinecone.upsert` settles on the last id of a batch
+    only and `weaviate.upsert` settles not at all - left Classes 1, 2, 6 and 10
+    querying an empty index and grading **PASS** off it, with `0.0% reconstruction`
+    and `0.0% extraction efficiency` printed as measurements. The planting probes
+    (3, 4, 8, 9) were guarded all along, because their bait is a `ProbeStep` that
+    `_plant_landed` reads back; the corpus is a direct adapter call, which
+    `_plant_landed` never sees.
 
     Asked with ``fetch``, not ``query``: a by-id read answers "did it land"
     without depending on ranking, and a store whose ranking is weak is already
@@ -300,7 +304,9 @@ def _skip_unseedable(
         if bundle.agent is not None and not bundle.agent.synthetic:
             reachable["agent"] = False
     vector = bundle.vector
-    if vector is not None and not vector.synthetic:
+    # Asked only of a store this run loaded: unloaded, every fetch is a certain
+    # miss, and nothing in the suite reads it anyway.
+    if vector is not None and not vector.synthetic and vector_loaded:
         # One document per tenant, not every document: this asks whether the
         # corpus landed, and 2000 misses against a live store is a stall, not a
         # better answer.
@@ -1119,11 +1125,16 @@ def probe(
     model = bundle.model
     mcp = bundle.mcp
     memory = bundle.memory
-    # Only when something reads the store: a vector probe, or the RAG pipeline - a
-    # live one is kept only if it reads back the canary loaded here. A suite of cache
-    # or memory probes embedded the whole corpus (with a hosted model, sent and
-    # billed) and loaded it for nothing measured.
-    if any({"vector", "rag"} & set(probe.requires_adapters) for probe in suite):
+    # Only when something reads the store: a vector probe, or a LIVE RAG pipeline -
+    # kept only if it reads back the canary loaded here; the built-in one ranks over
+    # its own index. A suite of cache or memory probes embedded the whole corpus
+    # (with a hosted model, sent and billed) and loaded it for nothing measured.
+    live_rag = bundle.rag is not None and not bundle.rag.synthetic
+    vector_loaded = any(
+        "vector" in probe.requires_adapters or ("rag" in probe.requires_adapters and live_rag)
+        for probe in suite
+    )
+    if vector_loaded:
         _prefetch_corpus(vector, substrate.documents)
         _load_corpus(vector, substrate)
     if isinstance(mcp, FakeMCP):
@@ -1149,7 +1160,7 @@ def probe(
     # AFTER the seeding, not before: the check asks the backend whether the canary
     # reached it, and asking first answers for an index that has not been written
     # yet - which would skip a pipeline the command does seed.
-    suite, starved_probes = _skip_unseedable(suite, bundle, substrate)
+    suite, starved_probes = _skip_unseedable(suite, bundle, substrate, vector_loaded=vector_loaded)
     for starved_id, reason in starved_probes:
         typer.echo(
             f"skipping {starved_id}: {reason}, so this class is reported NOT_COVERED "

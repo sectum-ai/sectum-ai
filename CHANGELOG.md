@@ -70,9 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`probe` loads the vector store's corpus only when a probe reads the store** -
-  a vector probe, or the RAG pipeline (a live one is kept only if it reads back
-  the canary loaded there). A suite of cache or memory probes embedded the whole
-  corpus - with a hosted `embedder`, sent and billed - for nothing measured.
+  a vector probe, or a live RAG pipeline (kept only if it reads back the canary
+  loaded there; the built-in one ranks over its own index). A suite of cache or
+  memory probes, or the built-in pipeline alone, embedded the whole corpus -
+  with a hosted `embedder`, sent and billed - for nothing measured.
 - **A config error no longer echoes the config.** `load_config` printed
   pydantic's own text, which carries each error's input - for a whole-config
   check, the whole config, an inline `api_key` included - to stderr and CI logs.
