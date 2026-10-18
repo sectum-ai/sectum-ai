@@ -62,11 +62,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **SDK contracts.** `resolve_embedding_model` raises `ConfigError` for an unknown
-  spec (it returned `None`, which only `fake-*` recall names still do), and
+- **SDK contracts.** `resolve_embedding_model` validates its spec: it raises
+  `ConfigError` for an unknown or malformed one (an unknown spec returned `None`,
+  which only `fake-*` recall names still do; `openai:` built a client) and
   `AdapterError` when a provider library fails to load the model.
   `VectorStoreAdapter` gains `embedder_name` and `embedder_bridge`, which the CLI's
-  resolver sets on a live store it builds with an `embedder`.
+  resolver sets on a live store it builds with an `embedder`. `RunDiff` gains
+  `embedder_changed`, and `RunDiff.regressed` is true on an embedder swap. New
+  public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
+  `embed_batched`, `iter_batches`, `embed_queries`, `validate_model_spec`,
+  `canonical_embedding_spec`, `is_hosted_embedding_spec`,
+  `LOCAL_EMBEDDING_PREFIXES`), `sectum_ai.spec` (`HASHING_EMBEDDER_NAME`,
+  `describe_vector_embedder`, `is_hashing_embedder`), `sectum_ai.config`
+  (`refuse_hosted_embeddings` - which any new command that embeds specs from a
+  flag or a substrate must call) and `sectum_ai.score.GEOMETRY_PROBES`.
 
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
   seeded `embedding_models` are validated before anything else: an unknown name was

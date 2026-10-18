@@ -1487,3 +1487,15 @@ def test_every_live_kind_is_driven_by_the_bridge_it_records(
     assert any(value is store.embedder_bridge for value in passed), passed
     if takes_dim:
         assert 128 in passed, passed
+
+
+def test_an_upstash_store_without_config_is_unclassifiable_not_misattributed() -> None:
+    # Refused fail-closed, but the reason "with enable_embeddings" was false: the
+    # flag was never set.
+    with pytest.raises(ValueError, match="cannot be classified") as caught:
+        SectumConfig.model_validate(
+            _mem0(
+                {"embedder": {"provider": "ollama"}, "vector_store": {"provider": "upstash_vector"}}
+            )
+        )
+    assert "enable_embeddings" not in str(caught.value)

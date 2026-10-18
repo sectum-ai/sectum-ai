@@ -485,10 +485,11 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             offenders.append(
                 f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
             )
-        elif kind == "upstash_vector" and (
-            not isinstance(store_config, dict) or store_config.get("enable_embeddings")
-        ):
-            offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
+        elif kind == "upstash_vector":
+            if not isinstance(store_config, dict):
+                offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
+            elif store_config.get("enable_embeddings"):
+                offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):
         offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")
