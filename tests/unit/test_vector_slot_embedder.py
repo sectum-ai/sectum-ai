@@ -2087,6 +2087,39 @@ def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
     assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 
 
+@pytest.mark.parametrize(
+    ("probe_id", "loads"),
+    [
+        ("semantic-cache-contamination", False),
+        # A live pipeline is kept only if it reads back the canary loaded here.
+        ("rag-pipeline-bleed", True),
+        ("rag-entity-bleed", True),
+    ],
+)
+def test_probe_loads_the_corpus_only_when_something_reads_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, probe_id: str, loads: bool
+) -> None:
+    # A suite of cache or memory probes embedded the whole corpus - with a hosted
+    # model, sent and billed - and loaded it into the store for nothing measured.
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    upserts: list[Any] = []
+    real_upsert = FakeVectorStore.upsert
+
+    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        upserts.append(tenant)
+        return real_upsert(self, tenant, documents)
+
+    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    probed = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", probe_id])
+    assert probed.exception is None or isinstance(probed.exception, SystemExit), probed.output
+    assert bool(upserts) is loads, (probe_id, len(upserts))
+
+
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
     # The helper the CLI registers from must be the scan's own rule: the CLI copied
     # the probe's selection, so a change to what the scan queries would have left

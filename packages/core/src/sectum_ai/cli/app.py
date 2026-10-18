@@ -1119,8 +1119,13 @@ def probe(
     model = bundle.model
     mcp = bundle.mcp
     memory = bundle.memory
-    _prefetch_corpus(vector, substrate.documents)
-    _load_corpus(vector, substrate)
+    # Only when something reads the store: a vector probe, or the RAG pipeline - a
+    # live one is kept only if it reads back the canary loaded here. A suite of cache
+    # or memory probes embedded the whole corpus (with a hosted model, sent and
+    # billed) and loaded it for nothing measured.
+    if any({"vector", "rag"} & set(probe.requires_adapters) for probe in suite):
+        _prefetch_corpus(vector, substrate.documents)
+        _load_corpus(vector, substrate)
     if isinstance(mcp, FakeMCP):
         for marker in substrate.manifest.markers:
             if marker.marker_type is MarkerType.HARD_CANARY:
