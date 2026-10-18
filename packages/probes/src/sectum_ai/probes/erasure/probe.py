@@ -386,10 +386,8 @@ class ErasureProbe:
         Returns:
             An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
             surfaces and any ``unseeded`` one the run would have scanned, and whose
-            ``coverage()`` reports a
-            verdict for *every*
-            erasure surface, so the attestation never implies more coverage than
-            it verified.
+            ``coverage()`` reports a verdict for *every* erasure surface, so the
+            attestation never implies more coverage than it verified.
         """
         in_scope = frozenset(scope) if scope is not None else None
         # EVERY marker the tenant owns, not just the hard canaries. The scan's

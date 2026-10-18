@@ -3637,15 +3637,17 @@ def erasure(
         # reads NOT_COVERED. A marker write is per canary: the target's that landed
         # are scanned and erased, and the surface is attested over them -
         # NOT_COVERED only if none did.
+        vector = unseeded is Surface.VECTOR_DB
         consequence = (
-            f"so that surface is recorded as not seeded and reads NOT_COVERED ({clearing})"
-            if unseeded is Surface.VECTOR_DB
+            "so that surface is recorded as not seeded and reads NOT_COVERED"
+            if vector
             else "so that surface is attested only over the target's canaries that "
             "did land, and reads NOT_COVERED if none did"
         )
+        # The refusal first, then what the cleanup did about it.
         typer.echo(
             f"warning: could not seed the {unseeded.value} canary, {consequence}: "
-            f"{untrusted(reason)}",
+            f"{untrusted(reason)}" + (f"; {clearing}" if vector else ""),
             err=True,
         )
     started = datetime.now(UTC)

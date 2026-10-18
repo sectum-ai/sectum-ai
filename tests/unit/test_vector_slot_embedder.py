@@ -1841,10 +1841,21 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         # The cleanup asks for the target's delete - the only one, as the probe
         # never scans or erases a surface handed over as not seeded.
         assert deleted == [target], (deleted, erased.output)
-        # And says only what it knows: a delete was asked for, or it failed.
-        assert ("asked the store to delete" in erased.output) is (delete_mode != "fails")
-        assert ("failed too" in erased.output) is (delete_mode == "fails")
+        # And says only what it knows - a delete was asked for, which a soft-deleting
+        # store may ignore, or it failed - on the one warning, after the refusal.
+        warning = next(
+            line for line in erased.output.splitlines() if "could not seed the vector_db" in line
+        )
+        refusal = warning.index("the vector store refused the corpus")
+        outcome = (
+            "failed too"
+            if delete_mode == "fails"
+            else "asked the store to delete what of the target's corpus had landed; a "
+            "soft-deleting store may keep it"
+        )
+        assert outcome in warning[refusal:], warning
         assert "Sectum cleared" not in erased.output, erased.output
+        assert sum("of the target's corpus" in line for line in erased.output.splitlines()) == 1
         assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
         assert erased.exit_code == 3, erased.output
         assert "pw@h" not in erased.output, erased.output
