@@ -694,6 +694,14 @@ def test_a_scored_run_carries_its_geometry_into_the_class_2_line(tmp_path: Path)
     class_2 = next(line for line in score.classes if line.class_id == 2)
     assert class_2.headline is not None
     assert "vector-store steps ranked by st:all-mpnet-base-v2" in class_2.headline, class_2.headline
+    # A finding proves its probe ran, as `diff` counts it: the same record with the
+    # vector probe's bookkeeping missing still names the geometry its findings
+    # were ranked in.
+    assert any(f["probe_id"] == "rag-entity-bleed" for f in record["findings"])
+    del record["probe_versions"]["rag-entity-bleed"]
+    score = score_run(RunResult.model_validate(record))
+    class_2 = next(line for line in score.classes if line.class_id == 2)
+    assert class_2.headline is not None and "ranked by" in class_2.headline, class_2.headline
 
 
 def test_only_a_ranking_records_the_geometry(
@@ -734,12 +742,14 @@ def test_only_a_ranking_records_the_geometry(
         assert pack["run_result"]["vector_embedder"] == expected, body
 
 
-def test_a_live_pipeline_ranks_over_the_store_and_records_its_geometry(
+def test_a_live_pipeline_alone_names_no_geometry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A live pipeline is kept only when it reads back the canary this command
-    # seeded into the store, so it ranks over the vectors the slot's embedder
-    # wrote. A pipeline-only run named no geometry, and a swap went undetected.
+    # A live pipeline is kept when the canary comes back from it at all - out of
+    # its own index, or echoed in the answer - not only when it reads the store
+    # this command seeded. So a run fed by it alone cannot show any step ranked in
+    # the store's geometry, and naming one put "vector-store steps ranked by" on a
+    # headline no store step fed.
     import json
 
     from typer.testing import CliRunner
@@ -761,11 +771,12 @@ def test_a_live_pipeline_ranks_over_the_store_and_records_its_geometry(
     runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "rag-pipeline-bleed"])
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["surface_provenance"].get("rag_pipeline") == "LIVE", record
-    assert record["vector_embedder"] == "st:all-mpnet-base-v2"
+    assert record["vector_embedder"] is None
+    record["vector_embedder"] = "st:all-mpnet-base-v2"
     class_2 = next(
         line for line in score_run(RunResult.model_validate(record)).classes if line.class_id == 2
     )
-    assert class_2.headline is not None and "ranked by" in class_2.headline, class_2.headline
+    assert class_2.headline is not None and "ranked by" not in class_2.headline, class_2.headline
 
 
 def _with_name(name: str) -> object:

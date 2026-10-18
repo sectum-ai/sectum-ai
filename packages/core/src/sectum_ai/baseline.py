@@ -10,13 +10,14 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
-from sectum_ai.score import ranked_probes
+from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     Finding,
     FindingStatus,
     RunMetrics,
     RunResult,
     Severity,
+    Surface,
     SurfaceProvenance,
     rate_from_counts,
 )
@@ -411,10 +412,11 @@ class RunDiff:
     # here - it is refused outright), and losing a live store is `scope_lost`'s to
     # report. ``(earlier, later)`` when they differ.
     embedder_changed: tuple[str, str] | None = None
-    # The probes either run ranked over the store with (``score.ranked_probes``),
-    # when ``embedder_changed`` is set: the swap changes the instrument only for
-    # those. A headline fed by none of them (the built-in pipeline's RPR beside
-    # Class 3) is still a measurement, and its regression read `[not measured]`.
+    # The probes either run exercised whose results the swap may have moved, when
+    # ``embedder_changed`` is set: the geometry probes, and the pipeline-end bleed
+    # probe on a live pipeline. A headline fed by none of them (the built-in
+    # pipeline's RPR beside Class 3) is still a measurement, and its regression
+    # read `[not measured]`.
     embedder_ranked: tuple[str, ...] = ()
 
     @property
@@ -558,16 +560,26 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
         embedder_changed=embedder_changed,
         embedder_ranked=(
-            tuple(
-                sorted(
-                    ranked_probes(_exercised_probes(earlier), earlier.surface_provenance)
-                    | ranked_probes(_exercised_probes(later), later.surface_provenance)
-                )
-            )
+            tuple(sorted(_swap_scoped(earlier) | _swap_scoped(later)))
             if embedder_changed is not None
             else ()
         ),
     )
+
+
+def _swap_scoped(run: RunResult) -> set[str]:
+    """The probes a run exercised whose results an embedder swap may have moved.
+
+    The geometry probes, and the pipeline-end bleed probe on a LIVE pipeline: one
+    may read the store the run seeded, and the run cannot tell whether it did, so
+    its rate is withheld across a swap rather than compared. Withheld only - the
+    record names no geometry for it (``score.GEOMETRY_PROBES``).
+    """
+    live_pipeline = (
+        run.surface_provenance.get(Surface.RAG_PIPELINE.value) == SurfaceProvenance.LIVE.value
+    )
+    scoped = GEOMETRY_PROBES | ({"rag-pipeline-bleed"} if live_pipeline else set())
+    return _exercised_probes(run) & scoped
 
 
 def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:

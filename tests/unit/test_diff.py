@@ -1550,9 +1550,10 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
 
 
 def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
-    # A LIVE pipeline the CLI kept reads the store it seeded, so its rate moved
-    # with the swap: the same pair as above, with the pipeline live, is not a
-    # measured regression, and the banner and the JSON say what it covered.
+    # A LIVE pipeline may read the store the run seeded, and the run cannot tell
+    # whether it did, so its rate may have moved with the swap: the same pair as
+    # above, with the pipeline live, is withheld rather than read as a regression,
+    # and the banner and the JSON say what it covered.
     exercised = {
         "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "LIVE"},
@@ -1562,7 +1563,7 @@ def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
         _run(metrics=RunMetrics(retrieval_pivot_rate=0.6)).model_copy(update=exercised),
     )
     assert diff_runs(earlier, later).embedder_ranked == ("rag-pipeline-bleed", "rag-poisoning")
-    # Live on EITHER side is enough: one of the two rates moved with the swap.
+    # Live on EITHER side is enough: one of the two rates may have moved with it.
     built_in = {"surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"}}
     for pair in (
         (earlier.model_copy(update=built_in), later),
@@ -1572,7 +1573,10 @@ def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
     output = _diff_output(tmp_path, earlier, later)
     assert "[not measured] retrieval_pivot_rate" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
-    assert "over it - the Retrieval-Pivot Rate (Class 2), Class 3, and the" in banner, banner
+    assert (
+        "over it - the Retrieval-Pivot Rate (Class 2, through a live RAG pipeline that may "
+        "read the store), Class 3, and the" in banner
+    ), banner
     paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
     assert payload["embedder_ranked"] == ["rag-pipeline-bleed", "rag-poisoning"]

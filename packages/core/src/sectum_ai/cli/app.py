@@ -141,7 +141,7 @@ from sectum_ai.runner import (
     confirmed_sequence_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import PROBE_SURFACES, ranked_probes, score_run
+from sectum_ai.score import GEOMETRY_PROBES, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     AdapterError,
@@ -1302,9 +1302,7 @@ def probe(
         # geometry, and naming one let a swap gate `diff` over unaffected numbers.
         vector_embedder=(
             vector.embedder_name
-            if ranked_probes(
-                {result[0].probe_id for result in step_results}, surface_provenance(bundle)
-            )
+            if {result[0].probe_id for result in step_results} & GEOMETRY_PROBES
             else None
         ),
         metrics=RunMetrics(
@@ -3910,11 +3908,11 @@ def _delta_range(delta: MetricDelta) -> str:
     return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
-# In class order, the order the banner names them. Both Class 2 probes feed the
-# one pooled rate, so they share a label.
+# In class order, the order the banner names them.
 _GEOMETRY_LABELS: dict[str, str] = {
     "rag-entity-bleed": "the Retrieval-Pivot Rate (Class 2)",
-    "rag-pipeline-bleed": "the Retrieval-Pivot Rate (Class 2)",
+    "rag-pipeline-bleed": "the Retrieval-Pivot Rate (Class 2, through a live RAG pipeline that "
+    "may read the store)",
     "rag-poisoning": "Class 3",
     "embedding-inversion": "Class 6",
     "ikea-extraction": "Class 10",
@@ -3927,17 +3925,13 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
     # Only what ranked over the store in THESE runs: the verdicts are scoped to
     # `embedder_ranked`, and a banner naming the Retrieval-Pivot Rate regardless
     # told the reader to discount a built-in pipeline's RPR regression printed
-    # above it.
-    ranked = list(
-        dict.fromkeys(
-            label
-            for probe_id, label in _GEOMETRY_LABELS.items()
-            if probe_id in result.embedder_ranked
-        )
-    )
+    # above it. Both Class 2 probes feed the one pooled rate, named once.
+    ranked_ids = set(result.embedder_ranked)
+    if "rag-entity-bleed" in ranked_ids:
+        ranked_ids.discard("rag-pipeline-bleed")
+    ranked = [label for probe_id, label in _GEOMETRY_LABELS.items() if probe_id in ranked_ids]
     vector_keys = {
-        f"{name}[{Surface.VECTOR_DB.value}]"
-        for name in ("erasure_residue", "erasure_caveats", "erasure_unverifiable")
+        f"{name}[{Surface.VECTOR_DB.value}]" for name in ("erasure_residue", "erasure_caveats")
     }
     if any(delta.name in vector_keys for delta in result.metrics.deltas):
         ranked.append("an erasure's vector residue scan")

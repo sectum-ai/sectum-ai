@@ -33,11 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vector stores ranked with different embedding models, and mark the metrics of
   the probes that rank by similarity over the vector store — and its erasure
   counts — as not measured: those were taken with different instruments, so one that
-  fell across the swap is not a fix. The pipeline-end bleed probe counts as one
-  when the pipeline was live (the CLI keeps a live pipeline only when it reads
-  back the canary from the store it seeded); a by-id fetch (Class 1), a run fed
-  by the built-in pipeline alone and metrics off the vector surface still
-  compare, and the banner names only what ranked over the store in those runs.
+  fell across the swap is not a fix. So is the pipeline-end bleed probe's on a
+  live pipeline, which may read the store the run seeded - withheld, never named
+  as ranked in it (a run fed by a live pipeline alone records no geometry, so a
+  swap between two such runs is not detected); a by-id fetch (Class 1), the
+  built-in pipeline and metrics off the vector surface still compare, and the
+  banner names only what ranked, or may have ranked, over the store in those runs.
   `diff --output json` carries it as `embedder_changed` (`[earlier, later]`, or
   `null`) and `embedder_ranked`.
 
@@ -74,8 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every live store it builds (`hashing-64` without an `embedder`), leaving `None`
   for the built-in fake, the `app` adapter, or a store built outside it - and
   `embedder_bridge`, set only when an `embedder` is configured. `RunDiff` gains
-  `embedder_changed` and `embedder_ranked` (the probes either run ranked over the
-  store with, which the swap's `[not measured]` is scoped to), and
+  `embedder_changed` and `embedder_ranked` (the probes either run exercised whose
+  results the swap may have moved, which its `[not measured]` is scoped to), and
   `RunDiff.regressed` is true on an embedder swap. `Runner.steps_to_send(probe)`
   returns the steps `run_per_step` will send, after its user-scope drops. New
   public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
@@ -84,9 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LOCAL_EMBEDDING_PREFIXES`), `sectum_ai.spec` (`HASHING_EMBEDDER_NAME`,
   `describe_vector_embedder`, `is_hashing_embedder`), `sectum_ai.config`
   (`refuse_hosted_embeddings` - which any new command that embeds specs from a
-  flag or a substrate must call) and `sectum_ai.score` (`GEOMETRY_PROBES`,
-  `ranked_probes` - the geometry probes, plus the pipeline-end bleed probe on a
-  live pipeline).
+  flag or a substrate must call) and `sectum_ai.score.GEOMETRY_PROBES`.
 
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
   seeded `embedding_models` are validated before anything else: an unknown name was

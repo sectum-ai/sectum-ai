@@ -63,7 +63,6 @@ chain, not an attack class.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from sectum_ai.evidence import run_digest
@@ -94,7 +93,6 @@ __all__ = [
     "METHODOLOGY_VERSION",
     "PROBE_SURFACES",
     "SEVERITY_WEIGHTS",
-    "ranked_probes",
     "score_run",
 ]
 
@@ -294,27 +292,11 @@ GEOMETRY_PROBES: frozenset[str] = frozenset(
 
 Their results move with its embedding model, so a run records the model only when
 one of them ran, `diff` scopes an embedder swap to them, and the scorecard names
-the geometry on their classes' headlines - each through :func:`ranked_probes`,
-which adds the pipeline-end bleed probe when the pipeline was live. Class 1
-fetches by id.
+the geometry on their classes' headlines. Class 1 fetches by id; the pipeline-end
+bleed probe asks the RAG pipeline - the built-in one ranks over its own index, and
+a live one may or may not read the store, which the run cannot tell, so `diff`
+withholds its rate across a swap without naming a geometry for it.
 """
-
-
-def ranked_probes(
-    probe_ids: Iterable[str], surface_provenance: Mapping[str, str]
-) -> frozenset[str]:
-    """The probes among ``probe_ids`` that ranked by similarity over the vector slot's store.
-
-    :data:`GEOMETRY_PROBES`, plus the pipeline-end bleed probe on a LIVE pipeline:
-    the CLI keeps a live pipeline only when it reads back a canary from the store
-    the run just seeded, so it ranks over the vectors the slot's embedder wrote.
-    The built-in pipeline ranks over its own index.
-    """
-    live_pipeline = (
-        surface_provenance.get(Surface.RAG_PIPELINE.value) == SurfaceProvenance.LIVE.value
-    )
-    geometry = GEOMETRY_PROBES | ({"rag-pipeline-bleed"} if live_pipeline else set())
-    return frozenset(geometry.intersection(probe_ids))
 
 
 def _geometry(vector_embedder: str | None) -> str:
@@ -322,8 +304,8 @@ def _geometry(vector_embedder: str | None) -> str:
 
     The audit PDF names it; the scorecard showed a rate ranked by shared tokens
     exactly as it showed one ranked by a production model. Worded as the vector
-    store's STEPS: Class 2's rate also pools the RAG pipeline's, which the built-in
-    pipeline ranks over its own index.
+    store's STEPS: Class 2's rate also pools the RAG pipeline's, which ranks with
+    its own retriever.
     """
     if vector_embedder is None:
         return ""
@@ -632,11 +614,9 @@ def _score_class(
     # `_headline` returns None for both "this class has no rate" and "the rate is
     # None", so the four classes that HAVE one are named here.
     # Named only on a class whose similarity-ranking probe actually ran: Class 2's
-    # rate on a run where only the built-in pipeline fed it ranked nothing in the
-    # store's geometry.
-    ranked = ranked_probes(
-        set(entry.probe_ids).intersection(run.probe_versions), run.surface_provenance
-    )
+    # rate on a run where only the pipeline-end probe fed it ranked nothing the
+    # run can show was in the store's geometry. `ran`, as `diff` counts it.
+    ranked = GEOMETRY_PROBES.intersection(ran)
     headline = _headline(entry, run.metrics, run.vector_embedder if ranked else None)
     unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
         entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes

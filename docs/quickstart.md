@@ -89,8 +89,8 @@ scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
 `[SCENARIO CHANGED]`, and two runs whose vector stores ranked with different
 embedding models (`vector_embedder`) — whatever ranked by similarity over the
-store (the Retrieval-Pivot Rate's vector-store steps — a live RAG pipeline's
-included — Classes 3 and 10, an erasure's vector residue scan) was taken with a different instrument — reported
+store (the Retrieval-Pivot Rate — whose live RAG pipeline may read the store —
+Classes 3 and 10, an erasure's vector residue scan) was taken with a different instrument — reported
 as `[EMBEDDER CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
 check the run record *inside* a pack, and so is one whose headline counts
