@@ -41,13 +41,7 @@ from sectum_ai.adapters import (
 from sectum_ai.adapters import (
     version as _adapters_version,
 )
-from sectum_ai.baseline import (
-    ERASURE_WORKFLOW_IDS,
-    FindingChange,
-    MetricDelta,
-    RunDiff,
-    diff_runs,
-)
+from sectum_ai.baseline import FindingChange, MetricDelta, RunDiff, diff_runs
 from sectum_ai.config import (
     AdapterBundle,
     AdapterConfig,
@@ -149,6 +143,7 @@ from sectum_ai.runner import (
 )
 from sectum_ai.score import GEOMETRY_PROBES, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
     SCHEMA_VERSION,
     AdapterError,
     ClassVerdict,

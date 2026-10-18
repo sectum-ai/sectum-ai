@@ -87,10 +87,10 @@ def test_an_erasure_only_run_asserts_only_the_deletion_controls() -> None:
 def test_the_pinned_erasure_probe_ids_match_the_probes_own_declarations() -> None:
     # controls.py cannot import the probes (the evidence package sits below them in
     # the package graph), so it pins their ids. This holds the pin to the source.
-    from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS
     from sectum_ai.probes import ErasureProbe, SubjectErasureProbe
+    from sectum_ai.spec import ERASURE_WORKFLOW_IDS
 
-    assert {ErasureProbe.id, SubjectErasureProbe.id} == _ERASURE_PROBE_IDS
+    assert {ErasureProbe.id, SubjectErasureProbe.id} == ERASURE_WORKFLOW_IDS
 
 
 def test_an_erasure_finding_alone_is_not_isolation_evidence() -> None:

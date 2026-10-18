@@ -18,15 +18,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
-from sectum_ai.evidence.controls import (
-    _ERASURE_PROBE_IDS,
-    COVERAGE_DISCLAIMER,
-    live_surfaces,
-)
+from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, live_surfaces
 from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ERASURE_SURFACES,
+    ERASURE_WORKFLOW_IDS,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
@@ -646,7 +643,7 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
     erasure samples carry it.
     """
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
-    erasure_only = bool(exercised) and not exercised - _ERASURE_PROBE_IDS
+    erasure_only = bool(exercised) and not exercised - ERASURE_WORKFLOW_IDS
     if erasure_only:
         # No detector ran at all, whatever the config says: the erasure workflow
         # never constructs one.
@@ -774,8 +771,9 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
     auditor's PDF stated a rate measured by shared tokens in the same words as one
     measured by a production embedding model. The record names an embedder only
     when something ranked by similarity over the store, so the row qualifies
-    whatever did - the rate, Classes 3 and 10, or an erasure's vector residue
-    scan, a lexical one of which is a real caveat on that verdict too. Omitted where
+    whatever did - the rate, Classes 3 and 10, an erasure's vector residue scan or
+    a subject erasure's fingerprint scan, a lexical one of which is a real caveat
+    on that verdict too. Omitted where
     the record names none.
     """
     if run.vector_embedder is None:

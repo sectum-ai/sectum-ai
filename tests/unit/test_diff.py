@@ -1553,17 +1553,23 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
 
 def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
     # A LIVE pipeline may read the store the run seeded, and the run cannot tell
-    # whether it did, so its rate may have moved with the swap: the same pair as
-    # above, with the pipeline live, is withheld rather than read as a regression,
-    # and the banner and the JSON say what it covered.
+    # whether it did, so its rate may have moved with the swap: beside Class 3, a
+    # rise in it is withheld rather than read as a regression, and the banner and
+    # the JSON say what it covered. Live, its steps feed the rate.
     exercised = {
         "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
         "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "LIVE"},
     }
-    earlier, later = _swap(
-        _run(metrics=RunMetrics(retrieval_pivot_rate=0.1)).model_copy(update=exercised),
-        _run(metrics=RunMetrics(retrieval_pivot_rate=0.6)).model_copy(update=exercised),
-    )
+
+    def _pipeline(k: int) -> RunResult:
+        leaks = [
+            _on(Surface.RAG_PIPELINE, _finding(f"p{n}", probe_id="rag-pipeline-bleed"))
+            for n in range(k)
+        ]
+        rate = RunMetrics(retrieval_pivot_rate=k / 10, retrieval_pivot_n=10, retrieval_pivot_k=k)
+        return _run(*leaks, metrics=rate).model_copy(update=exercised)
+
+    earlier, later = _swap(_pipeline(1), _pipeline(6))
     assert diff_runs(earlier, later).embedder_scoped == ("rag-pipeline-bleed", "rag-poisoning")
     # Live on EITHER side is enough: one of the two rates may have moved with it.
     built_in = {"surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"}}
@@ -1694,6 +1700,24 @@ def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: 
     assert "[REGRESSED] erasure_residue[tracing]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
     assert "over it - an erasure's vector residue scan, and the" in banner, banner
+
+
+def test_a_subject_erasure_swap_names_its_fingerprint_scan(tmp_path: Path) -> None:
+    # `erasure --subject` queries the store with the subject's fingerprints and
+    # writes no residue keys, so the banner had nothing to name the scan by and
+    # read "its similarity ranking".
+    exercised = {
+        "probe_versions": {"gdpr-subject-erasure-verification": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(_run().model_copy(update=exercised), _run().model_copy(update=exercised))
+    assert diff_runs(earlier, later).embedder_scoped == ("gdpr-subject-erasure-verification",)
+    banner = next(
+        line
+        for line in _diff_output(tmp_path, earlier, later).splitlines()
+        if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over it - a subject erasure's vector fingerprint scan, and the" in banner, banner
 
 
 def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:

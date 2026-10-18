@@ -10,9 +10,9 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
-from sectum_ai.probes import ErasureProbe, SubjectErasureProbe
 from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
     Finding,
     FindingStatus,
     RunMetrics,
@@ -568,17 +568,15 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     )
 
 
-#: The erasure workflows' probe ids: the records `erasure` and `erasure --subject` write.
-ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
-
-
 def _swap_scoped(run: RunResult) -> set[str]:
     """The probes a run exercised whose results an embedder swap may have moved.
 
     The geometry probes; the two erasure checks, whose vector scans query the store
     by similarity (an erasure record names an embedder only when it scanned the
     store, and its counts are keyed by surface, so this names the scan in the
-    banner and the JSON while ``key_lost`` withholds the counts); and the
+    banner and the JSON while the CLI's verdict withholds the ``vector_db``
+    counts - like every "not measured", a rendering of these fields, not a flag on
+    the deltas); and the
     pipeline-end bleed probe on a LIVE pipeline: one may read the store the run
     seeded, and the run cannot tell whether it did, so its rate is withheld across
     a swap rather than compared. Withheld only - the record names no geometry for

@@ -26,6 +26,7 @@ from sectum_ai.spec.errors import (
 )
 from sectum_ai.spec.hashing import canonical_hash, sha256_hex, to_canonical_json
 from sectum_ai.spec.models import (
+    ERASURE_WORKFLOW_IDS,
     HASHING_EMBEDDER_NAME,
     SCHEMA_VERSION,
     ClassScore,
@@ -64,6 +65,7 @@ from sectum_ai.spec.text import (
 
 __all__ = [
     "ERASURE_SURFACES",
+    "ERASURE_WORKFLOW_IDS",
     "HASHING_EMBEDDER_NAME",
     "SCHEMA_VERSION",
     "AccessOutcome",

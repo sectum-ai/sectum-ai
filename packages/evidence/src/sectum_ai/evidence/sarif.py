@@ -24,9 +24,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sectum_ai.evidence.controls import _ERASURE_PROBE_IDS, live_surfaces
+from sectum_ai.evidence.controls import live_surfaces
 from sectum_ai.evidence.labels import backing_surface, leak_label
-from sectum_ai.spec import Finding, FindingStatus, RunResult, Severity, SurfaceProvenance
+from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
+    Finding,
+    FindingStatus,
+    RunResult,
+    Severity,
+    SurfaceProvenance,
+)
 
 SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 SARIF_VERSION = "2.1.0"
@@ -171,7 +178,7 @@ def _rule(
             # under it correctly read "candidate" - the one field of the three that
             # still asserted a confirmed leak.
             "text": (
-                f"{'Residual-data' if probe_id in _ERASURE_PROBE_IDS else 'Cross-principal leak'}"
+                f"{'Residual-data' if probe_id in ERASURE_WORKFLOW_IDS else 'Cross-principal leak'}"
                 f" {'finding' if any_confirmed else 'candidate'} from the {probe_id} probe"
             )
         },
