@@ -66,8 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ConfigError` for an unknown or malformed one (an unknown spec returned `None`,
   which only `fake-*` recall names still do; `openai:` built a client) and
   `AdapterError` when a provider library fails to load the model.
-  `VectorStoreAdapter` gains `embedder_name` and `embedder_bridge`, which the CLI's
-  resolver sets on a live store it builds with an `embedder`. `RunDiff` gains
+  `VectorStoreAdapter` gains `embedder_name` - which the CLI's resolver sets on
+  every live store it builds (`hashing-64` without an `embedder`), leaving `None`
+  for the built-in fake, the `app` adapter, or a store built outside it - and
+  `embedder_bridge`, set only when an `embedder` is configured. `RunDiff` gains
   `embedder_changed`, and `RunDiff.regressed` is true on an embedder swap. New
   public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
   `embed_batched`, `iter_batches`, `embed_queries`, `validate_model_spec`,
