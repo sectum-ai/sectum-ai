@@ -210,17 +210,18 @@ class DetectionConfig(BaseModel):
     # errs toward surfacing rather than away from it.
     semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)] | Literal["auto"] = 0.62
     # Detection deployment mode. "hosted" (default) permits hosted embedder/judge
-    # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC / "no data
-    # leaves the box" guarantee: it fails fast if any configured embedder or judge
-    # would call a default third-party AI API. Only the offline `fake` providers,
-    # and providers explicitly pointed at an operator-controlled `base_url` (a local
+    # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that
+    # no tenant content reaches a third-party AI service: it fails fast if any
+    # configured embedder or judge would call a default third-party AI API. Only
+    # the offline `fake` providers, and providers explicitly pointed at an
+    # operator-controlled `base_url` (a local
     # or in-VPC endpoint), are allowed — so Sectum itself makes no call to a hosted
     # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
     # the threat model documents this. Detection is NOT the only stage that embeds
     # tenant content: the vector store's `embedder`, the Class 2 sweep and a mem0
     # memory adapter are gated by `SectumConfig._enforce_zero_egress`; specs from a
     # CLI override or a seeded substrate are gated where used, by
-    # `refuse_hosted_embeddings`. The zero-egress claim rests on all three - a new
+    # `refuse_hosted_embeddings`. The no-tenant-content claim rests on all three - a new
     # command that embeds specs from a flag or a substrate must call the last.
     mode: Literal["hosted", "local"] = "hosted"
 
@@ -503,10 +504,10 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             )
         elif kind == "upstash_vector":
             # No `config` block is mem0's default, `enable_embeddings=False`.
-            if store_config is not None and not isinstance(store_config, dict):
-                offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
-            elif store_config is None:
+            if store_config is None:
                 pass
+            elif not isinstance(store_config, dict):
+                offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
             elif store_config.get("enable_embeddings") is True:
                 offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
             elif store_config.get("enable_embeddings") not in (None, False):

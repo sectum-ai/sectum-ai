@@ -15,7 +15,8 @@ NOT a semantic model, so its per-dim curve is a reproducible artifact of the syn
 substrate, not a measurement of embedder strength. The genuine "stronger embedders leak
 more" gradient is a property of real embedders: swap the specs for two or more CLIP
 models (``clip:clip-ViT-B-32``, the ``sectum-ai[clip]`` extra) — CLIP embeds images and
-text into one space and runs locally, so no data leaves the box.
+text into one space and runs locally, so no tenant content leaves the box (loading the
+model calls the Hugging Face Hub unless it is cached and ``HF_HUB_OFFLINE=1``).
 """
 
 from __future__ import annotations

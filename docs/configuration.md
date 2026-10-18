@@ -354,7 +354,8 @@ is read from the environment, never inlined. A local OpenAI-compatible server â€
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
 
-Set `detection.mode: local` to **enforce** that offline posture. Five stages
+Set `detection.mode: local` to **enforce** that no tenant content reaches a
+third-party AI service. Five stages
 embed or judge tenant content: detection, the vector store's
 [`embedder`](#vector_store) (which embeds the whole corpus), the Class 2
 sweep's `scenario.embedding_models`, `calibrate --embedder` (the labelled set),
