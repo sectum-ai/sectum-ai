@@ -286,7 +286,11 @@ detection:
   # scenario.embedding_models, and a mem0 memory's embedder (plus the LLM feeding a
   # mem0 graph store, and any mem0 vector store not known to leave embedding to mem0) -
   # and on a mem0 memory while mem0's own usage telemetry is on (set
-  # MEM0_TELEMETRY=False; it posts run metadata, not tenant content). The adapters you point it at - a hosted vector database, an
+  # MEM0_TELEMETRY=False; it posts run metadata, not tenant content), on a stage
+  # loading through huggingface_hub (st: models, mem0's huggingface embedder, a
+  # huggingface or tgi model) while its telemetry is on (set
+  # HF_HUB_DISABLE_TELEMETRY=1), and on a crewai agent while crewai's is (set
+  # CREWAI_DISABLE_TELEMETRY=true). The adapters you point it at - a hosted vector database, an
   # OpenAI-Assistants or Anthropic tool-use agent - are the system under test and
   # receive the synthetic tenant data by design.
   mode: hosted   # hosted | local

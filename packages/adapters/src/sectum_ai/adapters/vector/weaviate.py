@@ -63,7 +63,12 @@ class WeaviateVectorStore(VectorStoreAdapter):
         if user_scoped:
             capabilities.add(Capability.USER_SCOPED)
         super().__init__(name, frozenset(capabilities))
-        self._client = weaviate.connect_to_local(host=host, port=port, grpc_port=grpc_port)
+        # The client's init checks fetch its latest version from pypi.org on every
+        # connect; skipping them also skips the gRPC health ping, so an unreachable
+        # gRPC port surfaces at the first query instead of here.
+        self._client = weaviate.connect_to_local(
+            host=host, port=port, grpc_port=grpc_port, skip_init_checks=True
+        )
         self._embed = embed
         self._prefix = prefix
         self._user_scoped = user_scoped

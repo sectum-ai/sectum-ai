@@ -153,6 +153,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses a mem0 memory until it is set to `False`. An embedding spec counts as local only by an allow-list
   (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
   refused until classified.
+- **Client libraries' own telemetry left the box in `local` mode.** mem0 was not
+  the only library in Sectum's process calling home by default; each adapter
+  client was audited at its uv.lock version. Where Sectum builds the client it now
+  turns the telemetry off: the `chroma` store passes
+  `Settings(anonymized_telemetry=False)` (the full `chromadb` 1.1.1 package, which
+  the `crewai` extra installs under the same import name as `chromadb-client`,
+  posts a PostHog event per client; `chromadb-client` 1.5.9's is a no-op), and the
+  `weaviate` store connects with `skip_init_checks=True` (weaviate-client 4.23.0
+  fetches its latest version from pypi.org on every connect; its gRPC health ping
+  goes with it, so an unreachable gRPC port now surfaces at the first query, not at
+  connect). These apply in every mode. Where there is no client setting, `local`
+  mode refuses the stage on its own reason until the library's env var is set, read
+  as the library reads it: a stage loading through huggingface_hub (an `st:` spec
+  from the config, a flag or a substrate; mem0's `huggingface` embedder without a
+  `huggingface_base_url`; a `huggingface` or `tgi` model adapter), whose Hub
+  requests fetch an agent-harness registry from huggingface.co (huggingface_hub
+  1.30.0), until `HF_HUB_DISABLE_TELEMETRY=1` (or `DISABLE_TELEMETRY` /
+  `DO_NOT_TRACK`, or the Hub offline); and a `crewai` agent, which exports usage
+  spans (agent roles and model names, not kickoff inputs) to telemetry.crewai.com
+  from import (crewai 1.15.1), until `CREWAI_DISABLE_TELEMETRY=true` - crewai reads
+  only `true`, not `1`. The docs' `HF_HUB_OFFLINE=1` advice now says it also blocks a
+  `tgi` model adapter's own requests.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
   Voyage and Cohere-on-Bedrock embed queries and documents into different halves
   of their space, and every call used document mode, so the Class 2 sweep ranked

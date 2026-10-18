@@ -412,10 +412,11 @@ def _mem0(config: dict[str, object]) -> dict[str, object]:
 
 
 @pytest.fixture(autouse=True)
-def _mem0_telemetry_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The local-mode mem0 cases below are about its model blocks; telemetry is
-    # pinned on its own.
+def _library_telemetry_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The local-mode cases in this file are about embedders and mem0's model
+    # blocks; mem0's and Hugging Face's telemetry are pinned on their own.
     monkeypatch.setenv("MEM0_TELEMETRY", "False")
+    monkeypatch.setenv("HF_HUB_DISABLE_TELEMETRY", "1")
 
 
 @pytest.mark.parametrize(

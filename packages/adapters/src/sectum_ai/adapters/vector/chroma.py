@@ -54,7 +54,12 @@ class ChromaVectorStore(VectorStoreAdapter):
         if user_scoped:
             capabilities.add(Capability.USER_SCOPED)
         super().__init__(name, frozenset(capabilities))
-        self._client = chromadb.HttpClient(host=host, port=port)
+        # The full `chromadb` package (which shares this import name with
+        # chromadb-client, and which crewai installs) posts a PostHog event per
+        # client unless its telemetry is turned off here.
+        self._client = chromadb.HttpClient(
+            host=host, port=port, settings=chromadb.Settings(anonymized_telemetry=False)
+        )
         self._embed = embed
         self._prefix = prefix
         self._user_scoped = user_scoped
