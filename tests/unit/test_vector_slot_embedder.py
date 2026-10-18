@@ -1338,3 +1338,8 @@ def test_an_omitted_mem0_provider_pointed_at_a_local_server_is_local() -> None:
     # sends nothing off the box, and refusing it claimed egress that does not occur.
     local_server = {"config": {"openai_base_url": "http://localhost:8080/v1"}}
     SectumConfig.model_validate(_mem0({"embedder": local_server}))
+
+
+def test_a_malformed_mem0_provider_is_a_config_error_not_a_traceback() -> None:
+    with pytest.raises(ValueError, match="mem0 embedder"):
+        SectumConfig.model_validate(_mem0({"embedder": {"provider": ["ollama"]}}))

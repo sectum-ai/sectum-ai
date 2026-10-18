@@ -415,6 +415,8 @@ def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) 
     # An omitted provider is mem0's default, openai - which a base URL can point
     # at a local server like any explicit openai block.
     provider = block.get("provider") or "openai"
+    if not isinstance(provider, str):
+        return False  # not a provider name mem0 knows; refused as not local
     settings = block.get("config")
     url_key = "openai_base_url"
     if llm and os.environ.get("OPENROUTER_API_KEY"):
