@@ -86,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LOCAL_EMBEDDING_PREFIXES`), `sectum_ai.spec` (`HASHING_EMBEDDER_NAME`,
   `describe_vector_embedder`, `is_hashing_embedder`), `sectum_ai.config`
   (`refuse_hosted_embeddings` - which any new command that embeds specs from a
-  flag or a substrate must call) and `sectum_ai.score.GEOMETRY_PROBES`.
+  flag or a substrate must call), `sectum_ai.score.GEOMETRY_PROBES` and
+  `sectum_ai.baseline.ERASURE_WORKFLOW_IDS`.
 
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
   seeded `embedding_models` are validated before anything else: an unknown name was
