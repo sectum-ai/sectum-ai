@@ -593,7 +593,8 @@ def _yaml_problem(error: Exception) -> str:
     scalar's constructor raises a bare ``KeyError`` / ``ValueError`` /
     ``IndexError`` holding the value. So a phrase is kept only when it quotes
     nothing - PyYAML's fixed text, such as "while scanning a quoted scalar" - and
-    everything else is named by its class and position alone.
+    everything else is named by its class, with the line and column where PyYAML
+    gives one (a constructor's bare exception carries none).
     """
     if isinstance(error, yaml.reader.ReaderError):
         return f"{error.reason} at position {error.position}"
@@ -624,6 +625,8 @@ def load_config(path: Path) -> SectumConfig:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         raise ConfigError(f"config file is not UTF-8 text: {path}") from None
+    except OSError as error:
+        raise ConfigError(f"cannot read config file {path}: {error.strerror}") from None
     try:
         raw = yaml.safe_load(text)
     # Every failure, not only YAMLError: a tagged scalar's constructor raises a bare

@@ -74,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check, the whole config, an inline `api_key` included - to stderr and CI logs.
   It now prints each error's location and message only. A YAML error gives
   PyYAML's fixed phrase where it quotes nothing, else its class, with the line and
-  column - never the quoted line or token; every parse failure is typed, where a
+  column where PyYAML gives one (a bad tagged value's constructor gives none) -
+  never the quoted line or token; every parse failure is typed, where a
   bad `!!bool` / `!!int` / timestamp or deep nesting escaped as a raw traceback
   quoting the value; and a file that is not UTF-8 says so. The `mem0` gate names
   a block it cannot read by its shape, never its contents.
