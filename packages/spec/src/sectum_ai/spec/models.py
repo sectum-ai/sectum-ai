@@ -515,14 +515,17 @@ class DetectionProvenance(SectumModel):
 
 
 HASHING_EMBEDDER_NAME = "hashing-64"
-
-#: The erasure workflows' probe ids: the records `erasure` and `erasure --subject`
-#: write. Here rather than on the probes because the evidence package sits below
-#: them (ADR-0004); a test holds it to the probes' own declarations.
-ERASURE_WORKFLOW_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
 """``RunResult.vector_embedder`` for a live store on the built-in hashing embedder.
 
 Shared so the CLI that records it and the renderers that explain it cannot drift.
+"""
+
+ERASURE_WORKFLOW_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
+"""The erasure workflows' probe ids: the records `erasure` and `erasure --subject` write.
+
+Control checks, not isolation probes. Here rather than on the probes because the
+evidence package sits below them (ADR-0004); a test holds it to the probes' own
+declarations.
 """
 
 

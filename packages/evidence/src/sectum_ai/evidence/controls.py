@@ -37,8 +37,6 @@ ERASURE = "erasure"  # an erasure surface scanned to a verdict, on a live backen
 _ISOLATION = ISOLATION
 _ERASURE = ERASURE
 
-# The erasure probes are control checks, not isolation probes, so a run in which
-# only they executed has produced no isolation evidence (`spec.ERASURE_WORKFLOW_IDS`).
 # The coverage verdicts that mean a surface was scanned and answered: a run whose
 # every surface is NOT_COVERED (or attestable-with-caveat, where nothing was
 # deleted) verified no erasure, whatever its coverage block's length.
