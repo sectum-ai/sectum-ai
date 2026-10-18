@@ -3920,7 +3920,8 @@ _GEOMETRY_LABELS: dict[str, str] = {
 
 def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
     """The banner for two runs whose vector stores ranked in different embedding models."""
-    before, after = (untrusted(name) for name in change)
+    # As every renderer names one: a hashing geometry with its shared-tokens caveat.
+    before, after = (untrusted(describe_vector_embedder(name)) for name in change)
     # Only what these runs ranked over the store: the verdicts are scoped to
     # `embedder_scoped`, and a banner naming the Retrieval-Pivot Rate regardless
     # told the reader to discount a built-in pipeline's RPR regression printed
@@ -3939,8 +3940,8 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
         else ""
     )
     return (
-        f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before} and this "
-        f"one with {after}: whatever ranked by similarity over it - {what}, and the "
+        f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before}, and this "
+        f"one with {after}. Whatever ranked by similarity over it - {what}, and the "
         "findings appearing or resolving there - was taken with a different instrument, "
         f"so its difference cannot be attributed to a change in isolation{may}; "
         "re-baseline deliberately"

@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from sectum_ai.baseline import compare_metrics, diff_runs
 from sectum_ai.spec import RunMetrics, RunResult
 
@@ -337,24 +339,37 @@ def test_the_modelled_gradient_is_labelled_modelled_in_every_renderer() -> None:
     assert measured and "modelled" not in measured[0].name
 
 
-def test_baseline_compare_flags_an_embedder_swap(tmp_path: Path) -> None:
+def test_baseline_compare_flags_an_embedder_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import json
 
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import app
+    from sectum_ai.config import SectumConfig
+    from sectum_ai.config import build_adapters as real_build
 
+    # A live store, as the CLI records one: its slot LIVE and its model named.
+    embedder = {"name": "hashing-64"}
+
+    def _live_store(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.synthetic = False
+        bundle.vector.embedder_name = embedder["name"]
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _live_store)
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    assert runner.invoke(app, ["probe", "--workdir", str(tmp_path)]).exit_code == 2
-    run_path = tmp_path / "run.json"
-    record = json.loads(run_path.read_text())
-    record["vector_embedder"] = "hashing-64"
-    run_path.write_text(json.dumps(record))
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert record["surface_provenance"]["vector_db"] == "LIVE", record["surface_provenance"]
+    assert record["vector_embedder"] == "hashing-64"
     assert runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--save"]).exit_code == 0
 
-    record["vector_embedder"] = "st:all-mpnet-base-v2"
-    run_path.write_text(json.dumps(record))
+    embedder["name"] = "st:all-mpnet-base-v2"
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     result = runner.invoke(app, ["baseline", "--workdir", str(tmp_path), "--compare"])
     assert result.exit_code == 2, result.output
     assert "[EMBEDDER CHANGED]" in result.output, result.output

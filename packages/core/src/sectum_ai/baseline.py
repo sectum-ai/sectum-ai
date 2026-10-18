@@ -574,13 +574,12 @@ def _swap_scoped(run: RunResult) -> set[str]:
     The geometry probes; the two erasure checks, whose vector scans query the store
     by similarity (an erasure record names an embedder only when it scanned the
     store, and its counts are keyed by surface, so this names the scan in the
-    banner and the JSON while the CLI's verdict withholds the ``vector_db``
-    counts - like every "not measured", a rendering of these fields, not a flag on
-    the deltas); and the
-    pipeline-end bleed probe on a LIVE pipeline: one may read the store the run
-    seeded, and the run cannot tell whether it did, so its rate is withheld across
-    a swap rather than compared. Withheld only - the record names no geometry for
-    it (``score.GEOMETRY_PROBES``).
+    banner and the JSON while the CLI's verdict withholds the ``vector_db`` counts
+    - like every "not measured", a rendering of these fields, not a flag on the
+    deltas); and the pipeline-end bleed probe on a LIVE pipeline: one may read the
+    store the run seeded, and the run cannot tell whether it did, so its rate is
+    withheld across a swap rather than compared. Withheld only - the record names
+    no geometry for it (``score.GEOMETRY_PROBES``).
     """
     live_pipeline = (
         run.surface_provenance.get(Surface.RAG_PIPELINE.value) == SurfaceProvenance.LIVE.value

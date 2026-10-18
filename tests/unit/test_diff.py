@@ -1483,6 +1483,8 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     # the instrument too, and an erasure record has no rate at all.
     assert "findings appearing or resolving" in text.output, text.output
     assert "Retrieval-Pivot Rate (Class 2)" in text.output, text.output
+    # Named as every renderer names a hashing geometry: with its caveat.
+    assert "hashing-64 - a deterministic hashing embedder" in text.output, text.output
     assert "[not measured] per_probe_findings[rag-entity-bleed]: 1 -> 0" in text.output
     assert "[ok]" not in text.output, text.output
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
@@ -1605,7 +1607,8 @@ def test_an_erasure_swap_banner_names_the_vector_scan_it_discounted(tmp_path: Pa
         if "[EMBEDDER CHANGED]" in line
     )
     assert "over it - an erasure's vector residue scan, and the" in banner, banner
-    # Nothing on either record that ranked: the banner says so rather than inventing a class.
+    # Nothing on either record that ranked - not a record this CLI writes, but `diff`
+    # grades records it did not write: the banner says so rather than inventing a class.
     bare = (_run().model_copy(update={"vector_embedder": name}) for name in ("hash-16", "hash-32"))
     banner = next(
         line for line in _diff_output(tmp_path, *bare).splitlines() if "[EMBEDDER CHANGED]" in line

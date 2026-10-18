@@ -292,8 +292,9 @@ _DETECTOR_TAIL = (
 # Which tiers ran is a property of the RUN, not of the product. Stated
 # unconditionally, this paragraph promised an auditor "semantic similarity, then
 # a calibrated judge" over three kinds of run that had neither: an `erasure`
-# attestation, whose probe matches by exact substring and invokes no provider at
-# all; a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
+# attestation, whose probe matches by exact substring and invokes no detection
+# provider (its vector scans query through the store's `embedder`, which is not
+# detection); a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
 # fake` and `judge.kind: fake` - an offline hashing vector its own docstring
 # calls "not semantically meaningful beyond lexical overlap", and a token-order
 # string matcher; and a run whose threshold gated the semantic tier shut. The
@@ -773,8 +774,7 @@ def _vector_embedder_summary(run: RunResult) -> str | None:
     when something ranked by similarity over the store, so the row qualifies
     whatever did - the rate, Classes 3 and 10, an erasure's vector residue scan or
     a subject erasure's fingerprint scan, a lexical one of which is a real caveat
-    on that verdict too. Omitted where
-    the record names none.
+    on that verdict too. Omitted where the record names none.
     """
     if run.vector_embedder is None:
         return None
