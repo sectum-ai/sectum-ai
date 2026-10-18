@@ -1663,7 +1663,9 @@ def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
         store.embedder_bridge.prefetch(texts)
 
 
-def _load_corpus(store: VectorStoreAdapter, substrate: Substrate) -> None:
+def _load_corpus(
+    store: VectorStoreAdapter, substrate: Substrate, tenants: Sequence[UUID] | None = None
+) -> None:
     """Upsert each tenant's corpus, a backend's own failure as a typed error.
 
     A store whose `embedder` changed keeps the index an earlier run created at the
@@ -1671,10 +1673,11 @@ def _load_corpus(store: VectorStoreAdapter, substrate: Substrate) -> None:
     raw traceback and exit 1. Named by type only: a backend's message can carry a
     DSN or key.
     """
-    for tenant in substrate.tenants:
-        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
+    order = [tenant.tenant_id for tenant in substrate.tenants] if tenants is None else tenants
+    for tenant_id in order:
+        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant_id]
         try:
-            store.upsert(tenant.tenant_id, documents)
+            store.upsert(tenant_id, documents)
         except SectumError:
             raise
         except Exception as error:
@@ -3505,11 +3508,25 @@ def erasure(
         _prefetch_corpus(store, substrate.documents)
         # The residue scan's own queries, by the probe's own rule.
         _register_queries(store, vector_residue_queries(substrate, target))
-        _load_corpus(store, substrate)
+        # The target's corpus first: it is what the verdict rests on.
+        _load_corpus(store, substrate, [target])
 
-    # Contained like every other surface: a store that refuses the corpus (an index
-    # left at another dimension) reads NOT_COVERED, and the rest keep their verdicts.
+    # Contained like every other surface: a store that refuses the target's corpus
+    # (an index left at another dimension) reads NOT_COVERED, and the rest keep their
+    # verdicts. Unlike a marker write, an upsert can land in part, so the probe is
+    # told: scanned over a partial load, it attested ERASED beside this warning.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
+    if Surface.VECTOR_DB not in unseedable and _seeds(Surface.VECTOR_DB):
+        others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
+        try:
+            _load_corpus(store, substrate, others)
+        except AdapterError as error:
+            # The target's corpus landed in full, so its verdict stands.
+            typer.echo(
+                f"warning: the other tenants' corpus did not all load ({error}); the "
+                "target's did, so the vector_db verdict stands",
+                err=True,
+            )
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue
@@ -3616,7 +3633,18 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(target, scope=erasure_scope)
+    ).run(
+        target,
+        scope=(
+            [
+                surface
+                for surface in (erasure_scope or ERASURE_SURFACES)
+                if surface is not Surface.VECTOR_DB
+            ]
+            if Surface.VECTOR_DB in unseedable
+            else erasure_scope
+        ),
+    )
     finished = datetime.now(UTC)
 
     _emit_erasure_attestation(

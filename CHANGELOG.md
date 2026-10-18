@@ -155,8 +155,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dimension, and the backend's own exception escaped `probe` and `erasure` as a
   raw traceback (exit 1). `probe` now stops with an adapter error (exit 3)
   naming only the exception's type, with a hint that the index's dimension may
-  have changed on a live store; `erasure` contains it like every other surface,
-  so `vector_db` reads NOT_COVERED and the other surfaces keep their verdicts.
+  have changed on a live store. `erasure` contains it like every other surface
+  and loads the target's corpus first: refused there - in full or part-way -
+  `vector_db` is left out of the scan and reads NOT_COVERED while the other
+  surfaces keep their verdicts; refused only for another tenant, the target's
+  verdict stands, with a warning.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep

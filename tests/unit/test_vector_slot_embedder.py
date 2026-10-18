@@ -1744,8 +1744,11 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
         load_config(tmp_path / "a\x00b.yaml")
 
 
+_BACKEND = "expected 64 dimensions (dsn=postgres://u:pw@h/db)"
+
+
 @pytest.mark.parametrize("live", [True, False])
-def test_a_store_refusing_the_corpus_is_a_typed_error(
+def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, live: bool
 ) -> None:
     # A store whose `embedder` changed keeps the index an earlier run created at the
@@ -1756,12 +1759,9 @@ def test_a_store_refusing_the_corpus_is_a_typed_error(
 
     from sectum_ai.cli.app import app
 
-    backend = "expected 64 dimensions, not 768 (dsn=postgres://u:pw@h/db)"
-
     def _refuse(*_: object, **__: object) -> None:
-        raise ValueError(backend)
+        raise ValueError(_BACKEND)
 
-    # Every store either command builds - `probe`'s bundle and `erasure`'s slot.
     monkeypatch.setattr(FakeVectorStore, "upsert", _refuse)
     monkeypatch.setattr(FakeVectorStore, "synthetic", not live)
     runner = CliRunner()
@@ -1770,13 +1770,63 @@ def test_a_store_refusing_the_corpus_is_a_typed_error(
     assert probed.exit_code == 3, probed.output
     assert "refused the corpus (ValueError)" in probed.output, probed.output
     assert ("vector dimension changed" in probed.output) is live, probed.output
-    # `erasure` contains it like every other surface: the vector store reads
-    # NOT_COVERED, said out loud, and the run goes on.
+    assert "pw@h" not in probed.output, probed.output
+
+
+@pytest.mark.parametrize(
+    ("refused_calls", "partial", "vector_verdict"),
+    [
+        # The target's own corpus refused: nothing it could rest on, so NOT_COVERED.
+        ({1}, False, "NOT_COVERED"),
+        # Refused part-way through the target's own batch: half of it landed, and a
+        # scan over that attested ERASED - so the surface is left out of the scan.
+        ({1}, True, "NOT_COVERED"),
+        # Another tenant's refused after the target's landed in full: it stands.
+        ({2}, False, "ERASED"),
+    ],
+)
+def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    refused_calls: set[int],
+    partial: bool,
+    vector_verdict: str,
+) -> None:
+    # Contained like every other surface's seeding - but an upsert lands per tenant,
+    # and over a partial load the probe attested ERASED beside a warning that said
+    # NOT_COVERED, with nothing in the record about the failed seeding.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    real_upsert = FakeVectorStore.upsert
+    calls = {"n": 0}
+
+    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] in refused_calls:
+            if partial:
+                real_upsert(self, tenant, list(documents)[: len(documents) // 2])
+            raise ValueError(_BACKEND)
+        return real_upsert(self, tenant, documents)
+
+    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path)])
-    assert "could not seed the vector_db canary" in erased.output, erased.output
-    assert "Traceback" not in erased.output, erased.output
-    for output in (probed.output, erased.output):
-        assert "pw@h" not in output and "768" not in output, output
+    assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
+    assert "pw@h" not in erased.output, erased.output
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    coverage = pack["run_result"]["metrics"]["erasure_coverage"]
+    assert coverage["vector_db"] == vector_verdict, (coverage, erased.output)
+    if vector_verdict == "NOT_COVERED":
+        assert "could not seed the vector_db canary" in erased.output, erased.output
+        assert pack["run_result"]["vector_embedder"] is None
+    else:
+        assert "could not seed the vector_db canary" not in erased.output, erased.output
+        assert "the vector_db verdict stands" in erased.output, erased.output
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
