@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the probes that rank by similarity over the vector store — and its erasure
   counts — as not measured: those were taken with different instruments, so one that
   fell across the swap is not a fix. A by-id fetch (Class 1) and metrics off the
-  vector surface still compare.
+  vector surface still compare. `diff --output json` carries it as
+  `embedder_changed` (`[earlier, later]`, or `null`).
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable
@@ -134,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentence-transformers config ships query and document prompts is encoded with
   them; checkpoints that document their prefixes only in the model card (many e5
   and BGE ones) ship none and are encoded without.
+- **`calibrate --embedder` resolved its override without validating it.** In hosted
+  mode `openai:` built a client with an empty model name and sent the labeled set to
+  OpenAI. The override is now validated in every mode: a malformed spec, or a sweep's
+  `fake-*` recall name, exits 3 with the reason.
 - **The Class 2 sweep sent an OpenAI model the whole corpus in one request**, and
   OpenAI rejects more than 2,048 inputs, so a gradient over a corpus past 512
   documents per tenant failed outright. Every model is now sent at most 64 texts

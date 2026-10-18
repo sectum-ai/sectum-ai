@@ -13,6 +13,7 @@ independent of `detection.embedder`, which is Sectum's own choice for grading.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -395,11 +396,24 @@ def test_the_probe_command_registers_its_queries_before_running(
         bundle.vector.embedder_bridge = EmbedderBridge(model)
         return bundle
 
+    from sectum_ai.runner import Runner
+
+    registered_when_the_suite_started: list[int] = []
+    real_run = Runner.run_per_step
+
+    def _run(self: Runner, probe: object) -> object:
+        registered_when_the_suite_started.append(len(model.queries))
+        return real_run(self, probe)  # type: ignore[arg-type]
+
     monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _bridged)
+    monkeypatch.setattr(Runner, "run_per_step", _run)
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
-    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
-    assert model.queries, "the planned vector queries were never registered"
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    assert result.exit_code in (0, 2), result.output
+    # Registered BEFORE the first probe ran: on a live store a query embedded on
+    # demand first would have gone out in document mode.
+    assert registered_when_the_suite_started and registered_when_the_suite_started[0] > 0
 
 
 def _bridged_slot(monkeypatch: pytest.MonkeyPatch, model: _Modes) -> None:
@@ -472,15 +486,42 @@ def test_a_failure_registering_subject_fingerprints_costs_no_surface_its_verdict
         def embed_queries(self, texts: list[str]) -> list[list[float]]:
             raise RuntimeError("rate limited")
 
-    _bridged_slot(monkeypatch, _QueryModeDown())
+    import json
+
+    from sectum_ai.config import build_vector_slot as real_build
+
+    def _embedding_store(*args: Any, **kwargs: Any) -> Any:
+        # A store that embeds its queries through the bridge, as a live one does,
+        # so the on-demand retry fails inside the probe's containment too.
+        store: Any = real_build(*args, **kwargs)
+        store.embedder_bridge = EmbedderBridge(_QueryModeDown())
+        real_query = store.query
+
+        def _query(tenant: Any, text: str, *rest: Any, **kw: Any) -> Any:
+            store.embedder_bridge(text)
+            return real_query(tenant, text, *rest, **kw)
+
+        store.query = _query
+        return store
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_vector_slot", _embedding_store)
     runner = CliRunner()
     runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
     manifest = tmp_path / "subject.yaml"
-    manifest.write_text('subject_ref: u\nfingerprints:\n  vector_db: ["a subject phrase"]\n')
+    manifest.write_text(
+        "subject_ref: u\nrecords:\n  semantic_cache: [k1]\n"
+        'fingerprints:\n  vector_db: ["a subject phrase"]\n'
+    )
     result = runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
-    assert result.exit_code != 3, result.output
     assert "embed on demand" in result.output, result.output
-    assert (tmp_path / "erasure-evidence.json").exists()
+    # The vector surface failed on its own, with the embedder's reason; the cache
+    # surface kept its own verdict; the attestation was still written. Exit 3 is
+    # the designed INCONCLUSIVE for an unverified surface, not an abort.
+    assert "vector_db: 1 checked, 0 still present -> NOT VERIFIED" in result.output
+    assert "embedder 'hash-16' failed" in result.output
+    assert "semantic_cache: 1 checked, 0 still present -> ABSENCE CHECKED" in result.output
+    assert "ERASURE INCONCLUSIVE" in result.output, result.output
+    assert json.loads((tmp_path / "erasure-evidence.json").read_text())["run_result"]
 
 
 def test_a_failed_query_registration_still_embeds_those_texts_as_queries(
@@ -1391,3 +1432,56 @@ def test_byoc_local_mode_allows_only_mem0_stores_known_to_leave_embedding_to_mem
         SectumConfig.model_validate(
             _mem0({"embedder": embedder, "vector_store": {"provider": "databricks", "config": {}}})
         )
+
+
+_LIVE_KINDS = {
+    # kind: (adapter module, class, minimal config, takes a dim)
+    "pgvector": ("pgvector", "PgVectorStore", {"dsn": "postgresql://x"}, True),
+    "chroma": ("chroma", "ChromaVectorStore", {}, False),
+    "weaviate": ("weaviate", "WeaviateVectorStore", {}, False),
+    "pinecone": ("pinecone", "PineconeVectorStore", {"api_key": "k", "index": "i"}, False),
+    "qdrant": ("qdrant", "QdrantVectorStore", {}, True),
+    "milvus": ("milvus", "MilvusVectorStore", {}, True),
+    "opensearch": ("opensearch", "OpenSearchVectorStore", {}, True),
+    "azure-search": (
+        "azure_search",
+        "AzureSearchVectorStore",
+        {"endpoint": "https://x.search.windows.net", "api_key": "k"},
+        True,
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", sorted(_LIVE_KINDS))
+def test_every_live_kind_is_driven_by_the_bridge_it_records(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The record names the configured model; a kind that ignored the bridge (or its
+    # dimension) would rank in the hashing geometry under a signed record naming
+    # the model - a false claim. Every kind, not only the one that is easy to build.
+    import sys
+    import types
+
+    module_name, class_name, extras, takes_dim = _LIVE_KINDS[kind]
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class _Recording(FakeVectorStore):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__()
+            calls.append((args, kwargs))
+
+        @classmethod
+        def connect(cls, *args: object, **kwargs: object) -> "_Recording":
+            return cls(*args, **kwargs)
+
+    module = types.ModuleType(f"sectum_ai.adapters.vector.{module_name}")
+    setattr(module, class_name, _Recording)
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    store = build_vector_store(AdapterConfig(kind=kind, embedder="hash-128", **extras))
+    assert isinstance(store.embedder_bridge, EmbedderBridge)
+    assert store.embedder_name == "hash-128"
+    ((args, kwargs),) = calls
+    passed = [*args, *kwargs.values()]
+    assert any(value is store.embedder_bridge for value in passed), passed
+    if takes_dim:
+        assert 128 in passed, passed
