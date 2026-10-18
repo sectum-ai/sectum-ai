@@ -541,8 +541,10 @@ def is_hashing_embedder(name: str) -> bool:
 def describe_vector_embedder(name: str) -> str:
     """``name`` as every renderer shows it: with its caveat, in one wording.
 
-    The scorecard, the probe summary and both PDF engines all call this, so the
-    artifacts an auditor compares cannot describe one geometry three ways.
+    The scorecard, the probe summary, both PDF engines and the diff/baseline
+    ``[EMBEDDER CHANGED]`` banner and JSON all call this, so the artifacts an
+    auditor compares cannot describe one geometry several ways. The banner gives
+    it a sentence of its own; keep it one.
     """
     if not is_hashing_embedder(name):
         return name

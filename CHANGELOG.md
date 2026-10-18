@@ -41,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in pipeline and metrics off the vector surface still compare, and the
   banner names only what ranked, or may have ranked, over the store in those runs.
   `diff --output json` carries it as `embedder_changed` (`[earlier, later]`, or
-  `null`) and `embedder_scoped`.
+  `null`), `embedder_scoped`, and `embedder_changed_note` (each side's hashing
+  caveat, as `probe`'s `vector_embedder_note`, or `null`).
 
 - **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
   findings rest on that its provenance never recorded, so the machine-readable

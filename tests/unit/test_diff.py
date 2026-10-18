@@ -17,6 +17,7 @@ from sectum_ai.spec import (
     RunResult,
     Severity,
     Surface,
+    describe_vector_embedder,
 )
 
 runner = CliRunner()
@@ -1483,12 +1484,15 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     # the instrument too, and an erasure record has no rate at all.
     assert "findings appearing or resolving" in text.output, text.output
     assert "Retrieval-Pivot Rate (Class 2)" in text.output, text.output
-    # Named as every renderer names a hashing geometry: with its caveat.
-    assert "hashing-64 - a deterministic hashing embedder" in text.output, text.output
+    # Named as every renderer names a hashing geometry: with its caveat, in a
+    # sentence of its own.
+    assert "This run: hashing-64 - a deterministic hashing embedder" in text.output
+    assert "The earlier run: st:all-mpnet-base-v2. This run:" in text.output, text.output
     assert "[not measured] per_probe_findings[rag-entity-bleed]: 1 -> 0" in text.output
     assert "[ok]" not in text.output, text.output
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
     assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
+    assert payload["embedder_changed_note"] == [None, describe_vector_embedder("hashing-64")]
 
 
 def test_a_record_that_names_no_embedder_is_not_an_embedder_change() -> None:
@@ -1549,7 +1553,7 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
     output = _diff_output(tmp_path, earlier, later)
     assert "[REGRESSED] per_probe_findings[rag-pipeline-bleed]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
-    assert "over it - Class 3, and the" in banner, banner
+    assert "over the store - Class 3, and the" in banner, banner
     assert "Retrieval-Pivot Rate" not in banner, banner
 
 
@@ -1583,7 +1587,7 @@ def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
     output = _diff_output(tmp_path, earlier, later)
     assert "[not measured] retrieval_pivot_rate" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
-    assert "over it - Class 3, and the" in banner, banner
+    assert "over the store - Class 3, and the" in banner, banner
     assert "a live RAG pipeline may read the store too" in banner, banner
     paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
     payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
@@ -1606,14 +1610,14 @@ def test_an_erasure_swap_banner_names_the_vector_scan_it_discounted(tmp_path: Pa
         for line in _diff_output(tmp_path, earlier, later).splitlines()
         if "[EMBEDDER CHANGED]" in line
     )
-    assert "over it - an erasure's vector residue scan, and the" in banner, banner
+    assert "over the store - an erasure's vector residue scan, and the" in banner, banner
     # Nothing on either record that ranked - not a record this CLI writes, but `diff`
     # grades records it did not write: the banner says so rather than inventing a class.
     bare = (_run().model_copy(update={"vector_embedder": name}) for name in ("hash-16", "hash-32"))
     banner = next(
         line for line in _diff_output(tmp_path, *bare).splitlines() if "[EMBEDDER CHANGED]" in line
     )
-    assert "over it - its similarity ranking, and the" in banner, banner
+    assert "over the store - its similarity ranking, and the" in banner, banner
 
 
 def test_the_embedder_banner_names_each_class_once_in_class_order() -> None:
@@ -1630,7 +1634,9 @@ def test_the_embedder_banner_names_each_class_once_in_class_order() -> None:
         embedder_scoped=ranked,
     )
     banner = _embedder_changed_banner(("hash-16", "hash-32"), result, "earlier")
-    assert "over it - the Retrieval-Pivot Rate (Class 2), Class 3, Class 10, and the" in banner
+    assert (
+        "over the store - the Retrieval-Pivot Rate (Class 2), Class 3, Class 10, and the" in banner
+    )
     # The vector-store probe ranked over the store, so the pooled rate certainly
     # moved: no "may" beside it.
     assert "may read the store" not in banner, banner
@@ -1702,7 +1708,7 @@ def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: 
     assert "[not measured] erasure_residue[vector_db]" in output, output
     assert "[REGRESSED] erasure_residue[tracing]" in output, output
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
-    assert "over it - an erasure's vector residue scan, and the" in banner, banner
+    assert "over the store - an erasure's vector residue scan, and the" in banner, banner
 
 
 def test_a_subject_erasure_swap_names_its_fingerprint_scan(tmp_path: Path) -> None:
@@ -1720,7 +1726,9 @@ def test_a_subject_erasure_swap_names_its_fingerprint_scan(tmp_path: Path) -> No
         for line in _diff_output(tmp_path, earlier, later).splitlines()
         if "[EMBEDDER CHANGED]" in line
     )
-    assert "over it - a subject erasure's vector fingerprint scan, and the" in banner, banner
+    assert "over the store - a subject erasure's vector fingerprint scan, and the" in banner, banner
+    # The earlier geometry's caveat ends its own sentence; the later one starts anew.
+    assert "configured for the vector store. This run: st:all-mpnet-base-v2. " in banner, banner
 
 
 def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:

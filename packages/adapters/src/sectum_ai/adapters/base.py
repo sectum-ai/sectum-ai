@@ -193,10 +193,10 @@ class VectorStoreAdapter(Adapter):
 
     Set by the CLI resolver: ``hashing-64`` for the built-in deterministic default,
     the configured spec (``st:all-mpnet-base-v2``; a hash spec by its dim) for a
-    real model, and ``None``
-    for the built-in fake. A Retrieval-Pivot Rate is a property of the geometry it
-    was measured in, so two runs in different geometries are not comparable - and
-    without this a signed pack cannot say which one it was.
+    real model, and ``None`` for the built-in fake. A Retrieval-Pivot Rate is a
+    property of the geometry it was measured in, so two runs in different
+    geometries are not comparable - and without this a signed pack cannot say
+    which one it was.
     """
 
     embedder_bridge: Any = None

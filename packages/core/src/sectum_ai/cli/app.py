@@ -3920,7 +3920,8 @@ _GEOMETRY_LABELS: dict[str, str] = {
 
 def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
     """The banner for two runs whose vector stores ranked in different embedding models."""
-    # As every renderer names one: a hashing geometry with its shared-tokens caveat.
+    # As every renderer names one: a hashing geometry with its shared-tokens caveat,
+    # each in a sentence of its own so a caveat's clauses cannot capture the next.
     before, after = (untrusted(describe_vector_embedder(name)) for name in change)
     # Only what these runs ranked over the store: the verdicts are scoped to
     # `embedder_scoped`, and a banner naming the Retrieval-Pivot Rate regardless
@@ -3940,8 +3941,9 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
         else ""
     )
     return (
-        f"[EMBEDDER CHANGED] the {earlier} run's vector store ranked with {before}, and this "
-        f"one with {after}. Whatever ranked by similarity over it - {what}, and the "
+        f"[EMBEDDER CHANGED] the {earlier} run's vector store and this one ranked with "
+        f"different embedding models. The {earlier} run: {before}. This run: {after}. "
+        f"Whatever ranked by similarity over the store - {what}, and the "
         "findings appearing or resolving there - was taken with a different instrument, "
         f"so its difference cannot be attributed to a change in isolation{may}; "
         "re-baseline deliberately"
@@ -4420,6 +4422,16 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
             list(result.embedder_changed) if result.embedder_changed is not None else None
         ),
         "embedder_scoped": list(result.embedder_scoped),
+        # As `probe --output json` carries `vector_embedder_note`: a hashing
+        # geometry's name alone reads as an embedding model.
+        "embedder_changed_note": (
+            [
+                describe_vector_embedder(name) if is_hashing_embedder(name) else None
+                for name in result.embedder_changed
+            ]
+            if result.embedder_changed is not None
+            else None
+        ),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
