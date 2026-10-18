@@ -556,8 +556,8 @@ LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")
 `calibrate --embedder fake` names the offline fake by the bare word, which is
 local too.
 
-`detection.mode: local` - the guarantee that no tenant content reaches a
-third-party AI service - refuses every
+`detection.mode: local` - the guarantee that Sectum's own stages send no tenant
+content to a third-party AI service - refuses every
 other spec. An allow-list, so a provider added later is hosted until someone
 says otherwise: a deny-list of the hosted ones failed OPEN for any prefix it
 was not updated with.

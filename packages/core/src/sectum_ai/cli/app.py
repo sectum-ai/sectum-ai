@@ -467,8 +467,8 @@ detection:
   # per-model preset for the embedder above (run `sectum-ai calibrate` to derive
   # one for your model). Raise it once a real embedding model is configured.
   semantic_threshold: 0.62  # 0.62 | <float> | auto
-  # Deployment mode. "local" is the BYOC guarantee that no tenant content reaches a
-  # third-party AI service: it
+  # Deployment mode. "local" is the BYOC guarantee that Sectum's own stages send no
+  # tenant content to a third-party AI service: it
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
   # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
   # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose

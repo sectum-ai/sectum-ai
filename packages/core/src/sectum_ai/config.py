@@ -210,17 +210,17 @@ class DetectionConfig(BaseModel):
     # errs toward surfacing rather than away from it.
     semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)] | Literal["auto"] = 0.62
     # Detection deployment mode. "hosted" (default) permits hosted embedder/judge providers (the
-    # real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that no tenant content reaches
-    # a third-party AI service: it fails fast if any configured embedder or judge would call a
-    # default third-party AI API. Only the offline `fake` providers, and providers explicitly
-    # pointed at an operator-controlled `base_url` (a local or in-VPC endpoint), are allowed -
-    # so Sectum itself makes no call to a hosted AI API. The `base_url` target is the operator's
-    # trust boundary, not Sectum's; the threat model documents this. Detection is NOT the only
-    # stage that embeds tenant content: the vector store's `embedder`, the Class 2 sweep and a
-    # mem0 memory adapter are gated by `SectumConfig._enforce_zero_egress`; specs from a CLI
-    # override or a seeded substrate are gated where used, by `refuse_hosted_embeddings`. The
-    # no-tenant-content claim rests on all three - a new command that embeds specs from a flag
-    # or a substrate must call the last.
+    # real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that Sectum's own stages send
+    # no tenant content to a third-party AI service: it fails fast if any configured embedder or
+    # judge would call a default third-party AI API. Only the offline `fake` providers, and
+    # providers explicitly pointed at an operator-controlled `base_url` (a local or in-VPC
+    # endpoint), are allowed - so Sectum itself makes no call to a hosted AI API. The `base_url`
+    # target is the operator's trust boundary, not Sectum's; the threat model documents this.
+    # Detection is NOT the only stage that embeds tenant content: the vector store's `embedder`,
+    # the Class 2 sweep and a mem0 memory adapter are gated by
+    # `SectumConfig._enforce_local_mode_stages`; specs from a CLI override or a seeded substrate
+    # are gated where used, by `refuse_hosted_embeddings`. The no-tenant-content claim rests on
+    # all three - a new command that embeds specs from a flag or a substrate must call the last.
     mode: Literal["hosted", "local"] = "hosted"
 
     @model_validator(mode="after")
@@ -355,7 +355,7 @@ class SectumConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _enforce_zero_egress(self) -> "SectumConfig":
+    def _enforce_local_mode_stages(self) -> "SectumConfig":
         """In ``detection.mode: local``, refuse a stage sending tenant content to a hosted AI API.
 
         ``DetectionConfig._enforce_local_mode`` gates the detection embedder and
@@ -395,8 +395,9 @@ class SectumConfig(BaseModel):
                 f"detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
                 f"third-party AI service, but "
                 f"{'; '.join(offenders)} would call a hosted AI API or cannot be shown "
-                "not to. Use a local model (st:<model>, hash-<dim>, or a local mem0 "
-                "provider) instead."
+                "not to. Use a local model (st:<model>, hash-<dim>), or for a mem0 block a "
+                "local provider or a store the gate allows (see the configuration "
+                "reference), instead."
             )
         if _mem0_telemetry_on(self.adapters.get("memory")):
             raise ValueError(
