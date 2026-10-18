@@ -633,7 +633,7 @@ def load_config(path: Path) -> SectumConfig:
         raise ConfigError(f"cannot read config file {path}: {error.strerror}") from None
     except ValueError:
         # A path the OS cannot take at all (an embedded NUL byte).
-        raise ConfigError(f"cannot read config file {path!r}: not a valid path") from None
+        raise ConfigError(f"cannot read config file {str(path)!r}: not a valid path") from None
     try:
         raw = yaml.safe_load(text)
     # Every failure, not only YAMLError: a tagged scalar's constructor raises a bare

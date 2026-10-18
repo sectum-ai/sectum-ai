@@ -1744,10 +1744,11 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
         load_config(tmp_path / "a\x00b.yaml")
 
 
-def test_the_cli_registers_exactly_the_queries_the_erasure_scan_sends() -> None:
-    # The CLI copied the probe's selection rule; a change to what the scan queries
-    # would have left the old texts registered, and the real queries embedded as
-    # documents by an asymmetric model.
+def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
+    # The helper the CLI registers from must be the scan's own rule: the CLI copied
+    # the probe's selection, so a change to what the scan queries would have left
+    # the old texts registered and the real queries embedded as documents. (The
+    # CLI's half: test_both_erasure_modes_register_their_fingerprint_queries.)
     from sectum_ai.probes import ErasureProbe, vector_residue_queries
     from sectum_ai.substrate import build_substrate, default_scenario
 

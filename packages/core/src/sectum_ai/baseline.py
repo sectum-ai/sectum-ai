@@ -410,9 +410,10 @@ class RunDiff:
     # or not isolation changed - the spec's own example of a change to flag. A rate
     # that fell across the swap read `[ok]`, a fix nobody made. Compared only where
     # both records name one: a fake slot, or a run in which nothing is known to
-    # have ranked by similarity over the store, names none (an older schema line never reaches
-    # here - it is refused outright), and losing a live store is `scope_lost`'s to
-    # report. ``(earlier, later)`` when they differ.
+    # have ranked by similarity over the store, names none (so does a record from
+    # before 0.8.0, which the CLI refuses outright but an SDK caller may pass), and
+    # losing a live store is `scope_lost`'s to report. ``(earlier, later)`` when
+    # they differ.
     embedder_changed: tuple[str, str] | None = None
     # The probes either run exercised whose results the swap may have moved, when
     # ``embedder_changed`` is set: the geometry probes, the erasure checks' vector
