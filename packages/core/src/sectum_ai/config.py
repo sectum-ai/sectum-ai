@@ -444,6 +444,15 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         offenders.append(f"memory mem0 embedder (cannot be classified: {embedder!r})")
     elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
         offenders.append(f"memory mem0 embedder ({provider!r})")
+    # A vector store that embeds server-side is a hosted embedder too: Upstash
+    # with `enable_embeddings` is sent each write's raw text to embed.
+    store = mem0_config.get("vector_store")
+    if isinstance(store, dict) and store.get("provider") == "upstash_vector":
+        store_config = store.get("config")
+        if not isinstance(store_config, dict):
+            offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
+        elif store_config.get("enable_embeddings"):
+            offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):
         offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")

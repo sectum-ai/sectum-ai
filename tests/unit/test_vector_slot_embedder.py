@@ -1356,3 +1356,17 @@ def test_byoc_local_mode_refuses_a_mem0_block_it_cannot_classify() -> None:
         SectumConfig.model_validate(
             {"adapters": {"memory": {"kind": "mem0", "config": {"embedder": block}}}}
         )
+
+
+def test_byoc_local_mode_refuses_a_mem0_store_that_embeds_server_side() -> None:
+    # Upstash with `enable_embeddings` is sent each write's raw text to embed with
+    # its hosted model - the egress the gate refuses for a hosted mem0 embedder.
+    def _upstash(**extra: object) -> dict[str, object]:
+        return {"provider": "upstash_vector", "config": {"url": "u", "token": "t", **extra}}
+
+    embedder = {"provider": "ollama"}
+    SectumConfig.model_validate(_mem0({"embedder": embedder, "vector_store": _upstash()}))
+    with pytest.raises(ValueError, match="enable_embeddings"):
+        SectumConfig.model_validate(
+            _mem0({"embedder": embedder, "vector_store": _upstash(enable_embeddings=True)})
+        )
