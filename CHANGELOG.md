@@ -158,12 +158,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw traceback (exit 1). `probe` now stops with an adapter error (exit 3)
   naming only the exception's type, with a hint that the index's dimension may
   have changed on a live store. `erasure` contains it like every other surface
-  and embeds and loads the target's corpus first: refused there - in full or
-  part-way - what landed is cleared, so `vector_db` shows no baseline, reads
-  NOT_COVERED and the run ends ERASURE INCONCLUSIVE (exit 3) like any unseeded
-  surface, the others keeping their verdicts (if the clearing fails too, the
-  surface is recorded as not seeded rather than scanned over a partial load);
-  refused only for another tenant, the target's verdict stands, with a warning.
+  and embeds and loads only the target's corpus - the one every store's residue
+  scan reads, where the other tenants' were embedded (with a hosted model, sent
+  and billed) for nothing. Refused - in full or part-way - what landed is
+  cleared, so `vector_db` shows no baseline, reads NOT_COVERED and the run ends
+  ERASURE INCONCLUSIVE (exit 3) like any unseeded surface, the others keeping
+  their verdicts; if the clearing fails too, the surface is recorded as not
+  seeded rather than scanned over a partial load, and the leftover is warned
+  about. A canary write refused part-way on another surface now warns that the
+  surface is attested over the canaries that landed, not that it reads
+  NOT_COVERED beside an ERASED verdict.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep

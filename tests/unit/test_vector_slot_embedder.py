@@ -1782,10 +1782,8 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
         # scan over that attested ERASED - so what landed is cleared first.
         ({1}, True, False, "NOT_COVERED"),
         # ...and if that cleanup fails too, the surface is recorded as not seeded
-        # rather than scanned over the partial load.
+        # rather than scanned over the partial load, and the leftover is said.
         ({1}, True, True, "NOT_COVERED"),
-        # Another tenant's refused after the target's landed in full: it stands.
-        ({2}, False, False, "ERASED"),
     ],
 )
 def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
@@ -1843,41 +1841,41 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             assert (
                 "not seeded: the vector store refused the corpus" in erased.output
             ) is delete_fails, erased.output
+            assert ("part of it may remain" in erased.output) is delete_fails, erased.output
             assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
             assert record["vector_embedder"] is None
-        else:
-            assert "could not seed the vector_db canary" not in erased.output, erased.output
-            assert "the vector_db verdict stands" in erased.output, erased.output
-            assert record["vector_embedder"] == "st:all-mpnet-base-v2"
 
 
-def test_a_typed_failure_embedding_the_other_tenants_leaves_the_target_verdict(
+def test_erasure_embeds_and_loads_only_the_targets_corpus(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Embedding the other tenants' corpus can fail with any SectumError (a provider
-    # answering with no vectors is a ConfigError); caught as AdapterError only, it
-    # aborted the run after the target's corpus was already in the store.
+    # Every store's residue scan reads the target's own tenant, so the other
+    # tenants' corpora were embedded - with a hosted model, sent and billed - and
+    # left in the live store for nothing the verdict reads.
     import json
 
     from typer.testing import CliRunner
 
-    from sectum_ai.cli import app as cli
-    from sectum_ai.spec import ConfigError
+    from sectum_ai.cli.app import _load_substrate, app
 
-    real_prefetch = cli._prefetch_corpus
-    calls = {"n": 0}
+    model = _Modes()
+    _bridged_slot(monkeypatch, model)
+    loaded: list[Any] = []
+    real_upsert = FakeVectorStore.upsert
 
-    def _prefetch(store: Any, documents: Any) -> None:
-        calls["n"] += 1
-        if calls["n"] == 2:
-            raise ConfigError("the provider answered with no vectors")
-        real_prefetch(store, documents)
+    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        loaded.append(tenant)
+        return real_upsert(self, tenant, documents)
 
-    monkeypatch.setattr(cli, "_prefetch_corpus", _prefetch)
+    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
     runner = CliRunner()
-    assert runner.invoke(cli.app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    erased = runner.invoke(cli.app, ["erasure", "--workdir", str(tmp_path)])
-    assert "the vector_db verdict stands" in erased.output, erased.output
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    substrate = _load_substrate(tmp_path)
+    target = substrate.tenants[0].tenant_id
+    assert loaded == [target], erased.output
+    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == target}
+    assert set(model.documents) <= own and model.documents, erased.output
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 

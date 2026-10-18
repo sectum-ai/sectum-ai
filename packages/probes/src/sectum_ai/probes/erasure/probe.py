@@ -376,15 +376,17 @@ class ErasureProbe:
                 Surfaces in ``scope`` that have no configured adapter are simply
                 not scanned (they too read ``NOT_COVERED``); the vector store is
                 always present.
-            unseeded: Surfaces the caller could not seed, with why. Each is
-                recorded as present but unestablished - not scanned, since a seed
-                that landed in part leaves a baseline the verdict cannot rest on -
-                so it reads ``NOT_COVERED`` and the run cannot attest it, exactly
-                as a surface whose scan failed.
+            unseeded: Surfaces the caller could not seed, with why. Each one the
+                run would otherwise scan (configured, in scope) is recorded as
+                present but unestablished - neither scanned nor erased, since a
+                seed that landed in part leaves a baseline the verdict cannot rest
+                on - so it reads ``NOT_COVERED`` and the run cannot attest it, as a
+                surface whose scan failed does.
 
         Returns:
             An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
-            surfaces and any ``unseeded`` one, and whose ``coverage()`` reports a
+            surfaces and any ``unseeded`` one the run would have scanned, and whose
+            ``coverage()`` reports a
             verdict for *every*
             erasure surface, so the attestation never implies more coverage than
             it verified.

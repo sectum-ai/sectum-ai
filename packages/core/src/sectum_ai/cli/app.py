@@ -3519,24 +3519,18 @@ def erasure(
     # Only if that cleanup fails too is the surface handed over as not seeded, to be
     # recorded unestablished rather than scanned.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
+    # Only the target's corpus is loaded: every store's residue scan reads the
+    # target's own tenant, so the other tenants' corpora were embedded - with a
+    # hosted model, sent and billed - for nothing the verdict reads.
     not_seeded: dict[Surface, str] = {}
     if Surface.VECTOR_DB in unseedable:
         try:
             store.delete(target)
-        except Exception:
-            not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
-    elif _seeds(Surface.VECTOR_DB):
-        others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
-        try:
-            _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
-            _load_corpus(store, substrate, others)
         except Exception as error:
-            # The target's corpus landed in full, so its verdict stands. Typed
-            # failures say why; anything else is named by type only.
-            why = str(error) if isinstance(error, SectumError) else type(error).__name__
+            not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
             typer.echo(
-                f"warning: the other tenants' corpus did not all load ({why}); the "
-                "target's did, so the vector_db verdict stands",
+                f"warning: clearing what landed of the target's corpus failed too "
+                f"({type(error).__name__}); part of it may remain in the vector store",
                 err=True,
             )
     for marker in substrate.manifest.markers:
@@ -3629,9 +3623,18 @@ def erasure(
         # Said out loud: an unseeded surface has no markers before, so the probe
         # attests nothing there and the coverage block reads NOT_COVERED. Silent,
         # that is indistinguishable from a surface nobody configured.
+        # The vector store's partial load was cleared above, so it reads NOT_COVERED.
+        # A marker write is per canary: those that landed are scanned and erased,
+        # and the surface is attested over them - NOT_COVERED only if none did.
+        consequence = (
+            "so that surface reads NOT_COVERED rather than erased"
+            if unseeded is Surface.VECTOR_DB
+            else "so that surface is attested only over the canaries that did land, "
+            "and reads NOT_COVERED if none did"
+        )
         typer.echo(
-            f"warning: could not seed the {unseeded.value} canary, so that surface "
-            f"reads NOT_COVERED rather than erased: {untrusted(reason)}",
+            f"warning: could not seed the {unseeded.value} canary, {consequence}: "
+            f"{untrusted(reason)}",
             err=True,
         )
     started = datetime.now(UTC)
