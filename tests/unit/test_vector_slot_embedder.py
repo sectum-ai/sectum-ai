@@ -1345,6 +1345,8 @@ def test_an_omitted_mem0_provider_pointed_at_a_local_server_is_local() -> None:
     [
         ({"provider": ["ollama"]}, "embedder.provider must be a provider name"),
         ({"provider": ""}, "embedder.provider must be a provider name"),
+        ({"provider": None}, "embedder.provider must be a provider name"),
+        ({"provider": "openai", "config": "x"}, "embedder.config must be a mapping"),
         ("ollama", "embedder must be a mapping"),
     ],
 )
@@ -1361,3 +1363,39 @@ def test_a_malformed_mem0_block_is_refused_for_what_it_is_in_every_mode(
         with pytest.raises(ValueError, match=reason) as caught:
             SectumConfig.model_validate(config)
         assert "hosted AI API" not in str(caught.value)
+
+
+def test_mem0_model_config_follows_mem0s_own_rules() -> None:
+    # A non-mapping `config` is refused for what it is, not as egress.
+    for mode in ("hosted", "local"):
+        with pytest.raises(ValueError, match="memory 'config' must be a mapping") as caught:
+            SectumConfig.model_validate(
+                {
+                    "detection": {"mode": mode},
+                    "adapters": {"memory": {"kind": "mem0", "config": "x"}},
+                }
+            )
+        assert "hosted AI API" not in str(caught.value)
+    # An empty graph-LLM provider is mem0's "use `llm`", which mem0 accepts.
+    local = {"provider": "ollama"}
+    neo4j = {"provider": "neo4j", "config": {"url": "bolt://localhost:7687"}}
+    SectumConfig.model_validate(
+        _mem0(
+            {
+                "llm": local,
+                "embedder": {"provider": "huggingface"},
+                "graph_store": {**neo4j, "llm": {"provider": ""}},
+            }
+        )
+    )
+    # A graph-LLM block with no provider is LlmConfig's default, openai - not `llm`.
+    with pytest.raises(ValueError, match=r"graph_store\.llm"):
+        SectumConfig.model_validate(
+            _mem0(
+                {
+                    "llm": local,
+                    "embedder": {"provider": "huggingface"},
+                    "graph_store": {**neo4j, "llm": {"config": {"model": "x"}}},
+                }
+            )
+        )

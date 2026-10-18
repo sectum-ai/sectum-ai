@@ -116,7 +116,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verbatim, so mem0's LLM runs for nothing else. An `openai` provider with an
   explicit `openai_base_url` counts as local, or, for an LLM while
   `OPENROUTER_API_KEY` is set (mem0 then routes to OpenRouter), an explicit
-  `openrouter_base_url`. An embedding spec counts as local only by an allow-list
+  `openrouter_base_url`. A malformed mem0 `llm` / `embedder` / `graph_store.llm`
+  block - not a mapping, a non-mapping `config`, or a provider that is not a name -
+  is now refused at config load in every mode, as mem0 would refuse it later. An
+  embedding spec counts as local only by an allow-list
   (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
   refused until classified.
 - **Asymmetric embedding models embedded probe queries as documents.** Cohere,
