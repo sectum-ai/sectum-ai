@@ -1744,6 +1744,36 @@ def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
         load_config(tmp_path / ("x" * 300 + ".yaml"))
     with pytest.raises(ConfigError, match="config file not found"):
         load_config(tmp_path / "absent.yaml")
+    with pytest.raises(ConfigError, match="not a valid path"):
+        load_config(tmp_path / "a\x00b.yaml")
+
+
+def test_the_cli_registers_exactly_the_queries_the_erasure_scan_sends() -> None:
+    # The CLI copied the probe's selection rule; a change to what the scan queries
+    # would have left the old texts registered, and the real queries embedded as
+    # documents by an asymmetric model.
+    from sectum_ai.probes import ErasureProbe, vector_residue_queries
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    class _Recording(FakeVectorStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.queried: list[str] = []
+
+        def query(self, tenant: Any, text: str, k: int = 5, *, user: Any = None) -> Any:
+            self.queried.append(text)
+            return super().query(tenant, text, k, user=user)
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _Recording()
+    for tenant in substrate.tenants:
+        store.upsert(
+            tenant.tenant_id, [d for d in substrate.documents if d.tenant_id == tenant.tenant_id]
+        )
+    ErasureProbe(substrate, vector=store).run(target)
+    assert store.queried
+    assert set(store.queried) == set(vector_residue_queries(substrate, target))
 
 
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:

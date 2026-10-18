@@ -5,6 +5,13 @@ from sectum_ai.probes.erasure.probe import (
     ErasureProbe,
     ErasureReport,
     SurfaceErasure,
+    vector_residue_queries,
 )
 
-__all__ = ["ERASURE_SURFACES", "ErasureProbe", "ErasureReport", "SurfaceErasure"]
+__all__ = [
+    "ERASURE_SURFACES",
+    "ErasureProbe",
+    "ErasureReport",
+    "SurfaceErasure",
+    "vector_residue_queries",
+]

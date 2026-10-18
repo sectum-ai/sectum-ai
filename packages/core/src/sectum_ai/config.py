@@ -616,8 +616,9 @@ def load_config(path: Path) -> SectumConfig:
     """Load and validate a ``sectum-ai.yaml`` configuration file.
 
     Raises:
-        ConfigError: if the file is missing, contains malformed YAML, or fails
-            schema validation.
+        ConfigError: if the file is missing or cannot be read (a directory, no
+            permission, an invalid path), is not UTF-8 text, contains malformed
+            YAML, or fails schema validation - never quoting the config's text.
     """
     # One try for every way the read can fail: a separate `exists()` check raised
     # its own untyped OSError for a parent it cannot traverse or an over-long name.
@@ -629,6 +630,9 @@ def load_config(path: Path) -> SectumConfig:
         raise ConfigError(f"config file is not UTF-8 text: {path}") from None
     except OSError as error:
         raise ConfigError(f"cannot read config file {path}: {error.strerror}") from None
+    except ValueError:
+        # A path the OS cannot take at all (an embedded NUL byte).
+        raise ConfigError(f"cannot read config file {path!r}: not a valid path") from None
     try:
         raw = yaml.safe_load(text)
     # Every failure, not only YAMLError: a tagged scalar's constructor raises a bare

@@ -30,6 +30,7 @@ from sectum_ai.spec import (
     ERASURE_SURFACES as _ERASURE_SURFACES,
 )
 from sectum_ai.spec import (
+    CorpusDocument,
     CoverageVerdict,
     ErasureUnsupported,
     Finding,
@@ -283,6 +284,30 @@ class ErasureReport:
             for surface, verdict in self.coverage().items()
             if verdict is CoverageVerdict.NOT_COVERED
         )
+
+
+def _marker_queries(documents: Mapping[str, CorpusDocument], marker: Marker) -> list[str]:
+    """What the vector residue scan queries for ``marker``: each planted document's title."""
+    return [
+        documents[location.doc_id].title
+        for location in marker.planted_locations
+        if location.doc_id in documents
+    ]
+
+
+def vector_residue_queries(substrate: Substrate, target: UUID) -> list[str]:
+    """Every text :class:`ErasureProbe`'s vector residue scan queries for ``target``.
+
+    The probe's own rule, for a caller preparing the store before the run (the CLI
+    registers these as queries, so an asymmetric embedder ranks them as queries).
+    """
+    documents = {document.doc_id: document for document in substrate.documents}
+    return [
+        query
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target
+        for query in _marker_queries(documents, marker)
+    ]
 
 
 class ErasureProbe:
@@ -697,11 +722,8 @@ class ErasureProbe:
         same store still returns.
         """
         inconclusive = False
-        for location in marker.planted_locations:
-            document = self._documents.get(location.doc_id)
-            if document is None:
-                continue
-            hits = self._vector.query(target, document.title, k=FINGERPRINT_QUERY_K)
+        for query in _marker_queries(self._documents, marker):
+            hits = self._vector.query(target, query, k=FINGERPRINT_QUERY_K)
             if any(residual_present(marker.plaintext, hit.content) for hit in hits):
                 return True
             if len(hits) >= FINGERPRINT_QUERY_K:

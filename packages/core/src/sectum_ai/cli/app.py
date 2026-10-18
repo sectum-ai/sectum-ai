@@ -133,6 +133,7 @@ from sectum_ai.probes import (
     confirmed_findings,
     dedupe_findings,
     is_cross_principal,
+    vector_residue_queries,
 )
 from sectum_ai.runner import (
     Runner,
@@ -3474,20 +3475,8 @@ def erasure(
 
     if _seeds(Surface.VECTOR_DB):
         _prefetch_corpus(store, substrate.documents)
-        # The residue scan queries the title of each document holding one of the
-        # target's markers - every type, as the probe scans every type - not every
-        # title the tenant has.
-        by_id = {doc.doc_id: doc for doc in substrate.documents}
-        _register_queries(
-            store,
-            (
-                by_id[location.doc_id].title
-                for marker in substrate.manifest.markers
-                if marker.owner_tenant_id == target
-                for location in marker.planted_locations
-                if location.doc_id in by_id
-            ),
-        )
+        # The residue scan's own queries, by the probe's own rule.
+        _register_queries(store, vector_residue_queries(substrate, target))
         for tenant in substrate.tenants:
             documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
             store.upsert(tenant.tenant_id, documents)

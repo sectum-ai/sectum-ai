@@ -94,7 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `embedder_changed` and `embedder_scoped` (the probes either run exercised whose
   results the swap may have moved, which its `[not measured]` is scoped to), and
   `RunDiff.regressed` is true on an embedder swap. `Runner.steps_to_send(probe)`
-  returns the steps `run_per_step` will send, after its user-scope drops. New
+  returns the steps `run_per_step` will send, after its user-scope drops, and
+  `sectum_ai.probes.vector_residue_queries(substrate, target)` the texts the
+  erasure probe's vector scan queries, which the CLI registers as queries. New
   public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
   `embed_batched`, `iter_batches`, `EMBED_BATCH_SIZE`, `embed_queries`, `validate_model_spec`,
   `canonical_embedding_spec`, `is_hosted_embedding_spec`,
