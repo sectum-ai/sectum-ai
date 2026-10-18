@@ -1340,6 +1340,24 @@ def test_an_omitted_mem0_provider_pointed_at_a_local_server_is_local() -> None:
     SectumConfig.model_validate(_mem0({"embedder": local_server}))
 
 
-def test_a_malformed_mem0_provider_is_a_config_error_not_a_traceback() -> None:
-    with pytest.raises(ValueError, match="mem0 embedder"):
-        SectumConfig.model_validate(_mem0({"embedder": {"provider": ["ollama"]}}))
+@pytest.mark.parametrize(
+    ("block", "reason"),
+    [
+        ({"provider": ["ollama"]}, "embedder.provider must be a provider name"),
+        ({"provider": ""}, "embedder.provider must be a provider name"),
+        ("ollama", "embedder must be a mapping"),
+    ],
+)
+def test_a_malformed_mem0_block_is_refused_for_what_it_is_in_every_mode(
+    block: object, reason: str
+) -> None:
+    # Not a traceback, and not "would call a hosted AI API" - mem0 rejects these
+    # before any call, so no egress is possible.
+    for mode in ("hosted", "local"):
+        config = {
+            "detection": {"mode": mode},
+            "adapters": {"memory": {"kind": "mem0", "config": {"embedder": block}}},
+        }
+        with pytest.raises(ValueError, match=reason) as caught:
+            SectumConfig.model_validate(config)
+        assert "hosted AI API" not in str(caught.value)

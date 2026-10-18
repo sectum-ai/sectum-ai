@@ -354,6 +354,38 @@ class SectumConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _validate_mem0_models(self) -> "SectumConfig":
+        """Refuse a malformed mem0 model block at load, in every mode.
+
+        A block that is not a mapping, or a provider that is not a name, fails
+        inside mem0 later; checked here it is refused for what it is - and the
+        egress gate below never has to classify a provider nobody could load.
+        """
+        memory = self.adapters.get("memory")
+        if memory is None or memory.kind != "mem0":
+            return self
+        mem0_config = (memory.model_extra or {}).get("config")
+        if not isinstance(mem0_config, dict):
+            return self  # the builder refuses a non-mapping `config` itself
+        graph = mem0_config.get("graph_store")
+        blocks = {
+            "llm": mem0_config.get("llm"),
+            "embedder": mem0_config.get("embedder"),
+            "graph_store.llm": graph.get("llm") if isinstance(graph, dict) else None,
+        }
+        for section, block in blocks.items():
+            if block is None:
+                continue
+            if not isinstance(block, dict):
+                raise ValueError(f"memory mem0 {section} must be a mapping, got {block!r}")
+            provider = block.get("provider")
+            if provider is not None and (not isinstance(provider, str) or not provider):
+                raise ValueError(
+                    f"memory mem0 {section}.provider must be a provider name, got {provider!r}"
+                )
+        return self
+
+    @model_validator(mode="after")
     def _enforce_zero_egress(self) -> "SectumConfig":
         """In ``detection.mode: local``, refuse every embedder that would leave the box.
 
@@ -415,8 +447,6 @@ def _mem0_provider_is_local(block: object, local: frozenset[str], *, llm: bool) 
     # An omitted provider is mem0's default, openai - which a base URL can point
     # at a local server like any explicit openai block.
     provider = block.get("provider") or "openai"
-    if not isinstance(provider, str):
-        return False  # not a provider name mem0 knows; refused as not local
     settings = block.get("config")
     url_key = "openai_base_url"
     if llm and os.environ.get("OPENROUTER_API_KEY"):
