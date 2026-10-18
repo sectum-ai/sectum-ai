@@ -344,14 +344,11 @@ class SectumConfig(BaseModel):
         """
         store = self.adapters.get("vector_store")
         spec = (store.model_extra or {}).get("embedder") if store else None
-        if spec is None:
-            return self
-        if not isinstance(spec, str):
-            raise ValueError(f"vector_store.embedder must be a model spec string, got {spec!r}")
-        try:
-            validate_model_spec(spec)
-        except ConfigError as error:
-            raise ValueError(f"vector_store.embedder: {error}") from error
+        if spec is not None:
+            try:
+                _check_vector_embedder(spec)
+            except ConfigError as error:
+                raise ValueError(str(error)) from error
         return self
 
     @model_validator(mode="after")
@@ -712,14 +709,19 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
     )
 
 
-def _recorded_embedder_name(bridge: EmbedderBridge) -> str:
-    """The name `diff` compares: one spelling per geometry, where that is knowable.
+def _check_vector_embedder(spec: object) -> str:
+    """``spec`` as a real embedding model's spec string, else :class:`ConfigError`.
 
-    A hash spec is its dim (`hash:64` and `hash-64` are one geometry), and an `st:`
-    model drops the `sentence-transformers/` namespace sentence-transformers itself
-    resolves a bare name to. Two spellings of one instrument read as a swap.
+    One check for the load-time validator and the build-time resolver, which a
+    store built straight from an :class:`AdapterConfig` reaches without the first.
     """
-    return canonical_embedding_spec(bridge.name)
+    if not isinstance(spec, str):
+        raise ConfigError(f"vector_store.embedder must be a model spec string, got {spec!r}")
+    try:
+        validate_model_spec(spec)
+    except ConfigError as error:
+        raise ConfigError(f"vector_store.embedder: {error}") from error
+    return spec
 
 
 def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
@@ -738,12 +740,7 @@ def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
     spec = (config.model_extra or {}).get("embedder")
     if spec is None:
         return None
-    if not isinstance(spec, str):
-        raise ConfigError(f"vector_store.embedder must be a model spec string, got {spec!r}")
-    try:
-        validate_model_spec(spec)
-    except ConfigError as error:
-        raise ConfigError(f"vector_store.embedder: {error}") from error
+    spec = _check_vector_embedder(spec)
     model = resolve_embedding_model(spec)
     assert model is not None  # validate_model_spec refuses the fake-* recall names
     return EmbedderBridge(model)
@@ -767,9 +764,8 @@ def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
         store.embedder_name = HASHING_EMBEDDER_NAME
     else:
         store = _build_vector_store(config, bridge, bridge.dim)
-        # A hash spec is recorded by its dim, not its spelling: `hash:64` and
-        # `hash-64` are one geometry, and the recorded name is what `diff` compares.
-        store.embedder_name = _recorded_embedder_name(bridge)
+        # The name `diff` compares, so one spelling per geometry (see the function).
+        store.embedder_name = canonical_embedding_spec(bridge.name)
         store.embedder_bridge = bridge
     # `semantic_retrieval` stays WITHDRAWN for every live store in this release,
     # including one driven by a real model - deliberately. The capability is a

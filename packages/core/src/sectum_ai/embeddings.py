@@ -509,13 +509,16 @@ _MODEL_MENU = (
 
 
 def canonical_embedding_spec(spec: str) -> str:
-    """One spelling per model: ``hash:<n>`` is ``hash-<n>``, and an ``st:`` model drops
-    the ``sentence-transformers/`` namespace sentence-transformers resolves a bare
-    name to. Two spellings of one model compare as one, in a record and in a sweep.
+    """One spelling per geometry, where that is provable: ``hash:<n>`` is ``hash-<n>``.
+
+    Nothing else is merged. ``st:<m>`` and ``st:sentence-transformers/<m>`` are
+    usually one hub model, but a bare name resolves to a local folder of that name
+    first - so treating them as one could hide a real model change behind a
+    comparison, which is worse than asking for a re-baseline.
     """
     if spec.startswith(("hash-", "hash:")):
         return f"hash-{_hash_dim(spec)}"
-    return spec.replace("st:sentence-transformers/", "st:", 1)
+    return spec
 
 
 def validate_model_spec(spec: str) -> None:

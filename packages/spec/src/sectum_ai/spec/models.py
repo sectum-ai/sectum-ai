@@ -584,9 +584,8 @@ class RunResult(SectumModel):
     """The embedding model the vector slot's store was driven with.
 
     ``hashing-64`` for the built-in deterministic default, the configured spec
-    (``st:all-mpnet-base-v2``) for a real model - one spelling per model, so
-    ``hash:128`` is recorded ``hash-128`` and ``st:sentence-transformers/<m>`` as
-    ``st:<m>`` - and ``None`` where the record does
+    (``st:all-mpnet-base-v2``) for a real model - a hash spec by its dim, so
+    ``hash:128`` is recorded ``hash-128`` - and ``None`` where the record does
     not say - a pre-0.8.0 record, a run whose vector slot was the built-in fake, or
     a run in which nothing ranked by similarity over the store (a narrowed suite of
     by-id fetches, an erasure scoped away from the vector surface). Independent of

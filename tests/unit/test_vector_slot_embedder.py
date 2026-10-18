@@ -786,14 +786,13 @@ def test_a_query_already_indexed_as_a_document_is_not_embedded_again() -> None:
     assert model.queries == ["who owns the contract"]
 
 
-def test_an_st_model_is_recorded_without_its_default_namespace() -> None:
-    # sentence-transformers resolves a bare name to its own namespace, so the two
-    # spellings are one model; recorded apart, a rename tripped [EMBEDDER CHANGED].
-    from sectum_ai.config import _recorded_embedder_name
+def test_an_st_model_keeps_its_spelling() -> None:
+    # A bare `st:` name can resolve to a local folder the namespaced one would not,
+    # so merging the two could hide a real model change behind a comparison.
+    from sectum_ai.embeddings import canonical_embedding_spec
 
-    assert _recorded_embedder_name(EmbedderBridge(HashingEmbedding("hash-16", dim=16))) == "hash-16"
-    renamed = SimpleNamespace(name="st:sentence-transformers/all-mpnet-base-v2", dim=768)
-    assert _recorded_embedder_name(renamed) == "st:all-mpnet-base-v2"  # type: ignore[arg-type]
+    namespaced = "st:sentence-transformers/all-mpnet-base-v2"
+    assert canonical_embedding_spec(namespaced) == namespaced
 
 
 def test_st_models_use_their_own_query_and_document_prompts() -> None:
@@ -1249,11 +1248,11 @@ def test_the_gradient_loads_the_spelling_the_operator_wrote(
 
     def _resolve(spec: str) -> object:
         loaded.append(spec)
-        return HashingEmbedding(spec, dim=32 if "MiniLM" in spec else 64)
+        return HashingEmbedding(spec, dim=32 if "32" in spec else 64)
 
     monkeypatch.setattr("sectum_ai.cli.app.resolve_embedding_model", _resolve)
-    specs = ("st:sentence-transformers/all-MiniLM-L6-v2", "st:all-mpnet-base-v2")
+    specs = ("hash:32", "hash-64", "hash-32")
     substrate = build_substrate(default_scenario(seed=2026, embedding_models=specs))
     rates = _per_model_rpr(substrate, FakeVectorStore())
-    assert loaded == list(specs)
-    assert set(rates) == {"st:all-MiniLM-L6-v2", "st:all-mpnet-base-v2"}
+    assert loaded == ["hash:32", "hash-64"]
+    assert set(rates) == {"hash-32", "hash-64"}

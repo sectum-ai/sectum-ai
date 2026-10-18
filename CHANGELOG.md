@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by shared tokens, not meaning. The default is unchanged. `semantic_retrieval`
   stays withheld from live stores, so Classes 6 and 13 still read `NOT_COVERED`.
 - **`RunResult.vector_embedder`** records the geometry the vector slot's store
-  ranked in (`hashing-64`, the configured spec in one spelling per model, or
+  ranked in (`hashing-64`, the configured spec - a hash spec by its dim - or
   `null` for the built-in fake or
   a run in which nothing ranked by similarity over the store), on both `probe` and
   `erasure` records. The scorecard's Class 2, 3 and 10 headlines name it too
@@ -64,8 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adapters are built: an unloadable model, or a provider failing mid-sweep (a
   revoked key, a quota), failed only after every probe had run against the stack,
   with no record written. Its warnings still print beside the run summary. A
-  comparison needs two or more *distinct* models: a spec listed twice, or spelled
-  two ways, is one model, so no gradient - and a recorded gradient is keyed by each
+  comparison needs two or more *distinct* models: a spec listed twice, or a hash
+  spec spelled two ways, is one model, so no gradient - and a recorded gradient is keyed by each
   model's canonical spelling (`hash:32` is `hash-32`), as `vector_embedder` is.
 
 - **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something

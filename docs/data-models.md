@@ -34,8 +34,8 @@ without running Sectum.
 schema it does not understand. The current `SCHEMA_VERSION` is **0.8.0** — it
 added `RunResult.vector_embedder`: the embedding model the vector slot's store was
 driven with (`hashing-64` for the built-in deterministic default, the configured
-spec such as `st:all-mpnet-base-v2` for a real model — one spelling per model:
-`hash:128` is recorded `hash-128`, `st:sentence-transformers/<m>` as `st:<m>` — `null` where the slot was the
+spec such as `st:all-mpnet-base-v2` for a real model — a hash spec by its dim, so
+`hash:128` is recorded `hash-128` — `null` where the slot was the
 built-in fake or the `app` API — neither embeds — or nothing in the run ranked by
 similarity over the store, such as a suite narrowed to by-id fetches). A Retrieval-Pivot Rate is a
 property of the geometry it was measured in, so a signed pack has to say which one.

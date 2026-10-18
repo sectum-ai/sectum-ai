@@ -65,8 +65,8 @@ geometries cannot be mistaken for the same measurement.
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
 Retrieval-Pivot Rate rises with embedding strength. When a scenario lists two or
-more *distinct* real models in `embedding_models` (one spec listed twice, or spelled
-two ways such as `hash:32` / `hash-32`, is one model), `sectum-ai probe` sweeps them
+more *distinct* real models in `embedding_models` (one spec listed twice, or a hash
+spec spelled two ways such as `hash:32` / `hash-32`, is one model), `sectum-ai probe` sweeps them
 and reports `retrieval_pivot_rate_by_model`, keyed by each model's canonical spelling.
 
 !!! warning "The gradient is modelled, not a measurement of your store"
