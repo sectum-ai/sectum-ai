@@ -71,6 +71,7 @@ from sectum_ai.adapters import (
 )
 from sectum_ai.embeddings import (
     EmbedderBridge,
+    canonical_embedding_spec,
     is_hosted_embedding_spec,
     resolve_embedding_model,
     validate_embedding_spec,
@@ -91,7 +92,6 @@ from sectum_ai.spec import (
     ConfigError,
     DetectionProvenance,
     SurfaceProvenance,
-    is_hashing_embedder,
 )
 
 
@@ -719,9 +719,7 @@ def _recorded_embedder_name(bridge: EmbedderBridge) -> str:
     model drops the `sentence-transformers/` namespace sentence-transformers itself
     resolves a bare name to. Two spellings of one instrument read as a swap.
     """
-    if is_hashing_embedder(bridge.name):
-        return f"hash-{bridge.dim}"
-    return bridge.name.replace("st:sentence-transformers/", "st:", 1)
+    return canonical_embedding_spec(bridge.name)
 
 
 def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:

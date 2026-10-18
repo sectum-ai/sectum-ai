@@ -41,6 +41,7 @@ __all__ = [
     "SentenceTransformerEmbedding",
     "VoyageEmbedding",
     "call_embedder",
+    "canonical_embedding_spec",
     "cosine",
     "embed_queries",
     "is_hosted_embedding_spec",
@@ -505,6 +506,16 @@ _MODEL_PREFIXES = ("st:", "openai:", "cohere:", "voyage:", "bedrock:", "hash-", 
 _MODEL_MENU = (
     "hash-<dim>, st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
 )
+
+
+def canonical_embedding_spec(spec: str) -> str:
+    """One spelling per model: ``hash:<n>`` is ``hash-<n>``, and an ``st:`` model drops
+    the ``sentence-transformers/`` namespace sentence-transformers resolves a bare
+    name to. Two spellings of one model compare as one, in a record and in a sweep.
+    """
+    if spec.startswith(("hash-", "hash:")):
+        return f"hash-{_hash_dim(spec)}"
+    return spec.replace("st:sentence-transformers/", "st:", 1)
 
 
 def validate_model_spec(spec: str) -> None:

@@ -72,6 +72,7 @@ from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
 from sectum_ai.embeddings import (
     EmbeddingModel,
     call_embedder,
+    canonical_embedding_spec,
     resolve_embedding_model,
     validate_embedding_spec,
     validate_model_spec,
@@ -795,6 +796,7 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
 def _per_model_rpr(
     substrate: Substrate,
     vector: VectorStoreAdapter,
+    warn: Callable[[str], None] | None = None,
 ) -> dict[str, float]:
     """Per-embedding-model retrieval gradient for the run, or ``{}`` if not applicable.
 
@@ -817,23 +819,27 @@ def _per_model_rpr(
     numbers mean nothing outside the in-memory ``FakeVectorStore`` and are therefore
     omitted from a live run's evidence.
     """
+    say = warn if warn is not None else functools.partial(typer.echo, err=True)
     names = substrate.scenario.embedding_models
     if len(names) <= 1:
         return {}
-    # Distinct models, not entries: a spec listed twice is one model, and a
-    # "gradient" over it is the one-model comparison refused below.
-    distinct = list(dict.fromkeys(names))
+    # Distinct models, not entries or spellings: a spec listed twice, or spelled
+    # two ways (`hash:32` / `hash-32`), is one model, and a "gradient" over it is
+    # the one-model comparison refused below.
+    first_spelling: dict[str, str] = {}
+    for name in names:
+        first_spelling.setdefault(canonical_embedding_spec(name), name)
+    distinct = list(first_spelling.values())
     real_names = [name for name in distinct if not name.startswith("fake-")]
     modelled_only = [name for name in distinct if name.startswith("fake-")]
     if real_names and modelled_only:
         # Dropping these was silent: an operator who configured 3 models could be
         # shown a 2-model gradient with nothing saying the third was excluded.
-        typer.echo(
+        say(
             f"warning: {', '.join(untrusted(name) for name in modelled_only)} "
             "excluded from the embedding-model gradient - fake-* names carry a "
             "modelled recall, not real vectors, so they cannot be compared "
-            "against a real provider",
-            err=True,
+            "against a real provider"
         )
     if len(real_names) > 1:
         models: list[EmbeddingModel] = []
@@ -845,14 +851,13 @@ def _per_model_rpr(
     if real_names:
         # One real model is not a gradient. Emitting it produced a single-entry
         # "comparison" from a config that asked for several.
-        typer.echo(
+        say(
             "warning: no embedding-model gradient recorded - a comparison needs "
-            "two or more real embedding models, and only one was configured",
-            err=True,
+            "two or more real embedding models, and only one was configured"
         )
         return {}
-    if isinstance(vector, FakeVectorStore):
-        return embedding_model_sweep(substrate, names)
+    if isinstance(vector, FakeVectorStore) and len(modelled_only) > 1:
+        return embedding_model_sweep(substrate, tuple(modelled_only))
     return {}
 
 
@@ -1024,9 +1029,8 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
-    # Validated before anything runs, in every mode: the sweep resolves this list
-    # only while the record is built, so an unknown name failed after the whole
-    # suite had run against the stack, with no record written.
+    # Validated before anything runs, in every mode, so an unknown name is refused
+    # before the adapters are built or the sweep runs.
     for model_spec in substrate.scenario.embedding_models:
         validate_embedding_spec(model_spec)
     # The sweep embeds the list fixed into the substrate at seed time, not the
@@ -1085,7 +1089,10 @@ def probe(
     # failed to load or a provider that failed mid-sweep threw away every probe's
     # measurement, with no record written. After the argument and adapter-config
     # checks, so a cheap mistake still reports first.
-    per_model_rpr = _per_model_rpr(substrate, bundle.vector)
+    # Its warnings are held and printed beside the run summary, where they were
+    # read before: up here they scrolled away above the whole suite.
+    sweep_warnings: list[str] = []
+    per_model_rpr = _per_model_rpr(substrate, bundle.vector, warn=sweep_warnings.append)
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
         typer.echo(
@@ -1211,6 +1218,8 @@ def probe(
     extraction_steps = _live_only(
         [result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id]
     )
+    for warning in sweep_warnings:
+        typer.echo(warning, err=True)
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),

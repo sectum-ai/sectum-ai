@@ -1157,3 +1157,49 @@ def test_a_spec_listed_twice_is_one_model_not_a_gradient(tmp_path: Path) -> None
     assert "only one was configured" in result.output, result.output
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["metrics"]["retrieval_pivot_rate_by_model"] == {}
+
+
+@pytest.mark.parametrize(
+    "specs",
+    [["hash-32", "hash:32"], ["fake-mini", "fake-mini"]],
+)
+def test_one_model_spelled_or_listed_twice_is_not_a_gradient(
+    tmp_path: Path, specs: list[str]
+) -> None:
+    # `hash:32` and `hash-32` are one geometry: compared, they recorded a two-entry
+    # "gradient" of identical vectors. And the recall-illustration branch still
+    # took a duplicated fake as two models.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    runner = CliRunner()
+    seed_args = [arg for spec in specs for arg in ("--embedding-model", spec)]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert record["metrics"]["retrieval_pivot_rate_by_model"] == {}
+
+
+def test_the_gradients_warnings_print_beside_the_summary_not_above_the_suite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Computed before the suite, its warnings scrolled away above every probe's
+    # output; the gradient they qualify prints at the end.
+    import typer
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    def _marker(*_: object) -> None:
+        typer.echo("SUITE-STARTED", err=True)
+
+    runner = CliRunner()
+    seed_args = ["--embedding-model", "hash-32", "--embedding-model", "fake-mini"]
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path), *seed_args])
+    monkeypatch.setattr("sectum_ai.cli.app._prefetch_corpus", _marker)
+    result = runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
+    warning = result.output.index("fake-mini excluded from the embedding-model gradient")
+    assert warning > result.output.index("SUITE-STARTED"), result.output
