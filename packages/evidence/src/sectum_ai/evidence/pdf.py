@@ -30,6 +30,7 @@ from sectum_ai.spec import (
     Finding,
     FindingStatus,
     RunResult,
+    Surface,
     SurfaceProvenance,
     describe_vector_embedder,
     rate_from_counts,
@@ -366,24 +367,36 @@ def _detector_tiers(
     ) + _DETECTOR_TAIL
 
 
-_DETECTOR_EXACT = (
+_DETECTOR_EXACT_HEAD = (
     "Each observation is matched against the ground-truth manifest by exact "
-    "content. Detection invoked no embedding model and no judge - the erasure "
+    "content. Detection invoked no embedding model and no judge"
+)
+_DETECTOR_EXACT = (
+    _DETECTOR_EXACT_HEAD + " - the erasure "
     "workflow reads each surface and checks the subject's own markers directly - "
     "so no semantic or adjudicated tier contributed to any verdict here. "
 ) + _DETECTOR_TAIL
 
-# The same, where the record names the vector store's geometry: that surface is
-# read through similarity queries ranked in it, so whether a marker surfaces there
-# at all is a ranking - the summary row names the model, and this must not say
-# the store was read directly beside it.
-_DETECTOR_EXACT_RANKED = (
-    "Each observation is matched against the ground-truth manifest by exact "
-    "content. Detection invoked no embedding model and no judge, so no semantic "
-    "or adjudicated tier contributed to any verdict here. The vector store, though, "
-    "is read through similarity queries ranked in its own embedding geometry, "
-    "named above: whether a marker surfaces there depends on that ranking. "
-) + _DETECTOR_TAIL
+
+def _erasure_detector(run: RunResult) -> str:
+    """The erasure detector paragraph, honest about how the vector store is read.
+
+    That surface is read through top-k similarity queries, so whether a marker
+    surfaces there at all is a ranking - and saying every surface was read directly
+    stood beside a geometry row naming the model that ranked it.
+    """
+    if Surface.VECTOR_DB.value not in run.surface_provenance:
+        return _DETECTOR_EXACT
+    # The geometry only where the record names one: the built-in store ranks by
+    # shared tokens, and has none to claim.
+    named = ", in the geometry named above" if run.vector_embedder is not None else ""
+    return (
+        _DETECTOR_EXACT_HEAD + ", so no semantic or adjudicated tier contributed to "
+        "any verdict here. The vector store, though, is read through top-k similarity "
+        f"queries ranked by the store{named}: whether a marker surfaces there depends "
+        "on that ranking. "
+    ) + _DETECTOR_TAIL
+
 
 # The same sentence, minus the attestation claim. `provenance_statement` already
 # ends "This pack is a demonstration, not an attestation." for an all-synthetic
@@ -660,7 +673,7 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
     if erasure_only:
         # No detector ran at all, whatever the config says: the erasure workflow
         # never constructs one.
-        detector = _DETECTOR_EXACT if run.vector_embedder is None else _DETECTOR_EXACT_RANKED
+        detector = _erasure_detector(run)
     elif run.detection is None:
         # A record from before `detection` was recorded. Which tiers ran cannot be
         # read off it, so say only what holds for any run - the manifest-grounding

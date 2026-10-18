@@ -160,9 +160,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have changed on a live store. `erasure` contains it like every other surface
   and embeds and loads the target's corpus first, then the other tenants' - which
   crowd the target's residue page on a shared index, as a production index
-  would. Refused anywhere - in full or part-way - `vector_db` is recorded as not
-  seeded rather than scanned over a partial load, so it reads NOT_COVERED and the
-  run cannot attest it, the other surfaces keeping their verdicts. Sectum then asks
+  would. The target's corpus refused - in full or part-way - or, on a shared
+  index, the others' that crowd it: `vector_db` is recorded as not seeded rather
+  than scanned over a partial load, so it reads NOT_COVERED and the run cannot
+  attest it, the other surfaces keeping their verdicts. On a store that scopes
+  the scan to the target, the others' refused load leaves its verdict standing,
+  with a warning. The erasure PDF says the vector store is read through ranked
+  queries whenever it was scanned. Sectum then asks
   the store to delete what of the target's corpus landed, as cleanup; the warning
   says a soft-deleting store may keep it, or that the delete failed. A canary
   write refused part-way on another surface now warns that the surface is

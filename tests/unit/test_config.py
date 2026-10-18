@@ -1353,7 +1353,8 @@ def test_build_embedder_rejects_an_unknown_kind() -> None:
 
 
 def test_local_detection_mode_rejects_a_hosted_openai_embedder() -> None:
-    # The "no data leaves the box" guarantee: local mode fails fast if the embedder
+    # The local-mode guarantee (no tenant content to a third-party AI service from
+    # Sectum's own stages): local mode fails fast if the embedder
     # would call the real OpenAI API (kind=openai with no local base_url).
     from pydantic import ValidationError
 

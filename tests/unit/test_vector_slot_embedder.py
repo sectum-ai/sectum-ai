@@ -1786,8 +1786,8 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
         # ...or a soft-deleting store "clears" and keeps it: scanned, it read
         # RESIDUAL over a partial load.
         ({1}, True, "keeps"),
-        # Another tenant's refused after the target's landed: the index is short of
-        # the conditions the run set up.
+        # Another tenant's refused on a shared index, after the target's landed: the
+        # index is short of the corpus that crowds the target's residue page.
         ({2}, False, "clears"),
     ],
 )
@@ -1830,6 +1830,14 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
 
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
     monkeypatch.setattr(FakeVectorStore, "delete", _delete)
+    # A shared index, where the other tenants' corpus is part of the conditions.
+    monkeypatch.setattr(
+        FakeVectorStore,
+        "supports",
+        lambda self, capability: (
+            capability is Capability.SHARED_INDEX or capability in self.capabilities
+        ),
+    )
     monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
@@ -1844,11 +1852,14 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         # And says only what it knows - a delete was asked for, which a soft-deleting
         # store may ignore, or it failed - on the one warning, after the refusal.
         warning = next(
-            line for line in erased.output.splitlines() if "could not seed the vector_db" in line
+            line
+            for line in erased.output.splitlines()
+            if "could not seed the vector_db" in line or "crowds the target's" in line
         )
         refusal = warning.index("the vector store refused the corpus")
         # Which load was refused: the target's canaries, or the others that crowd it.
-        assert ("the target's corpus landed" in warning) is (refused_calls == {2}), warning
+        crowding = "corpus that crowds the target's on this shared index" in warning
+        assert crowding is (refused_calls == {2}), warning
         outcome = (
             "failed too"
             if delete_mode == "fails"
@@ -1869,11 +1880,43 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         assert record["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED", erased.output
         assert "ERASURE VERIFIED" not in erased.output, erased.output
         assert "RESIDUAL" not in erased.output, erased.output
-        assert "could not seed the vector_db canary" in erased.output, erased.output
+        assert "so vector_db is recorded as not seeded" in erased.output, erased.output
         assert "not seeded: the vector store refused the corpus" in erased.output
         assert ("part of it may remain" in erased.output) is (delete_mode == "fails")
         assert "vector_db" in record["surface_provenance"], record["surface_provenance"]
         assert record["vector_embedder"] is None
+
+
+def test_another_tenants_refused_corpus_leaves_a_per_tenant_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On a store that scopes the scan to the target, the others' corpus never
+    # reaches its page: voiding the surface over their refused load blamed a
+    # crowding that cannot happen there.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+
+    real_upsert = FakeVectorStore.upsert
+    calls = {"n": 0}
+
+    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ValueError(_BACKEND)
+        return real_upsert(self, tenant, documents)
+
+    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert "the vector_db verdict stands" in erased.output, erased.output
+    assert "could not seed the vector_db" not in erased.output, erased.output
+    assert "pw@h" not in erased.output, erased.output
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 
 
 def test_erasure_embeds_and_loads_the_targets_corpus_first(
@@ -1952,11 +1995,19 @@ def test_an_erasure_pdf_says_the_vector_store_is_read_by_ranking() -> None:
         started_at=now,
         finished_at=now,
         probe_versions={"gdpr-erasure-verification": "1"},
-        surface_provenance={"vector_db": "LIVE"},
+        surface_provenance={"tracing": "LIVE"},
     )
-    ranked = base.model_copy(update={"vector_embedder": "st:all-mpnet-base-v2"})
-    assert "ranked in its own embedding geometry" in " ".join(scope_methodology(ranked))
-    assert "ranked in its own embedding geometry" not in " ".join(scope_methodology(base))
+    scanned = base.model_copy(update={"surface_provenance": {"vector_db": "LIVE"}})
+    named = scanned.model_copy(update={"vector_embedder": "st:all-mpnet-base-v2"})
+
+    def _text(run: RunResult) -> str:
+        return " ".join(scope_methodology(run))
+
+    # Read by ranking whenever the store was scanned - named or not - and only then.
+    assert "queries ranked by the store, in the geometry named above:" in _text(named)
+    assert "queries ranked by the store:" in _text(scanned)
+    assert "queries ranked by the store" not in _text(base)
+    assert "reads each surface" in _text(base)
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:
