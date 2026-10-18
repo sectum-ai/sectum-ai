@@ -407,6 +407,18 @@ class SectumConfig(BaseModel):
 # store), so a base URL on one block cannot be relied on to reach the call.
 _LOCAL_MEM0_EMBEDDERS = frozenset({"ollama", "lmstudio", "huggingface"})
 _LOCAL_MEM0_LLMS = frozenset({"ollama", "lmstudio", "vllm"})
+# mem0 0.1.116's vector stores that store the vectors mem0 hands them and embed
+# nothing themselves - an allow-list, so a store added later (0.1.117's
+# databricks embeds server-side by default) is refused until classified.
+# `upstash_vector` is here only without `enable_embeddings`; `langchain` wraps a
+# client that may embed, and is left out.
+_PASSIVE_MEM0_STORES = frozenset(
+    {
+        "qdrant", "chroma", "pgvector", "milvus", "upstash_vector", "azure_ai_search",
+        "pinecone", "mongodb", "redis", "elasticsearch", "vertex_ai_vector_search",
+        "opensearch", "supabase", "weaviate", "faiss",
+    }
+)  # fmt: skip
 
 
 def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
@@ -444,14 +456,21 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
         offenders.append(f"memory mem0 embedder (cannot be classified: {embedder!r})")
     elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
         offenders.append(f"memory mem0 embedder ({provider!r})")
-    # A vector store that embeds server-side is a hosted embedder too: Upstash
-    # with `enable_embeddings` is sent each write's raw text to embed.
+    # A vector store that embeds server-side is a hosted embedder too. Absent, it
+    # is mem0's default, an on-disk qdrant.
     store = mem0_config.get("vector_store")
-    if isinstance(store, dict) and store.get("provider") == "upstash_vector":
-        store_config = store.get("config")
-        if not isinstance(store_config, dict):
+    if store is not None:
+        kind = store.get("provider", "qdrant") if isinstance(store, dict) else None
+        store_config = store.get("config") if isinstance(store, dict) else None
+        if not isinstance(kind, str):
             offenders.append(f"memory mem0 vector_store (cannot be classified: {store!r})")
-        elif store_config.get("enable_embeddings"):
+        elif kind not in _PASSIVE_MEM0_STORES:
+            offenders.append(
+                f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
+            )
+        elif kind == "upstash_vector" and (
+            not isinstance(store_config, dict) or store_config.get("enable_embeddings")
+        ):
             offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):

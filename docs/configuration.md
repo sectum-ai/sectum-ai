@@ -367,7 +367,10 @@ override, or the list a substrate was seeded with. A `mem0` memory adapter bring
 its own embedder, which mem0 defaults to OpenAI and which embeds every write;
 `local` mode refuses it unless its `config` sets a local one. Sectum stores memory
 verbatim, so mem0's LLM runs only to feed a graph store — and then every LLM block
-mem0 might use (`llm` and `graph_store.llm`) must be ollama, lmstudio or vllm. Together these guarantee that no stage Sectum runs on its own behalf —
+mem0 might use (`llm` and `graph_store.llm`) must be ollama, lmstudio or vllm. Its
+`vector_store` must be one known to store the vectors mem0 gives it rather than
+embed server-side (any mem0 0.1.116 store but `langchain`, and `upstash_vector`
+only without `enable_embeddings`). Together these guarantee that no stage Sectum runs on its own behalf —
 grading, embedding the corpus for the store, the sweep, writing to a mem0 memory —
 calls a third-party AI service. The adapters you point it at are the system under test and receive the
 synthetic tenant data by design: a hosted vector database, or an agent adapter

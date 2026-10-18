@@ -1370,3 +1370,16 @@ def test_byoc_local_mode_refuses_a_mem0_store_that_embeds_server_side() -> None:
         SectumConfig.model_validate(
             _mem0({"embedder": embedder, "vector_store": _upstash(enable_embeddings=True)})
         )
+
+
+def test_byoc_local_mode_allows_only_mem0_stores_known_to_leave_embedding_to_mem0() -> None:
+    # An allow-list: a store added later (mem0 0.1.117's databricks embeds the raw
+    # text server-side by default) is refused until classified.
+    embedder = {"provider": "ollama"}
+    SectumConfig.model_validate(
+        _mem0({"embedder": embedder, "vector_store": {"provider": "chroma"}})
+    )
+    with pytest.raises(ValueError, match="databricks"):
+        SectumConfig.model_validate(
+            _mem0({"embedder": embedder, "vector_store": {"provider": "databricks", "config": {}}})
+        )

@@ -149,14 +149,15 @@ timestamped; it is signed by a TSA only when one is configured.)
   above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
   four stages embed or judge tenant content — detection, the vector store's
   `embedder` (the whole corpus), the Class 2 sweep's `embedding_models`, and a
-  `mem0` memory adapter's own embedder (and graph LLM) — and
+  `mem0` memory adapter's own embedder (and graph LLM, and a vector store that
+  embeds server-side) — and
   in `local` mode the config fails fast on any of them that would call a hosted AI
   API (a detection provider on `openai`/`anthropic` without a `base_url`, or an
   `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec, whether it comes from the
   config, a CLI override, or the list a substrate was seeded with). A `mem0` memory
   adapter is refused too unless its embedder — which mem0 defaults to OpenAI and
-  which embeds every write — is local, and, when a graph store is configured, the
-  LLM that feeds it — so no stage Sectum runs
+  which embeds every write — is local, every LLM that could feed a graph store is
+  local, and its vector store does not embed server-side — so no stage Sectum runs
   on its own behalf calls a third-party AI service. The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the

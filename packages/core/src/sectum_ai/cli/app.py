@@ -470,9 +470,9 @@ detection:
   # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
   # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
   # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
-  # embedder is not ollama, lmstudio, huggingface or base-URL-pointed openai - or,
-  # with a graph store, whose llm and graph_store.llm are not ollama, lmstudio or
-  # vllm.
+  # embedder is not ollama, lmstudio, huggingface or base-URL-pointed openai; with a
+  # graph store, whose llm or graph_store.llm is not ollama, lmstudio or vllm (no
+  # llm block means openai); or whose vector_store embeds server-side.
   # Adapters you point it at are the system under test and receive the synthetic
   # data by design.
   # "hosted" (default) places no egress restriction.
