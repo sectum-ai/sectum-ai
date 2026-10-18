@@ -141,7 +141,7 @@ from sectum_ai.runner import (
     confirmed_sequence_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import GEOMETRY_PROBES, PROBE_SURFACES, score_run
+from sectum_ai.score import PROBE_SURFACES, ranked_probes, score_run
 from sectum_ai.spec import (
     SCHEMA_VERSION,
     AdapterError,
@@ -1302,7 +1302,9 @@ def probe(
         # geometry, and naming one let a swap gate `diff` over unaffected numbers.
         vector_embedder=(
             vector.embedder_name
-            if {result[0].probe_id for result in step_results} & GEOMETRY_PROBES
+            if ranked_probes(
+                {result[0].probe_id for result in step_results}, surface_provenance(bundle)
+            )
             else None
         ),
         metrics=RunMetrics(
@@ -3908,8 +3910,11 @@ def _delta_range(delta: MetricDelta) -> str:
     return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
+# In class order, the order the banner names them. Both Class 2 probes feed the
+# one pooled rate, so they share a label.
 _GEOMETRY_LABELS: dict[str, str] = {
-    "rag-entity-bleed": "the vector store's Retrieval-Pivot Rate (Class 2)",
+    "rag-entity-bleed": "the Retrieval-Pivot Rate (Class 2)",
+    "rag-pipeline-bleed": "the Retrieval-Pivot Rate (Class 2)",
     "rag-poisoning": "Class 3",
     "embedding-inversion": "Class 6",
     "ikea-extraction": "Class 10",
@@ -3921,12 +3926,20 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
     before, after = (untrusted(name) for name in change)
     # Only what ranked over the store in THESE runs: the verdicts are scoped to
     # `embedder_ranked`, and a banner naming the Retrieval-Pivot Rate regardless
-    # told the reader to discount a pipeline-fed RPR regression printed above it.
-    ranked = [_GEOMETRY_LABELS.get(probe_id, probe_id) for probe_id in result.embedder_ranked]
-    if any(
-        delta.name == f"erasure_residue[{Surface.VECTOR_DB.value}]"
-        for delta in result.metrics.deltas
-    ):
+    # told the reader to discount a built-in pipeline's RPR regression printed
+    # above it.
+    ranked = list(
+        dict.fromkeys(
+            label
+            for probe_id, label in _GEOMETRY_LABELS.items()
+            if probe_id in result.embedder_ranked
+        )
+    )
+    vector_keys = {
+        f"{name}[{Surface.VECTOR_DB.value}]"
+        for name in ("erasure_residue", "erasure_caveats", "erasure_unverifiable")
+    }
+    if any(delta.name in vector_keys for delta in result.metrics.deltas):
         ranked.append("an erasure's vector residue scan")
     what = ", ".join(ranked) or "its similarity ranking"
     return (
@@ -4409,6 +4422,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         "embedder_changed": (
             list(result.embedder_changed) if result.embedder_changed is not None else None
         ),
+        "embedder_ranked": list(result.embedder_ranked),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))

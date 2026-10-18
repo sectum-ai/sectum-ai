@@ -699,7 +699,7 @@ def test_a_scored_run_carries_its_geometry_into_the_class_2_line(tmp_path: Path)
 def test_only_a_ranking_records_the_geometry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The pipeline-end probe asks the RAG pipeline (the built-in fake keeps its own
+    # The pipeline-end probe asks the built-in RAG pipeline (it keeps its own
     # index), and a subject check of record ids only fetches by id: neither ranked
     # over the store, so neither names its geometry.
     import json
@@ -732,6 +732,40 @@ def test_only_a_ranking_records_the_geometry(
         runner.invoke(app, ["erasure", "--subject", str(manifest), "--workdir", str(tmp_path)])
         pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
         assert pack["run_result"]["vector_embedder"] == expected, body
+
+
+def test_a_live_pipeline_ranks_over_the_store_and_records_its_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A live pipeline is kept only when it reads back the canary this command
+    # seeded into the store, so it ranks over the vectors the slot's embedder
+    # wrote. A pipeline-only run named no geometry, and a swap went undetected.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.config import build_adapters as real_build
+    from sectum_ai.score import score_run
+    from sectum_ai.spec import RunResult
+
+    def _live_pipeline(loaded: SectumConfig) -> object:
+        bundle = real_build(loaded)
+        bundle.vector.embedder_name = "st:all-mpnet-base-v2"
+        bundle.rag.synthetic = False
+        return bundle
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_adapters", _live_pipeline)
+    runner = CliRunner()
+    runner.invoke(app, ["seed", "--workdir", str(tmp_path)])
+    runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", "rag-pipeline-bleed"])
+    record = json.loads((tmp_path / "run.json").read_text())
+    assert record["surface_provenance"].get("rag_pipeline") == "LIVE", record
+    assert record["vector_embedder"] == "st:all-mpnet-base-v2"
+    class_2 = next(
+        line for line in score_run(RunResult.model_validate(record)).classes if line.class_id == 2
+    )
+    assert class_2.headline is not None and "ranked by" in class_2.headline, class_2.headline
 
 
 def _with_name(name: str) -> object:
@@ -794,9 +828,9 @@ def test_the_scorecard_names_the_geometry_on_every_similarity_ranked_headline() 
 def test_the_scorecard_names_no_geometry_where_no_similarity_probe_fed_the_class(
     tmp_path: Path,
 ) -> None:
-    # Class 2's rate pools the RAG pipeline's steps, which its own retriever ranked:
-    # on a run where only the pipeline-end probe fed it, naming the store's geometry
-    # described a ranking that never happened.
+    # Class 2's rate pools the RAG pipeline's steps, which the built-in pipeline
+    # ranks over its own index: on a run where only it fed the rate, naming the
+    # store's geometry described a ranking that never happened.
     import json
 
     from typer.testing import CliRunner

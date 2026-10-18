@@ -1529,11 +1529,10 @@ def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
 
 
 def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) -> None:
-    # The pipeline-end bleed probe asks the RAG pipeline, which ranks with its own
-    # retriever, so beside Class 3 its Retrieval-Pivot Rate is a measurement the
-    # swap did not touch. Every geometry probe was marked lost, rag-entity-bleed
-    # included though neither run ran it, and the RPR regression read
-    # `[not measured]`.
+    # The built-in RAG pipeline ranks over its own index, so beside Class 3 its
+    # Retrieval-Pivot Rate is a measurement the swap did not touch. Every geometry
+    # probe was marked lost, rag-entity-bleed included though neither run ran it,
+    # and the RPR regression read `[not measured]`.
     exercised = {
         "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
         "surface_provenance": {"vector_db": "LIVE"},
@@ -1548,6 +1547,77 @@ def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) 
     # And the banner below it does not tell the reader to discount that line.
     banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
     assert "Class 3" in banner and "Retrieval-Pivot Rate" not in banner, banner
+
+
+def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
+    # A LIVE pipeline the CLI kept reads the store it seeded, so its rate moved
+    # with the swap: the same pair as above, with the pipeline live, is not a
+    # measured regression, and the banner and the JSON say what it covered.
+    exercised = {
+        "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "LIVE"},
+    }
+    earlier, later = _swap(
+        _run(metrics=RunMetrics(retrieval_pivot_rate=0.1)).model_copy(update=exercised),
+        _run(metrics=RunMetrics(retrieval_pivot_rate=0.6)).model_copy(update=exercised),
+    )
+    assert diff_runs(earlier, later).embedder_ranked == ("rag-pipeline-bleed", "rag-poisoning")
+    # Live on EITHER side is enough: one of the two rates moved with the swap.
+    built_in = {"surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"}}
+    for pair in (
+        (earlier.model_copy(update=built_in), later),
+        (earlier, later.model_copy(update=built_in)),
+    ):
+        assert "rag-pipeline-bleed" in diff_runs(*pair).embedder_ranked
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[not measured] retrieval_pivot_rate" in output, output
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "over it - the Retrieval-Pivot Rate (Class 2), Class 3, and the" in banner, banner
+    paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
+    payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
+    assert payload["embedder_ranked"] == ["rag-pipeline-bleed", "rag-poisoning"]
+
+
+def test_an_erasure_swap_banner_names_the_vector_scan_it_discounted(tmp_path: Path) -> None:
+    # Two erasure records whose vector surface ended in a caveat carry no residue
+    # key, and the banner fell back to a phrase naming nothing.
+    exercised = {
+        "probe_versions": {"gdpr-erasure-verification": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(
+        _run(metrics=RunMetrics(erasure_caveats={"vector_db": 1})).model_copy(update=exercised),
+        _run(metrics=RunMetrics(erasure_caveats={"vector_db": 1})).model_copy(update=exercised),
+    )
+    banner = next(
+        line
+        for line in _diff_output(tmp_path, earlier, later).splitlines()
+        if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over it - an erasure's vector residue scan, and the" in banner, banner
+    # Nothing on either record that ranked: the banner says so rather than inventing a class.
+    bare = (_run().model_copy(update={"vector_embedder": name}) for name in ("hash-16", "hash-32"))
+    banner = next(
+        line for line in _diff_output(tmp_path, *bare).splitlines() if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over it - its similarity ranking, and the" in banner, banner
+
+
+def test_the_embedder_banner_names_each_class_once_in_class_order() -> None:
+    # `embedder_ranked` sorts by probe id, so the banner read "Class 10, ... (Class
+    # 2), Class 3"; and both Class 2 probes feed the one pooled rate.
+    from sectum_ai.baseline import BaselineComparison, RunDiff, diff_findings
+    from sectum_ai.cli.app import _embedder_changed_banner
+
+    ranked = ("ikea-extraction", "rag-entity-bleed", "rag-pipeline-bleed", "rag-poisoning")
+    result = RunDiff(
+        metrics=BaselineComparison(deltas=()),
+        findings=diff_findings((), ()),
+        embedder_changed=("hash-16", "hash-32"),
+        embedder_ranked=ranked,
+    )
+    banner = _embedder_changed_banner(("hash-16", "hash-32"), result, "earlier")
+    assert "over it - the Retrieval-Pivot Rate (Class 2), Class 3, Class 10, and the" in banner
 
 
 def _swap(earlier: RunResult, later: RunResult) -> tuple[RunResult, RunResult]:

@@ -4,6 +4,8 @@ The engineering spec section 12 places the runner in core; with ADR-0004 the
 package graph stays acyclic (core depends on probes, never the reverse).
 """
 
+from collections.abc import Iterator
+
 from sectum_ai.adapters import (
     Adapter,
     AgentAdapter,
@@ -151,17 +153,10 @@ class Runner:
         results: list[StepResult] = []
         dropped = 0
         planted = unconfirmed = 0
-        for planned in planned_steps:
-            step = planned
-            if self._droppable(step):
-                if step.action not in _PLANT_ACTIONS:
-                    dropped += 1
-                    continue
-                # A plant is not judged: run it as the tenant the user belongs to,
-                # which is what the adapter would do with the user anyway. Dropping
-                # it starved the tenant-level reads that depend on it, so a store
-                # that leaks across TENANTS read clean with the probe recorded.
-                step = planned.model_copy(update={"actor_user_id": None})
+        for step in self._as_sent(planned_steps):
+            if step is None:
+                dropped += 1
+                continue
             observation = self._execute(step)
             if step.action in _PLANT_ACTIONS:
                 planted += 1
@@ -297,6 +292,20 @@ class Runner:
         judged = [step for step in planned_steps if step.action not in _PLANT_ACTIONS]
         return bool(judged) and all(self._droppable(step) for step in judged)
 
+    def _as_sent(self, planned_steps: list[ProbeStep]) -> Iterator[ProbeStep | None]:
+        """Each planned step as it is sent, or ``None`` for one the runner drops."""
+        for step in planned_steps:
+            if not self._droppable(step):
+                yield step
+            elif step.action in _PLANT_ACTIONS:
+                # A plant is not judged: run it as the tenant the user belongs to,
+                # which is what the adapter would do with the user anyway. Dropping
+                # it starved the tenant-level reads that depend on it, so a store
+                # that leaks across TENANTS read clean with the probe recorded.
+                yield step.model_copy(update={"actor_user_id": None})
+            else:
+                yield None
+
     def steps_to_send(self, probe: Probe) -> list[ProbeStep]:
         """The steps :meth:`run_per_step` will send for ``probe``, as it will send them.
 
@@ -311,14 +320,7 @@ class Runner:
         planned_steps = list(probe.plan(self._substrate))
         if self._drops_whole_probe(planned_steps):
             return []
-        steps: list[ProbeStep] = []
-        for step in planned_steps:
-            if self._droppable(step):
-                if step.action not in _PLANT_ACTIONS:
-                    continue
-                step = step.model_copy(update={"actor_user_id": None})
-            steps.append(step)
-        return steps
+        return [step for step in self._as_sent(planned_steps) if step is not None]
 
     def _adapter_for(self, action: str) -> Adapter:
         family = action.split(".", 1)[0]

@@ -55,7 +55,9 @@ vector store ranked with (`vector_embedder`) and a probe that ranks over the sto
 fed the class, the headline says so —
 `12.5% RPR (95% CI 5.9%-24.7%, n=48, vector-store steps ranked by st:all-mpnet-base-v2)`
 — worded as the store's *steps*, since Class 2's rate also pools the RAG
-pipeline's, which its own retriever ranked. A hashing embedder is marked as
+pipeline's: the built-in pipeline ranks over its own index, while a live one, which
+the CLI keeps only when it reads back the canary from the store it seeded, ranks over
+the store and counts as one of its steps. A hashing embedder is marked as
 ranking by shared tokens rather than meaning, in the same words as the PDF.
 
 On a run with some live surfaces, a class backed by both a live surface and a
