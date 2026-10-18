@@ -3530,16 +3530,20 @@ def erasure(
     # scanned - whatever the clearing below achieves: a soft-deleting store keeps
     # what it is told to delete. The clearing is cleanup only.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_vector, in_scope=in_scope)
-    not_seeded: dict[Surface, str] = {}
+    # Said in the seeding warning below, beside the refusal it follows: Sectum only
+    # asks for the delete, and a soft-deleting store may keep what it is told to.
+    clearing = ""
     if Surface.VECTOR_DB in unseedable:
-        not_seeded[Surface.VECTOR_DB] = unseedable[Surface.VECTOR_DB]
         try:
             store.delete(target)
+            clearing = (
+                "Sectum asked the store to delete what of the target's corpus had "
+                "landed; a soft-deleting store may keep it"
+            )
         except Exception as error:
-            typer.echo(
-                f"warning: clearing what landed of the target's corpus failed too "
-                f"({type(error).__name__}); part of it may remain in the vector store",
-                err=True,
+            clearing = (
+                f"deleting what of the target's corpus had landed failed too "
+                f"({type(error).__name__}); part of it may remain in the vector store"
             )
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
@@ -3634,8 +3638,7 @@ def erasure(
         # are scanned and erased, and the surface is attested over them -
         # NOT_COVERED only if none did.
         consequence = (
-            "so that surface is recorded as not seeded and reads NOT_COVERED (Sectum "
-            "cleared what of the target's corpus had landed)"
+            f"so that surface is recorded as not seeded and reads NOT_COVERED ({clearing})"
             if unseeded is Surface.VECTOR_DB
             else "so that surface is attested only over the target's canaries that "
             "did land, and reads NOT_COVERED if none did"
@@ -3656,7 +3659,17 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(target, scope=erasure_scope, unseeded=not_seeded or None)
+    ).run(
+        target,
+        scope=erasure_scope,
+        # The vector store only: a marker write that partly landed is scanned and
+        # attested over what did, as the seeding warning says.
+        unseeded=(
+            {Surface.VECTOR_DB: unseedable[Surface.VECTOR_DB]}
+            if Surface.VECTOR_DB in unseedable
+            else None
+        ),
+    )
     finished = datetime.now(UTC)
 
     _emit_erasure_attestation(

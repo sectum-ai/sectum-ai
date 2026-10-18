@@ -162,10 +162,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crowd the target's residue page on a shared index, as a production index
   would. Refused anywhere - in full or part-way - `vector_db` is recorded as not
   seeded rather than scanned over a partial load, so it reads NOT_COVERED and the
-  run cannot attest it, the other surfaces keeping their verdicts; what landed of
-  the target's corpus is cleared as cleanup, with a warning if that fails. A canary write refused part-way on another surface now warns
-  that the surface is attested over the target's canaries that landed, not that
-  it reads NOT_COVERED beside an ERASED verdict.
+  run cannot attest it, the other surfaces keeping their verdicts. Sectum then asks
+  the store to delete what of the target's corpus landed, as cleanup; the warning
+  says a soft-deleting store may keep it, or that the delete failed. A canary
+  write refused part-way on another surface now warns that the surface is
+  attested over the target's canaries that landed, not that it reads NOT_COVERED
+  beside an ERASED verdict.
 - **`detection.mode: local` failed open on `scenario.embedding_models`.** The
   local-mode gate covered only the detection embedder and judge, on the premise
   that detection is the only stage that embeds tenant content; the Class 2 sweep

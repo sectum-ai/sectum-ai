@@ -1805,7 +1805,7 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
 
     from typer.testing import CliRunner
 
-    from sectum_ai.cli.app import app
+    from sectum_ai.cli.app import _load_substrate, app
 
     real_upsert = FakeVectorStore.upsert
     calls = {"n": 0}
@@ -1818,23 +1818,33 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             raise ValueError(_BACKEND)
         return real_upsert(self, tenant, documents)
 
-    def _delete_fails(self: FakeVectorStore, tenant: Any) -> None:
-        raise ConnectionError("delete refused")
+    real_delete = FakeVectorStore.delete
+    deleted: list[Any] = []
 
-    def _delete_keeps(self: FakeVectorStore, tenant: Any) -> None:
-        return None
+    def _delete(self: FakeVectorStore, tenant: Any) -> None:
+        deleted.append(tenant)
+        if delete_mode == "fails":
+            raise ConnectionError("delete refused")
+        if delete_mode == "clears":
+            real_delete(self, tenant)
 
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
-    if delete_mode == "fails":
-        monkeypatch.setattr(FakeVectorStore, "delete", _delete_fails)
-    if delete_mode == "keeps":
-        monkeypatch.setattr(FakeVectorStore, "delete", _delete_keeps)
+    monkeypatch.setattr(FakeVectorStore, "delete", _delete)
     monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    target = _load_substrate(tmp_path).tenants[0].tenant_id
     for scope in ([], ["--scope", "vector_db"]):
-        erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), *scope])
         calls["n"] = 0
+        deleted.clear()
+        erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), *scope])
+        # The cleanup asks for the target's delete - the only one, as the probe
+        # never scans or erases a surface handed over as not seeded.
+        assert deleted == [target], (deleted, erased.output)
+        # And says only what it knows: a delete was asked for, or it failed.
+        assert ("asked the store to delete" in erased.output) is (delete_mode != "fails")
+        assert ("failed too" in erased.output) is (delete_mode == "fails")
+        assert "Sectum cleared" not in erased.output, erased.output
         assert erased.exception is None or isinstance(erased.exception, SystemExit), erased.output
         assert erased.exit_code == 3, erased.output
         assert "pw@h" not in erased.output, erased.output
