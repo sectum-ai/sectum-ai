@@ -2079,8 +2079,10 @@ def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
     assert "the corpus embeds on demand instead" in erased.output, erased.output
-    # Every document still embedded - one at a time - and the verdict reached.
-    assert model.documents, erased.output
+    # Every one of the target's documents still embedded - one at a time - and the
+    # verdict reached.
+    _, own = _own_texts(tmp_path)
+    assert own <= set(model.documents), erased.output
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
     assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 

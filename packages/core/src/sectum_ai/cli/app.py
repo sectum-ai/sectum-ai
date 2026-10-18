@@ -3542,14 +3542,19 @@ def erasure(
         and store.supports(Capability.SHARED_INDEX)
     ):
         others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
-        try:
+
+        def _seed_others() -> None:
             _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
             _load_corpus(store, substrate, others)
-        except Exception as error:
-            why = str(error) if isinstance(error, SectumError) else type(error).__name__
+
+        # The same containment, and so the same rendering of a failure, as the
+        # target's load above; only the reason's prefix differs.
+        crowd: dict[Surface, str] = {}
+        _seed_erasure_surface(crowd, Surface.VECTOR_DB, _seed_others)
+        if Surface.VECTOR_DB in crowd:
             unseedable[Surface.VECTOR_DB] = (
                 "the other tenants' corpus that crowds the target's on this shared index "
-                f"did not load: {why}"
+                f"did not load: {crowd[Surface.VECTOR_DB]}"
             )
     # Said in the seeding warning below, beside the refusal it follows: Sectum only
     # asks for the delete, and a soft-deleting store may keep what it is told to.
