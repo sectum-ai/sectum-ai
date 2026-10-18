@@ -1786,9 +1786,6 @@ def test_a_store_refusing_the_corpus_stops_probe_with_a_typed_error(
         # ...or a soft-deleting store "clears" and keeps it: scanned, it read
         # RESIDUAL over a partial load.
         ({1}, True, "keeps"),
-        # Another tenant's refused on a shared index, after the target's landed: the
-        # index is short of the corpus that crowds the target's residue page.
-        ({2}, False, "clears"),
     ],
 )
 def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
@@ -1830,14 +1827,6 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
 
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
     monkeypatch.setattr(FakeVectorStore, "delete", _delete)
-    # A shared index, where the other tenants' corpus is part of the conditions.
-    monkeypatch.setattr(
-        FakeVectorStore,
-        "supports",
-        lambda self, capability: (
-            capability is Capability.SHARED_INDEX or capability in self.capabilities
-        ),
-    )
     monkeypatch.setattr(FakeVectorStore, "embedder_name", "st:all-mpnet-base-v2")
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
@@ -1857,9 +1846,6 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
             if "could not seed the vector_db" in line or "crowds the target's" in line
         )
         refusal = warning.index("the vector store refused the corpus")
-        # Which load was refused: the target's canaries, or the others that crowd it.
-        crowding = "corpus that crowds the target's on this shared index" in warning
-        assert crowding is (refused_calls == {2}), warning
         outcome = (
             "failed too"
             if delete_mode == "fails"
@@ -1887,72 +1873,79 @@ def test_erasure_contains_a_refused_corpus_and_says_what_it_rests_on(
         assert record["vector_embedder"] is None
 
 
-def test_another_tenants_refused_corpus_leaves_a_per_tenant_verdict(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # On a store that scopes the scan to the target, the others' corpus never
-    # reaches its page: voiding the surface over their refused load blamed a
-    # crowding that cannot happen there.
+def _erasure_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, shared: bool, refuse: int = 0
+) -> tuple[list[Any], list[str], Any, str]:
+    """Seed and run a vector-only erasure on the fake store, recording each upsert."""
     import json
 
     from typer.testing import CliRunner
 
     from sectum_ai.cli.app import app
 
+    model = _Modes()
+    _bridged_slot(monkeypatch, model)
+    loaded: list[Any] = []
     real_upsert = FakeVectorStore.upsert
-    calls = {"n": 0}
 
     def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
-        calls["n"] += 1
-        if calls["n"] == 2:
+        loaded.append(tenant)
+        if len(loaded) == refuse:
             raise ValueError(_BACKEND)
         return real_upsert(self, tenant, documents)
 
     monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
+    config = tmp_path / "sectum-ai.yaml"
+    flag = "true" if shared else "false"
+    config.write_text(f"adapters:\n  vector_store:\n    kind: fake\n    shared_index: {flag}\n")
     runner = CliRunner()
-    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
-    assert "the vector_db verdict stands" in erased.output, erased.output
-    assert "could not seed the vector_db" not in erased.output, erased.output
-    assert "pw@h" not in erased.output, erased.output
+    args = ["--workdir", str(tmp_path), "--config", str(config)]
+    assert runner.invoke(app, ["seed", *args]).exit_code == 0
+    erased = runner.invoke(app, ["erasure", *args, "--scope", "vector_db"])
     pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
-    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
+    return loaded, model.documents, pack["run_result"], erased.output
 
 
-def test_erasure_embeds_and_loads_the_targets_corpus_first(
+def test_erasure_on_a_per_tenant_store_loads_only_the_targets_corpus(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The target's corpus first, so a refusal there costs no other tenant's
-    # embedding; then the rest, which crowd the target's residue page on a shared
-    # index as a production index would - left out, the verdict came easier.
-    from typer.testing import CliRunner
+    # A per-tenant store scopes the scan to the target: the others' corpora were
+    # embedded (with a hosted model, billed) and left in the store for nothing the
+    # verdict reads.
+    from sectum_ai.cli.app import _load_substrate
 
-    from sectum_ai.cli.app import _load_substrate, app
-
-    model = _Modes()
-    _bridged_slot(monkeypatch, model)
-    loaded: list[Any] = []
-    embedded_before_first_load: list[int] = []
-    real_upsert = FakeVectorStore.upsert
-
-    def _upsert(self: FakeVectorStore, tenant: Any, documents: Any) -> Any:
-        if not loaded:
-            embedded_before_first_load.append(len(model.documents))
-        loaded.append(tenant)
-        return real_upsert(self, tenant, documents)
-
-    monkeypatch.setattr(FakeVectorStore, "upsert", _upsert)
-    runner = CliRunner()
-    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
-    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    loaded, embedded, record, output = _erasure_loads(tmp_path, monkeypatch, shared=False)
     substrate = _load_substrate(tmp_path)
-    tenants = [tenant.tenant_id for tenant in substrate.tenants]
-    assert loaded[0] == tenants[0], erased.output
-    assert sorted(loaded, key=str) == sorted(tenants, key=str), erased.output
-    # Only the target's documents were embedded before its load was tried.
-    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == tenants[0]}
-    first = model.documents[: embedded_before_first_load[0]]
-    assert first and set(first) <= own, erased.output
+    target = substrate.tenants[0].tenant_id
+    assert loaded == [target], output
+    own = {f"{d.title} {d.content}" for d in substrate.documents if d.tenant_id == target}
+    assert embedded and set(embedded) <= own, output
+    assert record["metrics"]["erasure_coverage"]["vector_db"] == "ERASED", output
+
+
+def test_erasure_on_a_shared_index_loads_the_target_first_then_the_crowd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sectum_ai.cli.app import _load_substrate
+
+    loaded, _, _, output = _erasure_loads(tmp_path, monkeypatch, shared=True)
+    tenants = [tenant.tenant_id for tenant in _load_substrate(tmp_path).tenants]
+    assert loaded[0] == tenants[0], output
+    assert sorted(loaded, key=str) == sorted(tenants, key=str), output
+
+
+def test_a_refused_crowding_corpus_voids_a_shared_index_verdict_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On a real shared index the others' documents crowd the target's page; refused
+    # after the target's landed, the surface is voided - and named for that load,
+    # not as a target canary that did not land.
+    _, _, record, output = _erasure_loads(tmp_path, monkeypatch, shared=True, refuse=2)
+    assert record["metrics"]["erasure_coverage"]["vector_db"] == "NOT_COVERED", output
+    assert "corpus that crowds the target's on this shared index" in output, output
+    assert "crowds it on this shared index did not load" in output, output
+    assert "not seeded:" not in output, output
+    assert "pw@h" not in output, output
 
 
 def test_erasure_on_a_shared_index_reads_as_crowded_as_main(tmp_path: Path) -> None:
@@ -2004,10 +1997,41 @@ def test_an_erasure_pdf_says_the_vector_store_is_read_by_ranking() -> None:
         return " ".join(scope_methodology(run))
 
     # Read by ranking whenever the store was scanned - named or not - and only then.
-    assert "queries ranked by the store, in the geometry named above:" in _text(named)
-    assert "queries ranked by the store:" in _text(scanned)
-    assert "queries ranked by the store" not in _text(base)
+    # "Where", not "that": a by-id subject check or an unseeded store reads nothing
+    # by ranking, and the paragraph must not say it did.
+    assert "depends on the store's ranking, in the geometry named above." in _text(named)
+    assert "Where the vector store is read through top-k similarity queries" in _text(scanned)
+    assert "depends on the store's ranking." in _text(scanned)
+    assert "is read through top-k similarity queries" not in _text(base)
     assert "reads each surface" in _text(base)
+
+
+def test_a_failed_corpus_prefetch_falls_back_to_embedding_on_demand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The prefetch is an optimisation, and a failed batch (a rate limit) stopped the
+    # run - or voided a verdict the upsert could still reach by embedding on demand.
+    import json
+
+    from typer.testing import CliRunner
+
+    from sectum_ai.cli.app import app
+    from sectum_ai.spec import AdapterError
+
+    model = _Modes()
+    _bridged_slot(monkeypatch, model)
+
+    def _prefetch(self: EmbedderBridge, texts: Any) -> None:
+        raise AdapterError("the embedding provider failed (RateLimitError)")
+
+    monkeypatch.setattr(EmbedderBridge, "prefetch", _prefetch)
+    runner = CliRunner()
+    assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
+    erased = runner.invoke(app, ["erasure", "--workdir", str(tmp_path), "--scope", "vector_db"])
+    assert "the corpus embeds on demand instead" in erased.output, erased.output
+    # And the run went on to its verdict rather than voiding the surface.
+    pack = json.loads((tmp_path / "erasure-evidence.json").read_text())
+    assert pack["run_result"]["metrics"]["erasure_coverage"]["vector_db"] == "ERASED"
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

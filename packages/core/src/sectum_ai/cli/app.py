@@ -1654,9 +1654,14 @@ def _prefetch_corpus(store: VectorStoreAdapter, documents: Iterable[CorpusDocume
     document - about 2,000 sequential calls for the default corpus. Embedding the
     same strings in batches first means ``upsert`` is served from cache. Purely an
     optimisation: a store that formats its text differently misses the cache and
-    embeds on demand, as a document, which is slower but still correct.
+    embeds on demand, as a document, which is slower but still correct - and so a
+    failed batch (a rate limit) is said and left to that on-demand path, rather
+    than stopping the run or voiding a verdict ``upsert`` could still reach.
     """
-    _prefetch_texts(store, (f"{document.title} {document.content}" for document in documents))
+    try:
+        _prefetch_texts(store, (f"{document.title} {document.content}" for document in documents))
+    except SectumError as error:
+        typer.echo(f"warning: {error}; the corpus embeds on demand instead", err=True)
 
 
 def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
@@ -3521,28 +3526,25 @@ def erasure(
     # NOT_COVERED, never scanned - whatever the clearing below achieves: a
     # soft-deleting store keeps what it is told to delete. The clearing is cleanup.
     _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_target, in_scope=in_scope)
-    # Then the other tenants'. On a shared index they crowd the target's residue
-    # page as a production index would - left out, the verdict came easier than the
-    # stack is - so a refusal there voids the surface too. On a per-tenant store the
-    # target's scan never sees them, and its verdict stands.
+    # Then the other tenants' - on a shared index only, where they crowd the target's
+    # residue page as a production index would: left out, the verdict came easier
+    # than the stack is, so a refusal there voids the surface too. A per-tenant
+    # store scopes the scan to the target, so there they would be embedded (with a
+    # hosted model, billed) and left in the store for nothing the verdict reads.
     crowding_refused = False
-    if Surface.VECTOR_DB not in unseedable and _seeds(Surface.VECTOR_DB):
+    if (
+        Surface.VECTOR_DB not in unseedable
+        and _seeds(Surface.VECTOR_DB)
+        and store.supports(Capability.SHARED_INDEX)
+    ):
         others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
         try:
             _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
             _load_corpus(store, substrate, others)
         except Exception as error:
             why = str(error) if isinstance(error, SectumError) else type(error).__name__
-            if store.supports(Capability.SHARED_INDEX):
-                unseedable[Surface.VECTOR_DB] = why
-                crowding_refused = True
-            else:
-                typer.echo(
-                    f"warning: the other tenants' corpus did not all load ({untrusted(why)}); "
-                    "the target's did, and this store scopes its scan to the target, so "
-                    "the vector_db verdict stands",
-                    err=True,
-                )
+            unseedable[Surface.VECTOR_DB] = why
+            crowding_refused = True
     # Said in the seeding warning below, beside the refusal it follows: Sectum only
     # asks for the delete, and a soft-deleting store may keep what it is told to.
     clearing = ""
@@ -3685,9 +3687,17 @@ def erasure(
         target,
         scope=erasure_scope,
         # The vector store only: a marker write that partly landed is scanned and
-        # attested over what did, as the seeding warning says.
+        # attested over what did, as the seeding warning says. The reason names the
+        # load that was refused - the target's canaries, or the crowding corpus.
         unseeded=(
-            {Surface.VECTOR_DB: unseedable[Surface.VECTOR_DB]}
+            {
+                Surface.VECTOR_DB: (
+                    "the other tenants' corpus that crowds it on this shared index did "
+                    f"not load: {unseedable[Surface.VECTOR_DB]}"
+                    if crowding_refused
+                    else f"not seeded: {unseedable[Surface.VECTOR_DB]}"
+                )
+            }
             if Surface.VECTOR_DB in unseedable
             else None
         ),

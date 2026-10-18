@@ -381,20 +381,21 @@ _DETECTOR_EXACT = (
 def _erasure_detector(run: RunResult) -> str:
     """The erasure detector paragraph, honest about how the vector store is read.
 
-    That surface is read through top-k similarity queries, so whether a marker
+    That surface can be read through top-k similarity queries, so whether a marker
     surfaces there at all is a ranking - and saying every surface was read directly
     stood beside a geometry row naming the model that ranked it.
     """
     if Surface.VECTOR_DB.value not in run.surface_provenance:
         return _DETECTOR_EXACT
-    # The geometry only where the record names one: the built-in store ranks by
-    # shared tokens, and has none to claim.
+    # Where, not that: a subject check of record ids fetches by id, and a store that
+    # could not be seeded was never read. The geometry only where the record names
+    # one: the built-in store ranks by shared tokens, and has none to claim.
     named = ", in the geometry named above" if run.vector_embedder is not None else ""
     return (
         _DETECTOR_EXACT_HEAD + ", so no semantic or adjudicated tier contributed to "
-        "any verdict here. The vector store, though, is read through top-k similarity "
-        f"queries ranked by the store{named}: whether a marker surfaces there depends "
-        "on that ranking. "
+        "any verdict here. Where the vector store is read through top-k similarity "
+        "queries, though - the canary scan, or a subject's vector fingerprints - "
+        f"whether a marker surfaces there depends on the store's ranking{named}. "
     ) + _DETECTOR_TAIL
 
 

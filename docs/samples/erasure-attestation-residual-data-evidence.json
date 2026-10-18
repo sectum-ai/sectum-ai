@@ -3,8 +3,8 @@
     "run_id": "erasure-7cd276c8",
     "scenario_hash": "24cc6346b7139bad3333785b6d2e9e106f2e2620eb82aaf61cae05d453b29a73",
     "manifest_hash": "07cbe06c1355fa3f01d3cd720d4dd1c453ec5d91965d53f694282a45463b26a6",
-    "started_at": "2026-10-17T21:45:09.985075+00:00",
-    "finished_at": "2026-10-17T21:45:09.989243+00:00",
+    "started_at": "2026-10-18T21:43:09.606057+00:00",
+    "finished_at": "2026-10-18T21:43:09.609805+00:00",
     "adapter_versions": {
       "fake-vector": "0.11.0",
       "fake-observability": "0.11.0",
@@ -533,10 +533,10 @@
     "schema_version": "0.8.0"
   },
   "manifest_hash": "07cbe06c1355fa3f01d3cd720d4dd1c453ec5d91965d53f694282a45463b26a6",
-  "tsa_token": "{\"digest\":\"03e451a2c7e1b4542fd87e618da65288778d6ab3bd823ec58736fdabbc169472\",\"timestamped_at\":\"2026-10-17T21:45:10.006318+00:00\",\"tsa\":\"local-dev\"}",
+  "tsa_token": "{\"digest\":\"055deb91d0337cc815d79ab213a3a9542751fdcb2b15a8a00ccd2a9120fd3e89\",\"timestamped_at\":\"2026-10-18T21:43:09.626238+00:00\",\"tsa\":\"local-dev\"}",
   "rekor_proof": null,
   "control_mappings": [],
-  "pdf_ref": "e043835f18ccecf743a447cf75bb5f7c697a21b5cc301fba4bdfead2e8261269",
+  "pdf_ref": "1c62515935c4296ac800b7f023962fbf249f7e4323ba45578223d30d3ee934c3",
   "anchored_in_log": false,
   "anchored_with_timestamp": false,
   "schema_version": "0.8.0"

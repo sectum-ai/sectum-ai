@@ -15,6 +15,7 @@ reported "the evidence pack was altered" on clean data. Regenerate the samples
 silence it.
 """
 
+import hashlib
 import json
 import re
 import tempfile
@@ -92,6 +93,13 @@ def test_shipped_sample_pdf_is_what_todays_renderer_produces(pack_path: Path) ->
     pack = EvidencePack.model_validate_json(pack_path.read_text())
     committed = pack_path.with_name(pack_path.name.replace("-evidence.json", "-audit-pack.pdf"))
     assert committed.exists(), f"no committed PDF beside {pack_path.name}"
+    # The committed PDF is the one the pack signs: re-rendering it from the pack
+    # alone (to follow a renderer change) left `pdf_ref` naming the old file, and
+    # `sectum-ai verify` reported the flagship sample as altered after signing.
+    assert hashlib.sha256(committed.read_bytes()).hexdigest() == pack.pdf_ref, (
+        f"{committed.name} is not the PDF {pack_path.name} signs; regenerate the samples "
+        "from a full run (docs/samples/README.md), not by re-rendering the PDF alone"
+    )
     with tempfile.TemporaryDirectory() as directory:
         fresh = Path(directory) / "audit.pdf"
         render_audit_pack(pack, fresh)

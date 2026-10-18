@@ -376,7 +376,8 @@ class ErasureProbe:
                 Surfaces in ``scope`` that have no configured adapter are simply
                 not scanned (they too read ``NOT_COVERED``); the vector store is
                 always present.
-            unseeded: Surfaces the caller could not seed, with why. Each one the
+            unseeded: Surfaces the caller could not seed, with why - recorded as
+                given, so it says which load failed. Each one the
                 run would otherwise scan (configured, in scope) is recorded as
                 present but unestablished - neither scanned nor erased, since a
                 seed that landed in part leaves a baseline the verdict cannot rest
@@ -453,7 +454,7 @@ class ErasureProbe:
                         residual_after=0,
                         # None of the target's markers was established there.
                         unverifiable_after=len(markers),
-                        unverifiable_reason=f"not seeded: {unseeded[surface]}",
+                        unverifiable_reason=unseeded[surface],
                     )
                 )
                 continue
