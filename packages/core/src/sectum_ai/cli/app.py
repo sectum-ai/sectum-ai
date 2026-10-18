@@ -4582,7 +4582,7 @@ def diff(
     findings themselves keyed by id - including in-place changes (status or
     severity). Exits with code 2 when the later run regressed - a metric worsened,
     a leak was newly confirmed or escalated in severity, this run measured less
-    than the earlier one, or the scenario or the vector store's embedding model
+    than the earlier one, or the scenario or the vector store's embedding geometry
     changed; the bracketed lines name which
     - else 0, so the command can gate a CI pipeline (the engineering spec,
     section 10).

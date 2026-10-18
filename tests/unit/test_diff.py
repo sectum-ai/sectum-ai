@@ -1497,6 +1497,17 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     assert payload["embedder_changed_note"] == [None, describe_vector_embedder("hashing-64")]
 
 
+def test_two_spellings_of_one_hash_geometry_are_not_an_embedder_change() -> None:
+    # `hash:128` and `hash-128` are one geometry; a third-party record may spell it
+    # either way, and one that no spec parses is compared as recorded, not refused.
+    spelled = [
+        _run().model_copy(update={"vector_embedder": name}) for name in ("hash:128", "hash-128")
+    ]
+    assert diff_runs(*spelled).embedder_changed is None
+    odd = _run().model_copy(update={"vector_embedder": "hash-anything"})
+    assert diff_runs(odd, spelled[1]).embedder_changed == ("hash-anything", "hash-128")
+
+
 def test_a_record_that_names_no_embedder_is_not_an_embedder_change() -> None:
     # A fake slot (or the app API) names none; losing a live store is scope_lost's
     # to report, so this gate stays out of it rather than double-flag.

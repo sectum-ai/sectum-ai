@@ -538,7 +538,7 @@ def is_hashing_embedder(name: str) -> bool:
     a well-formed spec: a record ``diff`` did not write may carry any string, and
     the caveat asserts what the geometry is.
     """
-    return name == HASHING_EMBEDDER_NAME or re.fullmatch(r"hash[-:][1-9][0-9]*", name) is not None
+    return name == HASHING_EMBEDDER_NAME or re.fullmatch(r"hash[-:]0*[1-9][0-9]*", name) is not None
 
 
 def vector_embedder_note(name: str | None) -> str | None:
@@ -596,7 +596,7 @@ class RunResult(SectumModel):
     detection: DetectionProvenance | None = None
     """Which detector graded this run, or ``None`` where no detector ran."""
     vector_embedder: str | None = None
-    """The embedding model the vector slot's store was driven with.
+    """The embedding geometry the vector slot's store was driven with.
 
     ``hashing-64`` for the built-in deterministic default, the configured spec
     (``st:all-mpnet-base-v2``) for a real model - a hash spec by its dim, so

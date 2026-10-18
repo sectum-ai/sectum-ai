@@ -10,9 +10,11 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sectum_ai.embeddings import canonical_embedding_spec
 from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
     ERASURE_WORKFLOW_IDS,
+    ConfigError,
     Finding,
     FindingStatus,
     RunMetrics,
@@ -529,7 +531,7 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
         (earlier.vector_embedder, later.vector_embedder)
         if earlier.vector_embedder is not None
         and later.vector_embedder is not None
-        and earlier.vector_embedder != later.vector_embedder
+        and _geometry(earlier.vector_embedder) != _geometry(later.vector_embedder)
         else None
     )
     return RunDiff(
@@ -566,6 +568,19 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             else ()
         ),
     )
+
+
+def _geometry(name: str) -> str:
+    """``name`` in its one spelling per geometry, or as recorded where it has none.
+
+    ``hash:128`` and ``hash-128`` are one geometry; a record ``diff`` did not write
+    may spell it either way, or carry a string no spec parses - compared as is
+    rather than refused.
+    """
+    try:
+        return canonical_embedding_spec(name)
+    except ConfigError:
+        return name
 
 
 def _swap_scoped(run: RunResult) -> set[str]:

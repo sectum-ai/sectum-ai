@@ -87,8 +87,8 @@ measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
 of different
 scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
-`[SCENARIO CHANGED]`, and two runs whose vector stores ranked with different
-embedding models (`vector_embedder`) — whatever ranked by similarity over the
+`[SCENARIO CHANGED]`, and two runs whose vector stores ranked in different
+embedding geometries (`vector_embedder`: a model, or the hashing default) — whatever ranked by similarity over the
 store (the Retrieval-Pivot Rate — whose live RAG pipeline may read the store —
 Classes 3 and 10, an erasure's vector residue scan or a subject erasure's
 fingerprint scan) was taken with a different instrument — reported
@@ -301,7 +301,8 @@ place and the JSON summary carries the same words in
 `retrieval_pivot_rate_by_model_note`, so a dashboard cannot mistake it for the
 headline.
 
-`vector_embedder` names the embedding model a live vector store ranked with —
+`vector_embedder` names the embedding geometry a live vector store ranked in — a
+model, or the hashing default —
 `null` when nothing in the run is known to have ranked by similarity over it (a
 live RAG pipeline alone may or may not read the store), and when the slot is
 the built-in fake (this demo's), whose ranking is a lexical stand-in the run

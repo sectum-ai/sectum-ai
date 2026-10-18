@@ -827,6 +827,7 @@ def _with_name(name: str) -> object:
         ("hash-64", True),
         ("hash:128", True),
         ("hash-0", False),
+        ("hash-064", True),
         ("hash-anything", False),
         ("hash-64\x1b[31m", False),
         ("st:all-mpnet-base-v2", False),
