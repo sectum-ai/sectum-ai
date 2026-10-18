@@ -1686,11 +1686,38 @@ def test_an_unreadable_mem0_block_is_refused_without_echoing_its_contents(
         with pytest.raises(ConfigError) as caught:
             load_config(path)
         assert secret not in str(caught.value), caught.value
-    # Nor does a YAML syntax error, whose PyYAML text quotes the offending line.
-    path.write_text(f'adapters:\n  vector_store:\n    api_key: "{secret}\n')
-    with pytest.raises(ConfigError, match=r"invalid YAML .* at line \d+") as caught:
+    # The gate names what it reads: a non-string key is one of them.
+    with pytest.raises(ValueError, match="a non-string config key"):
+        SectumConfig.model_validate(_mem0({"embedder": {"provider": "ollama", "config": {1: "x"}}}))
+
+
+@pytest.mark.parametrize(
+    ("text", "names"),
+    [
+        # An unterminated quote: located where it started, not at end of file.
+        ('detection:\n  api_key: "SECRET\nx: 1\n', "quoted scalar at line 2"),
+        ("api_key: *SECRET\n", "undefined alias <value> at line 1"),
+        ("api_key: !SECRET\n", "tag <value> at line 1"),
+        ("api_key: SECRET\x01\n", "special characters are not allowed"),
+        ("api_key: !!int SECRET\n", "could not be constructed"),
+        ("seed: 2026-13-45\n", "could not be constructed"),
+    ],
+)
+def test_a_yaml_error_names_its_problem_without_quoting_the_config(
+    tmp_path: Path, text: str, names: str
+) -> None:
+    # PyYAML's message quotes the offending line, its phrases quote an alias or a
+    # tag, and a constructor's ValueError quotes the value and escaped as a raw
+    # traceback - any of which may be the value holding a key.
+    from sectum_ai.config import load_config
+    from sectum_ai.spec import ConfigError
+
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_text(text)
+    with pytest.raises(ConfigError, match="invalid YAML") as caught:
         load_config(path)
-    assert secret not in str(caught.value), caught.value
+    assert names in str(caught.value), caught.value
+    assert "SECRET" not in str(caught.value), caught.value
 
 
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:

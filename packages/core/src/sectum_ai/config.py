@@ -585,6 +585,28 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
         )
 
 
+def _yaml_problem(error: Exception) -> str:
+    """What PyYAML found wrong and where, without any of the config's own text.
+
+    Its message quotes the offending line, and its phrases quote tokens (an
+    undefined alias, an unknown tag) - either may be the value holding a key. The
+    phrases are fixed text around ``%r`` tokens, so the quoted parts are dropped; a
+    constructor's bare ``ValueError`` (a bad ``!!int``, a timestamp out of range)
+    quotes the value outright and is named by kind only.
+    """
+    if isinstance(error, yaml.reader.ReaderError):
+        return f"{error.reason} at position {error.position}"
+    if not isinstance(error, yaml.MarkedYAMLError):
+        return "a value could not be constructed (for example a bad !!int or timestamp)"
+    parts = []
+    for text, mark in ((error.context, error.context_mark), (error.problem, error.problem_mark)):
+        if text:
+            redacted = re.sub(r"'[^']*'|\"[^\"]*\"", "<value>", text)
+            where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+            parts.append(f"{redacted}{where}")
+    return "; ".join(parts) or type(error).__name__
+
+
 def load_config(path: Path) -> SectumConfig:
     """Load and validate a ``sectum-ai.yaml`` configuration file.
 
@@ -596,13 +618,8 @@ def load_config(path: Path) -> SectumConfig:
         raise ConfigError(f"config file not found: {path}")
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        # The problem and where, not PyYAML's text: it quotes the offending line,
-        # which may be the one holding a key.
-        mark = getattr(error, "problem_mark", None)
-        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-        problem = getattr(error, "problem", None) or type(error).__name__
-        raise ConfigError(f"invalid YAML in {path}: {problem}{where}") from None
+    except (yaml.YAMLError, ValueError) as error:
+        raise ConfigError(f"invalid YAML in {path}: {_yaml_problem(error)}") from None
     if raw is None:
         return SectumConfig()
     if not isinstance(raw, dict):
