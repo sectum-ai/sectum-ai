@@ -1696,11 +1696,16 @@ def test_an_unreadable_mem0_block_is_refused_without_echoing_its_contents(
     [
         # An unterminated quote: located where it started, not at end of file.
         ('detection:\n  api_key: "SECRET\nx: 1\n', "quoted scalar at line 2"),
-        ("api_key: *SECRET\n", "undefined alias <value> at line 1"),
-        ("api_key: !SECRET\n", "tag <value> at line 1"),
+        ("api_key: *SECRET\n", "ComposerError at line 1"),
+        ("api_key: !SECRET\n", "ConstructorError at line 1"),
+        ("api_key: !<tag:x'y%22SECRET> x\n", "ConstructorError at line 1"),
         ("api_key: SECRET\x01\n", "special characters are not allowed"),
         ("api_key: !!int SECRET\n", "could not be constructed"),
+        ("api_key: !!bool SECRET\n", "could not be constructed"),
+        ("seed: !!timestamp SECRET\n", "could not be constructed"),
+        ("seed: !!int ''\n", "could not be constructed"),
         ("seed: 2026-13-45\n", "could not be constructed"),
+        ("api_key: " + "[" * 20000 + "]" * 20000 + "\n", "nested too deeply"),
     ],
 )
 def test_a_yaml_error_names_its_problem_without_quoting_the_config(
@@ -1717,7 +1722,20 @@ def test_a_yaml_error_names_its_problem_without_quoting_the_config(
     with pytest.raises(ConfigError, match="invalid YAML") as caught:
         load_config(path)
     assert names in str(caught.value), caught.value
-    assert "SECRET" not in str(caught.value), caught.value
+    # PyYAML lowercases a `!!bool` value before it fails on it.
+    assert "secret" not in str(caught.value).lower(), caught.value
+
+
+def test_a_config_that_is_not_utf8_says_so(tmp_path: Path) -> None:
+    # A decoding failure is a ValueError, and read as one the file was reported as
+    # holding "a bad !!int or timestamp".
+    from sectum_ai.config import load_config
+    from sectum_ai.spec import ConfigError
+
+    path = tmp_path / "sectum-ai.yaml"
+    path.write_bytes(b"api_key: \xff\xfe\n")
+    with pytest.raises(ConfigError, match="not UTF-8 text"):
+        load_config(path)
 
 
 def test_an_upstash_store_without_config_takes_mem0s_default() -> None:

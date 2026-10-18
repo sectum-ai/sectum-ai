@@ -588,22 +588,26 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
 def _yaml_problem(error: Exception) -> str:
     """What PyYAML found wrong and where, without any of the config's own text.
 
-    Its message quotes the offending line, and its phrases quote tokens (an
-    undefined alias, an unknown tag) - either may be the value holding a key. The
-    phrases are fixed text around ``%r`` tokens, so the quoted parts are dropped; a
-    constructor's bare ``ValueError`` (a bad ``!!int``, a timestamp out of range)
-    quotes the value outright and is named by kind only.
+    Any failure out of ``safe_load`` may carry the config: its message quotes the
+    offending line, its phrases quote tokens (an alias, a tag), and a tagged
+    scalar's constructor raises a bare ``KeyError`` / ``ValueError`` /
+    ``IndexError`` holding the value. So a phrase is kept only when it quotes
+    nothing - PyYAML's fixed text, such as "while scanning a quoted scalar" - and
+    everything else is named by its class and position alone.
     """
     if isinstance(error, yaml.reader.ReaderError):
         return f"{error.reason} at position {error.position}"
+    if isinstance(error, RecursionError):
+        return "nested too deeply to parse"
     if not isinstance(error, yaml.MarkedYAMLError):
-        return "a value could not be constructed (for example a bad !!int or timestamp)"
+        return f"a value could not be constructed ({type(error).__name__})"
     parts = []
     for text, mark in ((error.context, error.context_mark), (error.problem, error.problem_mark)):
-        if text:
-            redacted = re.sub(r"'[^']*'|\"[^\"]*\"", "<value>", text)
-            where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-            parts.append(f"{redacted}{where}")
+        if text is None and mark is None:
+            continue
+        phrase = text if text and not re.search("['\"]", text) else type(error).__name__
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        parts.append(f"{phrase}{where}")
     return "; ".join(parts) or type(error).__name__
 
 
@@ -617,8 +621,14 @@ def load_config(path: Path) -> SectumConfig:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, ValueError) as error:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise ConfigError(f"config file is not UTF-8 text: {path}") from None
+    try:
+        raw = yaml.safe_load(text)
+    # Every failure, not only YAMLError: a tagged scalar's constructor raises a bare
+    # KeyError or IndexError holding the value, and each would print it.
+    except Exception as error:
         raise ConfigError(f"invalid YAML in {path}: {_yaml_problem(error)}") from None
     if raw is None:
         return SectumConfig()
