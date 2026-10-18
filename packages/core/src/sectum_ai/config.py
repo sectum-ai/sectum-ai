@@ -411,7 +411,8 @@ _LOCAL_MEM0_LLMS = frozenset({"ollama", "lmstudio", "vllm"})
 # nothing themselves - an allow-list, so a store added later (0.1.117's
 # databricks embeds server-side by default) is refused until classified.
 # `upstash_vector` is here only without `enable_embeddings`; `langchain` wraps a
-# client that may embed, and is left out.
+# client that may embed, and `baidu` has not been verified - both are left out
+# deliberately, and stay out until someone checks they embed nothing.
 _PASSIVE_MEM0_STORES = frozenset(
     {
         "qdrant", "chroma", "pgvector", "milvus", "upstash_vector", "azure_ai_search",

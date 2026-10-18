@@ -473,8 +473,8 @@ detection:
   # embedder is not ollama, lmstudio, huggingface or base-URL-pointed openai; with a
   # graph store, whose llm or graph_store.llm is not ollama, lmstudio or vllm (no
   # llm block means openai); or whose vector_store is not known to leave embedding
-  # to mem0 (an allow-list: not langchain, baidu, databricks, or upstash_vector
-  # with enable_embeddings).
+  # to mem0 (an allow-list of most mem0 0.1.116 stores: not, for example, langchain,
+  # baidu, databricks, or upstash_vector with enable_embeddings).
   # Adapters you point it at are the system under test and receive the synthetic
   # data by design.
   # "hosted" (default) places no egress restriction.
