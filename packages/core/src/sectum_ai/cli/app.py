@@ -1126,9 +1126,10 @@ def probe(
     mcp = bundle.mcp
     memory = bundle.memory
     # Only when something reads the store: a vector probe, or a LIVE RAG pipeline -
-    # kept only if it reads back the canary loaded here; the built-in one ranks over
-    # its own index. A suite of cache or memory probes embedded the whole corpus
-    # (with a hosted model, sent and billed) and loaded it for nothing measured.
+    # which may read it, and is kept only if the canary comes back from it; the
+    # built-in one ranks over its own index. A suite of cache or memory probes
+    # embedded the whole corpus (with a hosted model, sent and billed) and loaded it
+    # for nothing measured.
     live_rag = bundle.rag is not None and not bundle.rag.synthetic
     vector_loaded = any(
         "vector" in probe.requires_adapters or ("rag" in probe.requires_adapters and live_rag)

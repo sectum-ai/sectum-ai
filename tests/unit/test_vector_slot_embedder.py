@@ -2137,11 +2137,13 @@ def test_probe_loads_the_corpus_only_when_something_reads_the_store(
     runner = CliRunner()
     assert runner.invoke(app, ["seed", "--workdir", str(tmp_path)]).exit_code == 0
     probed = runner.invoke(app, ["probe", "--workdir", str(tmp_path), "--probe", probe_id])
-    assert probed.exception is None or isinstance(probed.exception, SystemExit), probed.output
+    # The probe ran to its verdict - not stopped before the load decision.
+    assert probed.exit_code == 2, probed.output
     assert bool(upserts) is loads, (probe_id, len(upserts))
     assert bool(model.documents) is loads, (probe_id, len(model.documents))
-    if not loads:
-        assert fetches == [], (probe_id, len(fetches))
+    # And the landed-check - the guard against grading PASS off a live store that
+    # swallowed the corpus - asks exactly when the corpus was loaded.
+    assert bool(fetches) is loads, (probe_id, len(fetches))
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

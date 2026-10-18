@@ -202,7 +202,7 @@ built-in `fake` store, which does not embed.
 
 This is independent of `detection.embedder`: that is the model Sectum *grades*
 observations with; this is the one the customer's store *ranks* in. Hosted specs
-send the whole synthetic corpus to the provider and are refused under
+send the synthetic corpus (whatever of it a run loads) to the provider and are refused under
 `detection.mode: local`. They also receive **real personal data** in one workflow:
 `erasure --subject` queries the store for the data subject's vector fingerprints,
 so a hosted embedder is sent that subject's fingerprint text in the clear and
@@ -357,7 +357,7 @@ ignore it), so the semantic embedder + judge run with no external account.
 Set `detection.mode: local` to **enforce** that no stage Sectum runs on its own
 behalf sends tenant content to a third-party AI service. Five stages
 embed or judge tenant content: detection, the vector store's
-[`embedder`](#vector_store) (which embeds the whole corpus), the Class 2
+[`embedder`](#vector_store) (which embeds the corpus a run loads), the Class 2
 sweep's `scenario.embedding_models`, `calibrate --embedder` (the labelled set),
 and a `mem0` memory adapter's own embedder
 (and graph LLM, and a vector store that embeds server-side). In `local` mode Sectum fails fast on any of

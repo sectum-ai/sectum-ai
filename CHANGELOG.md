@@ -70,8 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`probe` loads the vector store's corpus only when a probe reads the store** -
-  a vector probe, or a live RAG pipeline (kept only if it reads back the canary
-  loaded there; the built-in one ranks over its own index). A suite of cache or
+  a vector probe, or a live RAG pipeline (which may read that store, and is kept
+  only if the canary comes back from it; the built-in one ranks over its own
+  index). A suite of cache or
   memory probes, or the built-in pipeline alone, embedded the whole corpus -
   with a hosted `embedder`, sent and billed - for nothing measured.
 - **A config error no longer echoes the config.** `load_config` printed

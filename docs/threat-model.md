@@ -153,7 +153,7 @@ timestamped; it is signed by a TSA only when one is configured.)
   cross the boundary from Sectum's own stages: local mode **enforces** that none of
   them sends tenant content to a third-party AI service:
   five stages embed or judge tenant content — detection, the vector store's
-  `embedder` (the whole corpus), the Class 2 sweep's `embedding_models`,
+  `embedder` (the corpus a run loads), the Class 2 sweep's `embedding_models`,
   `calibrate --embedder` (the labelled set), and a
   `mem0` memory adapter's own embedder (and graph LLM, and its vector store) — and
   in `local` mode the config fails fast on any of them that would call a hosted AI
