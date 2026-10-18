@@ -122,8 +122,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its queries lower against the corpus than a production store would and
   under-reported the per-model gradient. Queries now use `search_query` / `query`,
   in the sweep, for the suite's planned queries against a live store, and for
-  both erasure modes' fingerprint queries. An `st:` model with its own query and
-  document prompts (e5, BGE, nomic) is encoded with them.
+  both erasure modes' fingerprint queries. An `st:` model whose
+  sentence-transformers config ships query and document prompts is encoded with
+  them; checkpoints that document their prefixes only in the model card (many e5
+  and BGE ones) ship none and are encoded without.
+- **The Class 2 sweep sent each model the whole corpus in one request.** Cohere
+  caps a request at 96 texts and OpenAI at 2,048, so a gradient over a larger
+  corpus failed outright. It now sends 64 texts per request.
 - **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
   traceback and exit 1, with an SDK message that can echo part of the API key;
   every provider call — and loading a provider's model, such as a misspelled

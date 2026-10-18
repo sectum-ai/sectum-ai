@@ -160,10 +160,12 @@ class SentenceTransformerEmbedding:
         return self._encode(texts, ("query",))
 
     def _encode(self, texts: list[str], roles: tuple[str, ...]) -> list[list[float]]:
-        # An asymmetric model (e5 `query: `/`passage: `, BGE, nomic) ships its
-        # prompts in its own config; encoding without them ranks a query against
-        # the corpus differently from the production index built with them. A
-        # symmetric model has none, and is encoded as before.
+        # A model whose sentence-transformers config ships `query` / `document`
+        # (or `passage`) prompts is encoded with them: without them a query ranks
+        # against the corpus differently from an index built with them. Many
+        # asymmetric checkpoints (e5, BGE) document their prefixes only in the
+        # model card and ship no prompts; those are encoded without, like a
+        # symmetric model.
         prompts = getattr(self._model, "prompts", None) or {}
         role = next((name for name in roles if name in prompts), None)
         if role is None:
@@ -268,7 +270,8 @@ class VoyageEmbedding:
     sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
     ``embed`` uses ``input_type="document"`` and :meth:`embed_queries` ``query``. Voyage caps a
     single request at 1000 texts (and a per-model token budget) and does not
-    auto-batch, so the whole-corpus sweep is chunked in ``_VOYAGE_BATCH``-sized calls.
+    auto-batch, so a direct call is chunked in ``_VOYAGE_BATCH``-sized requests;
+    Sectum's own callers already send :data:`EMBED_BATCH_SIZE` texts at a time.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "VOYAGE_API_KEY") -> None:
@@ -683,7 +686,11 @@ class EmbedderBridge:
         texts: Iterable[str],
     ) -> None:
         missing = [text for text in dict.fromkeys(texts) if text not in cache]
-        vectors = embed_batched(self.name, embed, missing, self._batch_size)
-        cache.update(
-            (text, array("d", vector)) for text, vector in zip(missing, vectors, strict=True)
-        )
+        # Cached batch by batch: a batch that fails keeps the ones before it, so a
+        # contained failure does not re-bill them as one-text calls on demand.
+        for start in range(0, len(missing), self._batch_size):
+            chunk = missing[start : start + self._batch_size]
+            vectors = call_embedder(self.name, embed, chunk)
+            cache.update(
+                (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
+            )

@@ -1273,3 +1273,26 @@ def test_subject_fingerprints_are_not_embedded_before_the_other_adapters_check(
     assert result.exit_code == 3, result.output
     assert "does not read: shared_idx" in result.output, result.output
     assert model.queries == []
+
+
+def test_a_failed_batch_keeps_the_batches_before_it() -> None:
+    # Caching only after every batch returned threw away the ones that succeeded,
+    # and the contained fallback re-billed them as one-text calls.
+    from sectum_ai.spec import AdapterError
+
+    class _ThirdCallFails(_Modes):
+        calls = 0
+
+        def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            type(self).calls += 1
+            if type(self).calls == 3:
+                raise RuntimeError("429")
+            return super().embed_queries(texts)
+
+    model = _ThirdCallFails()
+    bridge = EmbedderBridge(model, batch_size=10)
+    with pytest.raises(AdapterError):
+        bridge.prefetch_queries([f"query {n}" for n in range(30)])
+    assert len(model.queries) == 20
+    bridge("query 5")  # served from the cache, not re-embedded
+    assert len(model.queries) == 20
