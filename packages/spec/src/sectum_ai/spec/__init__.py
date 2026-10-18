@@ -52,6 +52,7 @@ from sectum_ai.spec.models import (
     SyntheticUserSpec,
     describe_vector_embedder,
     is_hashing_embedder,
+    vector_embedder_note,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
@@ -123,6 +124,7 @@ __all__ = [
     "to_canonical_json",
     "tokenize",
     "untrusted",
+    "vector_embedder_note",
     "wilson_interval",
     "write_json_schemas",
 ]

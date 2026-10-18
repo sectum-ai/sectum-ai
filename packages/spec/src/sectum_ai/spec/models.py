@@ -5,6 +5,7 @@ generation produces them and nothing mutates them afterwards, which keeps the
 reproducibility contract (the engineering spec, section 6.5) easy to reason about.
 """
 
+import re
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
@@ -533,9 +534,23 @@ def is_hashing_embedder(name: str) -> bool:
     """Whether ``name`` is a hashing embedder: the default, or a ``hash-<dim>`` spec.
 
     Either ranks by shared tokens rather than meaning, so every renderer that
-    names one has to say so - a bare ``hash-256`` reads as an embedding model.
+    names one has to say so - a bare ``hash-256`` reads as an embedding model. Only
+    a well-formed spec: a record ``diff`` did not write may carry any string, and
+    the caveat asserts what the geometry is.
     """
-    return name == HASHING_EMBEDDER_NAME or name.startswith(("hash-", "hash:"))
+    return name == HASHING_EMBEDDER_NAME or re.fullmatch(r"hash[-:][1-9][0-9]*", name) is not None
+
+
+def vector_embedder_note(name: str | None) -> str | None:
+    """The caveat a JSON surface carries beside a recorded geometry, or ``None``.
+
+    :func:`describe_vector_embedder` for a hashing geometry, whose name alone reads
+    as an embedding model; ``None`` otherwise. One rule for ``probe``'s and
+    ``diff``'s JSON.
+    """
+    if name is None or not is_hashing_embedder(name):
+        return None
+    return describe_vector_embedder(name)
 
 
 def describe_vector_embedder(name: str) -> str:

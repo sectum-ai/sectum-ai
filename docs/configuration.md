@@ -194,8 +194,8 @@ models. Any other text, such as a document a probe plants mid-run, is embedded a
 a document. The run
 records the model as `vector_embedder` in its signed `RunResult`
 ([data models](data-models.md)), and the audit PDF and the scorecard name it beside
-the rates it qualifies; `diff` and `baseline --compare` report two runs that used
-different models as `[EMBEDDER CHANGED]` (both must name one: a run fed only by a
+the rates it qualifies; `diff` and `baseline --compare` report two runs whose stores
+ranked in different geometries as `[EMBEDDER CHANGED]` (both must name one: a run fed only by a
 live RAG pipeline names none). A `fake-*` name is refused (it is a sweep recall
 illustration with no vectors to give a store), and so is `embedder` on the
 built-in `fake` store, which does not embed.

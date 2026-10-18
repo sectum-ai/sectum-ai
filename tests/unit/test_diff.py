@@ -1487,6 +1487,8 @@ def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path)
     # Named as every renderer names a hashing geometry: with its caveat, in a
     # sentence of its own.
     assert "This run: hashing-64 - a deterministic hashing embedder" in text.output
+    # Geometries, not models: one of them has none.
+    assert "ranked in different embedding geometries" in text.output, text.output
     assert "The earlier run: st:all-mpnet-base-v2. This run:" in text.output, text.output
     assert "[not measured] per_probe_findings[rag-entity-bleed]: 1 -> 0" in text.output
     assert "[ok]" not in text.output, text.output

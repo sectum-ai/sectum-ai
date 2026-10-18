@@ -820,6 +820,28 @@ def _with_name(name: str) -> object:
     return _named
 
 
+@pytest.mark.parametrize(
+    ("name", "hashing"),
+    [
+        ("hashing-64", True),
+        ("hash-64", True),
+        ("hash:128", True),
+        ("hash-0", False),
+        ("hash-anything", False),
+        ("hash-64\x1b[31m", False),
+        ("st:all-mpnet-base-v2", False),
+    ],
+)
+def test_only_a_well_formed_hash_spec_is_captioned_as_one(name: str, hashing: bool) -> None:
+    # `diff` grades records it did not write, and the caveat asserts what the
+    # geometry is: a prefix match captioned `hash-anything` as a hashing embedder.
+    from sectum_ai.spec import is_hashing_embedder, vector_embedder_note
+
+    assert is_hashing_embedder(name) is hashing
+    assert (vector_embedder_note(name) is not None) is hashing
+    assert vector_embedder_note(None) is None
+
+
 def test_a_hash_spec_is_recorded_by_its_dim_not_its_spelling() -> None:
     # Two spellings of one geometry tripped [EMBEDDER CHANGED]; the gradient keys
     # by the same canonical spelling.

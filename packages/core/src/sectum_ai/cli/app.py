@@ -165,10 +165,10 @@ from sectum_ai.spec import (
     canonical_hash,
     configure_logging,
     describe_vector_embedder,
-    is_hashing_embedder,
     residual_present,
     sha256_hex,
     untrusted,
+    vector_embedder_note,
     wilson_interval,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -1360,11 +1360,7 @@ def probe(
             "vector_embedder": run.vector_embedder,
             # The disclosure the text, the scorecard and both PDFs carry: a hashing
             # embedder's name alone reads as an embedding model.
-            "vector_embedder_note": (
-                describe_vector_embedder(run.vector_embedder)
-                if run.vector_embedder is not None and is_hashing_embedder(run.vector_embedder)
-                else None
-            ),
+            "vector_embedder_note": vector_embedder_note(run.vector_embedder),
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
             # dashboard can show the rate's uncertainty, not a bare point estimate.
             "retrieval_pivot_n": run.metrics.retrieval_pivot_n,
@@ -3919,7 +3915,7 @@ _GEOMETRY_LABELS: dict[str, str] = {
 
 
 def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
-    """The banner for two runs whose vector stores ranked in different embedding models."""
+    """The banner for two runs whose vector stores ranked in different embedding geometries."""
     # As every renderer names one: a hashing geometry with its shared-tokens caveat,
     # each in a sentence of its own so a caveat's clauses cannot capture the next.
     before, after = (untrusted(describe_vector_embedder(name)) for name in change)
@@ -3941,8 +3937,8 @@ def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: 
         else ""
     )
     return (
-        f"[EMBEDDER CHANGED] the {earlier} run's vector store and this one ranked with "
-        f"different embedding models. The {earlier} run: {before}. This run: {after}. "
+        f"[EMBEDDER CHANGED] the {earlier} run's vector store and this one ranked in "
+        f"different embedding geometries. The {earlier} run: {before}. This run: {after}. "
         f"Whatever ranked by similarity over the store - {what}, and the "
         "findings appearing or resolving there - was taken with a different instrument, "
         f"so its difference cannot be attributed to a change in isolation{may}; "
@@ -4425,10 +4421,7 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         # As `probe --output json` carries `vector_embedder_note`: a hashing
         # geometry's name alone reads as an embedding model.
         "embedder_changed_note": (
-            [
-                describe_vector_embedder(name) if is_hashing_embedder(name) else None
-                for name in result.embedder_changed
-            ]
+            [vector_embedder_note(name) for name in result.embedder_changed]
             if result.embedder_changed is not None
             else None
         ),
