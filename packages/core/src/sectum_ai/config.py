@@ -398,10 +398,11 @@ class SectumConfig(BaseModel):
 
 
 # mem0 providers that run on the box (or on an endpoint the operator points them
-# at): ollama, lmstudio and vLLM default to localhost; huggingface embeds with a
-# local sentence-transformers model. An `openai` EMBEDDER with an explicit
-# `openai_base_url` is an OpenAI-compatible server the operator chose - the trust
-# `detection`'s `base_url` gets. No such allowance for a graph LLM: mem0 pairs one
+# at with the provider's own base URL - trusted, like `detection`'s `base_url`):
+# ollama, lmstudio and vLLM default to localhost; huggingface embeds with a local
+# sentence-transformers model unless given a `huggingface_base_url`. An `openai`
+# EMBEDDER with an explicit `openai_base_url` is an OpenAI-compatible server the
+# operator chose - the same trust. No such allowance for a graph LLM: mem0 pairs one
 # LLM block's provider with the other block's config (differently per graph
 # store), so a base URL on one block cannot be relied on to reach the call.
 _LOCAL_MEM0_EMBEDDERS = frozenset({"ollama", "lmstudio", "huggingface"})
@@ -446,7 +447,10 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
     graph = mem0_config.get("graph_store")
     if graph is not None and not isinstance(graph, dict):
         offenders.append(f"memory mem0 graph_store (cannot be classified: {graph!r})")
-    elif isinstance(graph, dict) and graph.get("config"):
+    # Any present `config` enables the graph, even an empty one: mem0 parses it into
+    # a config model that may well be truthy (a kuzu store's `{}` defaults to an
+    # in-memory database), and its LLM then runs over every write.
+    elif isinstance(graph, dict) and graph.get("config") is not None:
         llm_blocks = [("llm", mem0_config.get("llm"))]
         if graph.get("llm") is not None:
             llm_blocks.append(("graph_store.llm", graph["llm"]))
@@ -454,7 +458,7 @@ def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
             provider = _provider(block, "openai")
             if provider is None:
                 offenders.append(f"memory mem0 {section} (cannot be classified: {block!r})")
-            elif provider and provider not in _LOCAL_MEM0_LLMS:
+            elif provider not in _LOCAL_MEM0_LLMS:
                 offenders.append(f"memory mem0 {section} ({provider!r})")
     return offenders
 

@@ -1330,6 +1330,18 @@ def test_byoc_local_mode_requires_every_llm_feeding_a_graph_store_to_be_local() 
             "graph_store": {**_NEO4J, "llm": pointed},
         },
     ]
+    refused += [
+        # An empty graph config still enables the graph (a kuzu store's `{}` is a
+        # truthy in-memory database), so its LLM must be local too.
+        {"embedder": embedder, "graph_store": {"provider": "kuzu", "config": {}}},
+        # An empty graph provider is refused: the gate does not model what mem0
+        # does with it.
+        {
+            "llm": {"provider": "ollama"},
+            "embedder": embedder,
+            "graph_store": {**_NEO4J, "llm": {"provider": ""}},
+        },
+    ]
     for config in refused:
         with pytest.raises(ValueError, match="mem0"):
             SectumConfig.model_validate(_mem0(config))
