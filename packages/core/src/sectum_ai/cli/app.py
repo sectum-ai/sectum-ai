@@ -1687,8 +1687,9 @@ def _prefetch_texts(
 ) -> None:
     """Embed ``texts`` up front through the store's bridge, when it has one.
 
-    Every caller's prefetch is an optimisation, so one rule for its failure: said,
-    and left to the on-demand embedding the store's own calls fall back to.
+    A failed prefetch loses nothing the store's own calls cannot redo on demand -
+    registered queries included, since the bridge records them as queries before
+    embedding them - so one rule for its failure: said, and left to that fallback.
     """
     bridge = store.embedder_bridge
     if bridge is None:

@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   takes an optional `embedder` (`st:<model>`, `hash-<dim>`, `openai:<model>`,
   `cohere:<model>`, `voyage:<model>`, `bedrock:<model>`): a store Sectum creates is
   created at that model's dimension (a Pinecone index must already exist at it) and
-  the corpus is upserted in its geometry, embedded in batches first. Until now every
+  the corpus is upserted in its geometry, embedded in batches first. Pinecone,
+  Azure AI Search and Qdrant receive it in several write requests, each under the
+  service's documented per-request cap: a real model's vectors would put a default
+  500-document tenant corpus past Pinecone's 2 MB in one request. Until now every
   live store ranked with a 64-dimension hashing embedder, so the Class 2
   Retrieval-Pivot Rate against a real store was measured by shared tokens, not
   meaning. The default is unchanged. `semantic_retrieval` stays withheld from live

@@ -146,9 +146,8 @@ def _local(**overrides: object) -> dict[str, object]:
 def test_byoc_local_mode_refuses_a_hosted_vector_slot_embedder() -> None:
     # `detection.mode: local` guarantees no tenant content reaches a third-party AI
     # service from Sectum's own stages. The vector
-    # slot embeds the corpus a run loads, so a hosted embedder there is the largest
-    # egress in the product - and the gate, being a validator on `DetectionConfig`,
-    # never saw it.
+    # slot embeds the corpus a run loads, so a hosted embedder there sends it out -
+    # and the gate, being a validator on `DetectionConfig`, never saw it.
     with pytest.raises(ValueError, match="vector_store"):
         SectumConfig.model_validate(
             _local(adapters={"vector_store": {"kind": "opensearch", "embedder": "openai:x"}})

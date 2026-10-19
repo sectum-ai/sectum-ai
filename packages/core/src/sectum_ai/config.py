@@ -364,7 +364,7 @@ class SectumConfig(BaseModel):
         premise was false. ``scenario.embedding_models``
         embeds the corpus for the Class 2 sweep and was never gated, so ``mode: local``
         failed OPEN silently; and the vector slot's ``embedder`` embeds the corpus a
-        run loads - the largest egress in the product. A validator on
+        run loads. A validator on
         ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
         three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
 

@@ -15,6 +15,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.adapters.vector._batch import request_batches
 from sectum_ai.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
@@ -22,6 +23,9 @@ Embedder = Callable[[str], Sequence[float]]
 
 _POINT_NAMESPACE = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")
 """A fixed namespace for deriving a deterministic point id from a ``doc_id``."""
+
+_MAX_UPSERT_BYTES = 24_000_000
+"""Under Qdrant's default 32 MB cap on one request (``service.max_request_size_mb``)."""
 
 
 class QdrantVectorStore(VectorStoreAdapter):
@@ -138,7 +142,12 @@ class QdrantVectorStore(VectorStoreAdapter):
             )
             for document in items
         ]
-        self._client.upsert(collection_name=collection, points=points, wait=True)
+        for batch in request_batches(
+            points,
+            max_bytes=_MAX_UPSERT_BYTES,
+            size=lambda point: len(point.model_dump_json()),
+        ):
+            self._client.upsert(collection_name=collection, points=list(batch), wait=True)
 
     def query(
         self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
