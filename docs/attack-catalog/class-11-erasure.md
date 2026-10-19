@@ -100,18 +100,22 @@ A marker is unverifiable when its absence after erasure was never established.
 Both probes read the vector store with a top-50 similarity query, and a page that
 comes back **full** without a marker is not absence — a marker still stored but
 ranked past the page looks identical. On any surface, a backend error during
-either scan, or a purge that was attempted and failed, rules out none of the
-markers. And the vector store is not attested at all when the target's corpus —
+the post-erasure scan leaves unverifiable every marker that scan had not yet
+checked; one during the pre-erasure scan leaves no baseline to attest; and a purge
+that was attempted and failed rules out none of the markers that were there. And
+the vector store is not attested at all when the target's corpus —
 or, on a shared index, the other tenants' corpus that crowds it — does not load
 (a store left at an earlier `embedder`'s dimension refuses it): the probe neither
 scans nor erases it, every one of the target's markers counts as unverifiable,
 Sectum asks the store to delete what of the target's corpus landed, and the
 warning on stderr gives the cause. In each case the surface can never read
 `ERASED`: unless a marker it did see is residual, or its backend has no erasure
-API (a caveat), its human-readable verdict is `NOT VERIFIED` and its coverage
-verdict `NOT_COVERED`. Unless some surface holds residual data or a caveat
-(exit 2), `sectum-ai erasure` exits 3 with `ERASURE INCONCLUSIVE` naming the
-surfaces whose absence was never established.
+API and held markers before (a caveat), its human-readable verdict is `NOT VERIFIED` and its coverage
+verdict `NOT_COVERED`. `sectum-ai erasure` exits 3 with `ERASURE INCONCLUSIVE`
+naming the surfaces whose absence was never established — unless a surface whose
+backend has an erasure API still holds a marker (`ERASURE FAILED`) or one without
+such an API held markers before (`ATTESTABLE WITH CAVEAT`), either of which exits
+2 first.
 
 The guarantee is anti-over-claim: a surface that was not scanned can only ever be
 `NOT_COVERED` — it can never read as `ERASED`. The overall run is "fully erased"
