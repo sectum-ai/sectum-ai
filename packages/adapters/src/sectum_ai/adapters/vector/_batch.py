@@ -2,7 +2,7 @@
 
 Pinecone, Azure AI Search and Qdrant cap one write request by size (Qdrant by a
 server setting, 32 MB by default), Pinecone and Azure also at 1000 records. A real
-embedding model's vectors pass a size cap at the default corpus size: at 384
+embedding model's vectors can pass a size cap at the default corpus size: at 384
 dimensions a 500-document corpus computes to about 4 MB, twice Pinecone's 2 MB.
 """
 
