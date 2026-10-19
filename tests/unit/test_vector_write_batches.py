@@ -4,7 +4,7 @@ At 384 dimensions (all-MiniLM-L6-v2's) a default 500-document tenant corpus
 computes to about 4 MB, twice Pinecone's 2 MB upsert cap, in one request; the
 64-dimension hashing default fit. Qdrant's and Azure's byte budgets are reached
 only at larger dimensions, so their tests lower the byte cap to exercise the split;
-Azure's 1000-document cap is exercised by a 1200-document corpus.
+Pinecone's and Azure's 1000-record caps are exercised by 1200-document corpora.
 """
 
 import hashlib
@@ -79,6 +79,24 @@ def test_pinecone_upserts_a_real_model_corpus_in_requests_under_its_cap() -> Non
     assert all(len(json.dumps(request)) < 2_000_000 for request in index.requests)
     assert all(len(request) <= 1000 for request in index.requests)
     assert [v["id"] for r in index.requests for v in r] == [f"doc-{i}" for i in range(500)]
+
+
+def test_pinecone_splits_a_corpus_of_small_vectors_at_its_record_cap() -> None:
+    from sectum_ai.adapters.vector.pinecone import PineconeVectorStore
+
+    requests: list[int] = []
+    landed: set[str] = set()
+
+    def upsert(*, vectors: list[dict[str, Any]], namespace: str) -> None:
+        requests.append(len(vectors))
+        landed.update(vector["id"] for vector in vectors)
+
+    def fetch(*, ids: list[str], namespace: str) -> SimpleNamespace:
+        return SimpleNamespace(vectors={i: object() for i in ids if i in landed})
+
+    index = SimpleNamespace(upsert=upsert, fetch=fetch)
+    PineconeVectorStore(index, lambda _text: [0.5] * 64).upsert(_TENANT, _corpus(1200))
+    assert requests == [1000, 200]
 
 
 def test_qdrant_splits_its_upsert_at_the_byte_cap(
