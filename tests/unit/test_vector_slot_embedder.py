@@ -146,7 +146,7 @@ def _local(**overrides: object) -> dict[str, object]:
 def test_byoc_local_mode_refuses_a_hosted_vector_slot_embedder() -> None:
     # `detection.mode: local` guarantees no tenant content reaches a third-party AI
     # service from Sectum's own stages. The vector
-    # slot embeds the WHOLE CORPUS, so a hosted embedder there is the largest
+    # slot embeds the corpus a run loads, so a hosted embedder there is the largest
     # egress in the product - and the gate, being a validator on `DetectionConfig`,
     # never saw it.
     with pytest.raises(ValueError, match="vector_store"):
@@ -2142,8 +2142,10 @@ def test_probe_loads_the_corpus_only_when_something_reads_the_store(
     assert bool(upserts) is loads, (probe_id, len(upserts))
     assert bool(model.documents) is loads, (probe_id, len(model.documents))
     # And the landed-check - the guard against grading PASS off a live store that
-    # swallowed the corpus - asks exactly when the corpus was loaded.
-    assert bool(fetches) is loads, (probe_id, len(fetches))
+    # swallowed the corpus - asks exactly when the corpus was loaded. Not readable
+    # off Class 1, which fetches by id itself.
+    if probe_id != "tenant-boundary-fetch":
+        assert bool(fetches) is loads, (probe_id, len(fetches))
 
 
 def test_the_erasure_scan_queries_exactly_vector_residue_queries() -> None:

@@ -363,8 +363,8 @@ class SectumConfig(BaseModel):
         detection is the only stage that embeds or judges tenant content. That
         premise was false. ``scenario.embedding_models``
         embeds the corpus for the Class 2 sweep and was never gated, so ``mode: local``
-        failed OPEN silently; and the vector slot's ``embedder`` embeds the WHOLE
-        corpus - the largest egress in the product. A validator on
+        failed OPEN silently; and the vector slot's ``embedder`` embeds the corpus a
+        run loads - the largest egress in the product. A validator on
         ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
         three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
 

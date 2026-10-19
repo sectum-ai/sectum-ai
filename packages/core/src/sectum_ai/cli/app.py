@@ -1675,15 +1675,28 @@ def _prefetch_corpus(store: VectorStoreAdapter, documents: Iterable[CorpusDocume
     failed batch (a rate limit) is said and left to that on-demand path, rather
     than stopping the run or voiding a verdict ``upsert`` could still reach.
     """
+    _prefetch_texts(
+        store,
+        (f"{document.title} {document.content}" for document in documents),
+        fallback="the corpus embeds",
+    )
+
+
+def _prefetch_texts(
+    store: VectorStoreAdapter, texts: Iterable[str], *, fallback: str, as_queries: bool = False
+) -> None:
+    """Embed ``texts`` up front through the store's bridge, when it has one.
+
+    Every caller's prefetch is an optimisation, so one rule for its failure: said,
+    and left to the on-demand embedding the store's own calls fall back to.
+    """
+    bridge = store.embedder_bridge
+    if bridge is None:
+        return
     try:
-        _prefetch_texts(store, (f"{document.title} {document.content}" for document in documents))
+        (bridge.prefetch_queries if as_queries else bridge.prefetch)(texts)
     except SectumError as error:
-        typer.echo(f"warning: {error}; the corpus embeds on demand instead", err=True)
-
-
-def _prefetch_texts(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
-    if store.embedder_bridge is not None:
-        store.embedder_bridge.prefetch(texts)
+        typer.echo(f"warning: {error}; {fallback} on demand instead", err=True)
 
 
 def _load_corpus(
@@ -1747,17 +1760,15 @@ def _prefetch_queries(store: VectorStoreAdapter, runner: Runner, suite: Iterable
     )
     # An optimisation only (an unbatched plant embeds on demand, as a document), so
     # a failure here must not cost the run what the query registration does not.
-    try:
-        _prefetch_texts(
-            store,
-            (
-                f"{step.payload['doc_id']} {step.payload['content']}"
-                for step in steps
-                if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
-            ),
-        )
-    except SectumError as error:
-        typer.echo(f"warning: {error}; planted documents embed on demand instead", err=True)
+    _prefetch_texts(
+        store,
+        (
+            f"{step.payload['doc_id']} {step.payload['content']}"
+            for step in steps
+            if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
+        ),
+        fallback="planted documents embed",
+    )
 
 
 def _register_queries(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
@@ -1769,12 +1780,7 @@ def _register_queries(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
     from costing every other surface its verdict; in `probe` it is at the step, where
     a failure that persists ends the run as any adapter failure does.
     """
-    if store.embedder_bridge is None:
-        return
-    try:
-        store.embedder_bridge.prefetch_queries(texts)
-    except SectumError as error:
-        typer.echo(f"warning: {error}; the queries embed on demand instead", err=True)
+    _prefetch_texts(store, texts, fallback="the queries embed", as_queries=True)
 
 
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
