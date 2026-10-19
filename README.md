@@ -79,7 +79,7 @@ account is involved.
 | **Vendor security questionnaires** | Drop a tamper-evident AI tenant-isolation attestation into your data room. Unblock the enterprise prospect whose security team is asking how you isolate tenant data in your AI features. |
 | **SOC 2 audit evidence** | Plug a control-mapped AI isolation attestation into your Type II audit — CC6.1, CC6.6, CC6.7 evidence the auditor accepts as testing coverage of your AI features. |
 | **Pre-launch verification** | Run the probe suite against a new AI feature before launch. Catch the cross-tenant retrieval pivot, the cache contamination, the MCP confused-deputy bug while there's still time to fix it. |
-| **CI regression baselines** | Save a baseline, re-run on every prompt / embedding / model change. Sectum AI flags the regression when a stronger embedding model accidentally raises your Retrieval-Pivot Rate. |
+| **CI regression baselines** | Save a baseline, re-run on every prompt / embedding / model change. Sectum AI flags a regression in the same setup. A swap of the vector store's embedding model fails the gate too, as `[EMBEDDER CHANGED]` (a change of instrument; re-baseline deliberately), and the moved rate reads "not measured" rather than as an isolation regression or fix. |
 | **GDPR Article 17 erasure** | A churned tenant invoked their right to be forgotten. Scan every AI surface you can reach for their markers and record what came back — surface by surface, with the unscanned ones named — in a DPO-ready cryptographically-timestamped attestation pack. |
 | **EU AI Act Article 15** | Documented cybersecurity and robustness measurements for high-risk AI systems. Tamper-evident, control-mapped, and independently verifiable. |
 

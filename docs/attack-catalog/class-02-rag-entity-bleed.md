@@ -53,12 +53,23 @@ trusting a rounded figure. The Wilson interval is the right tool here: unlike th
 normal (Wald) approximation it stays inside [0, 100%] and keeps near-nominal
 coverage at small `n` or an extreme rate (0% or 100%).
 
+The rate is also a property of the **embedding geometry** the store ranks in. A
+live store is driven by its configured
+[`embedder`](../configuration.md#vector_store) — set it to the model your production
+index was built with — and otherwise by a deterministic hashing embedder that ranks
+by shared tokens rather than meaning. The run records which one as
+`vector_embedder` in its signed `RunResult`, so two rates measured in different
+geometries cannot be mistaken for the same measurement — except where either run was
+fed only by a live RAG pipeline, which records none (the run cannot tell whether that
+pipeline reads the store), and `diff` compares geometries only when both runs name one.
+
 ## Embedding-model sweep
 
 Stronger retrieval embeddings surface more cross-tenant content, so the
 Retrieval-Pivot Rate rises with embedding strength. When a scenario lists two or
-more `embedding_models` entries that resolve to real providers, `sectum-ai probe`
-sweeps them and reports `retrieval_pivot_rate_by_model`.
+more *distinct* real models in `embedding_models` (one spec listed twice, or a hash
+spec spelled two ways such as `hash:32` / `hash-32`, is one model), `sectum-ai probe` sweeps them
+and reports `retrieval_pivot_rate_by_model`, keyed by each model's canonical spelling.
 
 !!! warning "The gradient is modelled, not a measurement of your store"
 
@@ -68,11 +79,12 @@ sweeps them and reports `retrieval_pivot_rate_by_model`.
     construction. The gradient therefore describes how much cross-tenant content
     each *embedding model* surfaces under an assumed shared-index condition; it is
     not `retrieval_pivot_rate`, which is the metric that measures the configured
-    store. The CLI prints it under its own heading for this reason.
+    store — in the geometry of that store's `embedder`. The CLI prints it under its
+    own heading for this reason.
 
     Legacy `fake-*` names carry a modelled recall rather than real vectors, so they
     cannot share a sweep with a real provider: a mixed config drops them and says
-    so, and a gradient needs two or more *real* models or none is recorded.
+    so, and a gradient needs two or more distinct *real* models or none is recorded.
 
 Each entry is resolved to an embedding model:
 
@@ -80,7 +92,8 @@ Each entry is resolved to an embedding model:
   (opt-in extra `sectum-ai[sentence-transformers]`). The research pair is
   `st:all-MiniLM-L6-v2` (weaker) vs `st:all-mpnet-base-v2` (stronger); sweeping
   them reproduces the published gradient (arXiv:2602.08668). Runs locally, so no
-  data leaves the box (BYOC-safe).
+  tenant content leaves the box (BYOC-safe; loading the model calls the Hugging
+  Face Hub unless `HF_HUB_OFFLINE=1`).
 - `openai:<model>` — OpenAI embeddings (opt-in extra `sectum-ai[openai]`, key in
   `OPENAI_API_KEY`). Sends the synthetic corpus to OpenAI, so it is not BYOC-safe.
 - `cohere:<model>` — Cohere embeddings (opt-in extra `sectum-ai[cohere]`, key in

@@ -37,7 +37,9 @@ fixed demo ladder is not monotone, so it doubles as a determinism smoke test.
 ## Reproduce it on a real multi-modal model
 
 Swap the specs in `run.py` for **CLIP** (the `sectum-ai[clip]` extra), which embeds
-images and text into one space and runs locally (BYOC-safe — no data leaves the box):
+images and text into one space and runs locally (BYOC-safe — no tenant content leaves
+the box; loading the model calls the Hugging Face Hub unless it is cached and
+`HF_HUB_OFFLINE=1`):
 
 ```python
 SPECS = ["clip:clip-ViT-B-32"]

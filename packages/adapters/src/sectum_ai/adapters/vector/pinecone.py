@@ -14,16 +14,23 @@ dependency. The live path requires the ``pinecone`` optional dependency:
 ``pip install sectum-ai-adapters[pinecone]``.
 """
 
+import json
 from collections.abc import Callable, Sequence
 from typing import Any, Self
 from uuid import UUID
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.adapters.vector._batch import request_batches
 from sectum_ai.adapters.vector._settle import settle
 from sectum_ai.spec import AdapterError, CorpusDocument
 
 Embedder = Callable[[str], Sequence[float]]
 """A function turning text into an embedding vector."""
+
+_MAX_UPSERT_BYTES = 1_500_000
+"""Under Pinecone's 2 MB cap on one upsert request, leaving room for its framing."""
+_MAX_UPSERT_RECORDS = 1000
+"""Pinecone's cap on the records in one upsert request."""
 
 
 class PineconeVectorStore(VectorStoreAdapter):
@@ -120,7 +127,13 @@ class PineconeVectorStore(VectorStoreAdapter):
             for document in documents
         ]
         if vectors:
-            self._index.upsert(vectors=vectors, namespace=tenant.hex)
+            for batch in request_batches(
+                vectors,
+                max_bytes=_MAX_UPSERT_BYTES,
+                max_records=_MAX_UPSERT_RECORDS,
+                size=lambda vector: len(json.dumps(vector)),
+            ):
+                self._index.upsert(vectors=list(batch), namespace=tenant.hex)
             # Pinecone is eventually consistent: a probe that queried right after
             # the upsert saw nothing (no baseline, INCONCLUSIVE), and one that
             # re-scanned right after a delete saw the not-yet-purged vectors as a

@@ -633,6 +633,31 @@ def test_a_backend_that_refuses_the_canary_costs_only_its_own_surface(
     assert "vector_db: 6 markers before, 0 after -> ERASED" in result.output, result.output
 
 
+def test_a_canary_write_refused_part_way_is_attested_over_what_landed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A marker write is per canary: the ones that landed are scanned and erased,
+    # and the surface is attested over them. The warning said it read NOT_COVERED
+    # beside an ERASED verdict for the same surface.
+    class _RefusesLater(_LiveCacheBase):
+        writes = 0
+
+        def set(self, tenant: UUID, key: str, value: str, *, user: UUID | None = None) -> None:
+            type(self).writes += 1
+            if type(self).writes > 1:
+                raise ConnectionError("redis: connection reset")
+            super().set(tenant, key, value, user=user)
+
+    monkeypatch.setattr("sectum_ai.cli.app.build_cache", lambda _cfg: _RefusesLater())
+    with TemporaryDirectory() as directory:
+        workdir = Path(directory)
+        _runner.invoke(app, ["seed", "--workdir", str(workdir)])
+        result = _runner.invoke(app, ["erasure", "--workdir", str(workdir)])
+    assert "semantic_cache: 1 markers before, 0 after -> ERASED" in result.output, result.output
+    assert "attested only over the target's canaries that did land" in result.output
+    assert "semantic_cache canary, so that surface reads NOT_COVERED" not in result.output
+
+
 @pytest.mark.parametrize(
     ("builder", "fake", "method", "surface"),
     [

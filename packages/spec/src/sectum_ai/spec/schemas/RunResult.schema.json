@@ -388,7 +388,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.sectum.ai/0.7.0/RunResult.schema.json",
+  "$id": "https://schemas.sectum.ai/0.8.0/RunResult.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The canonical record of one probe run (the engineering spec, section 9).",
@@ -447,7 +447,7 @@
       "type": "string"
     },
     "schema_version": {
-      "default": "0.7.0",
+      "default": "0.8.0",
       "title": "Schema Version",
       "type": "string"
     },
@@ -462,6 +462,18 @@
       },
       "title": "Surface Provenance",
       "type": "object"
+    },
+    "vector_embedder": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vector Embedder"
     }
   },
   "required": [

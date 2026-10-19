@@ -46,16 +46,15 @@ memory `FakeVectorStore` with `shared_index: true`:
    attributed to a mechanism the backend does not have." So do not read
    this rate as inversion.
 
-   Pointing the CLI at a live store does not fix that, and no longer
-   pretends to: `sectum-ai.yaml` has no path to a real embedding model
-   for a vector store (`embedding_model` configures the *detection*
-   pipeline), so every live kind is hashing-embedder backed and declares
-   no semantic retrieval — against Qdrant, pgvector, Weaviate, Chroma,
-   Milvus, OpenSearch, Pinecone or Azure AI Search this class reports
-   `NOT_COVERED`, which is the honest verdict for a check that cannot be
-   performed. Reading a real inversion rate needs a real embedder in the
-   vector slot, which today means constructing the adapter through the
-   SDK.
+   Pointing the CLI at a live store does not fix that, and does not
+   pretend to: every live kind declares no semantic retrieval — without a
+   configured `vector_store.embedder` it is hashing-embedder backed, and
+   with one the capability is still withheld while this class's
+   attribution is under review (see the
+   [Class 6 page](../../docs/attack-catalog/class-06-embedding-inversion.md#runs-when)).
+   Against Qdrant, pgvector, Weaviate, Chroma, Milvus, OpenSearch,
+   Pinecone or Azure AI Search this class reports `NOT_COVERED`, which is
+   the honest verdict for a check that cannot be performed.
 3. **`sectum-ai report`** assembles the tamper-evident evidence pack.
 4. **`sectum-ai verify`** independently re-checks the pack.
 

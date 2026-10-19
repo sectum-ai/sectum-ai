@@ -26,6 +26,8 @@ from sectum_ai.spec.errors import (
 )
 from sectum_ai.spec.hashing import canonical_hash, sha256_hex, to_canonical_json
 from sectum_ai.spec.models import (
+    ERASURE_WORKFLOW_IDS,
+    HASHING_EMBEDDER_NAME,
     SCHEMA_VERSION,
     ClassScore,
     ControlMapping,
@@ -48,6 +50,10 @@ from sectum_ai.spec.models import (
     Substrate,
     SyntheticTenantSpec,
     SyntheticUserSpec,
+    describe_vector_embedder,
+    hash_spec_dim,
+    is_hashing_embedder,
+    vector_embedder_note,
 )
 from sectum_ai.spec.schema import json_schemas, write_json_schemas
 from sectum_ai.spec.stats import normal_quantile, rate_from_counts, wilson_interval
@@ -61,6 +67,8 @@ from sectum_ai.spec.text import (
 
 __all__ = [
     "ERASURE_SURFACES",
+    "ERASURE_WORKFLOW_IDS",
+    "HASHING_EMBEDDER_NAME",
     "SCHEMA_VERSION",
     "AccessOutcome",
     "AdapterError",
@@ -103,7 +111,10 @@ __all__ = [
     "SyntheticUserSpec",
     "canonical_hash",
     "configure_logging",
+    "describe_vector_embedder",
     "get_logger",
+    "hash_spec_dim",
+    "is_hashing_embedder",
     "json_schemas",
     "normal_quantile",
     "normalize_for_match",
@@ -115,6 +126,7 @@ __all__ = [
     "to_canonical_json",
     "tokenize",
     "untrusted",
+    "vector_embedder_note",
     "wilson_interval",
     "write_json_schemas",
 ]

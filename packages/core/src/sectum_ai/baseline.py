@@ -10,12 +10,16 @@ spec, sections 10 and 14).
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sectum_ai.embeddings import canonical_embedding_spec
+from sectum_ai.score import GEOMETRY_PROBES
 from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
     Finding,
     FindingStatus,
     RunMetrics,
     RunResult,
     Severity,
+    Surface,
     SurfaceProvenance,
     rate_from_counts,
 )
@@ -401,6 +405,22 @@ class RunDiff:
     # Finding ids embed markers and principals, so every finding "resolves"; a
     # later run with no users read every cross-user leak as fixed.
     scenario_changed: bool = False
+    # The two runs' vector stores ranked in different embedding geometries. The
+    # Retrieval-Pivot Rate is a property of the geometry, so a swap moves it whether
+    # or not isolation changed - the spec's own example of a change to flag. A rate
+    # that fell across the swap read `[ok]`, a fix nobody made. Compared only where
+    # both records name one: a fake slot, or a run in which nothing is known to
+    # have ranked by similarity over the store, names none (so does a record from
+    # before 0.8.0, which the CLI refuses outright but an SDK caller may pass), and
+    # losing a live store is `scope_lost`'s to report. ``(earlier, later)`` when
+    # they differ.
+    embedder_changed: tuple[str, str] | None = None
+    # The probes either run exercised whose results the swap may have moved, when
+    # ``embedder_changed`` is set: the geometry probes, the erasure checks' vector
+    # scans, and the pipeline-end bleed probe on a live pipeline. A metric fed by
+    # none of them (the built-in pipeline's findings beside Class 3) is still a
+    # measurement.
+    embedder_scoped: tuple[str, ...] = ()
 
     @property
     def regressed(self) -> bool:
@@ -426,6 +446,10 @@ class RunDiff:
         passed here would report "no regression" for a run that quietly stopped
         testing whole attack classes, via a narrowed ``--suite`` or a probe skipped
         for a missing adapter. Re-baseline deliberately to change what is covered.
+
+        So does a change of what was measured against: another scenario (a re-seed,
+        other tenants or users), or another embedding geometry for the vector store,
+        whose similarity-ranked numbers were taken with a different instrument.
         """
         return (
             self.metrics.regressed
@@ -439,6 +463,7 @@ class RunDiff:
             or bool(self.side_channel_lost)
             or bool(self.metrics.headline_unmeasured)
             or self.scenario_changed
+            or self.embedder_changed is not None
         )
 
 
@@ -502,6 +527,14 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
     ``later`` is the run under scrutiny, matching the argument order of
     :func:`compare_metrics`.
     """
+    embedder_changed = (
+        (earlier.vector_embedder, later.vector_embedder)
+        if earlier.vector_embedder is not None
+        and later.vector_embedder is not None
+        and canonical_embedding_spec(earlier.vector_embedder)
+        != canonical_embedding_spec(later.vector_embedder)
+        else None
+    )
     return RunDiff(
         metrics=compare_metrics(earlier.metrics, later.metrics),
         findings=diff_findings(earlier.findings, later.findings),
@@ -529,7 +562,37 @@ def diff_runs(earlier: RunResult, later: RunResult) -> RunDiff:
             )
         ),
         scenario_changed=earlier.scenario_hash != later.scenario_hash,
+        embedder_changed=embedder_changed,
+        embedder_scoped=(
+            tuple(sorted(_swap_scoped(earlier) | _swap_scoped(later)))
+            if embedder_changed is not None
+            else ()
+        ),
     )
+
+
+def _swap_scoped(run: RunResult) -> set[str]:
+    """The probes a run exercised whose results an embedder swap may have moved.
+
+    The geometry probes; the two erasure checks, whose vector scans query the store
+    by similarity (an erasure record names an embedder only when it scanned the
+    store, and its counts are keyed by surface, so this names the scan in the
+    banner and the JSON while the CLI's verdict withholds the ``vector_db`` counts
+    - like every "not measured", a rendering of these fields, not a flag on the
+    deltas); and the pipeline-end bleed probe on a LIVE pipeline: one may read the
+    store the run seeded, and the run cannot tell whether it did, so its rate is
+    withheld across a swap rather than compared. Withheld only - the record names
+    no geometry for it (``score.GEOMETRY_PROBES``).
+    """
+    live_pipeline = (
+        run.surface_provenance.get(Surface.RAG_PIPELINE.value) == SurfaceProvenance.LIVE.value
+    )
+    scoped = (
+        GEOMETRY_PROBES
+        | ERASURE_WORKFLOW_IDS
+        | ({"rag-pipeline-bleed"} if live_pipeline else set())
+    )
+    return _exercised_probes(run) & scoped
 
 
 def _erasure_lost(earlier: RunResult, later: RunResult) -> tuple[str, ...]:

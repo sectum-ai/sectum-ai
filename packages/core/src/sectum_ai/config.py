@@ -69,7 +69,14 @@ from sectum_ai.adapters import (
     SearchIndexAdapter,
     VectorStoreAdapter,
 )
-from sectum_ai.embeddings import validate_embedding_spec
+from sectum_ai.embeddings import (
+    EmbedderBridge,
+    canonical_embedding_spec,
+    is_hosted_embedding_spec,
+    resolve_embedding_model,
+    validate_embedding_spec,
+    validate_model_spec,
+)
 from sectum_ai.probes import (
     AnthropicJudge,
     DetectionProviders,
@@ -79,7 +86,13 @@ from sectum_ai.probes import (
     OpenAIJudge,
     resolve_semantic_threshold,
 )
-from sectum_ai.spec import AdapterError, ConfigError, DetectionProvenance, SurfaceProvenance
+from sectum_ai.spec import (
+    HASHING_EMBEDDER_NAME,
+    AdapterError,
+    ConfigError,
+    DetectionProvenance,
+    SurfaceProvenance,
+)
 
 
 class ScenarioConfig(BaseModel):
@@ -196,15 +209,18 @@ class DetectionConfig(BaseModel):
     # blind spot. 0.0 stays legal: it admits every candidate to the judge, which
     # errs toward surfacing rather than away from it.
     semantic_threshold: Annotated[float, Field(ge=0.0, le=1.0)] | Literal["auto"] = 0.62
-    # Detection deployment mode. "hosted" (default) permits hosted embedder/judge
-    # providers (the real OpenAI/Anthropic APIs). "local" is the BYOC / "no data
-    # leaves the box" guarantee: it fails fast if any configured embedder or judge
-    # would call a default third-party AI API. Only the offline `fake` providers,
-    # and providers explicitly pointed at an operator-controlled `base_url` (a local
-    # or in-VPC endpoint), are allowed — so Sectum itself makes no call to a hosted
-    # AI API. The `base_url` target is the operator's trust boundary, not Sectum's;
-    # the threat model documents this. Detection is the only stage that embeds or
-    # judges tenant content, so gating it is what makes the zero-egress claim real.
+    # Detection deployment mode. "hosted" (default) permits hosted embedder/judge providers (the
+    # real OpenAI/Anthropic APIs). "local" is the BYOC guarantee that Sectum's own stages send
+    # no tenant content to a third-party AI service: it fails fast if any configured embedder or
+    # judge would call a default third-party AI API. Only the offline `fake` providers, and
+    # providers explicitly pointed at an operator-controlled `base_url` (a local or in-VPC
+    # endpoint), are allowed - so Sectum itself makes no call to a hosted AI API. The `base_url`
+    # target is the operator's trust boundary, not Sectum's; the threat model documents this.
+    # Detection is NOT the only stage that embeds tenant content: the vector store's `embedder`,
+    # the Class 2 sweep and a mem0 memory adapter are gated by
+    # `SectumConfig._enforce_local_mode_stages`; specs from a CLI override or a seeded substrate
+    # are gated where used, by `refuse_hosted_embeddings`. The no-tenant-content claim rests on
+    # all three - a new command that embeds specs from a flag or a substrate must call the last.
     mode: Literal["hosted", "local"] = "hosted"
 
     @model_validator(mode="after")
@@ -319,20 +335,316 @@ class SectumConfig(BaseModel):
             return {key: value for key, value in data.items() if value is not None}
         return data
 
+    @model_validator(mode="after")
+    def _validate_vector_embedder(self) -> "SectumConfig":
+        """Refuse an unknown ``vector_store.embedder`` spec at load, in every mode.
+
+        `scenario.embedding_models` is checked at load by its field validator; this
+        is its sibling, so a typo surfaces before `seed` rather than at `probe`, and
+        the egress gate below never has to classify a spec nobody could resolve.
+        """
+        store = self.adapters.get("vector_store")
+        extras = (store.model_extra or {}) if store else {}
+        # Present but blank (`embedder:` with no value) is refused, not read as
+        # absent: the run would fall back to the hashing default with no error.
+        if "embedder" in extras:
+            try:
+                _check_vector_embedder(extras["embedder"])
+            except ConfigError as error:
+                raise ValueError(str(error)) from error
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_local_mode_stages(self) -> "SectumConfig":
+        """In ``detection.mode: local``, refuse a stage sending tenant content to a hosted AI API.
+
+        ``DetectionConfig._enforce_local_mode`` gates the detection embedder and
+        judge, and the guarantee used to rest on it alone, on the premise that
+        detection is the only stage that embeds or judges tenant content. That
+        premise was false. ``scenario.embedding_models``
+        embeds the corpus for the Class 2 sweep and was never gated, so ``mode: local``
+        failed OPEN silently; and the vector slot's ``embedder`` embeds the corpus a
+        run loads. A validator on
+        ``DetectionConfig`` cannot see either, so the guarantee lives here, where all
+        three are visible. ``st:`` and ``hash-`` run on the box and stay allowed.
+
+        A ``mem0`` memory adapter brings its own embedder, which mem0 defaults to
+        OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there (see
+        :func:`_hosted_mem0_providers` for its LLM and vector-store rules too), and
+        mem0 posts its own usage telemetry unless ``MEM0_TELEMETRY`` is false, which
+        is refused on its own reason (:func:`_mem0_telemetry_on`).
+        Specs that arrive from the command line or a seeded substrate rather than this
+        file are gated where they are used, by :func:`refuse_hosted_embeddings`.
+        """
+        if self.detection.mode != "local":
+            return self
+        offenders: list[str] = []
+        store = self.adapters.get("vector_store")
+        spec = (store.model_extra or {}).get("embedder") if store else None
+        # The built-in fake never reads an `embedder` - the build refuses the field
+        # as unread - so nothing would leave the box and egress is the wrong reason.
+        live = store is not None and store.kind != "fake"
+        if live and isinstance(spec, str) and is_hosted_embedding_spec(spec):
+            offenders.append(f"vector_store.embedder ({spec!r})")
+        hosted = [m for m in self.scenario.embedding_models if is_hosted_embedding_spec(m)]
+        if hosted:
+            offenders.append(f"scenario.embedding_models ({', '.join(map(repr, hosted))})")
+        offenders += _hosted_mem0_providers(self.adapters.get("memory"))
+        if offenders:
+            raise ValueError(
+                f"{_LOCAL_MODE_REFUSAL}{'; '.join(offenders)} would call a hosted AI API "
+                "or cannot be shown not to. Use a local model (st:<model>, hash-<dim>), "
+                "or for a mem0 block a local provider or a store the gate allows (see "
+                "the configuration reference), instead."
+            )
+        if _mem0_telemetry_on(self.adapters.get("memory")):
+            raise ValueError(
+                "detection.mode 'local' refuses a mem0 memory while mem0's own usage "
+                "telemetry is on: mem0 posts run metadata (not tenant content) to its "
+                "PostHog project unless MEM0_TELEMETRY is false. Set MEM0_TELEMETRY=False."
+            )
+        return self
+
+
+# mem0 providers that run on the box (or on an endpoint the operator points them
+# at with the provider's own base URL - trusted, like `detection`'s `base_url`):
+# ollama, lmstudio and vLLM default to localhost; huggingface embeds with a local
+# sentence-transformers model unless given a `huggingface_base_url`. An `openai`
+# EMBEDDER with an explicit `openai_base_url` is an OpenAI-compatible server the
+# operator chose - the same trust. No such allowance for a graph LLM: mem0 pairs one
+# LLM block's provider with the other block's config (differently per graph
+# store), so a base URL on one block cannot be relied on to reach the call.
+_LOCAL_MEM0_EMBEDDERS = frozenset({"ollama", "lmstudio", "huggingface"})
+_LOCAL_MEM0_LLMS = frozenset({"ollama", "lmstudio", "vllm"})
+# mem0 0.1.116's vector stores that store the vectors mem0 hands them and embed
+# nothing themselves - an allow-list, so a store added later (0.1.117's
+# databricks embeds server-side by default) is refused until classified.
+# `upstash_vector` is here only without `enable_embeddings`; `langchain` wraps a
+# client that may embed, and `baidu` has not been verified - both are left out
+# deliberately, and stay out until someone checks they embed nothing.
+_PASSIVE_MEM0_STORES = frozenset(
+    {
+        "qdrant", "chroma", "pgvector", "milvus", "upstash_vector", "azure_ai_search",
+        "pinecone", "mongodb", "redis", "elasticsearch", "vertex_ai_vector_search",
+        "opensearch", "supabase", "weaviate", "faiss",
+    }
+)  # fmt: skip
+
+
+# How the two refusals of a hosted embedding spec open - the config gate and the
+# gate on specs from a flag or a substrate are two halves of one rule. (Detection's
+# own refusal and the mem0 telemetry refusal word theirs separately.)
+_LOCAL_MODE_REFUSAL = (
+    "detection.mode 'local' forbids Sectum's own stages sending tenant content to a "
+    "third-party AI service, but "
+)
+
+
+def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
+    """Whether a mem0 ``memory`` would post mem0's usage telemetry, by mem0's own parse."""
+    if memory is None or memory.kind != "mem0":
+        return False
+    return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
+
+
+# What the gate reads of a mem0 `vector_store` block, named when it cannot.
+_VECTOR_STORE_READS = "a non-string provider, or a non-mapping config"
+
+
+def _unreadable(
+    section: str,
+    block: object,
+    why: str = (
+        "a non-string provider, a non-mapping config, a non-string config key, or a blank "
+        "*_base_url"
+    ),
+) -> str:
+    """A mem0 block the gate cannot classify, named by its shape and never its contents.
+
+    A block may hold an inline ``api_key`` or a connection string; an error message
+    reaches stderr and CI logs. ``why`` names what the gate reads in that section.
+    """
+    shape = why if isinstance(block, dict) else f"a {type(block).__name__}, not a mapping"
+    return f"memory mem0 {section} (cannot be classified: {shape})"
+
+
+def _hosted_mem0_providers(memory: AdapterConfig | None) -> list[str]:
+    """The mem0 model blocks ``memory`` would send writes through that may be hosted.
+
+    Fail closed, without modelling mem0's internals: the embedder embeds every
+    write, and must be local (or `openai` pointed at a base URL). The LLM runs only
+    to feed a graph store - Sectum stores memory verbatim (``infer=False``) - which
+    mem0 enables when ``graph_store`` has a ``config``; then every LLM block mem0
+    might use, ``llm`` and ``graph_store.llm``, must name a local provider. The
+    ``vector_store`` must be on :data:`_PASSIVE_MEM0_STORES` (Upstash only without
+    ``enable_embeddings``). A block the gate cannot read is refused as
+    unclassifiable, not as egress.
+    """
+    if memory is None or memory.kind != "mem0":
+        return []
+    mem0_config = (memory.model_extra or {}).get("config")
+    if mem0_config is None:
+        mem0_config = {}
+    if not isinstance(mem0_config, dict):
+        return [_unreadable("config", mem0_config)]
+
+    def _provider(block: object, default: str) -> str | None:
+        if block is None:
+            return default
+        if not isinstance(block, dict):
+            return None
+        settings = block.get("config")
+        if settings is not None and not isinstance(settings, dict):
+            return None
+        # A base URL set but blank is not "unset": an lmstudio embedder given
+        # `lmstudio_base_url: null` builds an OpenAI client that falls back to
+        # api.openai.com. Unreadable rather than modelled per provider.
+        if isinstance(settings, dict) and any(
+            not isinstance(key, str) or (key.endswith("_base_url") and not value)
+            for key, value in settings.items()
+        ):
+            return None
+        provider = block.get("provider", default)
+        return provider if isinstance(provider, str) else None
+
+    offenders: list[str] = []
+    embedder = mem0_config.get("embedder")
+    provider = _provider(embedder, "openai")
+    # A blank base URL was refused as unclassifiable above, so presence is enough.
+    settings = embedder.get("config") if isinstance(embedder, dict) else None
+    pointed = isinstance(settings, dict) and "openai_base_url" in settings
+    if provider is None:
+        offenders.append(_unreadable("embedder", embedder))
+    elif provider not in _LOCAL_MEM0_EMBEDDERS and not (provider == "openai" and pointed):
+        offenders.append(f"memory mem0 embedder ({provider!r})")
+    # A vector store that embeds server-side is a hosted embedder too. Absent, it
+    # is mem0's default, an on-disk qdrant.
+    store = mem0_config.get("vector_store")
+    if store is not None:
+        kind = store.get("provider", "qdrant") if isinstance(store, dict) else None
+        store_config = store.get("config") if isinstance(store, dict) else None
+        if not isinstance(kind, str):
+            offenders.append(_unreadable("vector_store", store, _VECTOR_STORE_READS))
+        elif kind not in _PASSIVE_MEM0_STORES:
+            offenders.append(
+                f"memory mem0 vector_store ({kind!r} is not known to leave embedding to mem0)"
+            )
+        elif kind == "upstash_vector":
+            # No `config` block is mem0's default, `enable_embeddings=False`.
+            if store_config is None:
+                pass
+            elif not isinstance(store_config, dict):
+                offenders.append(_unreadable("vector_store", store, _VECTOR_STORE_READS))
+            elif store_config.get("enable_embeddings") is True:
+                offenders.append("memory mem0 vector_store (upstash_vector with enable_embeddings)")
+            elif store_config.get("enable_embeddings") not in (None, False):
+                # Anything but a boolean (a quoted "false", a 1) is mem0's to coerce;
+                # refused as unread rather than named as a cause it may not be.
+                value = store_config["enable_embeddings"]
+                offenders.append(
+                    "memory mem0 vector_store (enable_embeddings cannot be classified: "
+                    f"a {type(value).__name__}, not a boolean)"
+                )
+    graph = mem0_config.get("graph_store")
+    if graph is not None and not isinstance(graph, dict):
+        offenders.append(_unreadable("graph_store", graph))
+    # Any present `config` enables the graph, even an empty one: mem0 parses it into
+    # a config model that may well be truthy (a kuzu store's `{}` defaults to an
+    # in-memory database), and its LLM then runs over every write.
+    elif isinstance(graph, dict) and graph.get("config") is not None:
+        llm_blocks = [("llm", mem0_config.get("llm"))]
+        if graph.get("llm") is not None:
+            llm_blocks.append(("graph_store.llm", graph["llm"]))
+        for section, block in llm_blocks:
+            provider = _provider(block, "openai")
+            if provider is None:
+                offenders.append(_unreadable(section, block))
+            elif provider not in _LOCAL_MEM0_LLMS:
+                offenders.append(f"memory mem0 {section} ({provider!r})")
+    return offenders
+
+
+def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source: str) -> None:
+    """Refuse hosted embedding ``specs`` under ``detection.mode: local``.
+
+    For specs the config validator never sees: ``seed --embedding-model`` and
+    ``calibrate --embedder`` overrides, and the list ``probe`` actually sweeps,
+    which is the one fixed into the substrate at seed time - not the config's.
+
+    Raises:
+        ConfigError: in ``local`` mode, naming the hosted specs and their source.
+    """
+    if config.detection.mode != "local":
+        return
+    specs = list(specs)
+    # Validated first: an unknown spec is refused for what it is, not as egress.
+    for spec in specs:
+        if spec != "fake":
+            validate_embedding_spec(spec)
+    hosted = [spec for spec in specs if is_hosted_embedding_spec(spec)]
+    if hosted:
+        raise ConfigError(
+            f"{_LOCAL_MODE_REFUSAL}{source} ({', '.join(map(repr, hosted))}) names a "
+            "hosted embedding API, refused whether or not this run would reach it. Use "
+            "a local model (st:<model>) or the deterministic hash-<dim> instead."
+        )
+
+
+def _yaml_problem(error: Exception) -> str:
+    """What PyYAML found wrong and where, without any of the config's own text.
+
+    Any failure out of ``safe_load`` may carry the config: its message quotes the
+    offending line, its phrases quote tokens (an alias, a tag), and a tagged
+    scalar's constructor raises a bare ``KeyError`` / ``ValueError`` /
+    ``IndexError`` holding the value. So a phrase is kept only when it quotes
+    nothing - PyYAML's fixed text, such as "while scanning a quoted scalar" - and
+    everything else is named by its class, with the line and column where PyYAML
+    gives one (a constructor's bare exception carries none).
+    """
+    if isinstance(error, yaml.reader.ReaderError):
+        return f"{error.reason} at position {error.position}"
+    if isinstance(error, RecursionError):
+        return "nested too deeply to parse"
+    if not isinstance(error, yaml.MarkedYAMLError):
+        return f"a value could not be constructed ({type(error).__name__})"
+    parts = []
+    for text, mark in ((error.context, error.context_mark), (error.problem, error.problem_mark)):
+        if text is None and mark is None:
+            continue
+        phrase = text if text and not re.search("['\"]", text) else type(error).__name__
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        parts.append(f"{phrase}{where}")
+    return "; ".join(parts) or type(error).__name__
+
 
 def load_config(path: Path) -> SectumConfig:
     """Load and validate a ``sectum-ai.yaml`` configuration file.
 
     Raises:
-        ConfigError: if the file is missing, contains malformed YAML, or fails
-            schema validation.
+        ConfigError: if the file is missing or cannot be read (a directory, no
+            permission, an invalid path), is not UTF-8 text, contains malformed
+            YAML, or fails schema validation - never echoing the YAML source or a
+            config block; a refused field may name its own scalar value.
     """
-    if not path.exists():
-        raise ConfigError(f"config file not found: {path}")
+    # One try for every way the read can fail: a separate `exists()` check raised
+    # its own untyped OSError for a parent it cannot traverse or an over-long name.
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        raise ConfigError(f"invalid YAML in {path}: {error}") from error
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ConfigError(f"config file not found: {path}") from None
+    except UnicodeDecodeError:
+        raise ConfigError(f"config file is not UTF-8 text: {path}") from None
+    except OSError as error:
+        raise ConfigError(f"cannot read config file {path}: {error.strerror}") from None
+    except ValueError:
+        # A path the OS cannot take at all (an embedded NUL byte).
+        raise ConfigError(f"cannot read config file {str(path)!r}: not a valid path") from None
+    try:
+        raw = yaml.safe_load(text)
+    # Every failure, not only YAMLError: a tagged scalar's constructor raises a bare
+    # KeyError or IndexError holding the value, and each would print it.
+    except Exception as error:
+        raise ConfigError(f"invalid YAML in {path}: {_yaml_problem(error)}") from None
     if raw is None:
         return SectumConfig()
     if not isinstance(raw, dict):
@@ -340,7 +652,14 @@ def load_config(path: Path) -> SectumConfig:
     try:
         return SectumConfig.model_validate(raw)
     except ValidationError as error:
-        raise ConfigError(f"invalid config in {path}: {error}") from error
+        # Location and message only: pydantic's own text carries each error's
+        # `input_value`, which for a whole-config check is the whole config - an
+        # inline `api_key` included - and this message reaches stderr and CI logs.
+        problems = "; ".join(
+            f"{'.'.join(map(str, problem['loc'])) or 'config'}: {problem['msg']}"
+            for problem in error.errors(include_url=False, include_input=False)
+        )
+        raise ConfigError(f"invalid config in {path}: {problems}") from None
 
 
 # --- adapter resolver -------------------------------------------------------
@@ -555,30 +874,88 @@ def build_app(config: AdapterConfig) -> VectorStoreAdapter:
     )
 
 
+def _check_vector_embedder(spec: object) -> str:
+    """``spec`` as a real embedding model's spec string, else :class:`ConfigError`.
+
+    One check for the load-time validator and the build-time resolver, which a
+    store built straight from an :class:`AdapterConfig` reaches without the first.
+    """
+    if not isinstance(spec, str):
+        # The type only: a mapping here may well hold an inline key.
+        raise ConfigError(
+            f"vector_store.embedder must be a model spec string, got a {type(spec).__name__}"
+        )
+    try:
+        validate_model_spec(spec)
+    except ConfigError as error:
+        raise ConfigError(f"vector_store.embedder: {error}") from error
+    return spec
+
+
+def _resolve_vector_embedder(config: AdapterConfig) -> EmbedderBridge | None:
+    """The embedding model the operator configured for this store, if any.
+
+    The embedder belongs to the customer's STORE, not to Sectum: a real index was
+    built with the customer's model, so the synthetic corpus has to be upserted in
+    that same geometry or similarity is meaningless and the dimensions will not
+    match. That is why this reads the vector adapter's own `embedder` key and is
+    independent of `detection.embedder`, which is Sectum's choice for GRADING.
+
+    Resolved through the same spec syntax and resolver as
+    `scenario.embedding_models`, rather than a third provider menu. A `fake-*`
+    name is refused: it is a sweep RECALL name with no vectors to give a store.
+    """
+    extras = config.model_extra or {}
+    if "embedder" not in extras:
+        return None
+    spec = _check_vector_embedder(extras["embedder"])
+    model = resolve_embedding_model(spec)
+    assert model is not None  # validate_model_spec refuses the fake-* recall names
+    return EmbedderBridge(model)
+
+
 def build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
     """Build the vector-store adapter the config selects.
 
-    Every LIVE kind is handed `_hashing_embed`, so none of them ranks
-    semantically and the capability has to say so - see `_lexically_ranked`.
-    Applied here rather than at each of the eight returns so a kind added later
-    cannot miss it.
+    A LIVE kind is driven by the configured `embedder` when there is one, in that
+    model's own output dimension, and by the deterministic `_hashing_embed`
+    otherwise. Which one is recorded on the store as `embedder_name`, because a
+    Retrieval-Pivot Rate is a property of the embedding geometry it was measured
+    in: two runs in different geometries are not comparable, and a reader of the
+    signed pack has to be able to tell them apart.
     """
-    store = _build_vector_store(config)
-    # The built-in fake keeps the declaration it documents as an exception
-    # (`VectorStoreAdapter.semantic_retrieval`): its Class 6/13 numbers are the
-    # demo exercising the probe, and every example that reports them says so.
-    return store if store.synthetic else _lexically_ranked(store)
+    if config.kind == "fake":
+        return _build_vector_store(config)
+    bridge = _resolve_vector_embedder(config)
+    if bridge is None:
+        store = _build_vector_store(config)
+        store.embedder_name = HASHING_EMBEDDER_NAME
+    else:
+        store = _build_vector_store(config, bridge, bridge.dim)
+        # The name `diff` compares: a hash spec by its dim (see the function).
+        store.embedder_name = canonical_embedding_spec(bridge.name)
+        store.embedder_bridge = bridge
+    # `semantic_retrieval` stays WITHDRAWN for every live store in this release,
+    # including one driven by a real model - deliberately. The capability is a
+    # single coarse flag gating two classes, and neither can be honest yet:
+    # Class 13 retrieves by IMAGE similarity and needs a multimodal embedder a
+    # text model cannot provide, and Class 6 records a fragment-query retrieval
+    # as `AML.T0024.001`, an attribution under review. Advertising
+    # it would let both run where neither measures what its name says; withdrawn,
+    # they read NOT_COVERED. Class 2 does not gate on it - it simply queries, and
+    # its retrieval now ranks in the configured model's geometry.
+    return _without_semantic_retrieval(store)
 
 
-def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
-    """Mark a store the CLI backs with ``_hashing_embed`` as not semantically ranked.
+def _without_semantic_retrieval(store: VectorStoreAdapter) -> VectorStoreAdapter:
+    """Withdraw the ``semantic_retrieval`` capability from a live store the CLI built.
 
     ``VectorStoreAdapter.semantic_retrieval`` defaults ``True`` "because every LIVE
     store Sectum ships is embedding-backed" - which is not true of the ones this
-    resolver builds. There is no config path to a real embedding model for a vector
-    store (``EmbedderConfig`` is the DETECTION pipeline's), so every live kind gets
-    ``_hashing_embed``: a bag-of-tokens counter where synonyms score 0.000, word
-    order is ignored, and a strict token SUBSET of a canary scores 0.894.
+    resolver builds without an ``embedder``: those get ``_hashing_embed``, a
+    bag-of-tokens counter where synonyms score 0.000, word order is ignored, and a
+    strict token SUBSET of a canary scores 0.894. A store WITH an ``embedder`` is
+    withdrawn too, for the reasons at the call site.
 
     That is exactly the case the capability's own docstring says must declare
     ``False``: "Run either against a store that matches on substrings instead, and a
@@ -589,8 +966,7 @@ def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
     Model``. Classes 6 and 13 now report NOT_COVERED - the honest verdict for a check
     that could not be performed.
 
-    Set per instance, like ``carries_user`` and ``synthetic``. Give the resolver a
-    real embedder and this is the one place to revisit.
+    Set per instance, like ``carries_user`` and ``synthetic``.
 
     The CAPABILITY has to be withdrawn too, not just the flag:
     ``VectorStoreAdapter.__init__`` folds ``semantic_retrieval`` into the frozen
@@ -604,7 +980,11 @@ def _lexically_ranked(store: VectorStoreAdapter) -> VectorStoreAdapter:
     return store
 
 
-def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
+def _build_vector_store(
+    config: AdapterConfig,
+    embed: Callable[[str], list[float]] = _hashing_embed,
+    dim: int = _EMBED_DIM,
+) -> VectorStoreAdapter:
     extras = config.model_extra or {}
     if config.kind == "fake":
         return FakeVectorStore(
@@ -618,7 +998,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
 
             dsn = _resolve_secret(extras, "dsn", "dsn_env")
             return PgVectorStore(
-                dsn, _hashing_embed, dim=_EMBED_DIM, user_scoped=_bool(extras, "user_scoped", False)
+                dsn, embed, dim=dim, user_scoped=_bool(extras, "user_scoped", False)
             )
     if config.kind == "chroma":
         with _optional_extra("chroma"):
@@ -627,7 +1007,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             host = _str(extras, "host", "localhost")
             port = _int(extras, "port", 8000)
             return ChromaVectorStore(
-                host, port, _hashing_embed, user_scoped=_bool(extras, "user_scoped", False)
+                host, port, embed, user_scoped=_bool(extras, "user_scoped", False)
             )
     if config.kind == "weaviate":
         with _optional_extra("weaviate"):
@@ -640,7 +1020,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 host,
                 port,
                 grpc_port,
-                _hashing_embed,
+                embed,
                 user_scoped=_bool(extras, "user_scoped", False),
             )
     if config.kind == "pinecone":
@@ -652,7 +1032,7 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             return PineconeVectorStore.connect(
                 api_key,
                 index_name,
-                _hashing_embed,
+                embed,
                 host=_optional_str(extras, "host"),
                 user_scoped=_bool(extras, "user_scoped", False),
             )
@@ -668,8 +1048,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return QdrantVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 host=_str(extras, "host", "localhost"),
                 port=_int(extras, "port", 6333),
                 grpc_port=_int(extras, "grpc_port", 6334),
@@ -687,8 +1067,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return MilvusVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 uri=_str(extras, "uri", "http://localhost:19530"),
                 token=milvus_token,
                 user_scoped=_bool(extras, "user_scoped", False),
@@ -705,8 +1085,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
                 else None
             )
             return OpenSearchVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 host=_str(extras, "host", "localhost"),
                 port=_int(extras, "port", 9200),
                 user=_optional_str(extras, "user"),
@@ -720,8 +1100,8 @@ def _build_vector_store(config: AdapterConfig) -> VectorStoreAdapter:
             from sectum_ai.adapters.vector.azure_search import AzureSearchVectorStore
 
             return AzureSearchVectorStore(
-                _hashing_embed,
-                dim=_EMBED_DIM,
+                embed,
+                dim=dim,
                 endpoint=_required_str(extras, "endpoint"),
                 api_key=_resolve_secret(extras, "api_key", "api_key_env"),
                 user_scoped=_bool(extras, "user_scoped", False),
@@ -922,7 +1302,9 @@ def build_memory(config: AdapterConfig) -> MemoryAdapter:
         soft_delete = _bool(extras, "soft_delete", False)
         mem0_config = extras.get("config")
         if mem0_config is not None and not isinstance(mem0_config, dict):
-            raise ConfigError(f"memory 'config' must be a mapping, got {mem0_config!r}")
+            raise ConfigError(
+                f"memory 'config' must be a mapping, got a {type(mem0_config).__name__}"
+            )
         with _optional_extra("mem0"):
             from sectum_ai.adapters.memory.mem0 import Mem0Memory
 

@@ -73,7 +73,7 @@ adapters:
     #   port: 8080
     #   grpc_port: 50051
     # kind: pinecone           # Pinecone (cloud, opt-in)
-    #   index: sectum-canaries      # the index name; it must exist with dimension 64
+    #   index: sectum-canaries      # must exist at the embedder's dimension (64 by default)
     #   api_key_env: SECTUM_PINECONE_API_KEY
     # kind: qdrant             # Qdrant (self-hosted)
     #   host: localhost
@@ -86,6 +86,11 @@ adapters:
     # kind: azure-search       # Azure AI Search (cloud, opt-in)
     #   endpoint: https://<service>.search.windows.net
     #   api_key_env: SECTUM_AZURE_SEARCH_KEY
+    # Any live kind also takes the embedding model your production index uses;
+    # without it the store ranks by a 64-dim hashing embedder (shared tokens, not
+    # meaning). The same spec syntax as scenario.embedding_models, minus its fake-*
+    # recall names, which have no vectors to give a store.
+    #   embedder: st:all-mpnet-base-v2
     kind: fake
 
   cache:
@@ -275,7 +280,13 @@ detection:
   # Cosine-similarity gate for semantic candidates. The conservative default
   # suits the fake embedder; raise it once a real embedding model is configured.
   semantic_threshold: 0.62
-  # `local` ENFORCES the BYOC posture: detection is the only stage that embeds or
-  # judges tenant content, and in `local` mode the config fails fast on any
-  # embedder or judge that would call a hosted API.
+  # `local` ENFORCES the BYOC posture: the config fails fast on any stage Sectum
+  # runs on its own behalf that would send tenant content to a hosted AI API - the
+  # detection embedder or judge, the vector store's `embedder`,
+  # scenario.embedding_models, and a mem0 memory's embedder (plus the LLM feeding a
+  # mem0 graph store, and any mem0 vector store not known to leave embedding to mem0) -
+  # and on a mem0 memory while mem0's own usage telemetry is on (set
+  # MEM0_TELEMETRY=False; it posts run metadata, not tenant content). The adapters you point it at - a hosted vector database, an
+  # OpenAI-Assistants or Anthropic tool-use agent - are the system under test and
+  # receive the synthetic tenant data by design.
   mode: hosted   # hosted | local

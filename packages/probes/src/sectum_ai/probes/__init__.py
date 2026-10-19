@@ -37,6 +37,7 @@ from sectum_ai.probes.erasure import (
     ErasureProbe,
     ErasureReport,
     SurfaceErasure,
+    vector_residue_queries,
 )
 from sectum_ai.probes.ikea_extraction import IkeaExtractionProbe
 from sectum_ai.probes.kv_cache_timing import KvCacheTimingProbe, KvCacheTimingReport, TimingSignal
@@ -111,4 +112,5 @@ __all__ = [
     "load_probe_manifest",
     "markers_naming_entity",
     "resolve_semantic_threshold",
+    "vector_residue_queries",
 ]

@@ -81,6 +81,7 @@ from sectum_ai.spec import (
     Severity,
     Surface,
     SurfaceProvenance,
+    describe_vector_embedder,
     rate_from_counts,
     untrusted,
     wilson_interval,
@@ -88,6 +89,7 @@ from sectum_ai.spec import (
 
 __all__ = [
     "CATALOG",
+    "GEOMETRY_PROBES",
     "METHODOLOGY_VERSION",
     "PROBE_SURFACES",
     "SEVERITY_WEIGHTS",
@@ -283,7 +285,38 @@ def _rate_from_counts(metrics: RunMetrics) -> float | None:
     return rate_from_counts(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
 
 
-def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
+GEOMETRY_PROBES: frozenset[str] = frozenset(
+    {"rag-entity-bleed", "rag-poisoning", "embedding-inversion", "ikea-extraction"}
+)
+"""The probes that rank by similarity over the vector slot's store.
+
+Their results move with its embedding geometry, so a probe run records it only
+when one of them ran, `diff` scopes an embedder swap to them (and to the erasure
+checks' vector scans, `spec.ERASURE_WORKFLOW_IDS`, whose records name it when
+they scanned the store), and the scorecard names the geometry on their
+classes' headlines. Class 1 fetches by id; the pipeline-end bleed probe asks the
+RAG pipeline - the built-in one ranks over its own index, and a live one may or
+may not read the store, which the run cannot tell, so `diff` withholds its rate
+across a swap without naming a geometry for it.
+"""
+
+
+def _geometry(vector_embedder: str | None) -> str:
+    """The embedding geometry a headline's vector-store steps ranked in, as a suffix.
+
+    The audit PDF names it; the scorecard showed a rate ranked by shared tokens
+    exactly as it showed one ranked by a production model. Worded as the vector
+    store's STEPS: Class 2's rate also pools the RAG pipeline's, which ranks with
+    its own retriever.
+    """
+    if vector_embedder is None:
+        return ""
+    return f", vector-store steps ranked by {untrusted(describe_vector_embedder(vector_embedder))}"
+
+
+def _headline(
+    entry: _CatalogClass, metrics: RunMetrics, vector_embedder: str | None = None
+) -> str | None:
     """The class's headline rate rendered with its uncertainty, when it has one.
 
     Class 2's Retrieval-Pivot Rate is recomputed from the record's binomial *counts*
@@ -303,7 +336,7 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
             low, high = wilson_interval(metrics.retrieval_pivot_k, metrics.retrieval_pivot_n)
             return (
                 f"{counts_rate:.1%} RPR (95% CI {low:.1%}-{high:.1%}, "
-                f"n={metrics.retrieval_pivot_n})"
+                f"n={metrics.retrieval_pivot_n}{_geometry(vector_embedder)})"
             )
         if metrics.retrieval_pivot_rate is not None:
             # No counts, so the rate is all the record actually has. Any interval it
@@ -316,7 +349,9 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
             # same reasoning, and the scorecard stopped one step short: bare, it
             # is byte-identical to a rate measured over a real sample beside its
             # interval, which is the conflation both branches exist to refuse.
-            return _ASSERTED.format(rate=f"{metrics.retrieval_pivot_rate:.1%} RPR")
+            return _ASSERTED.format(
+                rate=f"{metrics.retrieval_pivot_rate:.1%} RPR{_geometry(vector_embedder)}"
+            )
         return None
     rates: dict[int, tuple[str, float | None]] = {
         3: ("poisoning bleed", metrics.poisoning_bleed_delta),
@@ -332,7 +367,10 @@ def _headline(entry: _CatalogClass, metrics: RunMetrics) -> str | None:
         # identically whether it came from 1 of 1 or 300 of 300, and no reader of
         # the signed record can tell. Carrying k/n for them is the fuller fix and
         # needs new fields; saying what they are needs neither.
-        return _ASSERTED.format(rate=f"{label_rate[1]:.1%} {label_rate[0]}")
+        # All three rank over the vector store too, so they carry its geometry.
+        return _ASSERTED.format(
+            rate=f"{label_rate[1]:.1%} {label_rate[0]}{_geometry(vector_embedder)}"
+        )
     return None
 
 
@@ -577,7 +615,11 @@ def _score_class(
     # detail column, indistinguishable on the page from one that measured 0.0%.
     # `_headline` returns None for both "this class has no rate" and "the rate is
     # None", so the four classes that HAVE one are named here.
-    headline = _headline(entry, run.metrics)
+    # Named only on a class whose similarity-ranking probe actually ran: Class 2's
+    # rate on a run where only the pipeline-end probe fed it ranked nothing the
+    # run can show was in the store's geometry. `ran`, as `diff` counts it.
+    ranked = GEOMETRY_PROBES.intersection(ran)
+    headline = _headline(entry, run.metrics, run.vector_embedder if ranked else None)
     unmeasured_rate = (headline is None and entry.class_id in _HEADLINE_RATE_CLASSES) or (
         entry.class_id == _KV_TIMING_CLASS and not run.metrics.side_channel_effect_sizes
     )

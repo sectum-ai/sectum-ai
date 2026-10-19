@@ -23,21 +23,34 @@ import json
 import math
 import os
 import re
+from array import array
+from collections.abc import Callable, Iterable, Iterator
+from functools import partial
 from typing import Any, Protocol, runtime_checkable
 
-from sectum_ai.spec import ConfigError
+from sectum_ai.spec import AdapterError, ConfigError, SectumError, hash_spec_dim
 
 __all__ = [
+    "EMBED_BATCH_SIZE",
+    "LOCAL_EMBEDDING_PREFIXES",
     "BedrockEmbedding",
     "CohereEmbedding",
+    "EmbedderBridge",
     "EmbeddingModel",
     "HashingEmbedding",
     "OpenAIEmbedding",
     "SentenceTransformerEmbedding",
     "VoyageEmbedding",
+    "call_embedder",
+    "canonical_embedding_spec",
     "cosine",
+    "embed_batched",
+    "embed_queries",
+    "is_hosted_embedding_spec",
+    "iter_batches",
     "resolve_embedding_model",
     "validate_embedding_spec",
+    "validate_model_spec",
 ]
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -57,6 +70,20 @@ class EmbeddingModel(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one vector per input text, in order."""
         ...
+
+
+def embed_queries(model: EmbeddingModel, texts: list[str]) -> list[list[float]]:
+    """Embed ``texts`` as retrieval QUERIES where the model distinguishes them.
+
+    Cohere, Voyage and Cohere-on-Bedrock are asymmetric: a query and a document are
+    embedded into different halves of the space, and ``embed`` is document mode.
+    Embedding a probe's query as a document scores it lower against the corpus
+    than the customer's production store would, which embeds queries as queries -
+    so a Retrieval-Pivot Rate measured that way under-reports. A symmetric model
+    has no ``embed_queries`` and is used as is.
+    """
+    query_mode = getattr(model, "embed_queries", None)
+    return query_mode(texts) if query_mode is not None else model.embed(texts)
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -111,8 +138,10 @@ class SentenceTransformerEmbedding:
 
     The research pair is ``all-MiniLM-L6-v2`` (weaker) versus ``all-mpnet-base-v2``
     (stronger); sweeping the two reproduces the "stronger embeddings leak more"
-    gradient (arXiv:2602.08668). The model runs locally, so no data leaves the box
-    (BYOC-safe). Construction loads the model; an absent extra is a config error.
+    gradient (arXiv:2602.08668). The model runs locally, so no tenant content leaves
+    the box (BYOC-safe; loading it calls the Hugging Face Hub unless
+    ``HF_HUB_OFFLINE``). Construction loads the model; an absent extra is a config
+    error.
     """
 
     def __init__(self, model_name: str) -> None:
@@ -127,8 +156,26 @@ class SentenceTransformerEmbedding:
         self._model = SentenceTransformer(model_name)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Encode ``texts`` to normalised vectors with the local model."""
-        vectors = self._model.encode(texts, normalize_embeddings=True)
+        """Encode ``texts`` as documents to normalised vectors with the local model."""
+        return self._encode(texts, ("document", "passage"))
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Encode ``texts`` as retrieval queries, with the model's query prompt if it has one."""
+        return self._encode(texts, ("query",))
+
+    def _encode(self, texts: list[str], roles: tuple[str, ...]) -> list[list[float]]:
+        # A model whose sentence-transformers config ships `query` / `document`
+        # (or `passage`) prompts is encoded with them: without them a query ranks
+        # against the corpus differently from an index built with them. Many
+        # asymmetric checkpoints (e5, BGE) document their prefixes only in the
+        # model card and ship no prompts; those are encoded without, like a
+        # symmetric model.
+        prompts = getattr(self._model, "prompts", None) or {}
+        role = next((name for name in roles if name in prompts), None)
+        if role is None:
+            vectors = self._model.encode(texts, normalize_embeddings=True)
+        else:
+            vectors = self._model.encode(texts, normalize_embeddings=True, prompt_name=role)
         return [[float(value) for value in vector] for vector in vectors]
 
 
@@ -136,9 +183,11 @@ class OpenAIEmbedding:
     """OpenAI embeddings (opt-in extra ``sectum-ai[openai]``).
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
-    a missing package or key is a config error. Note this sends the substrate's
-    synthetic corpus to OpenAI, so it is not BYOC-safe - prefer
-    :class:`SentenceTransformerEmbedding` when data must stay on the box.
+    a missing package or key is a config error. Note this sends what it embeds to
+    OpenAI - the synthetic corpus, and as a vector-store embedder in
+    ``erasure --subject`` a data subject's real fingerprint text - so it is not
+    BYOC-safe; prefer :class:`SentenceTransformerEmbedding` when data must stay on
+    the box.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "OPENAI_API_KEY") -> None:
@@ -177,8 +226,10 @@ class CohereEmbedding:
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
-    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
-    Uses ``input_type="search_document"`` (the sweep embeds corpus documents).
+    sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
+    ``embed`` uses ``input_type="search_document"``; :meth:`embed_queries` uses
+    ``search_query``, the mode a production store embeds its queries in.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "COHERE_API_KEY") -> None:
@@ -196,8 +247,13 @@ class CohereEmbedding:
         self._client = cohere.Client(api_key)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed ``texts`` in one request and return the vectors in input order."""
+        """Embed ``texts`` (the client splits them into 96-text requests), in input order."""
         response = self._client.embed(texts=texts, model=self._model, input_type="search_document")
+        return self._vectors(response)
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries (``input_type="search_query"``)."""
+        response = self._client.embed(texts=texts, model=self._model, input_type="search_query")
         return self._vectors(response)
 
     @staticmethod
@@ -218,10 +274,12 @@ class VoyageEmbedding:
 
     Resolves its key from ``api_key_env`` (never inline, per the spec, section 16);
     a missing package or key is a config error. Like :class:`OpenAIEmbedding`, this
-    sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
-    Uses ``input_type="document"`` (the sweep embeds corpus documents). Voyage caps a
+    sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
+    ``embed`` uses ``input_type="document"`` and :meth:`embed_queries` ``query``. Voyage caps a
     single request at 1000 texts (and a per-model token budget) and does not
-    auto-batch, so the whole-corpus sweep is chunked in ``_VOYAGE_BATCH``-sized calls.
+    auto-batch, so a direct call is chunked in ``_VOYAGE_BATCH``-sized requests;
+    Sectum's own callers already send :data:`EMBED_BATCH_SIZE` texts at a time.
     """
 
     def __init__(self, model_name: str, *, api_key_env: str = "VOYAGE_API_KEY") -> None:
@@ -242,14 +300,20 @@ class VoyageEmbedding:
         """Embed ``texts`` and return the vectors in input order, chunked per request."""
         return self._embed_batched(self._client, self._model, texts)
 
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries (``input_type="query"``)."""
+        return self._embed_batched(self._client, self._model, texts, input_type="query")
+
     @classmethod
-    def _embed_batched(cls, client: Any, model: str, texts: list[str]) -> list[list[float]]:
+    def _embed_batched(
+        cls, client: Any, model: str, texts: list[str], *, input_type: str = "document"
+    ) -> list[list[float]]:
         # Voyage does not batch a single embed request, so split the corpus into
         # <=_VOYAGE_BATCH-text calls and concatenate the vectors in input order.
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _VOYAGE_BATCH):
             batch = texts[start : start + _VOYAGE_BATCH]
-            response = client.embed(batch, model=model, input_type="document")
+            response = client.embed(batch, model=model, input_type=input_type)
             vectors.extend(cls._vectors(response))
         return vectors
 
@@ -269,12 +333,13 @@ class BedrockEmbedding:
       embeds the corpus one text at a time. Request body ``{"inputText": ...}``, vector
       under ``embedding``.
     - **Cohere-on-Bedrock** (``cohere.embed-*``) takes a batch of up to 96 texts per
-      call. Request body ``{"texts": [...], "input_type": "search_document"}``, vectors
-      under ``embeddings``.
+      call. Request body ``{"texts": [...], "input_type": "search_document"}``
+      (``search_query`` from :meth:`embed_queries`), vectors under ``embeddings``.
 
     Credentials and region come from boto3's standard chain (env ``AWS_REGION`` /
     profile / instance role); ``region`` overrides it. Like :class:`OpenAIEmbedding`,
-    this sends the substrate's synthetic corpus to a hosted API, so it is not BYOC-safe.
+    this sends what it embeds to a hosted API (see :class:`OpenAIEmbedding`), so it is not
+    BYOC-safe.
     """
 
     def __init__(
@@ -297,6 +362,12 @@ class BedrockEmbedding:
             return self._embed_cohere(texts)
         return [self._embed_titan_one(text) for text in texts]
 
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as retrieval queries; Titan is symmetric, so only Cohere differs."""
+        if self._is_cohere:
+            return self._embed_cohere(texts, input_type="search_query")
+        return self.embed(texts)
+
     def _invoke(self, body: dict[str, Any]) -> Any:
         return self._client.invoke_model(
             modelId=self._model,
@@ -308,11 +379,13 @@ class BedrockEmbedding:
     def _embed_titan_one(self, text: str) -> list[float]:
         return self._titan_vector(self._invoke({"inputText": text}))
 
-    def _embed_cohere(self, texts: list[str]) -> list[list[float]]:
+    def _embed_cohere(
+        self, texts: list[str], input_type: str = "search_document"
+    ) -> list[list[float]]:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _BEDROCK_COHERE_BATCH):
             batch = texts[start : start + _BEDROCK_COHERE_BATCH]
-            response = self._invoke({"texts": batch, "input_type": "search_document"})
+            response = self._invoke({"texts": batch, "input_type": input_type})
             vectors.extend(self._cohere_vectors(response))
         return vectors
 
@@ -334,24 +407,50 @@ class BedrockEmbedding:
 
 
 def _hash_dim(spec: str) -> int:
-    """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension (both prefixes are 5 chars).
+    """Parse a ``hash-<int>`` / ``hash:<int>`` spec into a dimension, or raise ``ConfigError``.
 
     Rejects a non-positive dimension here, at config-validation time - otherwise
     ``hash-0`` / ``hash--3`` would pass ``validate_embedding_spec`` and fail only
-    when the sweep instantiates the embedder, defeating the early check.
+    when the sweep instantiates the embedder, defeating the early check. Parsed by
+    :func:`~sectum_ai.spec.hash_spec_dim`, the rule the caption reads too.
     """
-    try:
-        dim = int(spec[len("hash-") :])
-    except ValueError as error:
+    dim = hash_spec_dim(spec)
+    if dim is None:
         raise ConfigError(
-            f"malformed hashing-embedding spec {spec!r}; expected hash-<dim>"
-        ) from error
-    if dim <= 0:
-        raise ConfigError(f"hashing-embedding dimension must be positive, got {spec!r}")
+            f"malformed hashing-embedding spec {spec!r}; expected hash-<dim> with a "
+            "positive dimension"
+        )
     return dim
 
 
 def resolve_embedding_model(spec: str) -> EmbeddingModel | None:
+    """Resolve a scenario embedding-model name to a real :class:`EmbeddingModel`, or ``None``.
+
+    See :func:`_construct_embedding_model` for the specs. Construction can fail
+    inside a provider library - a misspelled ``st:`` model fails its download, a
+    ``bedrock:`` model with no region fails in boto3 - and that escaped as a raw
+    traceback and exit 1, so it is mapped like a call: :class:`AdapterError`
+    naming the exception type only.
+
+    Raises:
+        ConfigError: for a malformed spec or a missing extra or key.
+        AdapterError: when the provider library fails to construct the model.
+    """
+    # At the source, not at each caller: `calibrate` forgot the pre-check once and
+    # built a client for `openai:` with an empty model name.
+    validate_embedding_spec(spec)
+    try:
+        return _construct_embedding_model(spec)
+    except SectumError:
+        raise
+    except Exception as error:
+        raise AdapterError(
+            f"embedding model {spec!r} could not be loaded ({type(error).__name__}); "
+            "check its name, credentials and region"
+        ) from error
+
+
+def _construct_embedding_model(spec: str) -> EmbeddingModel | None:
     """Resolve a scenario embedding-model name to a real :class:`EmbeddingModel`, or ``None``.
 
     Returns ``None`` for the legacy deterministic recall fakes (``fake-*``), which
@@ -392,8 +491,10 @@ def validate_embedding_spec(spec: str) -> None:
     entry at config-load / CLI-parse time rather than letting it silently become a
     no-op sweep. Accepts the legacy ``fake-*`` recall names, a deterministic
     ``hash-<dim>`` (whose dim is validated), and the ``st:`` / ``openai:`` / ``cohere:``
-    / ``voyage:`` / ``bedrock:`` provider prefixes with a non-empty model name (their
-    install / key is checked lazily when the sweep runs).
+    / ``voyage:`` / ``bedrock:`` provider prefixes with a non-empty model name. A
+    missing extra or env key fails when the model is built, and a credential the
+    provider rejects only at its first call; `probe` runs the sweep, and builds the
+    vector store's model, before its suite, so either fails before any probe runs.
     """
     for prefix in ("st:", "openai:", "cohere:", "voyage:", "bedrock:"):
         if spec.startswith(prefix):
@@ -411,3 +512,206 @@ def validate_embedding_spec(spec: str) -> None:
         f"unknown embedding model {spec!r}; expected one of fake-<name>, hash-<dim>, "
         "st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
     )
+
+
+_MODEL_PREFIXES = ("st:", "openai:", "cohere:", "voyage:", "bedrock:", "hash-", "hash:")
+_MODEL_MENU = (
+    "hash-<dim>, st:<model>, openai:<model>, cohere:<model>, voyage:<model>, or bedrock:<model>"
+)
+
+
+def canonical_embedding_spec(spec: str) -> str:
+    """One spelling per geometry, where that is provable: ``hash:<n>`` is ``hash-<n>``.
+
+    Nothing else is merged. ``st:<m>`` and ``st:sentence-transformers/<m>`` are
+    usually one hub model, but a bare name resolves to a local folder of that name
+    first - so treating them as one could hide a real model change behind a
+    comparison, which is worse than asking for a re-baseline. Never raises: a
+    string no spec parses - a record ``diff`` did not write - comes back as is.
+    """
+    dim = hash_spec_dim(spec)
+    return f"hash-{dim}" if dim is not None else spec
+
+
+def validate_model_spec(spec: str) -> None:
+    """Raise :class:`~sectum_ai.spec.ConfigError` unless ``spec`` names a real embedding model.
+
+    :func:`validate_embedding_spec` also accepts the sweep's ``fake-*`` recall names,
+    which have no vectors to give a vector store or a calibration, and its error
+    lists them as an option - so the store, its load-time check and `calibrate` use
+    this instead, with one menu that names models only.
+    """
+    if spec.startswith("fake-"):
+        raise ConfigError(
+            f"{spec!r} is a sweep recall name, not an embedding model; use {_MODEL_MENU}"
+        )
+    if not spec.startswith(_MODEL_PREFIXES):
+        raise ConfigError(f"unknown embedding model {spec!r}; expected one of {_MODEL_MENU}")
+    validate_embedding_spec(spec)
+
+
+LOCAL_EMBEDDING_PREFIXES: tuple[str, ...] = ("st:", "hash-", "hash:", "fake-")
+"""Embedding specs that run on the box: sentence-transformers, hashing, recall fakes.
+
+`calibrate --embedder fake` names the offline fake by the bare word, which is
+local too.
+
+`detection.mode: local` - the guarantee that Sectum's own stages send no tenant
+content to a third-party AI service - refuses every
+other spec. An allow-list, so a provider added later is hosted until someone
+says otherwise: a deny-list of the hosted ones failed OPEN for any prefix it
+was not updated with.
+"""
+
+
+def is_hosted_embedding_spec(spec: str) -> bool:
+    """Whether ``spec`` may send text off the box: anything not known to run locally."""
+    return not (spec == "fake" or spec.startswith(LOCAL_EMBEDDING_PREFIXES))
+
+
+def call_embedder(
+    name: str, embed: Callable[[list[str]], list[list[float]]], texts: list[str]
+) -> list[list[float]]:
+    """Call a provider's ``embed`` with its failures mapped to :class:`AdapterError`.
+
+    A provider SDK raises its own exceptions - a revoked key, a misspelled model, a
+    rate limit mid-corpus - which escaped the CLI's typed-error handler as a raw
+    traceback and exit 1 instead of the adapter-error exit 3. Every path that calls
+    a provider goes through here: the vector slot, the Class 2 sweep, `calibrate`.
+    So does the count check: a degraded response with fewer vectors than texts
+    surfaced downstream as a raw IndexError or a strict-zip ValueError.
+    """
+    try:
+        vectors = embed(texts)
+    except SectumError:
+        raise
+    except Exception as error:
+        # The type only: an SDK's message can echo part of the API key.
+        raise AdapterError(
+            f"embedder {name!r} failed ({type(error).__name__}); check its "
+            "model name, credentials and quota"
+        ) from error
+    if len(vectors) != len(texts):
+        raise AdapterError(
+            f"embedder {name!r} returned {len(vectors)} vectors for {len(texts)} texts"
+        )
+    return vectors
+
+
+EMBED_BATCH_SIZE = 64
+"""Texts per provider request: under every provider's cap (OpenAI's is 2,048)."""
+
+
+def embed_batched(
+    name: str,
+    embed: Callable[[list[str]], list[list[float]]],
+    texts: list[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> list[list[float]]:
+    """:func:`call_embedder` over ``texts`` in ``batch_size`` chunks, in input order.
+
+    The Class 2 sweep handed a model the whole corpus as one request, and OpenAI
+    rejects more than 2,048 inputs - a corpus over 512 documents per tenant failed
+    the gradient outright.
+    """
+    return [vector for _, batch in iter_batches(name, embed, texts, batch_size) for vector in batch]
+
+
+def iter_batches(
+    name: str,
+    embed: Callable[[list[str]], list[list[float]]],
+    texts: list[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> Iterator[tuple[list[str], list[list[float]]]]:
+    """Yield each ``batch_size`` chunk of ``texts`` with its vectors, as it is embedded.
+
+    One loop for the sweep and the bridge, which caches each batch as it arrives so
+    a later failure keeps the batches before it.
+    """
+    for start in range(0, len(texts), batch_size):
+        chunk = texts[start : start + batch_size]
+        yield chunk, call_embedder(name, embed, chunk)
+
+
+class EmbedderBridge:
+    """Adapt a batch :class:`EmbeddingModel` to the single-text callable a store takes.
+
+    Every live vector store calls its embedder once per document inside `upsert`.
+    Handed a hosted model directly, that is one network call per document - about
+    2,000 sequential calls for the default corpus, before a single query. The CLI
+    knows the corpus before it upserts, so :meth:`prefetch` embeds it in batches
+    up front, as DOCUMENTS, and the per-document calls are served from cache.
+
+    The store calls the same callable to embed a query, so the bridge cannot tell
+    the two apart by the call. An asymmetric model (Cohere, Voyage) embeds them into
+    different halves of its space, and the customer's store embeds its queries as
+    queries - so the CLI registers the suite's planned query texts with
+    :meth:`prefetch_queries`, which embeds them in QUERY mode. Anything not
+    registered is embedded as a DOCUMENT on demand: a poison document a probe
+    plants mid-run must be indexed the way the corpus is, and a query the plan did
+    not name falls back to document mode, which is what every call used before
+    query mode existed. A text registered as both is a document: the index is what
+    the store keeps.
+    """
+
+    def __init__(self, model: EmbeddingModel, *, batch_size: int = EMBED_BATCH_SIZE) -> None:
+        self.model = model
+        self.name = model.name
+        self._batch_size = batch_size
+        # Packed doubles: a 3,072-dim model over the default corpus held ~200 MB as
+        # lists of boxed floats for the whole run.
+        self._documents: dict[str, array[float]] = {}
+        self._queries: dict[str, array[float]] = {}
+        # Every text registered as a query, embedded or not: a registration whose
+        # embedding failed still embeds later in QUERY mode, rather than falling
+        # back to document mode - which would silently under-rank it.
+        self._query_texts: set[str] = set()
+        self._dim: int | None = None
+
+    def prefetch(self, texts: Iterable[str]) -> None:
+        """Embed every document text not already cached, ``batch_size`` at a time."""
+        self._fill(self._documents, self.model.embed, texts)
+
+    def prefetch_queries(self, texts: Iterable[str]) -> None:
+        """Embed every query text not already cached in QUERY mode, in batches."""
+        texts = list(dict.fromkeys(texts))
+        self._query_texts.update(texts)
+        # A text already indexed as a document is served as one (see the class
+        # docstring), so a query-mode call for it would be paid and never used.
+        unindexed = [text for text in texts if text not in self._documents]
+        self._fill(self._queries, partial(embed_queries, self.model), unindexed)
+
+    def __call__(self, text: str) -> list[float]:
+        """The cached vector for ``text``; else it is embedded now - as a query if it was
+        registered as one (a failed :meth:`prefetch_queries`), otherwise as a document."""
+        cached = self._documents.get(text)
+        if cached is None:
+            cached = self._queries.get(text)
+        if cached is None and text in self._query_texts:
+            self.prefetch_queries([text])
+            cached = self._queries[text]
+        if cached is None:
+            self.prefetch([text])
+            cached = self._documents[text]
+        return cached.tolist()
+
+    @property
+    def dim(self) -> int:
+        """The model's output dimension, read off a real embedding the first time."""
+        if self._dim is None:
+            self._dim = len(self("sectum-ai dimension probe"))
+        return self._dim
+
+    def _fill(
+        self,
+        cache: dict[str, array[float]],
+        embed: Callable[[list[str]], list[list[float]]],
+        texts: Iterable[str],
+    ) -> None:
+        missing = [text for text in dict.fromkeys(texts) if text not in cache]
+        # Cached batch by batch: a batch that fails keeps the ones before it, so a
+        # contained failure does not re-bill them as one-text calls on demand.
+        for chunk, vectors in iter_batches(self.name, embed, missing, self._batch_size):
+            cache.update(
+                (text, array("d", vector)) for text, vector in zip(chunk, vectors, strict=True)
+            )

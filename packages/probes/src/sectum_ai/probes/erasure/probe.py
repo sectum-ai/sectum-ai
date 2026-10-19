@@ -30,6 +30,7 @@ from sectum_ai.spec import (
     ERASURE_SURFACES as _ERASURE_SURFACES,
 )
 from sectum_ai.spec import (
+    CorpusDocument,
     CoverageVerdict,
     ErasureUnsupported,
     Finding,
@@ -285,6 +286,30 @@ class ErasureReport:
         )
 
 
+def _marker_queries(documents: Mapping[str, CorpusDocument], marker: Marker) -> list[str]:
+    """What the vector residue scan queries for ``marker``: each planted document's title."""
+    return [
+        documents[location.doc_id].title
+        for location in marker.planted_locations
+        if location.doc_id in documents
+    ]
+
+
+def vector_residue_queries(substrate: Substrate, target: UUID) -> list[str]:
+    """Every text :class:`ErasureProbe`'s vector residue scan queries for ``target``.
+
+    The probe's own rule, for a caller preparing the store before the run (the CLI
+    registers these as queries, so an asymmetric embedder ranks them as queries).
+    """
+    documents = {document.doc_id: document for document in substrate.documents}
+    return [
+        query
+        for marker in substrate.manifest.markers
+        if marker.owner_tenant_id == target
+        for query in _marker_queries(documents, marker)
+    ]
+
+
 class ErasureProbe:
     """Class 11: verify a tenant's data has left every configured surface."""
 
@@ -331,7 +356,13 @@ class ErasureProbe:
         self._partial: list[Marker] = []
         self._decided = 0
 
-    def run(self, target: UUID, *, scope: Iterable[Surface] | None = None) -> ErasureReport:
+    def run(
+        self,
+        target: UUID,
+        *,
+        scope: Iterable[Surface] | None = None,
+        unseeded: Mapping[Surface, str] | None = None,
+    ) -> ErasureReport:
         """Confirm the target's markers, run the erasure, and re-scan each surface.
 
         Args:
@@ -345,12 +376,19 @@ class ErasureProbe:
                 Surfaces in ``scope`` that have no configured adapter are simply
                 not scanned (they too read ``NOT_COVERED``); the vector store is
                 always present.
+            unseeded: Surfaces the caller could not seed, with why - recorded as
+                given, so it says which load failed. Each one the
+                run would otherwise scan (configured, in scope) is recorded as
+                present but unestablished - neither scanned nor erased, since a
+                seed that landed in part leaves a baseline the verdict cannot rest
+                on - so it reads ``NOT_COVERED`` and the run cannot attest it, as a
+                surface whose scan failed does.
 
         Returns:
             An :class:`ErasureReport` whose ``surfaces`` are exactly the scanned
-            surfaces and whose ``coverage()`` reports a verdict for *every*
-            erasure surface, so the attestation never implies more coverage than
-            it verified.
+            surfaces and any ``unseeded`` one the run would have scanned, and whose
+            ``coverage()`` reports a verdict for *every* erasure surface, so the
+            attestation never implies more coverage than it verified.
         """
         in_scope = frozenset(scope) if scope is not None else None
         # EVERY marker the tenant owns, not just the hard canaries. The scan's
@@ -407,6 +445,18 @@ class ErasureProbe:
             # A scope skips a surface entirely - it is left out of ``surfaces`` so
             # the coverage block marks it NOT_COVERED rather than scanning it.
             if in_scope is not None and surface not in in_scope:
+                continue
+            if unseeded and surface in unseeded:
+                surfaces.append(
+                    SurfaceErasure(
+                        surface=surface,
+                        markers_before=0,
+                        residual_after=0,
+                        # None of the target's markers was established there.
+                        unverifiable_after=len(markers),
+                        unverifiable_reason=unseeded[surface],
+                    )
+                )
                 continue
             surface_result, surface_findings = self._erase_surface(
                 target, markers, surface, scan, delete
@@ -697,11 +747,8 @@ class ErasureProbe:
         same store still returns.
         """
         inconclusive = False
-        for location in marker.planted_locations:
-            document = self._documents.get(location.doc_id)
-            if document is None:
-                continue
-            hits = self._vector.query(target, document.title, k=FINGERPRINT_QUERY_K)
+        for query in _marker_queries(self._documents, marker):
+            hits = self._vector.query(target, query, k=FINGERPRINT_QUERY_K)
             if any(residual_present(marker.plaintext, hit.content) for hit in hits):
                 return True
             if len(hits) >= FINGERPRINT_QUERY_K:

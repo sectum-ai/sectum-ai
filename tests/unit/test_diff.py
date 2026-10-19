@@ -17,6 +17,7 @@ from sectum_ai.spec import (
     RunResult,
     Severity,
     Surface,
+    describe_vector_embedder,
 )
 
 runner = CliRunner()
@@ -1450,3 +1451,328 @@ def test_a_bounded_delta_is_tagged_not_measured_rather_than_ok() -> None:
         name="side_channel_effect_sizes[a|b]", baseline=146.7, current=5.2, bounded=True
     )
     assert _delta_verdict(bounded, (), (), (), ()) == "not measured"
+
+
+def _residue(
+    finding_id: str, surface: Surface, status: FindingStatus = FindingStatus.CONFIRMED
+) -> Finding:
+    """An erasure finding as `erasure` writes one: the target's own marker, on it."""
+    return _finding(finding_id, probe_id="gdpr-erasure-verification", status=status).model_copy(
+        update={"surface": surface, "observed_in_tenant_id": UUID(int=1)}
+    )
+
+
+def _on(surface: Surface, finding: Finding) -> Finding:
+    """A finding on the surface its probe reports, as `probe` writes it."""
+    return finding.model_copy(update={"surface": surface})
+
+
+def test_an_embedder_swap_is_flagged_in_every_renderer_and_gates(tmp_path: Path) -> None:
+    # The Retrieval-Pivot Rate is a property of the embedding geometry, so a swap
+    # moves it with no change to isolation. Without the gate a leak that resolved
+    # across the swap read `[ok]` - a fix nobody made - and one that appeared read
+    # as a regression in the stack rather than in the instrument.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier = _run(_on(Surface.VECTOR_DB, _finding("a"))).model_copy(
+        update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"}
+    )
+    later = _run().model_copy(update={**exercised, "vector_embedder": "hashing-64"})
+    result = diff_runs(earlier, later)
+    assert result.embedder_changed == ("st:all-mpnet-base-v2", "hashing-64")
+    assert result.regressed
+    paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
+    text = runner.invoke(app, ["diff", *paths])
+    assert text.exit_code == 2, text.output
+    assert "[EMBEDDER CHANGED]" in text.output and "hashing-64" in text.output, text.output
+    # It cannot know isolation did not change in the same interval.
+    assert "cannot be attributed to a change in isolation" in text.output, text.output
+    # Not only the rates: the geometry probes' findings resolving or appearing are
+    # the instrument too, and an erasure record has no rate at all.
+    assert "findings appearing or resolving" in text.output, text.output
+    assert "Retrieval-Pivot Rate (Class 2)" in text.output, text.output
+    # Named as every renderer names a hashing geometry: with its caveat, in a
+    # sentence of its own.
+    assert "This run: hashing-64 - a deterministic hashing embedder" in text.output
+    # Geometries, not models: one of them has none.
+    assert "ranked in different embedding geometries" in text.output, text.output
+    assert "The earlier run: st:all-mpnet-base-v2. This run:" in text.output, text.output
+    assert "[not measured] per_probe_findings[rag-entity-bleed]: 1 -> 0" in text.output
+    assert "[ok]" not in text.output, text.output
+    payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
+    assert payload["embedder_changed"] == ["st:all-mpnet-base-v2", "hashing-64"]
+    assert payload["embedder_changed_note"] == [None, describe_vector_embedder("hashing-64")]
+
+
+def test_two_spellings_of_one_hash_geometry_are_not_an_embedder_change() -> None:
+    # `hash:128` and `hash-128` are one geometry; a third-party record may spell it
+    # either way, and one that no spec parses is compared as recorded, not refused.
+    spelled = [
+        _run().model_copy(update={"vector_embedder": name}) for name in ("hash:128", "hash-128")
+    ]
+    assert diff_runs(*spelled).embedder_changed is None
+    for name in ("hash-anything", "hash-" + "1" * 5000):
+        odd = _run().model_copy(update={"vector_embedder": name})
+        assert diff_runs(odd, spelled[1]).embedder_changed == (name, "hash-128")
+
+
+def test_a_record_that_names_no_embedder_is_not_an_embedder_change() -> None:
+    # A fake slot (or the app API) names none; losing a live store is scope_lost's
+    # to report, so this gate stays out of it rather than double-flag.
+    earlier = _run().model_copy(update={"vector_embedder": "hashing-64"})
+    assert diff_runs(earlier, _run()).embedder_changed is None
+    assert diff_runs(earlier, earlier).embedder_changed is None
+
+
+def test_an_embedder_swap_does_not_hide_a_regression_off_the_vector_surface(
+    tmp_path: Path,
+) -> None:
+    # The swap changes the instrument on the vector surface only. Marking EVERY
+    # metric line "not measured" hid a real semantic-cache leak that appeared in
+    # the same run behind the banner.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0", "semantic-cache-contamination": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "semantic_cache": "LIVE"},
+    }
+    earlier = _run(_on(Surface.VECTOR_DB, _finding("a"))).model_copy(
+        update={**exercised, "vector_embedder": "hashing-64"}
+    )
+    later = _run(
+        _on(Surface.SEMANTIC_CACHE, _finding("c", probe_id="semantic-cache-contamination"))
+    ).model_copy(update={**exercised, "vector_embedder": "st:all-mpnet-base-v2"})
+    cli = runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    )
+    assert cli.exit_code == 2, cli.output
+    assert "[REGRESSED] per_probe_findings[semantic-cache-contamination]" in cli.output, cli.output
+    assert "[not measured] per_probe_findings[rag-entity-bleed]" in cli.output, cli.output
+
+
+def test_an_embedder_swap_spares_a_headline_no_ranked_probe_fed(tmp_path: Path) -> None:
+    # The built-in RAG pipeline ranks over its own index, so beside Class 3 its
+    # findings are a measurement the swap did not touch - and the banner named the
+    # Retrieval-Pivot Rate, which no probe in either run fed through the store.
+    # (Beside a live store the built-in pipeline's steps leave the rate itself.)
+    exercised = {
+        "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"},
+    }
+    # As `probe` writes them: a clean probe has no count, and the finding sits on
+    # the pipeline's surface.
+    leak = _finding("p", probe_id="rag-pipeline-bleed").model_copy(
+        update={"surface": Surface.RAG_PIPELINE}
+    )
+    earlier, later = _swap(
+        _run().model_copy(update=exercised), _run(leak).model_copy(update=exercised)
+    )
+    assert diff_runs(earlier, later).embedder_scoped == ("rag-poisoning",)
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[REGRESSED] per_probe_findings[rag-pipeline-bleed]" in output, output
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "over the store - Class 3, and the" in banner, banner
+    assert "Retrieval-Pivot Rate" not in banner, banner
+
+
+def test_an_embedder_swap_scopes_a_live_pipelines_rate(tmp_path: Path) -> None:
+    # A LIVE pipeline may read the store the run seeded, and the run cannot tell
+    # whether it did, so its rate may have moved with the swap: beside Class 3, a
+    # rise in it is withheld rather than read as a regression, and the banner and
+    # the JSON say what it covered. Live, its steps feed the rate.
+    exercised = {
+        "probe_versions": {"rag-poisoning": "1.0", "rag-pipeline-bleed": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "LIVE"},
+    }
+
+    def _pipeline(k: int) -> RunResult:
+        leaks = [
+            _on(Surface.RAG_PIPELINE, _finding(f"p{n}", probe_id="rag-pipeline-bleed"))
+            for n in range(k)
+        ]
+        rate = RunMetrics(retrieval_pivot_rate=k / 10, retrieval_pivot_n=10, retrieval_pivot_k=k)
+        return _run(*leaks, metrics=rate).model_copy(update=exercised)
+
+    earlier, later = _swap(_pipeline(1), _pipeline(6))
+    assert diff_runs(earlier, later).embedder_scoped == ("rag-pipeline-bleed", "rag-poisoning")
+    # Live on EITHER side is enough: one of the two rates may have moved with it.
+    built_in = {"surface_provenance": {"vector_db": "LIVE", "rag_pipeline": "SYNTHETIC"}}
+    for pair in (
+        (earlier.model_copy(update=built_in), later),
+        (earlier, later.model_copy(update=built_in)),
+    ):
+        assert "rag-pipeline-bleed" in diff_runs(*pair).embedder_scoped
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[not measured] retrieval_pivot_rate" in output, output
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "over the store - Class 3, and the" in banner, banner
+    assert "a live RAG pipeline may read the store too" in banner, banner
+    paths = [str(_write(tmp_path / "e.json", earlier)), str(_write(tmp_path / "l.json", later))]
+    payload = json.loads(runner.invoke(app, ["diff", *paths, "--output", "json"]).output)
+    assert payload["embedder_scoped"] == ["rag-pipeline-bleed", "rag-poisoning"]
+
+
+def test_an_erasure_swap_banner_names_the_vector_scan_it_discounted(tmp_path: Path) -> None:
+    # Two erasure records whose vector surface ended in a caveat carry no residue
+    # key, and the banner fell back to a phrase naming nothing.
+    exercised = {
+        "probe_versions": {"gdpr-erasure-verification": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+
+    # As `erasure` writes them: each retained marker itemized as an unverified caveat.
+    def _caveated() -> RunResult:
+        caveat = _residue("erasure-caveat-1", Surface.VECTOR_DB, FindingStatus.UNVERIFIED)
+        record = _run(caveat)
+        metrics = RunMetrics(erasure_caveats={"vector_db": 1})
+        return record.model_copy(update={**exercised, "metrics": metrics})
+
+    earlier, later = _swap(_caveated(), _caveated())
+    banner = next(
+        line
+        for line in _diff_output(tmp_path, earlier, later).splitlines()
+        if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over the store - an erasure's vector residue scan, and the" in banner, banner
+    # Nothing on either record that ranked - not a record this CLI writes, but `diff`
+    # grades records it did not write: the banner says so rather than inventing a class.
+    bare = (_run().model_copy(update={"vector_embedder": name}) for name in ("hash-16", "hash-32"))
+    banner = next(
+        line for line in _diff_output(tmp_path, *bare).splitlines() if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over the store - its similarity ranking, and the" in banner, banner
+
+
+def test_the_embedder_banner_names_each_class_once_in_class_order() -> None:
+    # `embedder_scoped` sorts by probe id, so the banner read "Class 10, ... (Class
+    # 2), Class 3"; and both Class 2 probes feed the one pooled rate.
+    from sectum_ai.baseline import BaselineComparison, RunDiff, diff_findings
+    from sectum_ai.cli.app import _embedder_changed_banner
+
+    ranked = ("ikea-extraction", "rag-entity-bleed", "rag-pipeline-bleed", "rag-poisoning")
+    result = RunDiff(
+        metrics=BaselineComparison(deltas=()),
+        findings=diff_findings((), ()),
+        embedder_changed=("hash-16", "hash-32"),
+        embedder_scoped=ranked,
+    )
+    banner = _embedder_changed_banner(("hash-16", "hash-32"), result, "earlier")
+    assert (
+        "over the store - the Retrieval-Pivot Rate (Class 2), Class 3, Class 10, and the" in banner
+    )
+    # The vector-store probe ranked over the store, so the pooled rate certainly
+    # moved: no "may" beside it.
+    assert "may read the store" not in banner, banner
+
+
+def _swap(earlier: RunResult, later: RunResult) -> tuple[RunResult, RunResult]:
+    return (
+        earlier.model_copy(update={"vector_embedder": "hashing-64"}),
+        later.model_copy(update={"vector_embedder": "st:all-mpnet-base-v2"}),
+    )
+
+
+def _diff_output(tmp_path: Path, earlier: RunResult, later: RunResult) -> str:
+    return runner.invoke(
+        app,
+        [
+            "diff",
+            str(_write(tmp_path / "e.json", earlier)),
+            str(_write(tmp_path / "l.json", later)),
+        ],
+    ).output
+
+
+def test_an_embedder_swap_scopes_to_what_ranks_by_similarity(tmp_path: Path) -> None:
+    # Class 1 fetches by id, so beside a probe that ranked over the store its new
+    # leak is still a regression.
+    exercised = {
+        "probe_versions": {"rag-entity-bleed": "1.0", "tenant-boundary-fetch": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(
+        _run().model_copy(update=exercised),
+        _run(_on(Surface.VECTOR_DB, _finding("b", probe_id="tenant-boundary-fetch"))).model_copy(
+            update=exercised
+        ),
+    )
+    output = _diff_output(tmp_path, earlier, later)
+    assert "[REGRESSED] per_probe_findings[tenant-boundary-fetch]" in output, output
+
+
+def test_an_erasure_swap_withholds_the_vector_scan_and_keeps_the_rest(tmp_path: Path) -> None:
+    # The vector residue scan queries the store by similarity, so it moved with the
+    # instrument: `[ok] erasure_residue[vector_db]: 3 -> 0` asserted a purge nobody
+    # made. The tracing surface has no embedder, so a residue there is still a
+    # regression. Records as `erasure` writes them: counts keyed by surface, no
+    # `per_probe_findings`.
+    exercised = {
+        "probe_versions": {"gdpr-erasure-verification": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE", "tracing": "LIVE"},
+    }
+
+    def _erasure(surface: Surface, count: int, residue: dict[str, int]) -> RunResult:
+        findings = [_residue(f"{surface.value}-{n}", surface) for n in range(count)]
+        record = _run(*findings)
+        metrics = RunMetrics(confirmed_findings=count, erasure_residue=residue)
+        return record.model_copy(update={**exercised, "metrics": metrics})
+
+    earlier, later = _swap(
+        _erasure(Surface.VECTOR_DB, 3, {"vector_db": 3, "tracing": 0}),
+        _erasure(Surface.TRACING, 2, {"vector_db": 0, "tracing": 2}),
+    )
+    assert "gdpr-erasure-verification" in diff_runs(earlier, later).embedder_scoped
+    output = _diff_output(tmp_path, earlier, later)
+    assert "per_probe_findings" not in output, output
+    assert "[ok]" not in output, output
+    assert "[not measured] erasure_residue[vector_db]" in output, output
+    assert "[REGRESSED] erasure_residue[tracing]" in output, output
+    banner = next(line for line in output.splitlines() if "[EMBEDDER CHANGED]" in line)
+    assert "over the store - an erasure's vector residue scan, and the" in banner, banner
+
+
+def test_a_subject_erasure_swap_names_its_fingerprint_scan(tmp_path: Path) -> None:
+    # `erasure --subject` queries the store with the subject's fingerprints and
+    # writes no residue keys, so the banner had nothing to name the scan by and
+    # read "its similarity ranking".
+    exercised = {
+        "probe_versions": {"gdpr-subject-erasure-verification": "1.0"},
+        "surface_provenance": {"vector_db": "LIVE"},
+    }
+    earlier, later = _swap(_run().model_copy(update=exercised), _run().model_copy(update=exercised))
+    assert diff_runs(earlier, later).embedder_scoped == ("gdpr-subject-erasure-verification",)
+    banner = next(
+        line
+        for line in _diff_output(tmp_path, earlier, later).splitlines()
+        if "[EMBEDDER CHANGED]" in line
+    )
+    assert "over the store - a subject erasure's vector fingerprint scan, and the" in banner, banner
+    # The earlier geometry's caveat ends its own sentence; the later one starts anew.
+    assert "configured for the vector store. This run: st:all-mpnet-base-v2. " in banner, banner
+
+
+def test_every_probe_that_ranks_by_similarity_is_scoped_by_an_embedder_swap() -> None:
+    # A probe that later starts issuing `vector.query` moves with the embedder too;
+    # leaving it off the list prints `[ok]` across a swap for it.
+    from sectum_ai.cli.app import _build_suite
+    from sectum_ai.config import DetectionConfig, build_detection_providers
+    from sectum_ai.score import GEOMETRY_PROBES
+    from sectum_ai.substrate import build_substrate, default_scenario
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    querying = {
+        probe.id
+        for probe in _build_suite(build_detection_providers(DetectionConfig()))
+        if any(step.action == "vector.query" for step in probe.plan(substrate))
+    }
+    assert querying
+    assert querying <= GEOMETRY_PROBES
+    # The pipeline-end probe asks the RAG pipeline, which ranks with its own
+    # retriever and index - not the slot's embedder. Listing it named a geometry
+    # for a rate the store never ranked, and a swap then gated `diff`.
+    assert "rag-pipeline-bleed" not in GEOMETRY_PROBES

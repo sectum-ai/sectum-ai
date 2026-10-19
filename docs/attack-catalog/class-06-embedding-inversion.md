@@ -31,15 +31,18 @@ scores `NOT_COVERED`, never `PASS`.
 
 Two things declare it absent. The `app` family (an application's own resource API filling
 the vector slot) is not an embedding space at all. And **every live vector store the CLI
-builds** declares it too: there is no config path from `sectum-ai.yaml` to a real
-embedding model for a vector store (`embedding_model` configures the *detection*
-pipeline), so each live kind is backed by a bag-of-tokens hashing embedder where synonyms
-score 0.000 — which is exactly the substring-matching backend this rule exists for. So
+builds** declares it too. Without a configured
+[`embedder`](../configuration.md#vector_store) each live kind is backed by a
+bag-of-tokens hashing embedder where synonyms score 0.000 — which is exactly the
+substring-matching backend this rule exists for. With one, the store ranks in a real
+model's geometry, but the capability is still withheld in this release: this probe's
+query is a strict token subset of the canary, so even a real model can retrieve it on
+shared tokens, and whether that retrieval is attributable to embedding inversion is under
+review. So
 against Qdrant, pgvector, Weaviate, Chroma, Milvus, OpenSearch, Pinecone or Azure AI
 Search,
 Class 6 reports `NOT_COVERED`. Only the built-in fake, whose numbers the examples label
-as the demo exercising the probe, runs it. Wiring a real embedder into the vector slot is
-what would change that; the SDK can already do it by constructing the adapter directly.
+as the demo exercising the probe, runs it.
 
 The user boundary is separate; see [the user boundary](index.md#the-user-boundary)
 for when this class is tested cross-user and when those steps are dropped.
