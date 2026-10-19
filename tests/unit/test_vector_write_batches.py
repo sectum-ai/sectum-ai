@@ -2,8 +2,9 @@
 
 At 384 dimensions (all-MiniLM-L6-v2's) a default 500-document tenant corpus
 computes to about 4 MB, twice Pinecone's 2 MB upsert cap, in one request; the
-64-dimension hashing default fit. Qdrant and Azure split only past caps a corpus
-reaches at larger dimensions, so their tests lower the cap to exercise the split.
+64-dimension hashing default fit. Qdrant's and Azure's byte budgets are reached
+only at larger dimensions, so their tests lower the byte cap to exercise the split;
+Azure's 1000-document cap is exercised by a 1200-document corpus.
 """
 
 import hashlib

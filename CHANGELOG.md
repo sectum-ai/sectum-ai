@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   created at that model's dimension (a Pinecone index must already exist at it) and
   the corpus is upserted in its geometry, embedded in batches first. Pinecone,
   Azure AI Search and Qdrant split the write into several requests wherever one
-  would pass the service's documented per-request cap: at 384 dimensions a default
+  would pass the service's documented per-request cap (Qdrant's at its 32 MB
+  default; Pinecone's and Azure's 1000 records too): at 384 dimensions a default
   500-document tenant corpus computes to about 4 MB, twice Pinecone's 2 MB. Until now every
   live store ranked with a 64-dimension hashing embedder, so the Class 2
   Retrieval-Pivot Rate against a real store was measured by shared tokens, not
