@@ -1,8 +1,9 @@
 """Hosted stores' corpus writes stay within each store's per-request cap.
 
-A real embedding model's vectors (here 384 dimensions, all-MiniLM-L6-v2's) made a
-default 500-document tenant corpus several times Pinecone's 2 MB upsert cap when
-sent in one request; the 64-dimension hashing default had fit.
+At 384 dimensions (all-MiniLM-L6-v2's) a default 500-document tenant corpus
+computes to about 4 MB, twice Pinecone's 2 MB upsert cap, in one request; the
+64-dimension hashing default fit. Qdrant and Azure split only past caps a corpus
+reaches at larger dimensions, so their tests lower the cap to exercise the split.
 """
 
 import hashlib
@@ -79,7 +80,7 @@ def test_pinecone_upserts_a_real_model_corpus_in_requests_under_its_cap() -> Non
     assert [v["id"] for r in index.requests for v in r] == [f"doc-{i}" for i in range(500)]
 
 
-def test_qdrant_upserts_a_real_model_corpus_in_requests_under_its_cap(
+def test_qdrant_splits_its_upsert_at_the_byte_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("qdrant_client")
@@ -109,7 +110,7 @@ def test_qdrant_upserts_a_real_model_corpus_in_requests_under_its_cap(
 
 
 @pytest.mark.parametrize("max_bytes", [1_000_000, 10**12])
-def test_azure_uploads_a_real_model_corpus_in_requests_under_its_caps(
+def test_azure_splits_its_upload_at_the_byte_and_document_caps(
     monkeypatch: pytest.MonkeyPatch, max_bytes: int
 ) -> None:
     from sectum_ai.adapters.vector import azure_search
@@ -124,6 +125,6 @@ def test_azure_uploads_a_real_model_corpus_in_requests_under_its_caps(
     monkeypatch.setattr(store, "_document_present", lambda _client, _key: True)
     store.upsert(_TENANT, _corpus(1200))
     assert len(requests) > 1
-    assert all(len(json.dumps(request)) <= max_bytes for request in requests)
+    assert all(sum(len(json.dumps(d)) for d in request) <= max_bytes for request in requests)
     assert all(len(request) <= 1000 for request in requests)
     assert [d["doc_id"] for r in requests for d in r] == [f"doc-{i}" for i in range(1200)]

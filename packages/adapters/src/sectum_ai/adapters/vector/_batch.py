@@ -1,8 +1,9 @@
 """Split a corpus write into requests a hosted store accepts.
 
 Pinecone, Azure AI Search and Qdrant cap the size of one write request. The
-64-dimension hashing default fit a whole tenant's corpus in one; a real embedding
-model's vectors (hundreds to thousands of dimensions) do not.
+64-dimension hashing default fit a whole tenant's corpus in one under every cap; a
+real embedding model's vectors can pass one - at 384 dimensions a 500-document
+corpus computes to about 4 MB, twice Pinecone's 2 MB.
 """
 
 from __future__ import annotations
