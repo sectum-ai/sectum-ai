@@ -64,6 +64,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An erasure surface whose purge AND post-scan both fail counts every marker
+  unverifiable.** A failed purge rules out none of the markers, and the
+  post-scan path said so — but when the post-scan raised too, its handler
+  ignored the purge failure: markers the partial scan had checked were counted
+  as ruled out, and the reason named only the scan error, so the purge failure
+  disappeared from the record. It now counts every baseline marker and keeps
+  both errors in the reason. On the same branch, vector markers the scan had
+  answered with a full page (reached, not ruled out) are no longer dropped from
+  the count. The verdict was already NOT VERIFIED, never ERASED; only
+  `unverifiable_after` / `erasure_unverifiable` under-stated.
+
 - **A failed anchor no longer makes `verify` accuse the previous pack.** The
   audit PDF was rendered straight to its final path, *before* the TSA/Rekor call
   that can fail and before the pack was written — so a failure in between left a
