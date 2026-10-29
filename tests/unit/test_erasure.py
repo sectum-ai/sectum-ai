@@ -1123,6 +1123,87 @@ def test_a_residual_seen_before_a_mid_scan_failure_is_not_thrown_away(
     assert report.genuine_residual is (expected_residual > 0), report
 
 
+def test_a_failed_purge_is_not_forgotten_when_the_post_scan_also_fails() -> None:
+    # A failed purge rules out none of the markers, and the no-exception path
+    # counts it that way. The post-scan exception branch ignored `purge_failed`:
+    # it counted the markers the partial scan had checked as ruled out and
+    # printed the scan error alone, so the purge failure vanished from the record.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    owned = [m for m in substrate.manifest.markers if m.owner_tenant_id == target]
+    total = len(owned)
+    calls = {"n": 0}
+    real_search = FakeSearchIndex.search
+
+    class _PurgeAndScanFail(FakeSearchIndex):
+        def search(self, tenant: UUID, query: str) -> list[str]:
+            calls["n"] += 1
+            if calls["n"] > total + 2:
+                raise RuntimeError("opensearch: cluster went away mid-scan")
+            return real_search(self, tenant, query)
+
+        def delete(self, tenant: UUID) -> None:
+            raise AdapterError("purge left 3 document(s) in place (AccessDenied)")
+
+    index = _PurgeAndScanFail()
+    for marker in owned:
+        index.index(target, f"search index entry mentioning {marker.plaintext}")
+
+    report = ErasureProbe(substrate, vector=FakeVectorStore(), search_index=index).run(
+        target, scope=(Surface.SEARCH_INDEX,)
+    )
+    surface = report.surfaces[0]
+    assert surface.markers_before == total, surface
+    assert surface.residual_after == 2, surface
+    assert surface.unverifiable_after == total, surface
+    reason = surface.unverifiable_reason or ""
+    assert "AccessDenied" in reason and "cluster went away" in reason, reason
+
+
+def test_a_vector_post_scan_failure_keeps_the_markers_it_could_not_rule_out() -> None:
+    # The vector scan counts a full page without the marker as inconclusive AND
+    # as decided. When the post-scan then raised, `len(before) - decided` treated
+    # those inconclusive markers as ruled out and dropped them from the count.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    owned = [m for m in substrate.manifest.markers if m.owner_tenant_id == target]
+    first_marker_queries = len(owned[0].planted_locations)
+
+    class _FullPagesThenDies(FakeVectorStore):
+        purged = False
+        calls = 0
+
+        def delete(self, tenant: UUID) -> None:
+            super().delete(tenant)
+            self.purged = True
+
+        def query(
+            self, tenant: UUID, text: str, k: int = 5, *, user: UUID | None = None
+        ) -> list[VectorHit]:
+            if not self.purged:
+                return super().query(tenant, text, k, user=user)
+            self.calls += 1
+            if self.calls > first_marker_queries:
+                raise RuntimeError("qdrant: connection reset mid-scan")
+            return [
+                VectorHit(doc_id=f"filler-{index}", tenant_id=tenant, score=1.0, content="filler")
+                for index in range(k)
+            ]
+
+    store = _FullPagesThenDies(soft_delete=False)
+    for tenant in substrate.tenants:
+        store.upsert(
+            tenant.tenant_id, [d for d in substrate.documents if d.tenant_id == tenant.tenant_id]
+        )
+    report = ErasureProbe(substrate, vector=store).run(target)
+    surface = report.surfaces[0]
+    assert surface.residual_after == 0, surface
+    # Marker 1 came back a full page without it - not ruled out - and the rest
+    # were never reached, so nothing at all was ruled out.
+    assert surface.unverifiable_after == surface.markers_before, surface
+    assert surface.verdict == "NOT VERIFIED", surface
+
+
 def test_a_secret_canary_residual_is_masked_in_the_evidence_span() -> None:
     # `detection.redact_secret`'s rule, which the detection pipeline has always
     # applied and this path never did: an evidence pack leaves the box in BYOC

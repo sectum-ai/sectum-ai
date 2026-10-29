@@ -558,8 +558,16 @@ class ErasureProbe:
             # "re-run", and the exit code a customer's CI keys on flipped.
             seen = list(self._partial)
             # Only the markers this scan never reached are undecided; the sibling
-            # counts it the same way (`max(at_stake - scan.decided, 1)`).
-            undecided = max(len(before) - self._decided, 1)
+            # counts it the same way (`max(at_stake - scan.decided, 1)`). A vector
+            # marker answered by a full page is decided AND inconclusive, so it is
+            # added back: the scan reached it but did not rule it out.
+            undecided = max(len(before) - self._decided + self._inconclusive.get(surface, 0), 1)
+            reason = str(error)
+            if purge_failed:
+                # As on the no-exception path, a failed purge rules out nothing -
+                # and the reason keeps both failures, not just the later one.
+                undecided = max(len(before), 1)
+                reason = f"{purge_failed}; the post-erasure scan then failed: {error}"
             return (
                 SurfaceErasure(
                     surface=surface,
@@ -567,7 +575,7 @@ class ErasureProbe:
                     residual_after=len(seen),
                     erasure_supported=supported,
                     unverifiable_after=undecided,
-                    unverifiable_reason=str(error),
+                    unverifiable_reason=reason,
                 ),
                 (
                     [self._residual_finding(target, marker, surface) for marker in seen]
