@@ -969,7 +969,7 @@ class FakeAppApi(FakeVectorStore):
     and the run's provenance both say ``api``. ``semantic_retrieval`` is ``False``,
     so Class 6 (embedding inversion) and Class 13 (multi-modal bleed) are skipped:
     an application's search is not an embedding space, and a substring hit
-    reported as ``Invert ML Model`` would be a real result attributed to a
+    reported as ``Invert AI Model`` would be a real result attributed to a
     mechanism that is not there.
 
     ``shared_index=True`` is the leak this models - the API that does not filter

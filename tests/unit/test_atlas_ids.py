@@ -19,12 +19,12 @@ import sectum_ai.probes as probes
 # ADR. `AML.T0051.001` is named just "Indirect" upstream - it is a sub-technique of
 # `AML.T0051` LLM Prompt Injection, and the catalog does not repeat the parent name.
 _VERIFIED_ATLAS_IDS: dict[str, str] = {
-    "AML.T0020": "Poison Training Data",
-    "AML.T0024": "Exfiltration via ML Inference API",
+    "AML.T0020": "Training Data Poisoning",
+    "AML.T0024": "Exfiltration via AI Inference API",
     "AML.T0024.000": "Infer Training Data Membership",
-    "AML.T0024.001": "Invert ML Model",
+    "AML.T0024.001": "Invert AI Model",
     "AML.T0051.001": "Indirect",
-    "AML.T0053": "LLM Plugin Compromise",
+    "AML.T0053": "AI Agent Tool Invocation",
     "AML.T0057": "LLM Data Leakage",
 }
 

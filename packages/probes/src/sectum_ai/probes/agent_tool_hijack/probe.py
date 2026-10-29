@@ -39,7 +39,7 @@ class AgentToolHijackProbe(DetectingProbe):
     name = "Cross-tenant agent tool-call hijacking"
     owasp_llm = "LLM08:2025"
     owasp_secondary: tuple[str, ...] = ("LLM06:2025",)
-    # T0053 LLM Plugin Compromise is the confused-deputy / token-passthrough /
+    # T0053 AI Agent Tool Invocation is the confused-deputy / token-passthrough /
     # cross-server technique; T0024 Exfiltration via AI Inference API is the leak it
     # causes. The tool-description-injection sub-probe additionally demonstrates
     # T0051.001 (LLM Prompt Injection: Indirect) - the coordinate arrives through tool

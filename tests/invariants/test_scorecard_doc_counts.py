@@ -83,13 +83,17 @@ def test_the_changelog_announces_the_methodology_stamp_the_code_ships() -> None:
     # their `1.3` packs are current. `[Unreleased]` carried BOTH: a `Changed`
     # headline announcing `1.3` and, 1100 lines below it, an entry announcing the
     # `1.4` the code actually stamps. A count is cheap to falsify; so is a version.
+    # Read the MOST RECENT announcement, wherever it sits. The first version of
+    # this scoped itself to `[Unreleased]`, which is right only until a release
+    # moves that section under a version heading and leaves `[Unreleased]` empty -
+    # and then the guard fails on a correct changelog. CHANGELOG.md is
+    # newest-first, so the first match from the top is the current claim.
     changelog = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
     text = changelog.read_text()
-    start = text.index("## [Unreleased]")
-    unreleased = text[start : text.index("\n## [", start + 1)]
     shipped = score_module.METHODOLOGY_VERSION
-    headline = re.search(r"\*\*Scorecard methodology `([0-9.]+)`", unreleased)
-    assert headline, "the Unreleased section no longer announces a methodology stamp"
+    headline = re.search(r"\*\*Scorecard methodology `([0-9.]+)`", text)
+    assert headline, "no section of CHANGELOG.md announces a methodology stamp"
     assert headline.group(1) == shipped, (
-        f"CHANGELOG announces methodology {headline.group(1)!r}; score.py stamps {shipped!r}"
+        f"CHANGELOG's most recent announcement is methodology {headline.group(1)!r}; "
+        f"score.py stamps {shipped!r}"
     )
