@@ -93,7 +93,7 @@ declares `Surface.API`, so its findings and the run's
 [surface provenance](coverage.md) both say `api` rather than `vector_db`. And it
 declares no semantic retrieval, so **Class 6 (embedding inversion) is skipped**
 -- an application's search is not an embedding space, and a substring hit reported
-as *Invert ML Model* would attribute a real result to a mechanism that is not
+as *Invert AI Model* would attribute a real result to a mechanism that is not
 there. It reports `NOT_COVERED`, never `PASS` ([scorecard](scorecard.md), rules 5
 and 6). The live vector stores declare it absent too in this release, including
 one driven by a real [`embedder`](#vector_store) — see

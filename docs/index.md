@@ -30,6 +30,6 @@ Sectum AI is built in three layers, each shippable on its own:
 - [Evidence chain](evidence-chain.md) — how a run becomes auditor-ready evidence.
 - [Threat model](threat-model.md) — boundaries, assets, and explicit non-goals.
 
-Sectum AI is at v0.11.0; every build-plan phase has met its acceptance criteria
+Sectum AI is at v0.12.0; every build-plan phase has met its acceptance criteria
 (see [`PHASES.md`](https://github.com/sectum-ai/sectum-ai/blob/main/PHASES.md)),
 and `CHANGELOG.md` records what each release changed.

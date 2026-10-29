@@ -172,7 +172,7 @@ class VectorStoreAdapter(Adapter):
 
     Two probe classes are only *meaningful* against a store that does. Class 6
     reconstructs a foreign entity from a partial fragment and reports it as
-    ``AML.T0024.001 Invert ML Model``; Class 13 is the Retrieval Pivot through a
+    ``AML.T0024.001 Invert AI Model``; Class 13 is the Retrieval Pivot through a
     shared multi-modal vector space. Run either against a store that matches on
     substrings instead, and a keyword hit gets recorded as embedding inversion -
     a real finding attributed to a mechanism the backend does not have.

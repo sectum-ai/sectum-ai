@@ -48,29 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `null`), `embedder_scoped`, and `embedder_changed_note` (each side's hashing
   caveat, as `probe`'s `vector_embedder_note`, or `null`).
 
-- **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
-  findings rest on that its provenance never recorded, so the machine-readable
-  scorecard carries the disclosure the text one prints.
-
-
-- **`RunResult.detection`** records which detector actually graded a run — the
-  embedder kind and model, the judge kind and model, and the *resolved* semantic
-  threshold (never the literal `"auto"`). Schema **0.7.0**; `None` on a record
-  from a path that runs no detector, which is what `erasure` is.
-
-
-- **The user boundary is stated once**, in the attack catalog's index, and the
-  class pages point at it: a probe plans cross-user steps only where its adapter
-  carries the caller's user, a tenant-scoped backend fails there, and where the
-  adapter cannot carry a user those steps are DROPPED rather than failed — a pass
-  that says the boundary was not tested, never that it held. Eight class pages
-  either asserted a clean per-tenant verdict with no user caveat at all, or (in
-  the two corrected an entry ago) over-stated it as a guaranteed failure.
-- **`sectum-ai verify --manifest <manifest.json>`** binds which marker belonged
-  to which tenant. The `manifest-hash` check existed and no CLI path reached it,
-  while the command's own closing note and ADR-0016 both told the reader to
-  "re-run with the original ground-truth manifest".
-
 ### Changed
 
 - **`probe` loads the vector store's corpus only when a probe reads the store** -
@@ -120,7 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   flag or a substrate must call), `sectum_ai.score.GEOMETRY_PROBES` and
   `sectum_ai.spec.ERASURE_WORKFLOW_IDS` (now the one definition the CLI, `diff`
   and the evidence package read).
-
 - **`probe` checks and runs the embedding-model gradient before its suite.** The
   seeded `embedding_models` are validated before anything else: an unknown name was
   silently treated as a `fake-*` recall name. And the gradient - which builds its
@@ -131,34 +107,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison needs two or more *distinct* models: a spec listed twice, or a hash
   spec spelled two ways, is one model, so no gradient - and a recorded gradient is keyed by each
   model's canonical spelling (`hash:32` is `hash-32`), as `vector_embedder` is.
-
-- **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something
-  a run did *less* of than it planned, both inside the canonical hash.
-  `user_steps_dropped` (probe id → count) records the user-level steps the runner
-  did not run because the adapter cannot carry a user identity to its backend.
-  `unconfirmed_plants` (probe id → count) records the plants the backend
-  acknowledged and did not serve back. A third, `side_channel_variance_floored`,
-  names the Class 5 tenant pairs whose effect sizes are bounds rather than
-  measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
-  minor-bump rule); regenerate them.
-- **Scorecard methodology `1.4`.** What counts as evidence is part of the
-  methodology, not only the weights: `1.2` graded a class on findings whose
-  backing surface was the built-in fake, `1.3` withholds them, and `1.4` caps a
-  withheld class's letter at that class's band so the withholding cannot read as
-  a pass (the rule-7 entry below). A run that graded `F` under `1.2` can grade
-  differently here, so the stamp moves with the rule that a given version always
-  recomputes to the same letter. This release ships `1.4`.
-- **The Action's output strings changed.** The step summary now reads
-  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
-  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
-  built-in fakes too. A workflow grepping the old text needs updating.
-- **`surface_provenance` keys must be surfaces.** The values were validated and
-  the keys were not, so a hand-edited record could name anything — and `score`
-  printed it verbatim, letting a record forge its own scorecard lines. A key that
-  is not a `Surface` is now a validation error.
-- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
-  the same "modelled shared index, not the configured store" caveat the text
-  renderer prints, so a dashboard cannot read the gradient as a measured rate.
 
 ### Fixed
 
@@ -229,6 +177,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every provider call — and loading a provider's model, such as a misspelled
   `st:` name or a `bedrock:` model with no region — now fails as a typed adapter
   error (exit 3) naming only the exception type.
+
+## [0.12.0] - 2026-10-29
+
+### Added
+
+- **`IsolationScore.unaccounted_surfaces`** — the surfaces a run's confirmed
+  findings rest on that its provenance never recorded, so the machine-readable
+  scorecard carries the disclosure the text one prints.
+
+
+- **`RunResult.detection`** records which detector actually graded a run — the
+  embedder kind and model, the judge kind and model, and the *resolved* semantic
+  threshold (never the literal `"auto"`). Schema **0.7.0**; `None` on a record
+  from a path that runs no detector, which is what `erasure` is.
+
+
+- **The user boundary is stated once**, in the attack catalog's index, and the
+  class pages point at it: a probe plans cross-user steps only where its adapter
+  carries the caller's user, a tenant-scoped backend fails there, and where the
+  adapter cannot carry a user those steps are DROPPED rather than failed — a pass
+  that says the boundary was not tested, never that it held. Eight class pages
+  either asserted a clean per-tenant verdict with no user caveat at all, or (in
+  the two corrected an entry ago) over-stated it as a guaranteed failure.
+- **`sectum-ai verify --manifest <manifest.json>`** binds which marker belonged
+  to which tenant. The `manifest-hash` check existed and no CLI path reached it,
+  while the command's own closing note and ADR-0016 both told the reader to
+  "re-run with the original ground-truth manifest".
+
+### Changed
+
+- **Schema 0.7.0.** Two disclosure blocks on `RunMetrics`, each recording something
+  a run did *less* of than it planned, both inside the canonical hash.
+  `user_steps_dropped` (probe id → count) records the user-level steps the runner
+  did not run because the adapter cannot carry a user identity to its backend.
+  `unconfirmed_plants` (probe id → count) records the plants the backend
+  acknowledged and did not serve back. A third, `side_channel_variance_floored`,
+  names the Class 5 tenant pairs whose effect sizes are bounds rather than
+  measurements. Packs stamped 0.6.x are no longer accepted by `verify` (the usual
+  minor-bump rule); regenerate them.
+- **Scorecard methodology `1.4`.** What counts as evidence is part of the
+  methodology, not only the weights: `1.2` graded a class on findings whose
+  backing surface was the built-in fake, `1.3` withholds them, and `1.4` caps a
+  withheld class's letter at that class's band so the withholding cannot read as
+  a pass (the rule-7 entry below). A run that graded `F` under `1.2` can grade
+  differently here, so the stamp moves with the rule that a given version always
+  recomputes to the same letter. This release ships `1.4`.
+- **The Action's output strings changed.** The step summary now reads
+  `Confirmed findings: N (on live surfaces: M)`, the console annotations read
+  "sectum-ai confirmed a finding", and `fail-on-leak` counts a finding on the
+  built-in fakes too. A workflow grepping the old text needs updating.
+- **`surface_provenance` keys must be surfaces.** The values were validated and
+  the keys were not, so a hand-edited record could name anything — and `score`
+  printed it verbatim, letting a record forge its own scorecard lines. A key that
+  is not a `Surface` is now a validation error.
+- **`probe --output json` gained `retrieval_pivot_rate_by_model_note`**, carrying
+  the same "modelled shared index, not the configured store" caveat the text
+  renderer prints, so a dashboard cannot read the gradient as a measured rate.
+
+### Fixed
+
 - **An erasure surface whose purge AND post-scan both fail counts every marker
   unverifiable.** A failed purge rules out none of the markers, and the
   post-scan path said so — but when the post-scan raised too, its handler
