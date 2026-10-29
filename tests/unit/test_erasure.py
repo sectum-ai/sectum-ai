@@ -123,6 +123,46 @@ def test_erasure_is_verified_when_the_store_hard_deletes() -> None:
     assert report.findings == ()
 
 
+def test_an_unseeded_surface_is_recorded_unestablished_and_never_touched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `unseeded` is an SDK contract: the reason recorded as given, every target
+    # marker unestablished, the surface neither scanned nor erased - a seed that
+    # landed in part leaves a baseline no verdict can rest on - and a surface out of
+    # scope still left out.
+    substrate = build_substrate(default_scenario(seed=2026))
+    target = substrate.tenants[0].tenant_id
+    store = _seeded_store(substrate, soft_delete=False)
+    touched: list[str] = []
+    real_query, real_delete = store.query, store.delete
+
+    def _query(*args: object, **kwargs: object) -> object:
+        touched.append("query")
+        return real_query(*args, **kwargs)  # type: ignore[arg-type]
+
+    def _delete(*args: object, **kwargs: object) -> object:
+        touched.append("delete")
+        return real_delete(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(store, "query", _query)
+    monkeypatch.setattr(store, "delete", _delete)
+    reason = "the target's corpus did not load: the vector store refused the corpus"
+    report = ErasureProbe(substrate, vector=store).run(target, unseeded={Surface.VECTOR_DB: reason})
+    (vector,) = report.surfaces
+    target_markers = [m for m in substrate.manifest.markers if m.owner_tenant_id == target]
+    assert vector.unverifiable_reason == reason
+    assert vector.unverifiable_after == len(target_markers)
+    assert (vector.markers_before, vector.residual_after) == (0, 0)
+    assert vector.verdict == "NOT VERIFIED"
+    assert touched == []
+    assert not report.erased
+    # Out of scope, an unseeded surface is not recorded at all.
+    scoped = ErasureProbe(substrate, vector=store).run(
+        target, scope=[Surface.TRACING], unseeded={Surface.VECTOR_DB: reason}
+    )
+    assert all(surface.surface is not Surface.VECTOR_DB for surface in scoped.surfaces)
+
+
 def test_erasure_fails_when_the_store_soft_deletes() -> None:
     substrate = build_substrate(default_scenario(seed=2026))
     target = substrate.tenants[0].tenant_id

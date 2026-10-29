@@ -65,7 +65,8 @@ Each spec resolves to an image model:
 - `clip:<model>` — real [CLIP](https://www.sbert.net/examples/applications/image-search/README.html)
   image embeddings via sentence-transformers (opt-in extra `sectum-ai[clip]`, default
   `clip:clip-ViT-B-32`). CLIP embeds images and text into one space and runs locally, so
-  no data leaves the box (BYOC-safe); sweeping two or more CLIP models measures the real
+  no tenant content leaves the box (BYOC-safe; loading the model calls the Hugging Face
+  Hub unless `HF_HUB_OFFLINE=1`); sweeping two or more CLIP models measures the real
   embedding-strength gradient.
 
 The [`multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed)
@@ -83,6 +84,6 @@ or real CLIP. Live multi-modal vector-store adapters and generic-suite / CLI wir
 follow-on. Like Class 6, the probe requires a vector-slot adapter reporting
 `semantic_retrieval` — the pivot it describes happens in a shared embedding space — so it
 is skipped and scores `NOT_COVERED` against the `app` family and against every live
-vector store the CLI builds (all of which are hashing-embedder backed; see
-[Class 6](class-06-embedding-inversion.md#runs-when)). Walkthrough:
+vector store the CLI builds — none of which embeds images, even with a configured text
+`embedder` (see [Class 6](class-06-embedding-inversion.md#runs-when)). Walkthrough:
 [`examples/multimodal-rag-bleed`](https://github.com/sectum-ai/sectum-ai/tree/main/examples/multimodal-rag-bleed).

@@ -103,5 +103,5 @@ def test_one_real_model_among_fakes_is_not_reported_as_a_gradient(
     substrate = build_substrate(_scenario_with_models("hash-256", "fake-mini"))
     assert _per_model_rpr(substrate, FakeVectorStore()) == {}
     captured = capsys.readouterr()
-    assert "two or more real embedding models" in captured.err
+    assert "two or more distinct real embedding models" in captured.err
     assert captured.out == ""

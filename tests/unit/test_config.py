@@ -1353,7 +1353,8 @@ def test_build_embedder_rejects_an_unknown_kind() -> None:
 
 
 def test_local_detection_mode_rejects_a_hosted_openai_embedder() -> None:
-    # The "no data leaves the box" guarantee: local mode fails fast if the embedder
+    # The local-mode guarantee (no tenant content to a third-party AI service from
+    # Sectum's own stages): local mode fails fast if the embedder
     # would call the real OpenAI API (kind=openai with no local base_url).
     from pydantic import ValidationError
 
@@ -1451,7 +1452,7 @@ def test_build_cache_missing_redis_extra_raises_adaptererror(
 
 
 def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
-    # `_lexically_ranked` had zero test references and its entire body showed as
+    # `_without_semantic_retrieval` had zero test references and its entire body showed as
     # uncovered, because no unit test built a live vector kind. A bug there is an
     # OVER-CLAIM in both directions its docstring names: a lexical keyword hit
     # shipped stamped `AML.T0024.001 Invert AI Model`, and a store that found
@@ -1462,9 +1463,9 @@ def test_a_live_vector_store_is_marked_lexically_ranked_not_semantic() -> None:
     store = build_vector_store(AdapterConfig(kind="opensearch", host="example", port=9200))
     assert isinstance(store, OpenSearchVectorStore)
     assert not store.synthetic
-    # The capability is WITHDRAWN - the resolver backs every live kind with a
-    # bag-of-tokens `_hashing_embed`, and there is no config path to a real
-    # embedding model for a vector store.
+    # The capability is WITHDRAWN - this store has no `embedder`, so it is backed by
+    # the bag-of-tokens `_hashing_embed`; a store with one withholds it too, for the
+    # reasons at `build_vector_store`.
     assert not store.supports(Capability.SEMANTIC_RETRIEVAL)
     # ...and nothing else is: the withdrawal must not be over-broad.
     assert store.supports(Capability.PER_TENANT_NAMESPACE)

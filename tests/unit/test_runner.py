@@ -483,6 +483,10 @@ def test_preflight_fails_fast_when_a_required_adapter_is_missing() -> None:
     runner = Runner(substrate)
     with pytest.raises(ConfigError, match=r"requires adapter.*vector"):
         runner.preflight(RagEntityBleedProbe())
+    # And so does asking which steps it would send: it sends none, so listing the
+    # plan as if it would contradicts the method's own contract.
+    with pytest.raises(ConfigError, match=r"requires adapter.*vector"):
+        runner.steps_to_send(RagEntityBleedProbe())
 
 
 def test_preflight_passes_when_required_adapters_are_present() -> None:
@@ -658,8 +662,66 @@ def test_a_plant_on_a_carrying_adapter_goes_too_when_no_read_survives() -> None:
     )
     store = FakeVectorStore()
     runner = Runner(substrate, vector=store, cache=_TenantOnlyCache())
+    assert runner.steps_to_send(_MixedProbe()) == []  # type: ignore[arg-type]
     assert runner.run_per_step(_MixedProbe()) == []  # type: ignore[arg-type]
     assert runner.dropped_user_steps["mixed-adapter-probe"] == 2
+
+
+@pytest.mark.parametrize("tenants", [1, 2])
+@pytest.mark.parametrize("carries_user", [False, True])
+def test_steps_to_send_are_the_steps_run_per_step_sends(tenants: int, carries_user: bool) -> None:
+    # The CLI embeds these texts before the run, so a drift between the two (a
+    # query it drops, a plant it re-scopes) either pays for a step never sent or
+    # embeds one in the wrong mode.
+    from sectum_ai.cli.app import _build_suite
+    from sectum_ai.config import (
+        DetectionConfig,
+        SectumConfig,
+        build_adapters,
+        build_detection_providers,
+    )
+    from sectum_ai.spec import Scenario, SharedEntity, SyntheticTenantSpec, SyntheticUserSpec
+
+    substrate = build_substrate(
+        Scenario(
+            scenario_id="parity",
+            seed=3,
+            tenants=tuple(
+                SyntheticTenantSpec(
+                    tenant_id=UUID(int=n),
+                    display_name=f"T{n}",
+                    industry="robotics",
+                    corpus_size=24,
+                    users=(
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 1), display_name="a"),
+                        SyntheticUserSpec(user_id=UUID(int=10 * n + 2), display_name="b"),
+                    ),
+                )
+                for n in range(1, tenants + 1)
+            ),
+            shared_entities=(SharedEntity(kind="person", value="Maria Chen"),),
+        )
+    )
+
+    def _runner() -> Runner:
+        bundle = build_adapters(SectumConfig())
+        for adapter in (bundle.vector, bundle.cache, bundle.memory):
+            adapter.carries_user = carries_user
+        return Runner(
+            substrate,
+            vector=bundle.vector,
+            cache=bundle.cache,
+            model=bundle.model,
+            mcp=bundle.mcp,
+            memory=bundle.memory,
+            rag=bundle.rag,
+            observability=bundle.observability,
+            agent=bundle.agent,
+        )
+
+    for probe in _build_suite(build_detection_providers(DetectionConfig())):
+        sent = [step for step, _ in _runner().run_per_step(probe)]
+        assert _runner().steps_to_send(probe) == sent, probe.id
 
 
 def test_the_two_no_user_contracts_drop_and_count_their_user_steps() -> None:

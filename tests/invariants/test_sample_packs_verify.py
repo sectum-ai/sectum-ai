@@ -15,6 +15,7 @@ reported "the evidence pack was altered" on clean data. Regenerate the samples
 silence it.
 """
 
+import hashlib
 import json
 import re
 import tempfile
@@ -22,7 +23,12 @@ from pathlib import Path
 
 import pytest
 
-from sectum_ai.evidence import PREDICATE_TYPE, STATEMENT_TYPE, verify_pack
+from sectum_ai.evidence import (
+    PREDICATE_TYPE,
+    STATEMENT_TYPE,
+    verify_in_toto_statement,
+    verify_pack,
+)
 from sectum_ai.evidence.pdf import render_audit_pack
 from sectum_ai.spec import EvidencePack
 
@@ -59,7 +65,7 @@ def test_shipped_intoto_sidecar_is_a_wellformed_statement(sidecar_path: Path) ->
     # shipped attestation is silently orphaned or malformed - including the
     # retrieval-pivot sidecar, whose (large) evidence.json is not committed and so
     # would otherwise go untested. The erasure sidecars are additionally bound to
-    # their committed packs by `sectum-ai verify` (test_cli_pipeline / cli_erasure).
+    # their committed packs by test_shipped_sample_pdf_is_what_todays_renderer_produces.
     statement = json.loads(sidecar_path.read_text())
     assert statement["_type"] == STATEMENT_TYPE
     assert statement["predicateType"] == PREDICATE_TYPE
@@ -92,6 +98,18 @@ def test_shipped_sample_pdf_is_what_todays_renderer_produces(pack_path: Path) ->
     pack = EvidencePack.model_validate_json(pack_path.read_text())
     committed = pack_path.with_name(pack_path.name.replace("-evidence.json", "-audit-pack.pdf"))
     assert committed.exists(), f"no committed PDF beside {pack_path.name}"
+    # The committed PDF and sidecar are the ones the pack signs: re-rendering the PDF
+    # from the pack alone (to follow a renderer change) left `pdf_ref` naming the old
+    # file, so the samples, copied under their generated names, failed `sectum-ai
+    # verify` as altered after signing.
+    assert hashlib.sha256(committed.read_bytes()).hexdigest() == pack.pdf_ref, (
+        f"{committed.name} is not the PDF {pack_path.name} signs; regenerate the samples "
+        "from a full run (docs/samples/README.md), not by re-rendering the PDF alone"
+    )
+    sidecar = pack_path.with_name(
+        pack_path.name.replace("-evidence.json", "-attestation.intoto.json")
+    )
+    verify_in_toto_statement(json.loads(sidecar.read_text()), pack)
     with tempfile.TemporaryDirectory() as directory:
         fresh = Path(directory) / "audit.pdf"
         render_audit_pack(pack, fresh)

@@ -2302,8 +2302,8 @@ def test_pack_refuses_a_run_that_is_not_the_one_the_evidence_attests(tmp_path: P
 
 def test_a_vector_store_that_swallows_the_corpus_is_not_graded_as_passing() -> None:
     # The fourth seeded slot, and the one the most classes stand on. `upsert` IS a
-    # write primitive, so the corpus goes into a live store unconditionally - and
-    # nothing read it back. A store that acknowledges the bulk load and serves
+    # write primitive, so the corpus goes into a live store whenever a probe reads it
+    # - and nothing read it back. A store that acknowledges the bulk load and serves
     # none of it (a quota, the wrong namespace, a read-side ACL, an index that
     # never settles; `pinecone.upsert` settles on the last id of a batch only,
     # `weaviate.upsert` settles not at all) left Classes 1, 2, 6 and 10 querying

@@ -17,7 +17,9 @@ specific subject's real records rather than synthetic markers.
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content**, used only to query and stored as a **hash** in the attestation — never
-in the clear. See [`subject.yaml`](subject.yaml).
+in the clear in the pack. To query a vector store, the `vector_db` fingerprints are
+embedded with the store's `embedder`: a hosted one (`openai:`, `cohere:`, ...) is
+sent the subject's text, and the CLI warns when it is. See [`subject.yaml`](subject.yaml).
 
 ## Run
 

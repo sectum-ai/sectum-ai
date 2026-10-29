@@ -128,7 +128,16 @@ Sectum AI is synthetic by default — the substrate is fabricated. When pointed 
 a real stack, the probes read whatever that stack returns. In **BYOC** mode the
 CLI runs inside the customer environment and only markers, the evidence spans of
 findings, and the timestamped evidence pack leave it; the bulk of retrieved
-content stays on-box. Note that **unverified** findings ship too, and an evidence
+content stays on-box. The exceptions are Sectum's own hosted stages, each refused
+under `detection.mode: local`: a hosted detection embedder or judge (sent the
+observations it grades), the sweep's hosted `embedding_models`, a hosted
+`calibrate --embedder`, a mem0 embedder, graph-store LLM and server-side-embedding
+vector store, and a hosted
+vector-store `embedder` — which receives the synthetic
+corpus and, in `erasure --subject`, the data subject's real `vector_db`
+fingerprint text — and mem0's own usage telemetry (run metadata, not content,
+unless `MEM0_TELEMETRY=False`). Loading a local model also calls its hub (no
+content; `HF_HUB_OFFLINE=1` with the model cached keeps the run offline). Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
 content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)
@@ -138,13 +147,35 @@ timestamped; it is signed by a TSA only when one is configured.)
 - **Hosted.** Sectum AI runs the synthetic tenants against the customer's
   reachable endpoints.
 - **BYOC (bring-your-own-cloud).** The customer runs the CLI inside their own
-  environment. Only the substrate's markers, the findings' evidence spans (which
-  can include a judge rationale restating observed content — see *Customer data*
-  above), and the hash-bound, timestamped evidence pack cross the boundary. Set `detection.mode: local` to **enforce** this posture:
-  detection is the only stage that embeds or judges tenant content, and in
-  `local` mode the config fails fast on any embedder or judge that would call a
-  default hosted AI API (`openai`/`anthropic` without a `base_url`) — so Sectum
-  makes no call to a third-party AI service. A `base_url` you configure is
+  environment. With `detection.mode: local`, only the substrate's markers, the
+  findings' evidence spans (which can include a judge rationale restating observed
+  content — see *Customer data* above), and the hash-bound, timestamped evidence pack
+  cross the boundary from Sectum's own stages: local mode **enforces** that none of
+  them sends tenant content to a third-party AI service:
+  five stages embed or judge tenant content — detection, the vector store's
+  `embedder` (the corpus a run loads), the Class 2 sweep's `embedding_models`,
+  `calibrate --embedder` (the labelled set), and a
+  `mem0` memory adapter's own embedder (and graph LLM, and its vector store) — and
+  in `local` mode the config fails fast on any of them that would call a hosted AI
+  API (a detection provider on `openai`/`anthropic` without a `base_url`, or an
+  `openai:`/`cohere:`/`voyage:`/`bedrock:` embedding spec, whether it comes from the
+  config, a CLI override, or the list a substrate was seeded with). A `mem0` memory
+  adapter is refused too unless its embedder — which mem0 defaults to OpenAI and
+  which embeds every write — is local, every LLM that could feed a graph store is
+  local, and its vector store is on an allow-list of stores known to keep the
+  vectors mem0 gives them rather than embed server-side, and its own usage
+  telemetry is off (`MEM0_TELEMETRY=False`) — so no stage Sectum runs
+  on its own behalf sends tenant content to a third-party AI service. (Loading a
+  local model still calls its hub — an `st:` model checks the Hugging Face Hub on
+  every load and downloads it if not cached, an `ollama` model is pulled by its
+  server; pre-cache them and set `HF_HUB_OFFLINE=1` to keep the run offline.) The adapters you point it at
+  are the system under test and receive the synthetic tenant data by design: a
+  hosted vector database, or an agent adapter driving an OpenAI Assistant or the
+  Anthropic Messages API, sends it to that provider because that is what is being
+  tested. One workflow sends **real** personal data instead: `erasure --subject`
+  embeds the data subject's vector fingerprints with the store's `embedder` to
+  query the store, so a hosted embedder receives that text in the clear (the CLI
+  warns; `local` mode refuses a hosted embedder). A `base_url` you configure is
   trusted to resolve to an endpoint inside your own boundary (a local or in-VPC
   server); that target is your trust boundary, not Sectum's.
 

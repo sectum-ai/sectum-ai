@@ -33,6 +33,8 @@ from sectum_ai.spec import (
     canonical_hash,
 )
 
+_REAL_EMBEDDER_TIER = "semantic similarity against the configured detection embedding model"
+
 
 def _run_result(manifest: GroundTruthManifest, *, with_finding: bool) -> RunResult:
     findings: tuple[Finding, ...] = ()
@@ -591,11 +593,11 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     # says "not a calibrated judge", so `"calibrated judge" not in ...` fails on
     # the sentence that fixes the defect.
     claims_a_judge = "then the configured judge"
-    assert "no embedding model" in offline_para, offline_para
+    assert "no detection embedding model" in offline_para, offline_para
     assert "no judge" in offline_para, offline_para
     assert claims_a_judge not in offline_para, offline_para
     assert "lexical overlap rather than meaning" in offline_para, offline_para
-    assert "semantic similarity against the configured embedding model" in real_para, real_para
+    assert _REAL_EMBEDDER_TIER in real_para, real_para
     assert claims_a_judge in real_para, real_para
 
     # A record written before `detection` existed asserts neither: the first tier
@@ -621,7 +623,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
         ),
     )
     mixed = scope_methodology(real_embedder_only)[1]
-    assert "semantic similarity against the configured embedding model" in mixed, mixed
+    assert _REAL_EMBEDDER_TIER in mixed, mixed
     assert claims_a_judge not in mixed, mixed
     assert "not a calibrated judge" in mixed, mixed
 
@@ -633,7 +635,7 @@ def test_the_detector_paragraph_says_which_tiers_actually_ran() -> None:
     )
     other = scope_methodology(real_judge_only)[1]
     assert claims_a_judge in other, other
-    assert "semantic similarity against the configured embedding model" not in other, other
+    assert _REAL_EMBEDDER_TIER not in other, other
     assert "lexical overlap rather than meaning" in other, other
 
 
@@ -1124,3 +1126,87 @@ def test_the_methodology_discloses_confirmations_that_rest_on_no_manifest_marker
     all_grounded = methodology(finding("rag-entity-bleed", "mkr-1"))
     assert "Not every confirmed finding" not in all_grounded, all_grounded
     assert "manifest-grounded" in all_grounded, all_grounded
+
+
+def _embedder_pack(embedder: str | None, *, with_rate: bool = True) -> EvidencePack:
+    metrics = RunMetrics(retrieval_pivot_n=10, retrieval_pivot_k=4) if with_rate else RunMetrics()
+    run = _rpr_run(metrics).model_copy(update={"vector_embedder": embedder})
+    return EvidencePack(run_result=run, manifest_hash=run.manifest_hash)
+
+
+def _reportlab_paragraphs(
+    pack: EvidencePack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> list[str]:
+    """Render ``pack`` with reportlab and return the markup of every paragraph."""
+    from reportlab.platypus import Paragraph
+
+    texts: list[str] = []
+
+    def _recording(text: str, *args: object, **kwargs: object) -> object:
+        texts.append(text)
+        return Paragraph(text, *args, **kwargs)
+
+    monkeypatch.setattr("sectum_ai.evidence.pdf.Paragraph", _recording)
+    render_audit_pack(pack, tmp_path / "pack.pdf")
+    return texts
+
+
+@pytest.mark.parametrize(
+    ("embedder", "expected"),
+    [
+        ("st:all-mpnet-base-v2", "st:all-mpnet-base-v2"),
+        ("hashing-64", "ranks by shared tokens rather than meaning"),
+        # A configured hash spec is the same kind of instrument; bare, it read as a
+        # model.
+        ("hash-256", "ranks by shared tokens rather than meaning"),
+        (None, None),
+    ],
+)
+def test_both_engines_name_the_geometry_the_rate_was_measured_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, embedder: str | None, expected: str | None
+) -> None:
+    # A rate measured by shared tokens read, in the auditor's PDF, in the same words
+    # as one measured by a production embedding model. Both engines carry the row,
+    # or the two packs of one run state different things about it.
+    pack = _embedder_pack(embedder)
+    html = build_audit_html(pack)
+    reportlab = "\n".join(_reportlab_paragraphs(pack, tmp_path, monkeypatch))
+    if expected is None:
+        assert "Vector-store steps ranked by" not in html
+        assert "Vector-store steps ranked by" not in reportlab
+    else:
+        assert "Vector-store steps ranked by" in html and expected in html
+        assert "Vector-store steps ranked by" in reportlab and expected in reportlab
+
+
+def test_the_recorded_embedder_is_escaped_in_both_engines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack = _embedder_pack("st:<b>forged</b>")
+    assert "<b>forged" not in build_audit_html(pack)
+    texts = _reportlab_paragraphs(pack, tmp_path, monkeypatch)
+    assert not any("<b>forged" in text for text in texts)
+
+
+def test_the_geometry_row_qualifies_whatever_ranked_not_only_the_rate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The record names an embedder only when something ranked over the store - an
+    # erasure's residue scan, Class 3 or 10 - and a lexical ranking is a caveat on
+    # those verdicts too. Gating the row on a Retrieval-Pivot Rate hid it there.
+    pack = _embedder_pack("hashing-64", with_rate=False)
+    assert "Vector-store steps ranked by" in build_audit_html(pack)
+    assert any(
+        "Vector-store steps ranked by" in text
+        for text in _reportlab_paragraphs(pack, tmp_path, monkeypatch)
+    )
+
+
+def test_the_erasure_methodology_does_not_deny_the_vector_stores_embedder() -> None:
+    # With `vector_store.embedder` set, the store embedded the corpus and every
+    # residue query; "this run invoked no embedding model" then contradicted the
+    # summary row of the same signed PDF. Detection is what invoked none.
+    from sectum_ai.evidence.pdf import _DETECTOR_EXACT
+
+    assert "Detection invoked no embedding model" in _DETECTOR_EXACT
+    assert "This run invoked no embedding model" not in _DETECTOR_EXACT

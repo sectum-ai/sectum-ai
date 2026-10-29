@@ -7,6 +7,177 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A real embedding model for the vector slot.** Every live `vector_store` kind
+  takes an optional `embedder` (`st:<model>`, `hash-<dim>`, `openai:<model>`,
+  `cohere:<model>`, `voyage:<model>`, `bedrock:<model>`): a store Sectum creates is
+  created at that model's dimension (a Pinecone index must already exist at it) and
+  the corpus is upserted in its geometry, embedded in batches first. Pinecone,
+  Azure AI Search and Qdrant split the write into several requests wherever one
+  would pass the service's documented per-request cap (Qdrant's at its 32 MB
+  default; Pinecone's and Azure's 1000 records too): at 384 dimensions a default
+  500-document tenant corpus computes to about 4 MB, twice Pinecone's 2 MB. Until now every
+  live store ranked with a 64-dimension hashing embedder, so the Class 2
+  Retrieval-Pivot Rate against a real store was measured by shared tokens, not
+  meaning. The default is unchanged. `semantic_retrieval` stays withheld from live
+  stores, so Classes 6 and 13 still read `NOT_COVERED`. A hosted spec sends the
+  synthetic corpus to its provider - and, in `erasure --subject`, the data
+  subject's real `vector_db` fingerprint text, which the CLI warns about; `local`
+  mode refuses a hosted embedder.
+- **`RunResult.vector_embedder`** records the geometry the vector slot's store
+  ranked in (`hashing-64`, the configured spec - a hash spec by its dim - or
+  `null` for the built-in fake or
+  a run in which nothing is known to have ranked by similarity over the store -
+  a live RAG pipeline alone may or may not read it), on both `probe` and
+  `erasure` records. The scorecard's Class 2, 3 and 10 headlines name it too
+  (Class 6 never runs against a live store).
+  Schema **0.8.0**. Both audit-PDF engines name it in the summary, as do
+  `probe`'s text and JSON summaries.
+- **`[EMBEDDER CHANGED]`** — `diff` and `baseline --compare` gate on two runs whose
+  vector stores ranked in different embedding geometries, and mark the metrics of
+  the probes that rank by similarity over the vector store — and its erasure
+  counts — as not measured: those were taken with different instruments, so one that
+  fell across the swap is not a fix. So is the pipeline-end bleed probe's on a
+  live pipeline, which may read the store the run seeded - withheld, never named
+  as ranked in it (a run fed by a live pipeline alone records no geometry, so a
+  swap is not detected where either run is such a run); a by-id fetch (Class 1), the
+  built-in pipeline and metrics off the vector surface still compare, and the
+  banner names only what ranked, or may have ranked, over the store in those runs.
+  `diff --output json` carries it as `embedder_changed` (`[earlier, later]`, or
+  `null`), `embedder_scoped`, and `embedder_changed_note` (each side's hashing
+  caveat, as `probe`'s `vector_embedder_note`, or `null`).
+
+### Changed
+
+- **`probe` loads the vector store's corpus only when a probe reads the store** -
+  a vector probe, or a live RAG pipeline (which may read that store, and is kept
+  only if the canary comes back from it; the built-in one ranks over its own
+  index). A suite of cache or
+  memory probes, or the built-in pipeline alone, embedded the whole corpus -
+  with a hosted `embedder`, sent and billed - for nothing measured.
+- **A config error no longer echoes the config.** `load_config` printed
+  pydantic's own text, which carries each error's input - for a whole-config
+  check, the whole config, an inline `api_key` included - to stderr and CI logs.
+  It now prints each error's location and message only. A YAML error gives
+  PyYAML's fixed phrase where it quotes nothing, else its class, with the line and
+  column where PyYAML gives one (a bad tagged value's constructor gives none) -
+  never the quoted line or token; every parse failure is typed, where a
+  bad `!!bool` / `!!int` / timestamp or deep nesting escaped as a raw traceback
+  quoting the value; and a file that is not UTF-8 says so. The `mem0` gate names
+  a block it cannot read by its shape, never its contents.
+- **A `hash-<dim>` spec takes ASCII digits only.** Python's `int` also read
+  `hash- 64`, `hash-6_4`, `hash-+64` and other scripts' digits as `hash-64`, so
+  those spellings validated; they are now refused as malformed, as the caption
+  that names a hashing geometry already read them.
+- **SDK contracts.** `resolve_embedding_model` validates its spec: it raises
+  `ConfigError` for an unknown or malformed one (an unknown spec returned `None`,
+  which only `fake-*` recall names still do; `openai:` built a client) and
+  `AdapterError` when a provider library fails to load the model.
+  `VectorStoreAdapter` gains `embedder_name` - which the CLI's resolver sets on
+  every live store it builds (`hashing-64` without an `embedder`), leaving `None`
+  for the built-in fake, the `app` adapter, or a store built outside it - and
+  `embedder_bridge`, set only when an `embedder` is configured. `RunDiff` gains
+  `embedder_changed` and `embedder_scoped` (the probes either run exercised whose
+  results the swap may have moved, which its `[not measured]` is scoped to), and
+  `RunDiff.regressed` is true on an embedder swap. `Runner.steps_to_send(probe)`
+  returns the steps `run_per_step` will send, after its user-scope drops, and
+  `sectum_ai.probes.vector_residue_queries(substrate, target)` the texts the
+  erasure probe's vector scan queries, which the CLI registers as queries;
+  `ErasureProbe.run` takes `unseeded` (surface -> why), recording each as not
+  established instead of scanning or erasing it. New
+  public helpers: `sectum_ai.embeddings` (`EmbedderBridge`, `call_embedder`,
+  `embed_batched`, `iter_batches`, `EMBED_BATCH_SIZE`, `embed_queries`, `validate_model_spec`,
+  `canonical_embedding_spec`, `is_hosted_embedding_spec`,
+  `LOCAL_EMBEDDING_PREFIXES`), `sectum_ai.spec` (`HASHING_EMBEDDER_NAME`,
+  `describe_vector_embedder`, `is_hashing_embedder` - a well-formed hash spec
+  only, by `hash_spec_dim`, the one parser `diff` and config validation use too -
+  and `vector_embedder_note`), `sectum_ai.config`
+  (`refuse_hosted_embeddings` - which any new command that embeds specs from a
+  flag or a substrate must call), `sectum_ai.score.GEOMETRY_PROBES` and
+  `sectum_ai.spec.ERASURE_WORKFLOW_IDS` (now the one definition the CLI, `diff`
+  and the evidence package read).
+- **`probe` checks and runs the embedding-model gradient before its suite.** The
+  seeded `embedding_models` are validated before anything else: an unknown name was
+  silently treated as a `fake-*` recall name. And the gradient - which builds its
+  own index from the substrate and never touches the stack - runs right after the
+  adapters are built: an unloadable model, or a provider failing mid-sweep (a
+  revoked key, a quota), failed only after every probe had run against the stack,
+  with no record written. Its warnings still print beside the run summary. A
+  comparison needs two or more *distinct* models: a spec listed twice, or a hash
+  spec spelled two ways, is one model, so no gradient - and a recorded gradient is keyed by each
+  model's canonical spelling (`hash:32` is `hash-32`), as `vector_embedder` is.
+
+### Fixed
+
+- **A store that refuses the corpus is a typed error.** Re-pointing a live store
+  at another `embedder` leaves the index an earlier run created at the old
+  dimension, and the backend's own exception escaped `probe` and `erasure` as a
+  raw traceback (exit 1). `probe` now stops with an adapter error (exit 3)
+  naming only the exception's type, with a hint that the index's dimension may
+  have changed on a live store. `erasure` contains it like every other surface.
+  It embeds and loads the target's corpus first, then - on a shared index only,
+  where they crowd the target's residue page as a production index would - the
+  other tenants'. If the target's corpus is refused (in full or part-way), or on
+  a shared index the others' that crowd it, `vector_db` is recorded as not
+  seeded, with which load failed, rather than scanned over a partial load: it
+  reads NOT_COVERED and the run cannot attest it, the other surfaces keeping
+  their verdicts. In that case Sectum also asks the store to delete what of the
+  target's corpus landed, as cleanup; the warning says a soft-deleting store may
+  keep it, or that the delete failed. A failed corpus prefetch is a warning, the
+  corpus embedding on demand. The erasure PDF says that where the vector store
+  is read through similarity queries, whether a marker surfaces depends on its
+  ranking. A canary write refused part-way on another surface now warns that the
+  surface is attested over the target's canaries that landed, not that it reads
+  NOT_COVERED beside an ERASED verdict.
+- **`detection.mode: local` failed open on `scenario.embedding_models`.** The
+  local-mode gate covered only the detection embedder and judge, on the premise
+  that detection is the only stage that embeds tenant content; the Class 2 sweep
+  embeds the whole corpus and an `openai:`/`cohere:`/`voyage:`/`bedrock:` entry
+  passed silently. `local` mode now refuses a hosted spec there and on the new
+  `vector_store.embedder` — and wherever else one arrives: a `seed
+  --embedding-model` or `calibrate --embedder` override, and the list `probe`
+  actually sweeps, which is the one fixed into the substrate at seed time rather
+  than the config's. A `mem0` memory adapter is refused too unless its embedder
+  (which mem0 defaults to OpenAI, and which embeds every write) is ollama, lmstudio,
+  huggingface, or openai with an explicit `openai_base_url` - and, with a graph
+  store configured, every LLM block mem0 might use (`llm` and `graph_store.llm`) is
+  ollama, lmstudio or vllm - and its vector store is on an allow-list of stores known
+  to keep the vectors mem0 gives them rather than embed server-side (not
+  `langchain`, `baidu` or a newer store such as `databricks`; `upstash_vector` only
+  without `enable_embeddings`). Sectum stores memory verbatim, so mem0's LLM runs for
+  nothing else; and mem0 pairs one LLM block's provider with the other's config, so
+  a graph LLM gets no base-URL allowance. A block the gate cannot read is refused as
+  unclassifiable. mem0 also posts its own usage telemetry (run metadata, not tenant
+  content) to its PostHog project unless `MEM0_TELEMETRY` is false, so `local` mode
+  refuses a mem0 memory until it is set to `False`. An embedding spec counts as local only by an allow-list
+  (`st:`, `hash-` / `hash:`, `fake` / `fake-`), so a provider added later is
+  refused until classified.
+- **Asymmetric embedding models embedded probe queries as documents.** Cohere,
+  Voyage and Cohere-on-Bedrock embed queries and documents into different halves
+  of their space, and every call used document mode, so the Class 2 sweep ranked
+  its queries lower against the corpus than a production store would and
+  under-reported the per-model gradient. Queries now use `search_query` / `query`,
+  in the sweep, for the suite's planned queries against a live store, and for
+  both erasure modes' queries (the canary scan's document titles, a subject's
+  fingerprints). An `st:` model whose
+  sentence-transformers config ships query and document prompts is encoded with
+  them; checkpoints that document their prefixes only in the model card (many e5
+  and BGE ones) ship none and are encoded without.
+- **`calibrate --embedder` resolved its override without validating it.** In hosted
+  mode `openai:` built a client with an empty model name and sent the labeled set to
+  OpenAI. The override is now validated in every mode: a malformed spec, or a sweep's
+  `fake-*` recall name, exits 3 with the reason.
+- **The Class 2 sweep sent an OpenAI model the whole corpus in one request**, and
+  OpenAI rejects more than 2,048 inputs, so a gradient over a corpus past 512
+  documents per tenant failed outright. Every model is now sent at most 64 texts
+  per request (Titan still takes one per call).
+- **Provider failures in the Class 2 sweep and `calibrate`** escaped as a raw
+  traceback and exit 1, with an SDK message that can echo part of the API key;
+  every provider call — and loading a provider's model, such as a misspelled
+  `st:` name or a `bedrock:` model with no region — now fails as a typed adapter
+  error (exit 3) naming only the exception type.
+
 ## [0.12.0] - 2026-10-29
 
 ### Added

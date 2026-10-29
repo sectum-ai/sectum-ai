@@ -5,6 +5,7 @@ generation produces them and nothing mutates them afterwards, which keeps the
 reproducibility contract (the engineering spec, section 6.5) easy to reason about.
 """
 
+import re
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
@@ -34,7 +35,7 @@ from sectum_ai.spec.enums import (
     SurfaceProvenance,
 )
 
-SCHEMA_VERSION = "0.7.0"
+SCHEMA_VERSION = "0.8.0"
 """Version stamped onto every aggregate model; bumped on any schema change.
 
 The blocks below are the schema changes that carried an anti-over-claim
@@ -60,6 +61,13 @@ signed evidence, and the interval is the anti-over-claim guarantee for the
 flagship metric: a small-``n`` rate can never read as a precise point estimate.
 
 (newest first)
+
+0.8.0 — :class:`RunResult` records ``vector_embedder``: the embedding geometry the
+vector slot's store was driven with. A Retrieval-Pivot Rate is a property of the
+geometry it was measured in, and the vector slot can now be driven by a real
+model rather than only the deterministic hashing embedder. Without this field a
+signed pack could not say which geometry its headline came from, and a reader
+comparing two packs could not tell an embedder swap from any other change.
 
 0.7.0 — :class:`RunMetrics` records ``user_steps_dropped`` (probe id -> count):
 the user-level steps the runner did not run because the adapter cannot carry a
@@ -507,6 +515,77 @@ class DetectionProvenance(SectumModel):
     """The RESOLVED similarity gate - the number that ran, never the literal "auto"."""
 
 
+HASHING_EMBEDDER_NAME = "hashing-64"
+"""``RunResult.vector_embedder`` for a live store on the built-in hashing embedder.
+
+Shared so the CLI that records it and the renderers that explain it cannot drift.
+"""
+
+ERASURE_WORKFLOW_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
+"""The erasure workflows' probe ids: the records `erasure` and `erasure --subject` write.
+
+Control checks, not isolation probes. Here rather than on the probes because the
+evidence package sits below them (ADR-0004); a test holds it to the probes' own
+declarations.
+"""
+
+
+def is_hashing_embedder(name: str) -> bool:
+    """Whether ``name`` is a hashing embedder: the default, or a ``hash-<dim>`` spec.
+
+    Either ranks by shared tokens rather than meaning, so every renderer that
+    names one has to say so - a bare ``hash-256`` reads as an embedding model. Only
+    a well-formed spec: a record ``diff`` did not write may carry any string, and
+    the caveat asserts what the geometry is.
+    """
+    return name == HASHING_EMBEDDER_NAME or hash_spec_dim(name) is not None
+
+
+def hash_spec_dim(name: str) -> int | None:
+    """The dimension of a well-formed ``hash-<dim>`` / ``hash:<dim>`` spec, or ``None``.
+
+    The one parser behind validating a spec, merging its spellings and captioning
+    it: ASCII digits only (``int`` alone also takes ``6_4``, `` 64`` and other
+    scripts' digits), a positive value, and within ``int``'s digit limit.
+    """
+    match = re.fullmatch(r"hash[-:]([0-9]+)", name)
+    if match is None:
+        return None
+    try:
+        dim = int(match.group(1))
+    except ValueError:
+        return None
+    return dim if dim > 0 else None
+
+
+def vector_embedder_note(name: str | None) -> str | None:
+    """The caveat a JSON surface carries beside a recorded geometry, or ``None``.
+
+    :func:`describe_vector_embedder` for a hashing geometry, whose name alone reads
+    as an embedding model; ``None`` otherwise. One rule for ``probe``'s and
+    ``diff``'s JSON.
+    """
+    if name is None or not is_hashing_embedder(name):
+        return None
+    return describe_vector_embedder(name)
+
+
+def describe_vector_embedder(name: str) -> str:
+    """``name`` as every renderer shows it: with its caveat, in one wording.
+
+    The scorecard, the probe summary, both PDF engines and the diff/baseline
+    ``[EMBEDDER CHANGED]`` banner and JSON all call this, so the artifacts an
+    auditor compares cannot describe one geometry several ways. The banner gives
+    it a sentence of its own; keep it one.
+    """
+    if not is_hashing_embedder(name):
+        return name
+    caveat = "a deterministic hashing embedder, which ranks by shared tokens rather than meaning"
+    if name == HASHING_EMBEDDER_NAME:
+        return f"{name} - {caveat}; no embedding model was configured for the vector store"
+    return f"{name} - {caveat}"
+
+
 class RunResult(SectumModel):
     """The canonical record of one probe run (the engineering spec, section 9)."""
 
@@ -533,6 +612,19 @@ class RunResult(SectumModel):
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     detection: DetectionProvenance | None = None
     """Which detector graded this run, or ``None`` where no detector ran."""
+    vector_embedder: str | None = None
+    """The embedding geometry the vector slot's store was driven with.
+
+    ``hashing-64`` for the built-in deterministic default, the configured spec
+    (``st:all-mpnet-base-v2``) for a real model - a hash spec by its dim, so
+    ``hash:128`` is recorded ``hash-128`` - and ``None`` where the record does
+    not say - a pre-0.8.0 record, a run whose vector slot was the built-in fake, or
+    a run in which nothing is known to have ranked by similarity over the store (a
+    live RAG pipeline alone may or may not read it; a narrowed suite of
+    by-id fetches, an erasure scoped away from the vector surface). Independent of
+    ``detection``: that is the model Sectum GRADES with, this is the geometry the
+    customer's store RANKS in.
+    """
     schema_version: str = SCHEMA_VERSION
 
     @field_validator("surface_provenance")

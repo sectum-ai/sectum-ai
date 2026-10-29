@@ -299,3 +299,122 @@ def test_validate_embedding_spec_rejects_a_non_positive_hash_dim() -> None:
     for bad in ("hash-0", "hash--3"):
         with pytest.raises(ConfigError):
             validate_embedding_spec(bad)
+
+
+def test_asymmetric_providers_embed_queries_in_query_mode() -> None:
+    # Cohere, Voyage and Cohere-on-Bedrock embed a query and a document into
+    # different halves of the space. A probe query embedded as a document ranks
+    # lower against the corpus than the customer's store would rank it, so the
+    # measured Retrieval-Pivot Rate under-reports.
+    import json
+    from types import SimpleNamespace
+
+    from sectum_ai.embeddings import BedrockEmbedding, CohereEmbedding, VoyageEmbedding
+
+    modes: list[str] = []
+
+    class _Client:
+        def embed(self, *args: object, input_type: str, **_: object) -> object:
+            modes.append(input_type)
+            return SimpleNamespace(embeddings=[[1.0]])
+
+        def invoke_model(self, *, body: str, **_: object) -> dict[str, Any]:
+            modes.append(json.loads(body)["input_type"])
+            return _bedrock_body({"embeddings": [[1.0]]})
+
+    cohere = CohereEmbedding.__new__(CohereEmbedding)
+    cohere._model, cohere._client = "embed-english-v3.0", _Client()
+    voyage = VoyageEmbedding.__new__(VoyageEmbedding)
+    voyage._model, voyage._client = "voyage-3", _Client()
+    bedrock = BedrockEmbedding.__new__(BedrockEmbedding)
+    bedrock._model, bedrock._is_cohere, bedrock._client = "cohere.embed-v3", True, _Client()
+    for model in (cohere, voyage, bedrock):
+        model.embed(["a document"])
+        model.embed_queries(["a query"])
+    assert modes == [
+        "search_document",
+        "search_query",
+        "document",
+        "query",
+        "search_document",
+        "search_query",
+    ]
+
+
+def test_the_provider_sweep_embeds_its_queries_in_query_mode() -> None:
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _Asymmetric(HashingEmbedding):
+        def __init__(self, name: str, dim: int) -> None:
+            super().__init__(name, dim=dim)
+            self.query_calls = 0
+
+        def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            self.query_calls += 1
+            return self.embed(texts)
+
+    models = [_Asymmetric("hash-32", 32), _Asymmetric("hash-64", 64)]
+    embedding_provider_sweep(substrate, models)
+    assert [model.query_calls for model in models] == [1, 1]
+
+
+class _Revoked(HashingEmbedding):
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("Incorrect API key provided: " + "sk-" + "proj-abc123")
+
+
+def test_every_provider_call_path_maps_sdk_failures_to_a_typed_error() -> None:
+    # The vector slot's bridge mapped them; the Class 2 sweep and `calibrate`
+    # called the same providers raw - a traceback, exit 1, and an SDK message that
+    # can echo part of the key.
+    from sectum_ai.cli.app import _BatchToSingleEmbedder
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    revoked = _Revoked("hash-16", dim=16)
+    with pytest.raises(AdapterError) as swept:
+        embedding_provider_sweep(substrate, [revoked, HashingEmbedding("hash-32", dim=32)])
+    with pytest.raises(AdapterError) as calibrated:
+        _BatchToSingleEmbedder(revoked).embed("an observation")
+    for caught in (swept, calibrated):
+        assert "sk-proj" not in str(caught.value)
+
+
+class _Short(HashingEmbedding):
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return []
+
+
+def test_a_short_provider_response_is_a_typed_error_on_every_path() -> None:
+    # A degraded response with fewer vectors than texts surfaced as a raw IndexError
+    # in `calibrate` and a strict-zip ValueError in the sweep.
+    from sectum_ai.cli.app import _BatchToSingleEmbedder
+    from sectum_ai.spec import AdapterError
+
+    substrate = build_substrate(default_scenario(seed=2026))
+    with pytest.raises(AdapterError, match="returned 0 vectors"):
+        _BatchToSingleEmbedder(_Short("hash-16", dim=16)).embed("an observation")
+    with pytest.raises(AdapterError, match="returned 0 vectors"):
+        embedding_provider_sweep(
+            substrate, [_Short("hash-16", dim=16), HashingEmbedding("hash-32", dim=32)]
+        )
+
+
+def test_the_provider_sweep_batches_its_requests() -> None:
+    # The whole corpus went to the provider as one request; OpenAI rejects more than
+    # 2,048 inputs, so a large corpus failed the gradient outright.
+    substrate = build_substrate(default_scenario(seed=2026))
+
+    class _Counting(HashingEmbedding):
+        def __init__(self, name: str, dim: int) -> None:
+            super().__init__(name, dim=dim)
+            self.sizes: list[int] = []
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            self.sizes.append(len(texts))
+            return super().embed(texts)
+
+    models = [_Counting("hash-32", 32), _Counting("hash-64", 64)]
+    embedding_provider_sweep(substrate, models)
+    assert len(substrate.documents) > 64
+    assert max(models[0].sizes) == 64

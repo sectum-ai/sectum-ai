@@ -18,22 +18,21 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from sectum_ai.evidence.chain import run_digest
-from sectum_ai.evidence.controls import (
-    _ERASURE_PROBE_IDS,
-    COVERAGE_DISCLAIMER,
-    live_surfaces,
-)
+from sectum_ai.evidence.controls import COVERAGE_DISCLAIMER, live_surfaces
 from sectum_ai.evidence.intoto import _is_external_timestamp_anchor
 from sectum_ai.evidence.labels import backing_surface, leak_label, unaccounted_surfaces
 from sectum_ai.spec import (
     ERASURE_SURFACES,
+    ERASURE_WORKFLOW_IDS,
     ControlMapping,
     CoverageVerdict,
     EvidencePack,
     Finding,
     FindingStatus,
     RunResult,
+    Surface,
     SurfaceProvenance,
+    describe_vector_embedder,
     rate_from_counts,
     sha256_hex,
     wilson_interval,
@@ -294,8 +293,9 @@ _DETECTOR_TAIL = (
 # Which tiers ran is a property of the RUN, not of the product. Stated
 # unconditionally, this paragraph promised an auditor "semantic similarity, then
 # a calibrated judge" over three kinds of run that had neither: an `erasure`
-# attestation, whose probe matches by exact substring and invokes no provider at
-# all; a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
+# attestation, whose probe matches by exact substring and invokes no detection
+# provider (its vector scans query through the store's `embedder`, which is not
+# detection); a default `probe` run, since `sectum-ai init` scaffolds `embedder.kind:
 # fake` and `judge.kind: fake` - an offline hashing vector its own docstring
 # calls "not semantically meaningful beyond lexical overlap", and a token-order
 # string matcher; and a run whose threshold gated the semantic tier shut. The
@@ -309,11 +309,11 @@ _DETECTOR_TAIL = (
 # a chat model.
 _TIER_EMBEDDER = {
     True: (
-        "an OFFLINE similarity stage - this run configured no embedding model, so "
-        "the second tier was Sectum's hashing vector, which measures lexical "
-        "overlap rather than meaning"
+        "an OFFLINE similarity stage - this run configured no detection embedding "
+        "model, so the second tier was Sectum's hashing vector, which measures "
+        "lexical overlap rather than meaning"
     ),
-    False: "semantic similarity against the configured embedding model",
+    False: "semantic similarity against the configured detection embedding model",
 }
 _TIER_JUDGE = {
     True: (
@@ -337,7 +337,7 @@ def _detector_tiers(
     recorded for precisely this ("a pack where the semantic tier was gated shut
     ... was indistinguishable from one where it ran") and no renderer read it, so
     the paragraph was byte-identical at 0.62 and at 1.0 while telling the auditor
-    "then semantic similarity against the configured embedding model".
+    "then semantic similarity against the configured detection embedding model".
     """
     tail = (
         " A paraphrase an offline stage cannot see is not reported as absent - it "
@@ -367,12 +367,37 @@ def _detector_tiers(
     ) + _DETECTOR_TAIL
 
 
-_DETECTOR_EXACT = (
+_DETECTOR_EXACT_HEAD = (
     "Each observation is matched against the ground-truth manifest by exact "
-    "content. This run invoked no embedding model and no judge - the erasure "
+    "content. Detection invoked no embedding model and no judge"
+)
+_DETECTOR_EXACT = (
+    _DETECTOR_EXACT_HEAD + " - the erasure "
     "workflow reads each surface and checks the subject's own markers directly - "
     "so no semantic or adjudicated tier contributed to any verdict here. "
 ) + _DETECTOR_TAIL
+
+
+def _erasure_detector(run: RunResult) -> str:
+    """The erasure detector paragraph, honest about how the vector store is read.
+
+    That surface can be read through top-k similarity queries, so whether a marker
+    surfaces there at all is a ranking - and saying every surface was read directly
+    stood beside a geometry row naming the model that ranked it.
+    """
+    if Surface.VECTOR_DB.value not in run.surface_provenance:
+        return _DETECTOR_EXACT
+    # Where, not that: a subject check of record ids fetches by id, and a store that
+    # could not be seeded was never read. The geometry only where the record names
+    # one: the built-in store ranks by shared tokens, and has none to claim.
+    named = ", in the geometry named above" if run.vector_embedder is not None else ""
+    return (
+        _DETECTOR_EXACT_HEAD + ", so no semantic or adjudicated tier contributed to "
+        "any verdict here. Where the vector store is read through top-k similarity "
+        "queries, though - the canary scan, or a subject's vector fingerprints - "
+        f"whether a marker surfaces there depends on the store's ranking{named}. "
+    ) + _DETECTOR_TAIL
+
 
 # The same sentence, minus the attestation claim. `provenance_statement` already
 # ends "This pack is a demonstration, not an attestation." for an all-synthetic
@@ -645,11 +670,11 @@ def scope_methodology(run: RunResult) -> tuple[str, ...]:
     erasure samples carry it.
     """
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
-    erasure_only = bool(exercised) and not exercised - _ERASURE_PROBE_IDS
+    erasure_only = bool(exercised) and not exercised - ERASURE_WORKFLOW_IDS
     if erasure_only:
         # No detector ran at all, whatever the config says: the erasure workflow
         # never constructs one.
-        detector = _DETECTOR_EXACT
+        detector = _erasure_detector(run)
     elif run.detection is None:
         # A record from before `detection` was recorded. Which tiers ran cannot be
         # read off it, so say only what holds for any run - the manifest-grounding
@@ -766,6 +791,22 @@ def _retrieval_pivot_summary(run: RunResult) -> str | None:
     return f"{metrics.retrieval_pivot_rate:.1%} (asserted by the record; no sample size recorded)"
 
 
+def _vector_embedder_summary(run: RunResult) -> str | None:
+    """Name the embedding geometry the vector store ranked in, or ``None`` if unrecorded.
+
+    The Retrieval-Pivot Rate is a property of that geometry: without this row the
+    auditor's PDF stated a rate measured by shared tokens in the same words as one
+    measured by a production embedding model. The record names an embedder only
+    when something ranked by similarity over the store, so the row qualifies
+    whatever did - the rate, Classes 3 and 10, an erasure's vector residue scan or
+    a subject erasure's fingerprint scan, a lexical one of which is a real caveat
+    on that verdict too. Omitted where the record names none.
+    """
+    if run.vector_embedder is None:
+        return None
+    return describe_vector_embedder(run.vector_embedder)
+
+
 def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     """Render an ``EvidencePack`` to auditor-facing PDF bytes via reportlab.
 
@@ -795,6 +836,9 @@ def _render_reportlab(pack: EvidencePack, anchor: str) -> bytes:
     rpr_line = _retrieval_pivot_summary(run)
     if rpr_line is not None:
         summary.append(("Retrieval-Pivot Rate", rpr_line))
+    embedder_line = _vector_embedder_summary(run)
+    if embedder_line is not None:
+        summary.append(("Vector-store steps ranked by", embedder_line))
     flow += [
         Paragraph(f"<b>{escape(label)}:</b> {escape(value)}", body) for label, value in summary
     ]

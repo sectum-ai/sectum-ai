@@ -9,7 +9,7 @@ import functools
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from sectum_ai.adapters import (
     Adapter,
     AdapterRegistry,
+    Capability,
     FakeAgent,
     FakeAppApi,
     FakeBackup,
@@ -64,11 +65,20 @@ from sectum_ai.config import (
     detection_provenance,
     embedder_model_name,
     load_config,
+    refuse_hosted_embeddings,
     surface_provenance,
     surface_provenance_of,
 )
 from sectum_ai.crypto import load_key_from_env, seal_bytes, unseal_bytes
-from sectum_ai.embeddings import EmbeddingModel, resolve_embedding_model, validate_embedding_spec
+from sectum_ai.embeddings import (
+    EmbeddingModel,
+    call_embedder,
+    canonical_embedding_spec,
+    is_hosted_embedding_spec,
+    resolve_embedding_model,
+    validate_embedding_spec,
+    validate_model_spec,
+)
 from sectum_ai.evidence import (
     PdfEngine,
     RekorTransparencyLog,
@@ -124,6 +134,7 @@ from sectum_ai.probes import (
     confirmed_findings,
     dedupe_findings,
     is_cross_principal,
+    vector_residue_queries,
 )
 from sectum_ai.runner import (
     Runner,
@@ -132,12 +143,14 @@ from sectum_ai.runner import (
     confirmed_sequence_rate,
     retrieval_pivot_counts,
 )
-from sectum_ai.score import PROBE_SURFACES, score_run
+from sectum_ai.score import GEOMETRY_PROBES, PROBE_SURFACES, score_run
 from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
     SCHEMA_VERSION,
     AdapterError,
     ClassVerdict,
     ConfigError,
+    CorpusDocument,
     EvidenceError,
     EvidencePack,
     Finding,
@@ -153,9 +166,11 @@ from sectum_ai.spec import (
     SurfaceProvenance,
     canonical_hash,
     configure_logging,
+    describe_vector_embedder,
     residual_present,
     sha256_hex,
     untrusted,
+    vector_embedder_note,
     wilson_interval,
 )
 from sectum_ai.substrate import build_substrate, default_scenario
@@ -217,7 +232,11 @@ def _build_suite(providers: DetectionProviders) -> tuple[Probe, ...]:
 
 
 def _skip_unseedable(
-    suite: tuple[Probe, ...], bundle: AdapterBundle, substrate: Substrate
+    suite: tuple[Probe, ...],
+    bundle: AdapterBundle,
+    substrate: Substrate,
+    *,
+    vector_loaded: bool = True,
 ) -> tuple[tuple[Probe, ...], list[tuple[str, str]]]:
     """Drop probes whose canary this stack has no way to receive.
 
@@ -240,18 +259,18 @@ def _skip_unseedable(
     rather than assumed - a same-tenant read for a marker the seeding placed. What
     comes back decides it, which is `_plant_landed`'s rule one layer out.
 
-    The fourth slot is the VECTOR STORE, and it was the one this guard did not
-    ask - the slot the most classes stand on. `upsert` IS a write primitive, so
-    the corpus is loaded into a live store unconditionally; nothing then read it
-    back. A store that acknowledges the bulk load and serves none of it - a
-    quota, the wrong namespace, a read-side ACL, an index that never settles;
-    `pinecone.upsert` settles on the last id of a batch only and `weaviate.upsert`
-    settles not at all - left Classes 1, 2, 6 and 10 querying an empty index and
-    grading **PASS** off it, with `0.0% reconstruction` and `0.0% extraction
-    efficiency` printed as measurements. The planting probes (3, 4, 8, 9) were
-    guarded all along, because their bait is a `ProbeStep` that `_plant_landed`
-    reads back; the corpus is a direct adapter call, which `_plant_landed` never
-    sees.
+    The fourth slot is the VECTOR STORE, and it was the one this guard did not ask -
+    the slot the most classes stand on. `upsert` IS a write primitive, so the corpus
+    is loaded into a live store whenever a probe reads it (a vector probe, or a live
+    RAG pipeline); nothing then read it back. A store that acknowledges the bulk
+    load and serves none of it - a quota, the wrong namespace, a read-side ACL, an
+    index that never settles; `pinecone.upsert` settles on the last id of a batch
+    only and `weaviate.upsert` settles not at all - left Classes 1, 2, 6 and 10
+    querying an empty index and grading **PASS** off it, with `0.0% reconstruction`
+    and `0.0% extraction efficiency` printed as measurements. The planting probes
+    (3, 4, 8, 9) were guarded all along, because their bait is a `ProbeStep` that
+    `_plant_landed` reads back; the corpus is a direct adapter call, which
+    `_plant_landed` never sees.
 
     Asked with ``fetch``, not ``query``: a by-id read answers "did it land"
     without depending on ranking, and a store whose ranking is weak is already
@@ -285,7 +304,9 @@ def _skip_unseedable(
         if bundle.agent is not None and not bundle.agent.synthetic:
             reachable["agent"] = False
     vector = bundle.vector
-    if vector is not None and not vector.synthetic:
+    # Asked only of a store this run loaded: unloaded, every fetch is a certain
+    # miss, and nothing in the suite reads it anyway.
+    if vector is not None and not vector.synthetic and vector_loaded:
         # One document per tenant, not every document: this asks whether the
         # corpus landed, and 2000 misses against a live store is a stall, not a
         # better answer.
@@ -391,6 +412,7 @@ workdir: .sectum-ai
 adapters:
   vector_store:
     kind: fake  # fake|pgvector|chroma|weaviate|pinecone|qdrant|milvus|opensearch|azure-search
+    # embedder: st:all-mpnet-base-v2  # a live kind: the model your production index uses
     shared_index: true       # demo leak: one index serves every tenant
     # dsn_env: SECTUM_PGVECTOR_DSN
   cache:
@@ -453,9 +475,20 @@ detection:
   # per-model preset for the embedder above (run `sectum-ai calibrate` to derive
   # one for your model). Raise it once a real embedding model is configured.
   semantic_threshold: 0.62  # 0.62 | <float> | auto
-  # Deployment mode. "local" is the BYOC "no data leaves the box" guarantee: it
-  # fails fast if any embedder/judge above would call a hosted AI API (use `fake`,
-  # or set a local `base_url`). "hosted" (default) places no egress restriction.
+  # Deployment mode. "local" is the BYOC guarantee that Sectum's own stages send no
+  # tenant content to a third-party AI service: it
+  # fails fast if the embedder/judge above would call a hosted AI API (use `fake`,
+  # or set a local `base_url`), and likewise a hosted vector_store `embedder` or
+  # scenario embedding_models entry (use `st:` or `hash-`), or a mem0 memory whose
+  # embedder is not ollama, lmstudio, huggingface or base-URL-pointed openai; with a
+  # graph store, whose llm or graph_store.llm is not ollama, lmstudio or vllm (no
+  # llm block means openai); or whose vector_store is not known to leave embedding
+  # to mem0 (an allow-list of most mem0 0.1.116 stores: not langchain or baidu, nor a
+  # newer store such as databricks, nor upstash_vector with enable_embeddings); or any mem0 memory
+  # while mem0's own usage telemetry is on (set MEM0_TELEMETRY=False).
+  # Adapters you point it at are the system under test and receive the synthetic
+  # data by design.
+  # "hosted" (default) places no egress restriction.
   mode: hosted             # hosted | local
 """
 
@@ -657,9 +690,6 @@ def _refuse_other_schema_line(recorded: object, what: str) -> None:
         )
 
 
-_ERASURE_WORKFLOW_IDS = frozenset({ErasureProbe.id, SubjectErasureProbe.id})
-
-
 def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
     """Refuse a record whose headline counts disagree with its own findings.
 
@@ -724,7 +754,7 @@ def _refuse_self_contradicting_record(run: RunResult, what: str) -> None:
         )
     counted = _per_probe_counts(confirmed)
     recorded_counts = run.metrics.per_probe_findings
-    erasure_only = not recorded_counts and set(counted) <= _ERASURE_WORKFLOW_IDS
+    erasure_only = not recorded_counts and set(counted) <= ERASURE_WORKFLOW_IDS
     disagreeing = (
         []
         if erasure_only
@@ -774,7 +804,11 @@ def _per_probe_counts(findings: list[Finding]) -> dict[str, int]:
     return counts
 
 
-def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str, float]:
+def _per_model_rpr(
+    substrate: Substrate,
+    vector: VectorStoreAdapter,
+    warn: Callable[[str], None] | None = None,
+) -> dict[str, float]:
     """Per-embedding-model retrieval gradient for the run, or ``{}`` if not applicable.
 
     NOT a measurement of the configured vector store. Both sweeps retrieve from
@@ -796,38 +830,51 @@ def _per_model_rpr(substrate: Substrate, vector: VectorStoreAdapter) -> dict[str
     numbers mean nothing outside the in-memory ``FakeVectorStore`` and are therefore
     omitted from a live run's evidence.
     """
+    say = warn if warn is not None else functools.partial(typer.echo, err=True)
     names = substrate.scenario.embedding_models
     if len(names) <= 1:
         return {}
-    # Resolve once: a `st:` spec constructs (and may download) a model, so the
-    # earlier two-pass form would have paid that twice.
-    resolved = [(name, resolve_embedding_model(name)) for name in names]
-    real = [model for _, model in resolved if model is not None]
-    modelled_only = [name for name, model in resolved if model is None]
-    if real and modelled_only:
+    # Distinct models, not entries or spellings: a spec listed twice, or spelled
+    # two ways (`hash:32` / `hash-32`), is one model, and a "gradient" over it is
+    # the one-model comparison refused below.
+    # Keyed by that spelling too, as `vector_embedder` is.
+    distinct = list(dict.fromkeys(canonical_embedding_spec(name) for name in names))
+    real_names = [name for name in distinct if not name.startswith("fake-")]
+    modelled_only = [name for name in distinct if name.startswith("fake-")]
+    if real_names and modelled_only:
         # Dropping these was silent: an operator who configured 3 models could be
         # shown a 2-model gradient with nothing saying the third was excluded.
-        typer.echo(
+        say(
             f"warning: {', '.join(untrusted(name) for name in modelled_only)} "
             "excluded from the embedding-model gradient - fake-* names carry a "
             "modelled recall, not real vectors, so they cannot be compared "
-            "against a real provider",
-            err=True,
+            "against a real provider"
         )
-    if len(real) > 1:
-        return embedding_provider_sweep(substrate, real)
-    if real:
+    if len(real_names) > 1:
+        models: list[EmbeddingModel] = []
+        for name in real_names:
+            model = resolve_embedding_model(name)
+            assert model is not None  # every validated non-fake spec resolves to a model
+            models.append(model)
+        return embedding_provider_sweep(substrate, models)
+    if real_names:
         # One real model is not a gradient. Emitting it produced a single-entry
         # "comparison" from a config that asked for several.
-        typer.echo(
+        say(
             "warning: no embedding-model gradient recorded - a comparison needs "
-            "two or more real embedding models, and only one was configured",
-            err=True,
+            "two or more distinct real embedding models, and the list names only one"
         )
         return {}
-    if isinstance(vector, FakeVectorStore):
-        return embedding_model_sweep(substrate, names)
-    return {}
+    if not isinstance(vector, FakeVectorStore):
+        return {}
+    if len(modelled_only) < 2:
+        # The same rule for the recall illustration: one fake listed twice is one.
+        say(
+            "warning: no embedding-model gradient recorded - a comparison needs "
+            "two or more distinct models, and the list names only one"
+        )
+        return {}
+    return embedding_model_sweep(substrate, tuple(modelled_only))
 
 
 def _format_rpr(metrics: RunMetrics) -> str:
@@ -916,7 +963,8 @@ def seed(
             "--embedding-model",
             help=(
                 "Embedding model for the Class 2 per-model sweep; repeat for two or "
-                "more to record a per-model Retrieval-Pivot Rate. Overrides the config. "
+                "more distinct models to record a per-model Retrieval-Pivot Rate. "
+                "Overrides the config. "
                 "Forms: fake-<name>, hash-<dim>, st:<model>, openai:<model>, "
                 "cohere:<model>, voyage:<model>, bedrock:<model>."
             ),
@@ -930,6 +978,7 @@ def seed(
     if embedding_model:
         for spec in embedding_model:
             validate_embedding_spec(spec)  # ConfigError -> exit 3
+        refuse_hosted_embeddings(loaded, embedding_model, "--embedding-model")
         embedding_models = tuple(embedding_model)
     else:
         embedding_models = loaded.scenario.embedding_models
@@ -997,6 +1046,15 @@ def probe(
     loaded = load_config(config) if config is not None else _DEMO_CONFIG
     effective_workdir = workdir if workdir is not None else loaded.workdir
     substrate = _load_substrate(effective_workdir, _resolve_manifest_key(loaded.security))
+    # Validated before anything runs, in every mode, so an unknown name is refused
+    # before the adapters are built or the sweep runs.
+    for model_spec in substrate.scenario.embedding_models:
+        validate_embedding_spec(model_spec)
+    # The sweep embeds the list fixed into the substrate at seed time, not the
+    # config's - so a substrate seeded with hosted models passed the config's gate.
+    refuse_hosted_embeddings(
+        loaded, substrate.scenario.embedding_models, "the seeded scenario's embedding_models"
+    )
     # The precondition of the whole product, tested as the probes themselves test it. Ask
     # the real question - is any marker foreign to any principal? - rather than a proxy for
     # it. Counting principals was the proxy, and it was wrong twice over: a tenant with one
@@ -1043,6 +1101,15 @@ def probe(
         suite = tuple(instance for instance in suite if instance.id == only)
         run_kv_timing = only == KvCacheTimingProbe.id
     bundle = build_adapters(loaded)
+    # The gradient builds its own index from the substrate and never touches the
+    # stack, so it runs here, before the suite: run at record time, a model that
+    # failed to load or a provider that failed mid-sweep threw away every probe's
+    # measurement, with no record written. After the argument and adapter-config
+    # checks, so a cheap mistake still reports first.
+    # Its warnings are held and printed beside the run summary, where they were
+    # read before: up here they scrolled away above the whole suite.
+    sweep_warnings: list[str] = []
+    per_model_rpr = _per_model_rpr(substrate, bundle.vector, warn=sweep_warnings.append)
     suite, skipped_probes = _skip_inapplicable(suite, bundle)
     for skipped_id, missing_cap in skipped_probes:
         typer.echo(
@@ -1058,9 +1125,19 @@ def probe(
     model = bundle.model
     mcp = bundle.mcp
     memory = bundle.memory
-    for tenant in substrate.tenants:
-        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-        vector.upsert(tenant.tenant_id, documents)
+    # Only when something reads the store: a vector probe, or a LIVE RAG pipeline -
+    # which may read it, and is kept only if the canary comes back from it; the
+    # built-in one ranks over its own index. A suite of cache or memory probes
+    # embedded the whole corpus (with a hosted model, sent and billed) and loaded it
+    # for nothing measured.
+    live_rag = bundle.rag is not None and not bundle.rag.synthetic
+    vector_loaded = any(
+        "vector" in probe.requires_adapters or ("rag" in probe.requires_adapters and live_rag)
+        for probe in suite
+    )
+    if vector_loaded:
+        _prefetch_corpus(vector, substrate.documents)
+        _load_corpus(vector, substrate)
     if isinstance(mcp, FakeMCP):
         for marker in substrate.manifest.markers:
             if marker.marker_type is MarkerType.HARD_CANARY:
@@ -1084,7 +1161,7 @@ def probe(
     # AFTER the seeding, not before: the check asks the backend whether the canary
     # reached it, and asking first answers for an index that has not been written
     # yet - which would skip a pipeline the command does seed.
-    suite, starved_probes = _skip_unseedable(suite, bundle, substrate)
+    suite, starved_probes = _skip_unseedable(suite, bundle, substrate, vector_loaded=vector_loaded)
     for starved_id, reason in starved_probes:
         typer.echo(
             f"skipping {starved_id}: {reason}, so this class is reported NOT_COVERED "
@@ -1103,6 +1180,7 @@ def probe(
         agent=bundle.agent,
     )
 
+    _prefetch_queries(vector, runner, suite)
     started = datetime.now(UTC)
     step_results: list[StepResult] = []
     # A single probe stays serial regardless of --max-concurrency (a pool is only
@@ -1166,6 +1244,8 @@ def probe(
     extraction_steps = _live_only(
         [result for result in step_results if result[0].probe_id == IkeaExtractionProbe.id]
     )
+    for warning in sweep_warnings:
+        typer.echo(warning, err=True)
     run = RunResult(
         run_id=f"run-{substrate.scenario.scenario_id}",
         scenario_hash=canonical_hash(substrate.scenario),
@@ -1232,6 +1312,16 @@ def probe(
         # calibrated judge" - and had nothing to condition it on, while both tiers
         # past the first are off by default.
         detection=detection_provenance(loaded.detection),
+        # The geometry the headline Retrieval-Pivot Rate was measured in. Read off
+        # the store the run actually drove, not the config, so it cannot drift
+        # from what happened - and recorded only when something RANKED over it: a
+        # narrowed suite of by-id fetches or timing measured nothing in any
+        # geometry, and naming one let a swap gate `diff` over unaffected numbers.
+        vector_embedder=(
+            vector.embedder_name
+            if {result[0].probe_id for result in step_results} & GEOMETRY_PROBES
+            else None
+        ),
         metrics=RunMetrics(
             confirmed_findings=len(confirmed),
             retrieval_pivot_rate=rpr_rate,
@@ -1241,7 +1331,7 @@ def probe(
             # Real embedding providers (st:/openai:/hash-) record a genuine
             # per-model gradient for any stack; legacy fake names fall back to the
             # in-memory recall illustration. See _per_model_rpr.
-            retrieval_pivot_rate_by_model=_per_model_rpr(substrate, vector),
+            retrieval_pivot_rate_by_model=per_model_rpr,
             per_probe_findings=_per_probe_counts(confirmed),
             user_steps_dropped=dict(sorted(runner.dropped_user_steps.items())),
             unconfirmed_plants=dict(sorted(runner.unconfirmed_plants.items())),
@@ -1285,6 +1375,10 @@ def probe(
             "probe_count": probe_count,
             "confirmed_findings": len(confirmed),
             "retrieval_pivot_rate": run.metrics.retrieval_pivot_rate,
+            "vector_embedder": run.vector_embedder,
+            # The disclosure the text, the scorecard and both PDFs carry: a hashing
+            # embedder's name alone reads as an embedding model.
+            "vector_embedder_note": vector_embedder_note(run.vector_embedder),
             # The binomial counts and Wilson 95% CI travel with the rate so a CI
             # dashboard can show the rate's uncertainty, not a bare point estimate.
             "retrieval_pivot_n": run.metrics.retrieval_pivot_n,
@@ -1348,6 +1442,13 @@ def probe(
         )
         if run.metrics.retrieval_pivot_rate is not None:
             typer.echo(f"retrieval-pivot rate: {_format_rpr(run.metrics)}")
+        if run.vector_embedder is not None:
+            # The geometry the similarity-ranked numbers were measured in - the rate
+            # above, and the Class 3 and 10 rates below - as the PDF states it.
+            typer.echo(
+                "vector-store steps ranked by: "
+                f"{untrusted(describe_vector_embedder(run.vector_embedder))}"
+            )
         if run.metrics.retrieval_pivot_rate_by_model:
             # Printed under its own heading, NOT as an indented "retrieval-pivot
             # rate [model]" - that read as the measured rate broken down by model,
@@ -1562,6 +1663,127 @@ def _erasure_provenance_lines(
     ]
 
 
+def _prefetch_corpus(store: VectorStoreAdapter, documents: Iterable[CorpusDocument]) -> None:
+    """Batch-embed a corpus before it is upserted, when the store has a real model.
+
+    Every live store embeds ``f"{document.title} {document.content}"`` once per
+    document inside ``upsert``. Against a hosted model that is one network call per
+    document - about 2,000 sequential calls for the default corpus. Embedding the
+    same strings in batches first means ``upsert`` is served from cache. Purely an
+    optimisation: a store that formats its text differently misses the cache and
+    embeds on demand, as a document, which is slower but still correct - and so a
+    failed batch (a rate limit) is said and left to that on-demand path, rather
+    than stopping the run or voiding a verdict ``upsert`` could still reach.
+    """
+    _prefetch_texts(
+        store,
+        (f"{document.title} {document.content}" for document in documents),
+        fallback="the corpus embeds",
+    )
+
+
+def _prefetch_texts(
+    store: VectorStoreAdapter, texts: Iterable[str], *, fallback: str, as_queries: bool = False
+) -> None:
+    """Embed ``texts`` up front through the store's bridge, when it has one.
+
+    A failed prefetch loses nothing the store's own calls cannot redo on demand -
+    registered queries included, since the bridge records them as queries before
+    embedding them - so one rule for its failure: said, and left to that fallback.
+    """
+    bridge = store.embedder_bridge
+    if bridge is None:
+        return
+    try:
+        (bridge.prefetch_queries if as_queries else bridge.prefetch)(texts)
+    except SectumError as error:
+        typer.echo(f"warning: {error}; {fallback} on demand instead", err=True)
+
+
+def _load_corpus(
+    store: VectorStoreAdapter, substrate: Substrate, tenants: Sequence[UUID] | None = None
+) -> None:
+    """Upsert each tenant's corpus, a backend's own failure as a typed error.
+
+    A store whose `embedder` changed keeps the index an earlier run created at the
+    old dimension, and the backend refuses the upsert with its own exception - a
+    raw traceback and exit 1. Named by type only: a backend's message can carry a
+    DSN or key.
+    """
+    order = [tenant.tenant_id for tenant in substrate.tenants] if tenants is None else tenants
+    for tenant_id in order:
+        documents = [doc for doc in substrate.documents if doc.tenant_id == tenant_id]
+        try:
+            store.upsert(tenant_id, documents)
+        except SectumError:
+            raise
+        except Exception as error:
+            # Any live store: its dimension follows the config either way - an
+            # `embedder` added, changed, or removed back to the 64-dim default.
+            hint = (
+                "; if the vector dimension changed since the index was created (an "
+                "`embedder` added, changed or removed), recreate it or use a new one"
+                if not store.synthetic
+                else ""
+            )
+            raise AdapterError(
+                f"the vector store refused the corpus ({type(error).__name__}){hint}"
+            ) from error
+
+
+def _prefetch_queries(store: VectorStoreAdapter, runner: Runner, suite: Iterable[Probe]) -> None:
+    """Embed the suite's vector texts up front: queries as QUERIES, plants in batches.
+
+    Not only an optimisation: the store embeds queries and documents through one
+    callable, so this is how the bridge knows which texts are queries. An
+    asymmetric model (Cohere, Voyage) ranks a query embedded as a document lower
+    than the customer's store would, under-reporting the Retrieval-Pivot Rate.
+    The documents a probe plants mid-run (Class 3's poison) are batched as
+    documents, in the text the runner hands the store (`title` is the doc id).
+    The steps come from the runner itself (:meth:`Runner.steps_to_send`), so the
+    texts are exactly the ones it will send - none it drops, none it re-scopes.
+    """
+    if store.embedder_bridge is None:
+        return
+    steps = [
+        step
+        for probe in suite
+        for step in runner.steps_to_send(probe)
+        if step.action in ("vector.query", "vector.upsert")
+    ]
+    _register_queries(
+        store,
+        (
+            step.payload["query"]
+            for step in steps
+            if step.action == "vector.query" and "query" in step.payload
+        ),
+    )
+    # An optimisation only (an unbatched plant embeds on demand, as a document), so
+    # a failure here must not cost the run what the query registration does not.
+    _prefetch_texts(
+        store,
+        (
+            f"{step.payload['doc_id']} {step.payload['content']}"
+            for step in steps
+            if step.action == "vector.upsert" and {"doc_id", "content"} <= step.payload.keys()
+        ),
+        fallback="planted documents embed",
+    )
+
+
+def _register_queries(store: VectorStoreAdapter, texts: Iterable[str]) -> None:
+    """Embed ``texts`` in QUERY mode up front, when the store has a real model.
+
+    A failure here is not fatal by itself: the texts stay registered as queries, so
+    each embeds on demand, in query mode, where it is asked for. In an erasure that
+    is inside the probe's per-surface containment, which keeps one adapter's failure
+    from costing every other surface its verdict; in `probe` it is at the step, where
+    a failure that persists ends the run as any adapter failure does.
+    """
+    _prefetch_texts(store, texts, fallback="the queries embed", as_queries=True)
+
+
 def _warn_on_synthetic_surfaces(provenance: dict[str, str]) -> None:
     """Tell the operator which surfaces this run never touched for real.
 
@@ -1609,8 +1831,10 @@ def _seed_erasure_surface(
     The seeding runs before the probe, so an exception here aborts the whole
     command - losing every other surface's verdict, which is exactly what
     `_erase_surface`'s containment exists to prevent one step later. A backend
-    that refuses the write leaves its surface unseeded, and unseeded is
-    NOT_COVERED: the probe finds no markers before, so it attests nothing.
+    that refuses the write leaves its surface unseeded: for a marker write the
+    probe then attests it over whatever of the target's canaries did land, and
+    reads it NOT_COVERED if none did. (The vector store's caller hands it to the
+    probe as not seeded instead: a corpus loads in parts.)
     """
     # A surface outside `--scope` is not scanned, not erased and not reported, so
     # writing to it would leave a canary in a live backend nobody comes back for.
@@ -2759,6 +2983,7 @@ def _emit_erasure_attestation(
     started: datetime,
     finished: datetime,
     surface_provenance: dict[str, str],
+    vector_embedder: str | None,
 ) -> None:
     """Build and write the signed erasure attestation for a report, then report it.
 
@@ -2782,6 +3007,13 @@ def _emit_erasure_attestation(
             for surface, provenance in surface_provenance.items()
             if surface in {scanned.surface.value for scanned in report.surfaces}
         },
+        # Scoped like the provenance above: a run that never scanned the vector
+        # surface says nothing about the geometry its store ranks in.
+        vector_embedder=(
+            vector_embedder
+            if Surface.VECTOR_DB in {scanned.surface for scanned in report.surfaces}
+            else None
+        ),
         findings=report.findings,
         metrics=RunMetrics(
             confirmed_findings=len(confirmed_findings(report.findings)),
@@ -3087,7 +3319,8 @@ def erasure(
                 "PII), 'records' mapping an erasure surface (vector_db, semantic_cache, "
                 "tracing, ...) to the subject's record ids, and 'fingerprints' mapping a "
                 "surface (vector_db, model_adapter, agent_memory, search_index) to content "
-                "to probe for (used only to query; hashed in the attestation). Checks each id "
+                "to probe for (used only to query; hashed in the attestation - though a hosted "
+                "vector_store embedder is sent the vector_db fingerprints). Checks each id "
                 "is gone and no content still surfaces after your own deletion ran. A surface "
                 "with neither ids nor fingerprints reads NOT_COVERED. Ignores --scope and "
                 "--soft-delete."
@@ -3139,6 +3372,23 @@ def erasure(
             subject_memory = build_memory(cfg)
         with adapter_config(loaded, "search_index", fake_default) as cfg:
             subject_search = build_search_index(cfg)
+        # The content scan queries the manifest's vector fingerprints - embedded only
+        # once every adapter block has passed its config check, so a typo elsewhere
+        # does not first send the subject's text to a hosted embedder.
+        phrases = manifest.fingerprints.get(Surface.VECTOR_DB, ())
+        hosted = subject_store.embedder_bridge is not None and is_hosted_embedding_spec(
+            subject_store.embedder_bridge.name
+        )
+        if phrases and hosted:
+            # The one path where a hosted embedder receives REAL personal data, not
+            # the synthetic corpus: the subject's own fingerprint text, in the clear.
+            typer.echo(
+                f"warning: the vector fingerprint scan sends the data subject's "
+                f"fingerprint text to {untrusted(subject_store.embedder_bridge.name)}, "
+                "the vector store's embedder, to query the store",
+                err=True,
+            )
+        _register_queries(subject_store, phrases)
         unsupported = [
             surface.value
             for surface in manifest.records
@@ -3225,6 +3475,13 @@ def erasure(
             loaded=loaded,
             started=subject_started,
             finished=subject_finished,
+            # Only a content scan ranks; a by-id `fetch` of the record ids measures
+            # nothing in any geometry.
+            vector_embedder=(
+                subject_store.embedder_name
+                if manifest.fingerprints.get(Surface.VECTOR_DB)
+                else None
+            ),
             surface_provenance=_subject_provenance(
                 subject_store,
                 (
@@ -3277,11 +3534,67 @@ def erasure(
     def _seeds(surface: Surface) -> bool:
         return in_scope is None or surface in in_scope
 
-    if _seeds(Surface.VECTOR_DB):
-        for tenant in substrate.tenants:
-            documents = [doc for doc in substrate.documents if doc.tenant_id == tenant.tenant_id]
-            store.upsert(tenant.tenant_id, documents)
     unseedable: dict[Surface, str] = {}
+
+    def _seed_target() -> None:
+        # The target's corpus first, embedded and loaded, so a refusal there costs no
+        # other tenant's embedding.
+        _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id == target])
+        # The residue scan's own queries, by the probe's own rule.
+        _register_queries(store, vector_residue_queries(substrate, target))
+        _load_corpus(store, substrate, [target])
+
+    # Contained like every other surface. But a corpus loads in parts, and scanned
+    # over a partial load the verdict rested on conditions the run did not set up.
+    # So the surface is handed to the probe as not seeded - recorded unestablished,
+    # NOT_COVERED, never scanned - whatever the clearing below achieves: a
+    # soft-deleting store keeps what it is told to delete. The clearing is cleanup.
+    _seed_erasure_surface(unseedable, Surface.VECTOR_DB, _seed_target, in_scope=in_scope)
+    # The reason names the load that failed, once, for the warning and the record.
+    if Surface.VECTOR_DB in unseedable:
+        unseedable[Surface.VECTOR_DB] = (
+            f"the target's corpus did not load: {unseedable[Surface.VECTOR_DB]}"
+        )
+    # Then the other tenants' - on a shared index only, where they crowd the target's
+    # residue page as a production index would: left out, the verdict came easier
+    # than the stack is, so a refusal there voids the surface too. A per-tenant
+    # store scopes the scan to the target, so there they would be embedded (with a
+    # hosted model, billed) and left in the store for nothing the verdict reads.
+    if (
+        Surface.VECTOR_DB not in unseedable
+        and _seeds(Surface.VECTOR_DB)
+        and store.supports(Capability.SHARED_INDEX)
+    ):
+        others = [tenant.tenant_id for tenant in substrate.tenants if tenant.tenant_id != target]
+
+        def _seed_others() -> None:
+            _prefetch_corpus(store, [doc for doc in substrate.documents if doc.tenant_id != target])
+            _load_corpus(store, substrate, others)
+
+        # The same containment, and so the same rendering of a failure, as the
+        # target's load above; only the reason's prefix differs.
+        crowd: dict[Surface, str] = {}
+        _seed_erasure_surface(crowd, Surface.VECTOR_DB, _seed_others)
+        if Surface.VECTOR_DB in crowd:
+            unseedable[Surface.VECTOR_DB] = (
+                "the other tenants' corpus that crowds the target's on this shared index "
+                f"did not load: {crowd[Surface.VECTOR_DB]}"
+            )
+    # Said in the seeding warning below, beside the refusal it follows: Sectum only
+    # asks for the delete, and a soft-deleting store may keep what it is told to.
+    clearing = ""
+    if Surface.VECTOR_DB in unseedable:
+        try:
+            store.delete(target)
+            clearing = (
+                "Sectum asked the store to delete what of the target's corpus had "
+                "landed; a soft-deleting store may keep it"
+            )
+        except Exception as error:
+            clearing = (
+                f"deleting what of the target's corpus had landed failed too "
+                f"({type(error).__name__}); part of it may remain in the vector store"
+            )
     for marker in substrate.manifest.markers:
         if marker.marker_type is not MarkerType.HARD_CANARY:
             continue
@@ -3369,12 +3682,23 @@ def erasure(
         )
 
     for unseeded, reason in sorted(unseedable.items(), key=lambda item: item[0].value):
-        # Said out loud: an unseeded surface has no markers before, so the probe
-        # attests nothing there and the coverage block reads NOT_COVERED. Silent,
-        # that is indistinguishable from a surface nobody configured.
+        # Said out loud: silent, an unseeded surface is indistinguishable from one
+        # nobody configured. The vector store is handed over as not seeded, so it
+        # reads NOT_COVERED. A marker write is per canary: the target's that landed
+        # are scanned and erased, and the surface is attested over them -
+        # NOT_COVERED only if none did.
+        vector = unseeded is Surface.VECTOR_DB
+        consequence = (
+            "so it is recorded as not seeded and reads NOT_COVERED"
+            if vector
+            else "so that surface is attested only over the target's canaries that "
+            "did land, and reads NOT_COVERED if none did"
+        )
+        what = "vector_db" if vector else f"the {unseeded.value} canary"
+        # The refusal first, then what the cleanup did about it.
         typer.echo(
-            f"warning: could not seed the {unseeded.value} canary, so that surface "
-            f"reads NOT_COVERED rather than erased: {untrusted(reason)}",
+            f"warning: could not seed {what}, {consequence}: {untrusted(reason)}"
+            + (f"; {clearing}" if vector else ""),
             err=True,
         )
     started = datetime.now(UTC)
@@ -3388,7 +3712,17 @@ def erasure(
         search_index=search,
         eval_set=evalset,
         backup=backup,
-    ).run(target, scope=erasure_scope)
+    ).run(
+        target,
+        scope=erasure_scope,
+        # The vector store only: a marker write that partly landed is scanned and
+        # attested over what did, as the seeding warning says.
+        unseeded=(
+            {Surface.VECTOR_DB: unseedable[Surface.VECTOR_DB]}
+            if Surface.VECTOR_DB in unseedable
+            else None
+        ),
+    )
     finished = datetime.now(UTC)
 
     _emit_erasure_attestation(
@@ -3411,6 +3745,8 @@ def erasure(
         started=started,
         finished=finished,
         surface_provenance=provenance,
+        # An unseeded store is reported but nothing ranked over it.
+        vector_embedder=None if Surface.VECTOR_DB in unseedable else store.embedder_name,
     )
 
 
@@ -3448,7 +3784,7 @@ class _BatchToSingleEmbedder:
 
     def embed(self, text: str) -> tuple[float, ...]:
         """Embed a single text by calling the batch model with a one-item list."""
-        return tuple(self._model.embed([text])[0])
+        return tuple(call_embedder(self.name, self._model.embed, [text])[0])
 
 
 def _resolve_calibration_embedder(
@@ -3470,12 +3806,7 @@ def _resolve_calibration_embedder(
         if spec == "fake":
             return FakeEmbeddingProvider(), "fake"
         model = resolve_embedding_model(spec)
-        if model is None:
-            raise ConfigError(
-                f"--embedder {spec!r} does not name a real embedding model; "
-                "use fake, hash-<dim>, st:<model>, openai:<model>, cohere:<model>, "
-                "voyage:<model>, or bedrock:<model>"
-            )
+        assert model is not None  # `calibrate` refused the fake-* recall names already
         return _BatchToSingleEmbedder(model), model.name
     provider = build_embedder(detection_embedder)
     if provider is None:  # kind: fake -> the offline deterministic embedder
@@ -3644,6 +3975,18 @@ def calibrate(
     # config defaults; calibration is a pure function of (seed, embedder) and the
     # substrate it builds, so it writes nothing and needs no prior `seed` run.
     _ = workdir if workdir is not None else loaded.workdir
+    if embedder is not None:
+        # Validated in every mode: resolving `openai:` built a client with an empty
+        # model name and sent the labeled set to the provider. Either refusal names
+        # calibrate's own offline option, which the shared messages cannot know.
+        try:
+            if embedder != "fake":
+                validate_model_spec(embedder)
+            refuse_hosted_embeddings(loaded, [embedder], "--embedder")
+        except ConfigError as error:
+            raise ConfigError(
+                f"{error} (calibrate also accepts --embedder fake, the offline embedder)"
+            ) from error
     provider, model_name = _resolve_calibration_embedder(embedder, loaded.detection.embedder)
     substrate = build_substrate(
         default_scenario(seed=effective_seed, corpus_size=loaded.scenario.corpus_size)
@@ -3686,14 +4029,67 @@ def _delta_range(delta: MetricDelta) -> str:
     return f"{before} -> {after}" + (bound if delta.bounded else "")
 
 
+# In class order, the order the banner names them.
+_GEOMETRY_LABELS: dict[str, str] = {
+    "rag-entity-bleed": "the Retrieval-Pivot Rate (Class 2)",
+    "rag-poisoning": "Class 3",
+    "embedding-inversion": "Class 6",
+    "ikea-extraction": "Class 10",
+    ErasureProbe.id: "an erasure's vector residue scan",
+    SubjectErasureProbe.id: "a subject erasure's vector fingerprint scan",
+}
+
+
+def _embedder_changed_banner(change: tuple[str, str], result: RunDiff, earlier: str) -> str:
+    """The banner for two runs whose vector stores ranked in different embedding geometries."""
+    # As every renderer names one: a hashing geometry with its shared-tokens caveat,
+    # each in a sentence of its own so a caveat's clauses cannot capture the next.
+    before, after = (untrusted(describe_vector_embedder(name)) for name in change)
+    # Only what these runs ranked over the store: the verdicts are scoped to
+    # `embedder_scoped`, and a banner naming the Retrieval-Pivot Rate regardless
+    # told the reader to discount a built-in pipeline's RPR regression printed
+    # above it.
+    ranked = [
+        label for probe_id, label in _GEOMETRY_LABELS.items() if probe_id in result.embedder_scoped
+    ]
+    what = ", ".join(ranked) or "its similarity ranking"
+    # A live pipeline MAY read the store, which the run cannot tell, so its rate is
+    # withheld in its own words rather than named among what certainly ranked.
+    may = (
+        "; a live RAG pipeline may read the store too, so the Retrieval-Pivot Rate it "
+        "feeds is withheld rather than compared"
+        if "rag-pipeline-bleed" in result.embedder_scoped
+        and "rag-entity-bleed" not in result.embedder_scoped
+        else ""
+    )
+    return (
+        f"[EMBEDDER CHANGED] the {earlier} run's vector store and this one ranked in "
+        f"different embedding geometries. The {earlier} run: {before}. This run: {after}. "
+        f"Whatever ranked by similarity over the store - {what}, and the "
+        "findings appearing or resolving there - was taken with a different instrument, "
+        f"so its difference cannot be attributed to a change in isolation{may}; "
+        "re-baseline deliberately"
+    )
+
+
 def _lost_verdict(delta: MetricDelta, result: RunDiff) -> str:
     """``_delta_verdict`` for a whole diff: every kind of lost coverage at once."""
+    # An embedder swap changes the instrument only for what ranks by similarity in
+    # the vector store: those probes, and the vector surface's erasure counts, read
+    # "not measured". A by-id fetch (Class 1), or a cache or memory regression in
+    # the same run, still reads `[REGRESSED]` rather than hiding behind the banner.
+    swapped = result.embedder_changed is not None
     return _delta_verdict(
         delta,
-        result.coverage_lost,
+        (*result.coverage_lost, *result.embedder_scoped),
         (*result.boundary_lost, *result.plants_lost),
         result.scope_lost,
-        (*result.erasure_lost, *result.scope_lost, *result.side_channel_lost),
+        (
+            *result.erasure_lost,
+            *result.scope_lost,
+            *result.side_channel_lost,
+            *((Surface.VECTOR_DB.value,) if swapped else ()),
+        ),
         scenario_changed=result.scenario_changed,
     )
 
@@ -3906,6 +4302,8 @@ def baseline(
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "baseline found may simply have nowhere to appear; re-baseline deliberately"
         )
+    if result.embedder_changed is not None:
+        typer.echo(_embedder_changed_banner(result.embedder_changed, result, "baseline"))
     # The other CI-facing command. Both were silent about a run describing the
     # built-in fakes, where every other command discloses it.
     _warn_on_synthetic_surfaces(run.surface_provenance)
@@ -3917,9 +4315,8 @@ def baseline(
         # a closed list that did not contain it. The bracketed lines above are
         # printed from the same result and cannot drift from it.
         typer.echo(
-            "BASELINE REGRESSION: a metric worsened, a leak was newly confirmed or "
-            "escalated in severity, this run measured less than the baseline did, or "
-            "the scenario changed - the bracketed lines above name which.",
+            "BASELINE REGRESSION: the bracketed lines above name which comparison "
+            "regressed or could not be made.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -4092,6 +4489,8 @@ def _render_diff_text(earlier: Path, later: Path, result: RunDiff) -> None:
             "tenants or users): finding-level comparison is not meaningful, and a leak the "
             "earlier run found may simply have nowhere to appear"
         )
+    if result.embedder_changed is not None:
+        typer.echo(_embedder_changed_banner(result.embedder_changed, result, "earlier"))
     typer.echo("RESULT: REGRESSION" if result.regressed else "RESULT: no regression")
 
 
@@ -4141,6 +4540,17 @@ def _render_diff_json(earlier: Path, later: Path, result: RunDiff) -> None:
         # empty lists over a run that exits 2 - a clean run, in JSON.
         "headline_unmeasured": list(result.metrics.headline_unmeasured),
         "scenario_changed": result.scenario_changed,
+        "embedder_changed": (
+            list(result.embedder_changed) if result.embedder_changed is not None else None
+        ),
+        "embedder_scoped": list(result.embedder_scoped),
+        # As `probe --output json` carries `vector_embedder_note`: a hashing
+        # geometry's name alone reads as an embedding model.
+        "embedder_changed_note": (
+            [vector_embedder_note(name) for name in result.embedder_changed]
+            if result.embedder_changed is not None
+            else None
+        ),
         "regressed": result.regressed,
     }
     typer.echo(json.dumps(payload, indent=2))
@@ -4298,7 +4708,8 @@ def diff(
     findings themselves keyed by id - including in-place changes (status or
     severity). Exits with code 2 when the later run regressed - a metric worsened,
     a leak was newly confirmed or escalated in severity, this run measured less
-    than the earlier one, or the scenario changed; the bracketed lines name which
+    than the earlier one, or the scenario or the vector store's embedding geometry
+    changed; the bracketed lines name which
     - else 0, so the command can gate a CI pipeline (the engineering spec,
     section 10).
 

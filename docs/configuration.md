@@ -51,7 +51,7 @@ Settings that drive substrate generation.
 | `seed` | int | `2026` | Drives every deterministic generator. |
 | `corpus_profile` | str | `demo` | Accepted but not yet applied - any string parses — the demo corpus is generated regardless of this value. Reserved for profile-driven corpora. |
 | `corpus_size` | int | `500` | Documents generated per tenant (the demo default, spec §6.2). Threaded through `sectum-ai seed`; lower it for a faster run. |
-| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more entries that resolve to *real* providers trigger the Class 2 embedding-model gradient sweep — a **modelled** comparison over the sweep's own shared index, not a measurement of the configured vector store (see the Class 2 page). Legacy `fake-*` names carry a modelled recall rather than real vectors, so a mixed config drops them with a warning, and one real model records no gradient (a comparison needs two); with no real model at all and the built-in fake store, the offline sweep still runs and records a gradient, which the record labels as modelled rather than measured. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `bedrock:<model>` (Amazon Bedrock — Titan, or Cohere-on-Bedrock `cohere.embed-*`, opt-in `sectum-ai[bedrock]`, AWS creds + `AWS_REGION`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
+| `embedding_models` | list[str] | `["fake-deterministic"]` | Two or more *distinct* real models (one spec listed twice, or a hash spec spelled two ways such as `hash:32` / `hash-32`, is one model) trigger the Class 2 embedding-model gradient sweep — a **modelled** comparison over the sweep's own shared index, not a measurement of the configured vector store (see the Class 2 page). Legacy `fake-*` names carry a modelled recall rather than real vectors, so a mixed config drops them with a warning, and one real model records no gradient (a comparison needs two); with no real model at all, two or more distinct fake names and the built-in fake store, the offline sweep still runs and records a gradient, which the record labels as modelled rather than measured. Each is `st:<model>` (sentence-transformers, opt-in `sectum-ai[sentence-transformers]`, local/BYOC-safe), `openai:<model>` (opt-in `sectum-ai[openai]`, key in `OPENAI_API_KEY`), `cohere:<model>` (opt-in `sectum-ai[cohere]`, key in `COHERE_API_KEY`), `voyage:<model>` (opt-in `sectum-ai[voyage]`, key in `VOYAGE_API_KEY`), `bedrock:<model>` (Amazon Bedrock — Titan, or Cohere-on-Bedrock `cohere.embed-*`, opt-in `sectum-ai[bedrock]`, AWS creds + `AWS_REGION`), `hash-<dim>` (deterministic offline), or a legacy `fake-*` recall illustration. The hosted providers send the synthetic corpus to their API (not BYOC-safe; refused under `detection.mode: local`). See the [Class 2 page](attack-catalog/class-02-rag-entity-bleed.md#embedding-model-sweep). |
 
 ## `workdir`
 
@@ -95,9 +95,8 @@ declares no semantic retrieval, so **Class 6 (embedding inversion) is skipped**
 -- an application's search is not an embedding space, and a substring hit reported
 as *Invert AI Model* would attribute a real result to a mechanism that is not
 there. It reports `NOT_COVERED`, never `PASS` ([scorecard](scorecard.md), rules 5
-and 6). The live vector stores declare it absent for the same reason: there is no
-config path to a real embedding model for a vector store, so each is backed by a
-hashing embedder that ranks lexically — see
+and 6). The live vector stores declare it absent too in this release, including
+one driven by a real [`embedder`](#vector_store) — see
 [Class 6](attack-catalog/class-06-embedding-inversion.md#runs-when). Class 13 is unaffected because it is not in the CLI's probe suite under
 any configuration; it runs from the SDK (`examples/multimodal-rag-bleed`).
 
@@ -158,11 +157,58 @@ the default. This is the field-level sibling of the unknown-family check.
 | `pgvector` | `dsn_env: str` *(or `dsn: str`)*, `user_scoped: bool = false` | PostgreSQL with the pgvector extension. Prefer the env-var form. |
 | `chroma` | `host: str = "localhost"`, `port: int = 8000`, `user_scoped: bool = false` | ChromaDB server. Each tenant maps to its own collection. |
 | `weaviate` | `host: str = "localhost"`, `port: int = 8080`, `grpc_port: int = 50051`, `user_scoped: bool = false` | Weaviate server. Each tenant maps to its own collection. |
-| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)*, `user_scoped: bool = false` | Pinecone index. Each tenant maps to its own namespace; the index must exist with dimension 64. |
+| `pinecone` | `api_key_env: str` *(or `api_key: str`)*, `index: str`, `host: str` *(optional)*, `user_scoped: bool = false` | Pinecone index. Each tenant maps to its own namespace; the index must exist at the embedder's dimension — 64 for the default, or the configured `embedder`'s. |
 | `qdrant` | `host: str = "localhost"`, `port: int = 6333`, `grpc_port: int = 6334`, `api_key_env: str` *(or `api_key: str`, optional)*, `user_scoped: bool = false` | Qdrant server. Each tenant maps to its own collection; `user_scoped: true` adds a per-user payload filter. A local/self-hosted Qdrant usually needs no `api_key`. |
 | `milvus` | `uri: str = "http://localhost:19530"`, `token_env: str` *(or `token: str`, optional)*, `user_scoped: bool = false` | Milvus server. Each tenant maps to its own collection (strong consistency); `user_scoped: true` adds a per-user filter expression. A local/self-hosted Milvus usually needs no `token`. Requires the `milvus` extra. |
 | `opensearch` | `host: str = "localhost"`, `port: int = 9200`, `user: str` *(optional)*, `password_env: str` *(or `password: str`, optional)*, `use_ssl: bool = false`, `verify_certs: bool = true`, `user_scoped: bool = false` | OpenSearch cluster. Each tenant maps to its own `knn_vector` index (Lucene engine, cosine); `user_scoped: true` adds a k-NN pre-filter. A local cluster with the security plugin disabled needs no auth. Requires the `opensearch` extra. |
 | `azure-search` | `endpoint: str` *(required)*, `api_key_env: str` *(or `api_key: str`)*, `user_scoped: bool = false` | Azure AI Search service. Each tenant maps to its own index (HNSW, cosine); `user_scoped: true` adds an OData filter. Hosted (no local backend); requires the `azure-search` extra. |
+
+Every live kind also takes an optional **`embedder`**: the embedding model the
+store is driven with, in the same spec syntax as `scenario.embedding_models`
+(`st:<model>`, `hash-<dim>`, `openai:<model>`, `cohere:<model>`, `voyage:<model>`,
+`bedrock:<model>`).
+
+```yaml
+adapters:
+  vector_store:
+    kind: qdrant
+    embedder: st:all-mpnet-base-v2  # the model the production index was built with
+```
+
+Set it to the model your production index uses. A real index ranks in its own
+embedding geometry, and the Class 2 Retrieval-Pivot Rate is a property of that
+geometry — the published result is that stronger embedding models leak *more* — so
+a run in a different geometry measures a different stack. Without it, every live
+kind is driven by a deterministic 64-dimension hashing embedder that ranks by
+shared tokens, not meaning. A collection, table or index the run creates is created
+at the model's own output dimension; one left by an earlier run at a different
+dimension (the default is 64) is **reused as it is**, and the backend rejects the
+upsert. Drop what the earlier run created before switching models — pgvector's one
+shared table, or the per-tenant collections or indexes on the other stores.
+`sectum-ai erasure` does not do this: it deletes one tenant's data, and pgvector's
+column keeps its declared dimension. The corpus
+is embedded in batches before the upsert, as documents, and so are the suite's
+planned queries and the erasure scans' queries (the canary scan's document titles,
+a subject's fingerprints), as queries — which matters for the asymmetric Cohere and Voyage
+models. Any other text, such as a document a probe plants mid-run, is embedded as
+a document. The run
+records the model as `vector_embedder` in its signed `RunResult`
+([data models](data-models.md)), and the audit PDF and the scorecard name it beside
+the rates it qualifies; `diff` and `baseline --compare` report two runs whose stores
+ranked in different geometries as `[EMBEDDER CHANGED]` (both must name one: a run fed only by a
+live RAG pipeline names none). A `fake-*` name is refused (it is a sweep recall
+illustration with no vectors to give a store), and so is `embedder` on the
+built-in `fake` store, which does not embed.
+
+This is independent of `detection.embedder`: that is the model Sectum *grades*
+observations with; this is the one the customer's store *ranks* in. Hosted specs
+send the synthetic corpus (whatever of it a run loads) to the provider and are refused under
+`detection.mode: local`. They also receive **real personal data** in one workflow:
+`erasure --subject` queries the store for the data subject's vector fingerprints,
+so a hosted embedder is sent that subject's fingerprint text in the clear and
+becomes a processor of it (the CLI warns when it does). Configuring a real embedder does **not** yet enable Class 6
+or Class 13 against a live store — see
+[Class 6](attack-catalog/class-06-embedding-inversion.md#runs-when).
 
 ### `cache`
 
@@ -300,7 +346,7 @@ deterministic offline fakes; configure real providers for production detection.
 | `judge.api_key_env` | str | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Env var holding the API key. Optional when `base_url` is a local endpoint. |
 | `judge.base_url` | str | provider API | OpenAI-/Anthropic-compatible base URL; `kind: openai` + a local Ollama runs the judge with no account. |
 | `semantic_threshold` | float in `[0.0, 1.0]` \| `auto` | `0.62` | The similarity gate before the judge. A number is used verbatim. `auto` resolves to the calibrated per-model preset for the embedder above (see below), falling back to `0.62` with a logged warning for an unknown model. Raise it (or use `auto`) once a real embedding model is configured — a stronger model surfaces more (the engineering spec, section 7). **Bounded to the range a cosine similarity can occupy**: a value above `1.0` is unsatisfiable and would switch the semantic detector off entirely — no candidate reaches the judge, a paraphrased cross-tenant leak is not recorded even as unverified, and the run still signs a pack asserting isolation. Out-of-range values (including `nan` and `inf`) are rejected at config load. `0.0` is legal and admits every candidate to the judge. |
-| `mode` | `hosted` \| `local` | `hosted` | `local` is the BYOC "no data leaves the box" guarantee: the config **fails fast** if any embedder or judge would call a default hosted AI API. Only `fake` providers, or providers with a `base_url` pointed at an operator-controlled local/in-VPC endpoint, are allowed. `hosted` (the default) places no egress restriction. |
+| `mode` | `hosted` \| `local` | `hosted` | `local` is the BYOC guarantee that no stage Sectum runs on its own behalf sends tenant content to a third-party AI service (the adapters under test are not gated, except a `mem0` memory, whose in-process embedder is Sectum's own stage): the config **fails fast** if any embedder or judge would call a default hosted AI API. For detection, only `fake` providers, or providers with a `base_url` pointed at an operator-controlled local/in-VPC endpoint, are allowed; a hosted `vector_store.embedder`, `scenario.embedding_models` entry (or `seed --embedding-model` / `calibrate --embedder` override, or a seeded substrate's list) is refused outright (only `st:<model>`, `hash-<dim>` / `hash:<dim>`, the sweep's `fake-*` recall names and calibrate's bare `fake` run on the box), as is a `mem0` memory whose `embedder` is not `ollama`, `lmstudio`, `huggingface` or `openai` with an explicit `openai_base_url`, or whose `llm` or `graph_store.llm` is not `ollama`, `lmstudio` or `vllm` (checked only with a graph store configured — any `graph_store.config`, even an empty one), or — with or without a graph store — whose `vector_store` is not on the gate's allow-list of stores that keep the vectors mem0 gives them (most mem0 0.1.116 stores; not `langchain` or `baidu`, nor a newer one such as `databricks`; `upstash_vector` only without `enable_embeddings`), or with mem0's own usage telemetry on (run metadata, not tenant content, posted to mem0's PostHog project unless `MEM0_TELEMETRY=False`). A local provider is trusted at any base URL you give it, like `detection`'s `base_url`; but unlike the embedder, an `openai` LLM pointed at a base URL is not accepted, because mem0 pairs one LLM block's provider with the other's config; a mem0 block the gate cannot read is refused as unclassifiable. mem0 defaults its embedder and LLM to OpenAI; its LLM does not otherwise run, as Sectum stores memory verbatim. `hosted` (the default) places no egress restriction. |
 
 Real providers reach their HTTP APIs with the standard library only; the API key
 is read from the environment, never inlined. A local OpenAI-compatible server —
@@ -308,11 +354,40 @@ is read from the environment, never inlined. A local OpenAI-compatible server �
 BYOC-safe option: set `base_url` and the key becomes optional (these endpoints
 ignore it), so the semantic embedder + judge run with no external account.
 
-Set `detection.mode: local` to **enforce** that offline posture. Detection is the
-only stage that embeds or judges tenant content, so in `local` mode Sectum
-fails fast on any embedder or judge that would reach a default hosted API
-(`openai`/`anthropic` without a `base_url`) — guaranteeing it makes no call to a
-third-party AI service. A `base_url` you set is trusted to point at an endpoint
+Set `detection.mode: local` to **enforce** that no stage Sectum runs on its own
+behalf sends tenant content to a third-party AI service. Five stages
+embed or judge tenant content: detection, the vector store's
+[`embedder`](#vector_store) (which embeds the corpus a run loads), the Class 2
+sweep's `scenario.embedding_models`, `calibrate --embedder` (the labelled set),
+and a `mem0` memory adapter's own embedder
+(and graph LLM, and a vector store that embeds server-side). In `local` mode Sectum fails fast on any of
+them that would reach a hosted API — a detection embedder or judge on
+`openai`/`anthropic` without a `base_url`, or any embedding spec that does not run on
+the box (only `st:<model>`, `hash-<dim>` / `hash:<dim>`, the sweep's `fake-*` recall
+names and calibrate's bare `fake` do) — whether it is the store's `embedder`, an
+`embedding_models` entry, a `seed --embedding-model` or `calibrate --embedder`
+override, or the list a substrate was seeded with. A `mem0` memory adapter brings
+its own embedder, which mem0 defaults to OpenAI and which embeds every write;
+`local` mode refuses it unless its `config` sets a local one. Sectum stores memory
+verbatim, so mem0's LLM runs only to feed a graph store — and then every LLM block
+mem0 might use (`llm` and `graph_store.llm`) must be ollama, lmstudio or vllm. Its
+`vector_store` must be on the gate's allow-list of stores known to keep the vectors
+mem0 gives them rather than embed server-side (most mem0 0.1.116 stores; not
+`langchain` or `baidu`, nor a newer one such as `databricks`; `upstash_vector` only
+without `enable_embeddings`). mem0 also posts its own usage telemetry — run
+metadata, not tenant content — unless `MEM0_TELEMETRY=False`, so `local` mode
+refuses a mem0 memory until it is set. Together these guarantee that no stage Sectum runs on its own behalf —
+grading, embedding the corpus for the store, the sweep, calibration, writing to a
+mem0 memory —
+sends tenant content to a third-party AI service. Loading a local model still
+calls its hub: an `st:` model (and mem0's `huggingface` embedder) checks the
+Hugging Face Hub on every load and downloads it if it is not cached, and an
+`ollama` model is pulled by its server — no content, but a call off the box;
+pre-cache the models and set `HF_HUB_OFFLINE=1` to keep the run itself offline. The adapters you point it at are the system under test and receive the
+synthetic tenant data by design: a hosted vector database, or an agent adapter
+driving an OpenAI Assistant or the Anthropic Messages API, sends it to that
+provider because that is what is being tested; keep them inside your boundary if
+nothing may leave it. A `base_url` you set is trusted to point at an endpoint
 inside your own boundary; that target is your trust boundary, not Sectum's (see
 the [threat model](threat-model.md)).
 

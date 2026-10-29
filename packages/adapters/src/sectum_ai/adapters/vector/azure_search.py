@@ -17,11 +17,13 @@ Requires the ``azure-search`` optional dependency:
 ``pip install sectum-ai-adapters[azure-search]``.
 """
 
+import json
 from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID, uuid5
 
 from sectum_ai.adapters.base import Capability, VectorHit, VectorStoreAdapter
+from sectum_ai.adapters.vector._batch import request_batches
 from sectum_ai.adapters.vector._settle import settle
 from sectum_ai.spec import AdapterError, CorpusDocument
 
@@ -30,6 +32,11 @@ Embedder = Callable[[str], Sequence[float]]
 
 _POINT_NAMESPACE = UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")
 """A fixed namespace for deriving a deterministic document key from a ``doc_id``."""
+
+_MAX_UPLOAD_BYTES = 12_000_000
+"""Under Azure AI Search's 16 MB cap on one indexing request, leaving room for its framing."""
+_MAX_UPLOAD_DOCUMENTS = 1000
+"""Azure AI Search's cap on the documents in one indexing request."""
 
 
 class AzureSearchVectorStore(VectorStoreAdapter):
@@ -158,22 +165,25 @@ class AzureSearchVectorStore(VectorStoreAdapter):
             return
         index = self._ensure_index(tenant)
         client = self._client(index)
-        client.upload_documents(
-            documents=[
-                {
-                    "id": self._key(document.doc_id),
-                    "doc_id": document.doc_id,
-                    "content": document.content,
-                    "owner_user": (
-                        str(document.owner_user_id)
-                        if document.owner_user_id
-                        else self._TENANT_LEVEL
-                    ),
-                    "vector": self._vector(f"{document.title} {document.content}"),
-                }
-                for document in items
-            ]
-        )
+        uploads = [
+            {
+                "id": self._key(document.doc_id),
+                "doc_id": document.doc_id,
+                "content": document.content,
+                "owner_user": (
+                    str(document.owner_user_id) if document.owner_user_id else self._TENANT_LEVEL
+                ),
+                "vector": self._vector(f"{document.title} {document.content}"),
+            }
+            for document in items
+        ]
+        for batch in request_batches(
+            uploads,
+            max_bytes=_MAX_UPLOAD_BYTES,
+            max_records=_MAX_UPLOAD_DOCUMENTS,
+            size=lambda upload: len(json.dumps(upload)),
+        ):
+            client.upload_documents(documents=list(batch))
         # Azure indexes asynchronously; see _settle for what an early read cost.
         last_key = self._key(items[-1].doc_id)
         settle(

@@ -87,7 +87,12 @@ measured and this one did not, reported as `[RATE NOT REMEASURED]`, and two runs
 of different
 scenarios — a re-seed, other tenants or users, where every finding "resolves"
 because its id embeds the markers and principals — reported as
-`[SCENARIO CHANGED]`; a record from another schema line
+`[SCENARIO CHANGED]`, and two runs whose vector stores ranked in different
+embedding geometries (`vector_embedder`: a model, or the hashing default) — whatever ranked by similarity over the
+store (the Retrieval-Pivot Rate — whose live RAG pipeline may read the store —
+Classes 3 and 10, an erasure's vector residue scan or a subject erasure's
+fingerprint scan) was taken with a different instrument — reported
+as `[EMBEDDER CHANGED]`; a record from another schema line
 is refused outright — as it is by `report`, `score`, and `verify`, which also
 check the run record *inside* a pack, and so is one whose headline counts
 contradict the findings it carries, see below), or residual / attestable-with-caveat data on an erased surface
@@ -146,7 +151,9 @@ attestation, using two methods:
 
 `records` carries **ids only** (no PII); `fingerprints` carries the subject's
 **content** to probe — used only to query, and stored as a **hash** in the
-attestation, never in the clear:
+attestation, never in the clear. To query a vector store the content is embedded
+with the store's `embedder`, so a hosted one (`openai:`, `cohere:`, ...) is sent the
+subject's fingerprint text; the CLI warns when it is:
 
 ```yaml
 subject_ref: "dsr-2026-00042"   # your opaque reference for the request; no PII
@@ -263,8 +270,8 @@ The OSCAL is a derived, unsigned projection; the signed `evidence.json` stays th
 canonical record.
 
 The summary carries the `run_id`, the probe count, the confirmed-finding
-count, the headline Retrieval-Pivot Rate (and, when two or more real embedding
-models are configured, a **modelled** embedding-model gradient over the sweep's
+count, the headline Retrieval-Pivot Rate (and, when two or more distinct real
+embedding models are configured, a **modelled** embedding-model gradient over the sweep's
 own shared index — not a breakdown of the measured rate), the per-probe finding
 counts, the run's
 `surface_provenance` with `confirmed_on_live_surfaces` (the confirmed findings
@@ -293,3 +300,12 @@ index, not against the adapters the run drove. The text renderer labels it in
 place and the JSON summary carries the same words in
 `retrieval_pivot_rate_by_model_note`, so a dashboard cannot mistake it for the
 headline.
+
+`vector_embedder` names the embedding geometry a live vector store ranked in — a
+model, or the hashing default —
+`null` when nothing in the run is known to have ranked by similarity over it (a
+live RAG pipeline alone may or may not read the store), and when the slot is
+the built-in fake (this demo's), whose ranking is a lexical stand-in the run
+already discloses as synthetic — and `vector_embedder_note` carries the caveat
+when that geometry is a hashing embedder, which ranks by shared tokens rather than
+meaning, so a dashboard cannot read a lexical live rate as a semantic one.

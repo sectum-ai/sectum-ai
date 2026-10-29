@@ -17,6 +17,7 @@ from sectum_ai.spec import (
     ERASURE_SURFACES as _SPEC_ERASURE_SURFACES,
 )
 from sectum_ai.spec import (
+    ERASURE_WORKFLOW_IDS,
     ControlMapping,
     CoverageVerdict,
     RunResult,
@@ -36,12 +37,6 @@ ERASURE = "erasure"  # an erasure surface scanned to a verdict, on a live backen
 _ISOLATION = ISOLATION
 _ERASURE = ERASURE
 
-# The erasure probes are control checks, not isolation probes, so a run in which
-# only they executed has produced no isolation evidence. Their ids are pinned here
-# rather than imported: the evidence package sits below probes in the package graph
-# (ADR-0004). tests/unit/test_controls.py holds this set to the probes' own
-# declarations so the two cannot drift.
-_ERASURE_PROBE_IDS = frozenset({"gdpr-erasure-verification", "gdpr-subject-erasure-verification"})
 # The coverage verdicts that mean a surface was scanned and answered: a run whose
 # every surface is NOT_COVERED (or attestable-with-caveat, where nothing was
 # deleted) verified no erasure, whatever its coverage block's length.
@@ -190,7 +185,7 @@ def isolation_surfaces(run: RunResult) -> frozenset[str]:
     exercised = set(run.probe_versions) | {finding.probe_id for finding in run.findings}
     drove = {
         surface
-        for probe_id in exercised - _ERASURE_PROBE_IDS
+        for probe_id in exercised - ERASURE_WORKFLOW_IDS
         for surface in _ISOLATION_PROBE_SURFACES.get(probe_id, ())
     }
     return (live_surfaces(run) - erasure_scanned_surfaces(run)) & frozenset(drove)
@@ -234,7 +229,7 @@ def _run_supports(run: RunResult, requirement: str, surfaces: tuple[str, ...] = 
     # vector store OR an application API), so the union over the exercised probes
     # is the set this run can speak for.
     isolation_live = live & isolation_surfaces(run)
-    return bool(exercised - _ERASURE_PROBE_IDS) and bool(isolation_live)
+    return bool(exercised - ERASURE_WORKFLOW_IDS) and bool(isolation_live)
 
 
 def asserted_surfaces(run: RunResult, mapping: ControlMapping) -> tuple[str, ...]:

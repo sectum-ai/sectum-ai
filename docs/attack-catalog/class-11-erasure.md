@@ -96,15 +96,25 @@ alphanumeric projection, which catches one split *inside* that body, where an
 80-column log almost always wraps it. A surface holding any such copy used to
 read `ERASED`.
 
-Two things make a marker unverifiable. Both probes read the vector store with a
-top-50 similarity query, and a page that comes back **full** without a marker is
-not absence — a marker still stored but ranked past the page looks identical. On
-any surface, a backend error during the post-erasure re-scan is the second: the
-markers seen before erasure are the baseline, and the failed scan rules out none
-of them. Either way those markers are counted as unverifiable, the surface's
-human-readable verdict is `NOT VERIFIED` rather than `ERASED`, its coverage
-verdict is `NOT_COVERED`, and `sectum-ai erasure` exits 3 with
-`ERASURE INCONCLUSIVE` naming the surfaces whose absence was never established.
+A marker is unverifiable when its absence after erasure was never established.
+Both probes read the vector store with a top-50 similarity query, and a page that
+comes back **full** without a marker is not absence — a marker still stored but
+ranked past the page looks identical. On any surface, a backend error during
+either scan, or a purge that was attempted and failed, leaves absence
+unestablished, and the surface records how many markers were neither found nor
+ruled out. And the vector store is not attested at all when the target's corpus —
+or, on a shared index, the other tenants' corpus that crowds it — does not load
+(a store left at an earlier `embedder`'s dimension refuses it): the probe neither
+scans nor erases it, every one of the target's markers counts as unverifiable,
+Sectum asks the store to delete what of the target's corpus landed, and the
+warning on stderr gives the cause. In each case the surface can never read
+`ERASED`: unless a marker it did see is residual, or its backend has no erasure
+API and held markers before (a caveat), its human-readable verdict is `NOT VERIFIED` and its coverage
+verdict `NOT_COVERED`. `sectum-ai erasure` exits 3 with `ERASURE INCONCLUSIVE`
+naming the surfaces whose absence was never established — unless a surface whose
+backend has an erasure API still holds a marker (`ERASURE FAILED`) or one without
+such an API held markers before (`ATTESTABLE WITH CAVEAT`), either of which exits
+2 first.
 
 The guarantee is anti-over-claim: a surface that was not scanned can only ever be
 `NOT_COVERED` — it can never read as `ERASED`. The overall run is "fully erased"

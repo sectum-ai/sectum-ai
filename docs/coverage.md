@@ -19,7 +19,7 @@ synthetic substrate.
 | Semantic / application cache | `redis` | ✅ |
 | Agent framework | `langgraph`, `crewai`, `autogen`, `openai-assistants`, `anthropic-tooluse`, `http` | ✅ |
 | MCP server | `stdio`, `http` | ✅ |
-| Embedding provider (Class 2 sweep) | not an adapter `kind:` — an `embedding_models:` entry, spelled `st:<model>` (local), `openai:<model>`, `cohere:<model>`, `voyage:<model>`, `bedrock:<model>` (the four hosted opt-in live) | ✅ (`hash-<dim>`, `fake-<name>`) |
+| Embedding provider (Class 2 sweep, vector store) | not an adapter `kind:` — an `embedding_models:` entry, or a live store's `vector_store.embedder`, spelled `st:<model>` (local), `openai:<model>`, `cohere:<model>`, `voyage:<model>`, `bedrock:<model>` (the four hosted opt-in live; a hosted store embedder receives the corpus, and in `erasure --subject` the subject's fingerprint text) | ✅ (`hash-<dim>`; `fake-<name>` for the sweep only) |
 | Long-term / agent memory | `redis` (in CI), `mem0` (opt-in live) | ✅ |
 | Full-text search index | `opensearch` | ✅ |
 | Application resource API (`app`) | *(live HTTP adapter not yet implemented)* | ✅ |
@@ -107,16 +107,19 @@ scanning adapter yet, so it is out of scope, not fake; see the
   slot that reports the `semantic_retrieval` capability, because a backend matching on
   substrings can return a document for a fragment query with no embedding involved and
   that keyword hit would be recorded as `AML.T0024.001 Invert AI Model` — a real finding
-  attributed to a mechanism the backend does not have. There is no path from
-  `sectum-ai.yaml` to a real embedding model for a vector store (`embedding_model`
-  configures the *detection* pipeline), so every live kind the CLI builds is backed by a
-  bag-of-tokens hashing embedder and declares the capability absent. Against Qdrant,
+  attributed to a mechanism the backend does not have. Every live kind the CLI builds
+  declares the capability absent: without a configured
+  [`embedder`](configuration.md#vector_store) it is backed by a bag-of-tokens hashing
+  embedder, and with one the capability is still withheld in this release — Class 13
+  retrieves by image similarity, which a text model cannot provide, and Class 6's
+  attribution of a fragment-query retrieval to embedding inversion is under review. Against Qdrant,
   pgvector, Weaviate, Chroma, Milvus, OpenSearch, Pinecone and Azure AI Search these classes
   therefore read `NOT_COVERED` — the honest verdict for a check that cannot be
   performed, and the same shape as the erasure-fingerprint gap above. The built-in fake
   still runs them, which is what the walkthroughs demonstrate and what they say they
-  demonstrate. Wiring a real embedder into the vector slot is the natural next step;
-  the SDK can already do it by constructing the adapter directly.
+  demonstrate. Class 2 is not gated on the capability: with an `embedder` configured
+  its vector-store steps rank in that model's geometry (its rate also pools the RAG
+  pipeline's steps, which the pipeline's own retriever ranks).
 - **Class 7 does not run against a live MCP server or a live agent.** Both halves of
   the class read back something *Sectum planted*: an MCP resource under a key it
   invents, and an agent lookup for an id it invents. Neither the MCP protocol nor

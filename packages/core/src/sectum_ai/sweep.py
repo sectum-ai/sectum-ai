@@ -15,9 +15,10 @@ no fake-derived per-model rates.
 """
 
 from collections.abc import Sequence
+from functools import partial
 
 from sectum_ai.adapters.fakes import FakeVectorStore
-from sectum_ai.embeddings import EmbeddingModel, cosine
+from sectum_ai.embeddings import EmbeddingModel, cosine, embed_batched, embed_queries
 from sectum_ai.probes import RagEntityBleedProbe
 from sectum_ai.runner import (
     StepResult,
@@ -84,17 +85,26 @@ def embedding_provider_sweep(
     gradient therefore reflects the actual embeddings ("stronger embeddings leak
     more"), so it is recorded for any configured stack, not only the fake.
 
-    Documents and queries are each embedded in one batch per model to keep a remote
-    provider to two calls per model.
+    Documents and queries are sent in batches of 64 texts (under every provider's
+    request cap), which a provider may split further - Titan makes one call per
+    text - so a sweep makes many calls per model, not two.
     """
     probe = RagEntityBleedProbe()
     steps = probe.plan(substrate)
     documents = list(substrate.documents)
     rates: dict[str, float] = {}
     for model in models:
-        document_vectors = model.embed([f"{doc.title} {doc.content}" for doc in documents])
+        document_vectors = embed_batched(
+            model.name, model.embed, [f"{doc.title} {doc.content}" for doc in documents]
+        )
         index = list(zip(documents, document_vectors, strict=True))
-        query_vectors = model.embed([payload_required(step, "query") for step in steps])
+        # As queries: an asymmetric model (Cohere, Voyage) ranks a query embedded
+        # as a document lower against the corpus, under-reporting the gradient.
+        query_vectors = embed_batched(
+            model.name,
+            partial(embed_queries, model),
+            [payload_required(step, "query") for step in steps],
+        )
         results: list[StepResult] = []
         for step, query_vector in zip(steps, query_vectors, strict=True):
             k = payload_int(step, "k", "5")
