@@ -46,7 +46,7 @@ def test_every_fake_adapter_declares_itself_synthetic() -> None:
     # A fake added later that inherits the default would be recorded as LIVE and
     # would silently restore the over-claim this block exists to close.
     assert _FAKE_CLASSES, "no fake adapters discovered - the introspection broke"
-    missed = sorted(c.__name__ for c in _FAKE_CLASSES if not c.synthetic)
+    missed = sorted(c.__name__ for c in _FAKE_CLASSES if not getattr(c, "synthetic", False))
     assert not missed, f"fake adapters not marked synthetic: {missed}"
 
 

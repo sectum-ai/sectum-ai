@@ -44,7 +44,7 @@ jobs:
       # `--show-diff-on-failure` prints what a hook would have rewritten, since a
       # formatting hook "fails" by editing rather than by saying anything.
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
