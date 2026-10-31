@@ -36,7 +36,7 @@ mem0 = ["mem0ai>=0.1,<0.2"]
 # the Phoenix adapter imports httpx directly (observability/phoenix.py); declare
 # it explicitly rather than relying on arize-phoenix-client to pull it in.
 phoenix = ["arize-phoenix-client>=2", "httpx>=0.27"]
-langfuse = ["langfuse>=4.14.0,<5"]
+langfuse = ["langfuse>=4.15.6,<5"]
 langsmith = ["langsmith>=0.1"]
 mcp = ["mcp>=1"]
 pinecone = ["pinecone>=5"]
@@ -57,7 +57,7 @@ vllm = ["openai>=1.50"]
 # InferenceClient (not the GPU-heavy text-generation-inference server package).
 tgi = ["huggingface_hub>=1.30.0"]
 openai-assistants = ["openai>=1.50"]
-anthropic-tooluse = ["anthropic>=0.40"]
+anthropic-tooluse = ["anthropic>=1.8.0"]
 rag-langchain = ["langchain-core>=1.5.4"]
 # the S3 backup adapter talks to any S3-compatible store (AWS S3, MinIO, Ceph);
 # langsmith (above) also backs the eval-set adapter (LangSmith Datasets).

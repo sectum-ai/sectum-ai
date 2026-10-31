@@ -107,6 +107,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison needs two or more *distinct* models: a spec listed twice, or a hash
   spec spelled two ways, is one model, so no gradient - and a recorded gradient is keyed by each
   model's canonical spelling (`hash:32` is `hash-32`), as `vector_embedder` is.
+- Dependency floors raised to the versions now locked: `anthropic>=1.8.0` (from
+  `>=0.40`), `sentence-transformers>=6.1.0` (from `>=3`), `langfuse>=4.15.6,<5`,
+  and, for development, `mypy>=2.3.1` and `hypothesis>=6.168.1`; CI's
+  `actions/cache` moves from v4 to v6. Drained as one batch rather than six
+  PRs, which would each have cascade-conflicted on `uv.lock`. Each is locked at
+  the version its Dependabot PR proposed, not the newest (anthropic 2.x is
+  out, and was not taken). The anthropic and langfuse bumps are covered by the
+  extras contract job. sentence-transformers is behind an extra that no CI job
+  installs, so it was checked locally: Sectum's `st:` embedder encodes, normalises
+  and ranks on 6.1.0. A model that ships no prompts now reports empty `query` /
+  `document` prompts, which encode identically to no prompt. mypy 2.3 types an
+  `inspect.isclass` result as `type[object]`, so one test now reads the
+  attribute with `getattr`.
 
 ### Fixed
 
