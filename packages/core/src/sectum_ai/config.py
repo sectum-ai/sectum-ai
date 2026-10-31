@@ -372,9 +372,14 @@ class SectumConfig(BaseModel):
         OpenAI: ``memory: {kind: mem0}`` alone sends every memory write there (see
         :func:`_hosted_mem0_providers` for its LLM and vector-store rules too), and
         mem0 posts its own usage telemetry unless ``MEM0_TELEMETRY`` is false, which
-        is refused on its own reason (:func:`_mem0_telemetry_on`).
-        Specs that arrive from the command line or a seeded substrate rather than this
-        file are gated where they are used, by :func:`refuse_hosted_embeddings`.
+        is refused on its own reason (:func:`_mem0_telemetry_on`). So, each on its own
+        reason, are a stage loading through huggingface_hub while its telemetry is on
+        (:func:`_hf_telemetry_on`) and a crewai agent while crewai's is
+        (:func:`_crewai_telemetry_on`): libraries in Sectum's process with no client
+        setting to turn it off. Where Sectum builds the client it turns it off there
+        (the chroma and weaviate vector stores). Specs that arrive from the command
+        line or a seeded substrate rather than this file are gated where they are
+        used, by :func:`refuse_hosted_embeddings`.
         """
         if self.detection.mode != "local":
             return self
@@ -402,6 +407,18 @@ class SectumConfig(BaseModel):
                 "detection.mode 'local' refuses a mem0 memory while mem0's own usage "
                 "telemetry is on: mem0 posts run metadata (not tenant content) to its "
                 "PostHog project unless MEM0_TELEMETRY is false. Set MEM0_TELEMETRY=False."
+            )
+        hugging_face = _hugging_face_stages(self)
+        if hugging_face and _hf_telemetry_on():
+            raise ValueError(_hf_telemetry_refusal("; ".join(hugging_face)))
+        if _crewai_telemetry_on(self.adapters.get("agent")):
+            raise ValueError(
+                "detection.mode 'local' refuses a crewai agent while CrewAI's own "
+                "telemetry is on: importing crewai sets up an exporter that sends usage "
+                "spans (crew and agent metadata such as roles and model names, not "
+                "kickoff inputs) to telemetry.crewai.com unless CREWAI_DISABLE_TELEMETRY "
+                "is 'true' (crewai reads no other value, not even '1'). Set "
+                "CREWAI_DISABLE_TELEMETRY=true."
             )
         return self
 
@@ -445,6 +462,74 @@ def _mem0_telemetry_on(memory: AdapterConfig | None) -> bool:
     if memory is None or memory.kind != "mem0":
         return False
     return os.environ.get("MEM0_TELEMETRY", "True").lower() in ("true", "1", "yes")
+
+
+def _hf_true(value: str | None) -> bool:
+    """huggingface_hub 1.30.0's own reading of a boolean env var (``constants._is_true``)."""
+    return value is not None and value.upper() in ("1", "ON", "YES", "TRUE")
+
+
+def _hf_telemetry_on() -> bool:
+    """Whether huggingface_hub would fetch its agent-harness registry from the Hub.
+
+    It does so, at most daily, while building the headers of any Hub request - a
+    model load's, or a tgi model's own - unless its telemetry is disabled or the
+    Hub is offline (which also blocks a tgi model's requests). Read as it reads
+    them, including the ``or`` that lets a set but blank ``HF_HUB_OFFLINE`` fall
+    through to ``TRANSFORMERS_OFFLINE``.
+    """
+    environ = os.environ
+    disabled = any(
+        _hf_true(environ.get(name))
+        for name in ("HF_HUB_DISABLE_TELEMETRY", "DISABLE_TELEMETRY", "DO_NOT_TRACK")
+    )
+    offline = _hf_true(environ.get("HF_HUB_OFFLINE") or environ.get("TRANSFORMERS_OFFLINE"))
+    return not (disabled or offline)
+
+
+def _hugging_face_stages(config: "SectumConfig") -> list[str]:
+    """The configured stages that load through huggingface_hub, named for a refusal."""
+    stages: list[str] = []
+    store = config.adapters.get("vector_store")
+    spec = (store.model_extra or {}).get("embedder") if store else None
+    live = store is not None and store.kind != "fake"
+    if live and isinstance(spec, str) and spec.startswith("st:"):
+        stages.append(f"vector_store.embedder ({spec!r})")
+    local_models = [m for m in config.scenario.embedding_models if m.startswith("st:")]
+    if local_models:
+        stages.append(f"scenario.embedding_models ({', '.join(map(repr, local_models))})")
+    memory = config.adapters.get("memory")
+    mem0_config = (memory.model_extra or {}).get("config") if memory else None
+    embedder = mem0_config.get("embedder") if isinstance(mem0_config, dict) else None
+    # Without a base URL mem0's huggingface embedder is a sentence-transformers model.
+    if memory is not None and memory.kind == "mem0" and isinstance(embedder, dict):
+        settings = embedder.get("config")
+        pointed = isinstance(settings, dict) and settings.get("huggingface_base_url")
+        if embedder.get("provider") == "huggingface" and not pointed:
+            stages.append("memory mem0 embedder ('huggingface')")
+    model = config.adapters.get("model")
+    if model is not None and model.kind in ("huggingface", "tgi"):
+        stages.append(f"model ({model.kind!r})")
+    return stages
+
+
+def _hf_telemetry_refusal(stages: str) -> str:
+    return (
+        f"detection.mode 'local' refuses {stages} while Hugging Face telemetry is on: "
+        "huggingface_hub fetches its agent-harness registry from huggingface.co (a "
+        "request carrying no tenant content) unless HF_HUB_DISABLE_TELEMETRY is set. "
+        "Set HF_HUB_DISABLE_TELEMETRY=1."
+    )
+
+
+def _crewai_telemetry_on(agent: AdapterConfig | None) -> bool:
+    """Whether a crewai ``agent`` would export crewai's telemetry, by crewai's own parse."""
+    if agent is None or agent.kind != "crewai":
+        return False
+    return not any(
+        os.environ.get(name, "false").lower() == "true"
+        for name in ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
+    )
 
 
 # What the gate reads of a mem0 `vector_store` block, named when it cannot.
@@ -588,6 +673,9 @@ def refuse_hosted_embeddings(config: SectumConfig, specs: Iterable[str], source:
             "hosted embedding API, refused whether or not this run would reach it. Use "
             "a local model (st:<model>) or the deterministic hash-<dim> instead."
         )
+    local_models = [spec for spec in specs if spec.startswith("st:")]
+    if local_models and _hf_telemetry_on():
+        raise ConfigError(_hf_telemetry_refusal(f"{source} ({', '.join(map(repr, local_models))})"))
 
 
 def _yaml_problem(error: Exception) -> str:

@@ -485,7 +485,10 @@ detection:
   # llm block means openai); or whose vector_store is not known to leave embedding
   # to mem0 (an allow-list of most mem0 0.1.116 stores: not langchain or baidu, nor a
   # newer store such as databricks, nor upstash_vector with enable_embeddings); or any mem0 memory
-  # while mem0's own usage telemetry is on (set MEM0_TELEMETRY=False).
+  # while mem0's own usage telemetry is on (set MEM0_TELEMETRY=False); a stage
+  # loading through huggingface_hub (st:, mem0 huggingface, a huggingface or tgi
+  # model) while its telemetry is on (set HF_HUB_DISABLE_TELEMETRY=1); or a crewai
+  # agent while crewai's is (set CREWAI_DISABLE_TELEMETRY=true).
   # Adapters you point it at are the system under test and receive the synthetic
   # data by design.
   # "hosted" (default) places no egress restriction.

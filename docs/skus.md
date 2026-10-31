@@ -56,8 +56,10 @@ and their probe sets are validated against the live catalog in CI.
 - **BYOC (bring-your-own-cloud)** — the CLI runs inside your environment; only
   the markers, the configuration, the findings' evidence spans (which can include
   a judge rationale restating observed content) and the timestamped evidence pack
-  leave the box — unless a stage is configured with a hosted AI provider, or a mem0
-  memory's own usage telemetry is on (run metadata, unless `MEM0_TELEMETRY=False`),
+  leave the box — unless a stage is configured with a hosted AI provider, or a
+  library's own telemetry is on (metadata: mem0's unless `MEM0_TELEMETRY=False`,
+  huggingface_hub's unless `HF_HUB_DISABLE_TELEMETRY=1`, crewai's unless
+  `CREWAI_DISABLE_TELEMETRY=true`),
   both of which `detection.mode: local` refuses (loading a local model still calls
   its hub — no content — unless it is cached and `HF_HUB_OFFLINE=1`; an `ollama`
   model is pulled by its server), or an adapter under test is itself hosted (a

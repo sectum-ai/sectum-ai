@@ -135,9 +135,13 @@ observations it grades), the sweep's hosted `embedding_models`, a hosted
 vector store, and a hosted
 vector-store `embedder` — which receives the synthetic
 corpus and, in `erasure --subject`, the data subject's real `vector_db`
-fingerprint text — and mem0's own usage telemetry (run metadata, not content,
-unless `MEM0_TELEMETRY=False`). Loading a local model also calls its hub (no
-content; `HF_HUB_OFFLINE=1` with the model cached keeps the run offline). Note that **unverified** findings ship too, and an evidence
+fingerprint text — and the default-on telemetry of libraries in Sectum's process
+(metadata, not content): mem0's (unless `MEM0_TELEMETRY=False`), huggingface_hub's
+for a stage that loads through it (unless `HF_HUB_DISABLE_TELEMETRY=1`) and crewai's
+(unless `CREWAI_DISABLE_TELEMETRY=true`); the `chroma` and `weaviate` stores turn
+their clients' off themselves. Loading a local model also calls its hub (no
+content; `HF_HUB_OFFLINE=1` with the model cached keeps the run offline, but
+blocks a `tgi` model adapter's own requests). Note that **unverified** findings ship too, and an evidence
 span can be the judge's own free-text rationale, which may restate observed tenant
 content — so the egress is "the findings' spans", not "confirmed spans only". (The pack is hash-bound and
 timestamped; it is signed by a TSA only when one is configured.)
@@ -164,11 +168,16 @@ timestamped; it is signed by a TSA only when one is configured.)
   which embeds every write — is local, every LLM that could feed a graph store is
   local, and its vector store is on an allow-list of stores known to keep the
   vectors mem0 gives them rather than embed server-side, and its own usage
-  telemetry is off (`MEM0_TELEMETRY=False`) — so no stage Sectum runs
+  telemetry is off (`MEM0_TELEMETRY=False`); a stage loading through
+  `huggingface_hub` (an `st:` model, mem0's `huggingface` embedder, a `huggingface`
+  or `tgi` model adapter) is refused until its telemetry is off
+  (`HF_HUB_DISABLE_TELEMETRY=1`), and a `crewai` agent until crewai's is
+  (`CREWAI_DISABLE_TELEMETRY=true`) — so no stage Sectum runs
   on its own behalf sends tenant content to a third-party AI service. (Loading a
   local model still calls its hub — an `st:` model checks the Hugging Face Hub on
   every load and downloads it if not cached, an `ollama` model is pulled by its
-  server; pre-cache them and set `HF_HUB_OFFLINE=1` to keep the run offline.) The adapters you point it at
+  server; pre-cache them and set `HF_HUB_OFFLINE=1` to keep the run offline — but not
+  with a `tgi` model adapter, whose client offline mode blocks too.) The adapters you point it at
   are the system under test and receive the synthetic tenant data by design: a
   hosted vector database, or an agent adapter driving an OpenAI Assistant or the
   Anthropic Messages API, sends it to that provider because that is what is being
