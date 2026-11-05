@@ -120,6 +120,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `document` prompts, which encode identically to no prompt. mypy 2.3 types an
   `inspect.isclass` result as `type[object]`, so one test now reads the
   attribute with `getattr`.
+- A second batch of floors: `langsmith>=0.14.16` (from `>=0.1`; locks 0.14.16,
+  up from 0.8.16), `torch>=2.15.0` (from `>=2.4`, the `huggingface` extra; its
+  CUDA wheels move with it), `langchain-core>=1.7.3` and
+  `sentence-transformers>=6.2.0`, each locked at its Dependabot PR's version.
+  torch is covered by the extras contract job. No CI job installs langsmith,
+  and the live LangSmith tests need a key, so both LangSmith adapters were
+  driven against a local stub server under 0.8.16 and 0.14.16: the same
+  requests and the same results. langchain-core and sentence-transformers
+  passed their unit tests with the extras installed.
 
 ### Fixed
 
