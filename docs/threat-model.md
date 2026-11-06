@@ -172,7 +172,12 @@ timestamped; it is signed by a TSA only when one is configured.)
   `huggingface_hub` (an `st:` model, mem0's `huggingface` embedder, a `huggingface`
   or `tgi` model adapter) is refused until its telemetry is off
   (`HF_HUB_DISABLE_TELEMETRY=1`), and a `crewai` agent until crewai's is
-  (`CREWAI_DISABLE_TELEMETRY=true`) — so no stage Sectum runs
+  (`CREWAI_DISABLE_TELEMETRY=true`); a `langchain` RAG pipeline or `langgraph`
+  agent is refused while the environment turns LangSmith tracing on
+  (`LANGSMITH_TRACING=true` or an alias), which would send every run's full
+  content to LangSmith; and the LangSmith clients Sectum builds pin their tracing
+  mode (an env-chosen otel mode would export past `api_url`) and the Langfuse one
+  keeps to `host` over `LANGFUSE_BASE_URL` — so no stage Sectum runs
   on its own behalf sends tenant content to a third-party AI service. (Loading a
   local model still calls its hub — an `st:` model checks the Hugging Face Hub on
   every load and downloads it if not cached, an `ollama` model is pulled by its

@@ -54,7 +54,10 @@ class LangfuseObservability(ObservabilityAdapter):
         """
         from langfuse import Langfuse
 
-        client = Langfuse(public_key=public_key, secret_key=secret_key, host=host)
+        # `base_url`, not the deprecated `host`: langfuse ranks a LANGFUSE_BASE_URL in
+        # the environment above `host`, so the configured host - and the keys sent
+        # to it - would follow a stray env var to another server.
+        client = Langfuse(public_key=public_key, secret_key=secret_key, base_url=host)
         return cls(client, name=name)
 
     def _project_name(self) -> str:

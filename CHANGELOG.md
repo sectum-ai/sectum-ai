@@ -18,6 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Authorization` header unless `api_key` / `api_key_env` is set; a configured
   key is sent as before. Measured against a stub server before and after, on
   both the completion and the streamed time-to-first-token request.
+- **Environment-switched egress the `local` gate did not read.** Audited at the
+  uv.lock versions and measured against a local collector, with a proxy that
+  refused every outbound tunnel. If `LANGSMITH_TRACING`, `LANGCHAIN_TRACING` or
+  either `_V2` name is exactly `true` (langsmith 0.14.16: the first non-blank
+  `_V2` name decides, else the first plain one), langchain_core 1.7.3 attaches a
+  LangSmith tracer to every run. A `langchain` RAG pipeline's and a `langgraph`
+  agent's runs then posted their query, retrieved documents and answer to
+  `LANGSMITH_ENDPOINT`, or opened api.smith.langchain.com without one. `local` mode
+  now refuses those two stages while tracing is on, naming the variable. Tracing
+  turned on in a factory's own code is not gated. Two clients Sectum builds now
+  keep to the configured destination in every mode. Under
+  `LANGSMITH_TRACING_MODE=otel` or `hybrid` (or a truthy `LANGSMITH_OTEL_ENABLED`
+  / `LANGSMITH_OTEL_ONLY`), the `langsmith` observability and eval-set clients
+  installed a process-global OpenTelemetry exporter. Another library's span then
+  went to `LANGSMITH_ENDPOINT`'s `/otel`, or to api.smith.langchain.com, not to
+  `api_url`. Both clients now pin `tracing_mode="langsmith"`. langfuse 4.15.6
+  ranks `LANGFUSE_BASE_URL` above the deprecated `host` argument, so a stray value
+  took the `langfuse` adapter's keyed requests to another server. It now passes
+  `host` as `base_url` (`LANGFUSE_HOST` never outranked it). crewai 1.15.1, with
+  its telemetry on, makes its exporter the global provider: another library's span
+  then went to telemetry.crewai.com. The existing crewai refusal already keeps that
+  provider from being built in `local` mode.
 
 ## [0.13.0] - 2026-11-05
 

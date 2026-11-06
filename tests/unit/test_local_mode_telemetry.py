@@ -8,8 +8,17 @@ registry from huggingface.co while building any Hub request's headers, crewai
 1.15.1 exports usage spans to telemetry.crewai.com from import - local mode
 refuses the stage until the library's own env var turns it off, read as the
 library reads it, like the mem0 refusal before them.
+
+Env vars that turn egress on, measured against the same versions: langsmith
+0.14.16's tracing env makes langchain_core 1.7.3 trace every run - full inputs and
+outputs - to LangSmith, so local mode refuses a langchain RAG or langgraph agent
+while it is on. Its tracing-mode env would point the clients Sectum builds at a
+global OTel exporter, and langfuse 4.15.6 ranks ``LANGFUSE_BASE_URL`` above the
+``host`` Sectum passes; those clients now pin both.
 """
 
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +35,17 @@ _HF_VARS = (
     "TRANSFORMERS_OFFLINE",
 )
 _CREWAI_VARS = ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
+_LANGSMITH_VARS = (
+    "LANGSMITH_TRACING_V2",
+    "LANGCHAIN_TRACING_V2",
+    "LANGSMITH_TRACING",
+    "LANGCHAIN_TRACING",
+)
 
 
 @pytest.fixture(autouse=True)
 def _telemetry_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (*_HF_VARS, *_CREWAI_VARS):
+    for name in (*_HF_VARS, *_CREWAI_VARS, *_LANGSMITH_VARS):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("MEM0_TELEMETRY", "False")
 
@@ -212,3 +227,98 @@ def test_byoc_local_mode_refuses_crewai_with_its_telemetry_on(
     SectumConfig.model_validate(
         _local(adapters={"agent": {"kind": "langgraph", "factory": "graph_module:build"}})
     )
+
+
+_LANGCHAIN_STAGES: dict[str, dict[str, Any]] = {
+    "rag ('langchain')": {"rag": {"kind": "langchain", "factory": "chain_module:build"}},
+    "agent ('langgraph')": {"agent": {"kind": "langgraph", "factory": "graph_module:build"}},
+}
+
+
+@pytest.mark.parametrize("stage", list(_LANGCHAIN_STAGES))
+@pytest.mark.parametrize(
+    ("env", "refused"),
+    [
+        ({}, None),
+        ({"LANGSMITH_TRACING": "true"}, "LANGSMITH_TRACING"),
+        ({"LANGCHAIN_TRACING": "true"}, "LANGCHAIN_TRACING"),
+        ({"LANGSMITH_TRACING_V2": "true"}, "LANGSMITH_TRACING_V2"),
+        ({"LANGCHAIN_TRACING_V2": "true"}, "LANGCHAIN_TRACING_V2"),
+        # langsmith compares the value to exactly "true".
+        ({"LANGSMITH_TRACING": "True"}, None),
+        ({"LANGSMITH_TRACING": "1"}, None),
+        ({"LANGSMITH_TRACING": " true"}, None),
+        # The first non-blank _V2 name decides, before either plain name is read.
+        ({"LANGSMITH_TRACING_V2": "false", "LANGSMITH_TRACING": "true"}, None),
+        ({"LANGSMITH_TRACING_V2": "false", "LANGCHAIN_TRACING_V2": "true"}, None),
+        ({"LANGSMITH_TRACING_V2": " ", "LANGSMITH_TRACING": "true"}, "LANGSMITH_TRACING"),
+        ({"LANGSMITH_TRACING": "", "LANGCHAIN_TRACING": "true"}, "LANGCHAIN_TRACING"),
+    ],
+)
+def test_byoc_local_mode_refuses_a_langchain_stage_while_langsmith_tracing_is_on(
+    monkeypatch: pytest.MonkeyPatch, stage: str, env: dict[str, str], refused: str | None
+) -> None:
+    # Measured with the locked versions: LangChainRAGPipeline and LangGraphAgent
+    # runs posted their query, retrieved documents and answer to /runs/multipart
+    # on LANGSMITH_ENDPOINT, or opened api.smith.langchain.com:443 without one.
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    config = _local(adapters=_LANGCHAIN_STAGES[stage])
+    if refused:
+        with pytest.raises(ValueError, match=f"while {refused} is 'true'") as error:
+            SectumConfig.model_validate(config)
+        assert stage in str(error.value)
+        assert f"Unset {refused}." in str(error.value)
+    else:
+        SectumConfig.model_validate(config)
+    SectumConfig.model_validate({"adapters": _LANGCHAIN_STAGES[stage]})
+
+
+def test_byoc_local_mode_leaves_stages_that_never_run_langchain_to_langsmith_tracing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("CREWAI_DISABLE_TELEMETRY", "true")
+    SectumConfig.model_validate(
+        _local(
+            adapters={
+                "rag": {"kind": "http", "url": "http://rag:80"},
+                "agent": {"kind": "crewai", "factory": "crew_module:build"},
+                "observability": {"kind": "langsmith", "api_key": "k"},
+            }
+        )
+    )
+
+
+def _stub(monkeypatch: pytest.MonkeyPatch, module: str, cls: str) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+    stub = types.ModuleType(module)
+    setattr(stub, cls, lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setitem(sys.modules, module, stub)
+    return calls
+
+
+def test_the_langsmith_clients_pin_their_tracing_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Under LANGSMITH_TRACING_MODE=otel|hybrid (or *_OTEL_ENABLED / *_OTEL_ONLY) the
+    # client installed a global OTel exporter: a span carrying a canary went to
+    # LANGSMITH_ENDPOINT/otel, or api.smith.langchain.com:443, never to `api_url`.
+    from sectum_ai.adapters.eval_set.langsmith import LangSmithEvalSet
+    from sectum_ai.adapters.observability.langsmith import LangSmithObservability
+
+    calls = _stub(monkeypatch, "langsmith", "Client")
+    LangSmithObservability.connect("k", "http://langsmith.internal")
+    LangSmithEvalSet.connect("k", "http://langsmith.internal")
+    expected = {"api_url": "http://langsmith.internal", "api_key": "k", "tracing_mode": "langsmith"}
+    assert calls == [expected, expected]
+
+
+def test_the_langfuse_client_goes_to_the_configured_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    # langfuse resolves `base_url or LANGFUSE_BASE_URL or host`: given `host`, a
+    # LANGFUSE_BASE_URL in the environment took the keyed requests elsewhere.
+    from sectum_ai.adapters.observability.langfuse import LangfuseObservability
+
+    calls = _stub(monkeypatch, "langfuse", "Langfuse")
+    LangfuseObservability.connect("pk", "sk", "http://langfuse.internal")
+    assert calls == [
+        {"public_key": "pk", "secret_key": "sk", "base_url": "http://langfuse.internal"}
+    ]
