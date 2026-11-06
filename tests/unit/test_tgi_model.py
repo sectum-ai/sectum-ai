@@ -99,6 +99,30 @@ def test_build_model_tgi_requires_base_url() -> None:
         _build_model(AdapterConfig(kind="tgi"))
 
 
+@pytest.mark.parametrize(
+    ("api_key", "headers"), [(None, {"authorization": None}), ("configured", None)]
+)
+def test_tgi_live_backend_suppresses_the_implicit_hugging_face_token(
+    monkeypatch: pytest.MonkeyPatch, api_key: str | None, headers: dict[str, None] | None
+) -> None:
+    # huggingface_hub sends the operator's own HF token to the TGI server when
+    # given none; a None `authorization` client header is what drops it. The
+    # real library's behaviour is pinned in tests/contract/test_extra_api_surface.py.
+    import sys
+    import types
+
+    from sectum_ai.adapters.model._tgi_live import LiveTGIBackend
+
+    built: list[dict[str, object]] = []
+    stub = types.ModuleType("huggingface_hub")
+    stub.InferenceClient = lambda **kwargs: built.append(kwargs)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "huggingface_hub", stub)
+
+    LiveTGIBackend(base_url="http://localhost:8080", api_key=api_key)
+    assert built[0]["token"] == api_key
+    assert built[0]["headers"] == headers
+
+
 def test_build_model_tgi_returns_serving_only_adapter() -> None:
     pytest.importorskip("huggingface_hub")  # connect() imports the client
     model = _build_model(AdapterConfig(kind="tgi", base_url="http://localhost:8080"))

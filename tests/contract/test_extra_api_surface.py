@@ -68,12 +68,49 @@ def test_cohere_embed_response_shapes_stay_readable() -> None:
 
 
 def test_tgi_inference_client_surface() -> None:
-    # _TgiLiveBackend constructs InferenceClient(model=, token=, timeout=) and
-    # calls .text_generation(prompt, max_new_tokens=, stream=).
+    # _TgiLiveBackend constructs InferenceClient(model=, token=, timeout=, headers=)
+    # and calls .text_generation(prompt, max_new_tokens=, stream=).
     hub = pytest.importorskip("huggingface_hub")
     assert hasattr(hub, "InferenceClient")
-    assert _accepts(hub.InferenceClient.__init__, ("model", "token", "timeout"))
+    assert _accepts(hub.InferenceClient.__init__, ("model", "token", "timeout", "headers"))
     assert _accepts(hub.InferenceClient.text_generation, ("max_new_tokens", "stream"))
+
+
+@pytest.mark.parametrize(("api_key", "sent"), [(None, None), ("configured", "Bearer configured")])
+def test_tgi_sends_only_the_configured_token_to_the_server(
+    monkeypatch: pytest.MonkeyPatch, api_key: str | None, sent: str | None
+) -> None:
+    # With no token, huggingface_hub's hf-inference provider falls back to the
+    # operator's own Hugging Face token and sends it to the TGI server, the system
+    # under test. _tgi_live suppresses it through two library internals - client
+    # headers merged over the library's, None values dropped - so this runs the
+    # real client against a mock transport to catch an upstream change to either.
+    hub = pytest.importorskip("huggingface_hub")
+    import httpx
+    from huggingface_hub.utils._http import default_client_factory
+
+    from sectum_ai.adapters.model._tgi_live import LiveTGIBackend
+
+    monkeypatch.setenv("HF_TOKEN", "hf_operator_token_not_for_the_target")
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        # Building the headers first fetches huggingface.co/api/agent-harnesses
+        # unless a cached copy is under a day old; a 404 degrades it to an empty
+        # registry and caches nothing.
+        if request.url.host != "tgi.test":
+            return httpx.Response(404)
+        seen.append(request)
+        return httpx.Response(200, json=[{"generated_text": "ok"}])
+
+    hub.set_client_factory(lambda: httpx.Client(transport=httpx.MockTransport(respond)))
+    try:
+        LiveTGIBackend(base_url="http://tgi.test:8080", api_key=api_key).complete("hi")
+    finally:
+        hub.set_client_factory(default_client_factory)
+
+    assert len(seen) == 1
+    assert seen[0].headers.get("authorization") == sent
 
 
 # --- transformers + peft: adapters.model._huggingface_live ------------------
