@@ -1336,8 +1336,9 @@ def build_model(config: AdapterConfig) -> ModelAdapter:
         # A live HuggingFace Text Generation Inference server. Serving-only like
         # vLLM (Class 5 KV-cache timing, no per-tenant training -> Class 9 skipped).
         # TGI serves one model per endpoint, so only ``base_url`` is required;
-        # ``api_key`` is an optional bearer token. The ``huggingface_hub`` client
-        # is imported lazily by ``connect``.
+        # ``api_key`` is an optional bearer token; without it none is sent (not
+        # the operator's own HF token - see _tgi_live). The ``huggingface_hub``
+        # client is imported lazily by ``connect``.
         from sectum_ai.adapters.model.tgi import TGIModel
 
         tgi_base_url = _required_str(extras, "base_url")

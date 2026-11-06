@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The `tgi` model no longer sends your Hugging Face token to the server under
+  test.** With no `api_key` configured, the `huggingface_hub` client (1.30.0)
+  fell back to the operator's own Hugging Face token - `HF_TOKEN` or the cached
+  `hf auth login` token - and sent it as `Authorization: Bearer` to the TGI
+  `base_url`, the system under test. `HF_HUB_DISABLE_IMPLICIT_TOKEN=1` did not
+  stop it, and the client refuses `token=False`. The adapter now sends no
+  `Authorization` header unless `api_key` / `api_key_env` is set; a configured
+  key is sent as before. Measured against a stub server before and after, on
+  both the completion and the streamed time-to-first-token request.
 - **Environment-switched egress the `local` gate did not read.** Audited at the
   uv.lock versions and measured against a local collector, with a proxy that
   refused every outbound tunnel. If `LANGSMITH_TRACING`, `LANGCHAIN_TRACING` or
