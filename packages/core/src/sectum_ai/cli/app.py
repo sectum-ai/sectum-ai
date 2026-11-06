@@ -618,6 +618,10 @@ def _write_substrate(substrate: Substrate, workdir: Path, key: bytes | None) -> 
     return plain_path
 
 
+# `probe` reloads the same substrate, so "re-run probe" would refuse again.
+_RESEED = "re-run 'sectum-ai seed' to produce one"
+
+
 def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
     """Load the seeded substrate from ``workdir``, or exit with a config error.
 
@@ -648,6 +652,7 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
         _refuse_other_schema_line(
             raw_sealed.get("schema_version") if isinstance(raw_sealed, dict) else None,
             str(sealed),
+            _RESEED,
         )
         try:
             return Substrate.model_validate(raw_sealed)
@@ -663,7 +668,7 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
         # The markers, tenants and manifest ARE the schema: a substrate from
         # another line seeded a run whose own stamp then read as current.
         _refuse_other_schema_line(
-            raw.get("schema_version") if isinstance(raw, dict) else None, str(plain)
+            raw.get("schema_version") if isinstance(raw, dict) else None, str(plain), _RESEED
         )
         try:
             return Substrate.model_validate(raw)
@@ -674,7 +679,9 @@ def _load_substrate(workdir: Path, key: bytes | None = None) -> Substrate:
     raise typer.Exit(code=3)
 
 
-def _refuse_other_schema_line(recorded: object, what: str) -> None:
+def _refuse_other_schema_line(
+    recorded: object, what: str, remedy: str = "re-run 'sectum-ai probe' to produce one"
+) -> None:
     """Refuse a record from another ``major.minor`` schema line.
 
     A record's fields ARE its schema: a 0.6.x run recorded every adapter slot, so
@@ -689,7 +696,7 @@ def _refuse_other_schema_line(recorded: object, what: str) -> None:
     ):
         raise ConfigError(
             f"{what} is a schema {recorded!r} record; this build reads {SCHEMA_VERSION} "
-            "records only - re-run 'sectum-ai probe' to produce one"
+            f"records only - {remedy}"
         )
 
 

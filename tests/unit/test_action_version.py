@@ -132,3 +132,29 @@ def test_the_data_models_page_states_the_shipped_schema_version() -> None:
         f"docs/data-models.md says {match.group(1)}, but the spec ships {SCHEMA_VERSION}; "
         "bump it with the schema"
     )
+
+
+def test_every_sibling_dependency_is_pinned_to_the_shipped_version() -> None:
+    # Unpinned, `pip install sectum-ai==0.12.0` resolved the four siblings to the
+    # NEWEST release: a 0.12.0 CLI over 0.13.0 libraries, a schema-0.8.0 verifier
+    # included. Every release silently changed what every older pin installed.
+    from packaging.requirements import Requirement
+
+    version = _package_version()
+    stale = []
+    for pyproject in sorted((_ROOT / "packages").glob("*/pyproject.toml")):
+        project = tomllib.loads(pyproject.read_text())["project"]
+        lines = list(project.get("dependencies", []))
+        for extra in project.get("optional-dependencies", {}).values():
+            lines.extend(extra)
+        for line in lines:
+            requirement = Requirement(line)
+            if (
+                requirement.name.startswith("sectum-ai")
+                and str(requirement.specifier) != f"=={version}"
+            ):
+                stale.append(f"{pyproject.parent.name}: {line}")
+    assert not stale, (
+        f"every sectum-ai sibling must be pinned =={version}, the shipped version; "
+        f"bump these as part of the release: {stale}"
+    )

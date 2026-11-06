@@ -70,6 +70,17 @@ signed evidence (see the
 **0.4.0** added the per-surface `erasure_coverage` block to `RunMetrics`
 (see the [erasure attack catalog page](attack-catalog/class-11-erasure.md)).
 
+**Upgrading across a schema line.** A build refuses every record from another
+`major.minor` line, not only packs. An older workdir needs `sectum-ai seed` and then
+`sectum-ai probe` again (`probe`, `erasure`, `report` and `pack` refuse its
+substrate; `score`, `report`, `pack` and `baseline` its `run.json`); an older
+baseline needs re-saving with `baseline --save` from a fresh run; and `diff` and
+`verify` refuse an older run or pack.
+To verify an older pack, use the release that wrote it. From 0.13.1 on,
+`sectum-ai==X.Y.Z` installs that release's own siblings; for 0.13.0 and earlier,
+pin all five packages (`sectum-ai`, `-spec`, `-probes`, `-adapters`, `-evidence`)
+to the same version.
+
 ## Published JSON Schema
 
 The Draft 2020-12 JSON Schemas are generated from the Pydantic models by
