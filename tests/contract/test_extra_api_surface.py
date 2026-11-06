@@ -95,6 +95,11 @@ def test_tgi_sends_only_the_configured_token_to_the_server(
     seen: list[httpx.Request] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
+        # Building the headers first fetches huggingface.co/api/agent-harnesses
+        # unless a cached copy is under a day old; a 404 degrades it to an empty
+        # registry and caches nothing.
+        if request.url.host != "tgi.test":
+            return httpx.Response(404)
         seen.append(request)
         return httpx.Response(200, json=[{"generated_text": "ok"}])
 
@@ -104,9 +109,8 @@ def test_tgi_sends_only_the_configured_token_to_the_server(
     finally:
         hub.set_client_factory(default_client_factory)
 
-    to_target = [r for r in seen if r.url.host == "tgi.test"]
-    assert len(to_target) == 1
-    assert to_target[0].headers.get("authorization") == sent
+    assert len(seen) == 1
+    assert seen[0].headers.get("authorization") == sent
 
 
 # --- transformers + peft: adapters.model._huggingface_live ------------------
