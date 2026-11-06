@@ -216,3 +216,9 @@ not a per-PR enforcement.
   renames are applied across the 16 sites that carry them (`CHANGELOG.md` and
   the entries of this log are left as written, being records of what shipped).
   `tests/unit/test_atlas_ids.py` pins the v16 names.
+
+- **2026-11-05** (at v0.13.0) — **both halves performed.** The MISP galaxy mirror
+  still carries cluster *MITRE ATLAS Techniques* **version 16, 197 techniques**,
+  unchanged since the v0.12.0 sweep. All seven assigned IDs are present under the
+  names `tests/unit/test_atlas_ids.py` pins, none deprecated or revoked. No probe's
+  `atlas_techniques` changed in this release. **No retirement, no rename.**
