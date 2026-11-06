@@ -44,7 +44,9 @@ class TGIModel(_ServingModel):
         """Build a live ``huggingface_hub``-backed TGI backend and return the adapter.
 
         ``base_url`` is the TGI server URL (for example ``http://localhost:8080``);
-        ``api_key`` is an optional bearer token for a gated endpoint. The
+        ``api_key`` is an optional bearer token for a gated endpoint; without it no
+        ``Authorization`` header is sent, not even the operator's own Hugging Face
+        token, which ``huggingface_hub`` would otherwise fall back to. The
         ``huggingface_hub`` client is imported here, on the live path only.
         Requires ``pip install sectum-ai-adapters[tgi]``.
         """

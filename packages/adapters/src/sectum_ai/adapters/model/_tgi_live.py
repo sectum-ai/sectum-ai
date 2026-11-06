@@ -28,7 +28,17 @@ class LiveTGIBackend:
     ) -> None:
         from huggingface_hub import InferenceClient
 
-        self._client = InferenceClient(model=base_url, token=api_key, timeout=timeout)
+        # With no token, huggingface_hub 1.30.0's hf-inference provider (the one
+        # that serves a URL model) falls back to `get_token()` and sends the
+        # operator's own Hugging Face token - HF_TOKEN or the cached login - as
+        # `Authorization: Bearer` to the TGI server, the system under test.
+        # HF_HUB_DISABLE_IMPLICIT_TOKEN does not stop it, and `token=False`
+        # raises. The client's own headers are merged over the library's and
+        # None values are then dropped, so a None `authorization` sends none.
+        headers = None if api_key is not None else {"authorization": None}
+        self._client = InferenceClient(
+            model=base_url, token=api_key, timeout=timeout, headers=headers
+        )
         self._max_tokens = max_tokens
 
     def complete(self, prompt: str) -> str:
