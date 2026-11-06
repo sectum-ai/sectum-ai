@@ -377,7 +377,11 @@ class SectumConfig(BaseModel):
         (:func:`_hf_telemetry_on`) and a crewai agent while crewai's is
         (:func:`_crewai_telemetry_on`): libraries in Sectum's process with no client
         setting to turn it off. Where Sectum builds the client it turns it off there
-        (the chroma and weaviate vector stores). Specs that arrive from the command
+        (the chroma and weaviate vector stores), and keeps the LangSmith and Langfuse
+        clients off destinations the environment picks. A langchain RAG or langgraph agent is
+        refused while the environment turns LangSmith tracing on
+        (:func:`_langsmith_tracing_var`): unlike the telemetry above, that tracer
+        sends the runs' full content. Specs that arrive from the command
         line or a seeded substrate rather than this file are gated where they are
         used, by :func:`refuse_hosted_embeddings`.
         """
@@ -419,6 +423,16 @@ class SectumConfig(BaseModel):
                 "kickoff inputs) to telemetry.crewai.com unless CREWAI_DISABLE_TELEMETRY "
                 "is 'true' (crewai reads no other value, not even '1'). Set "
                 "CREWAI_DISABLE_TELEMETRY=true."
+            )
+        tracing = _langsmith_tracing_var()
+        langchain = _langchain_stages(self)
+        if tracing and langchain:
+            raise ValueError(
+                f"detection.mode 'local' refuses {'; '.join(langchain)} while {tracing} is "
+                "'true': langchain_core then attaches a LangSmith tracer to every run "
+                "Sectum makes, which sends its full inputs and outputs (the synthetic "
+                "tenants' queries, retrieved documents and answers) to LANGSMITH_ENDPOINT, "
+                f"or to api.smith.langchain.com when that is unset. Unset {tracing}."
             )
         return self
 
@@ -530,6 +544,37 @@ def _crewai_telemetry_on(agent: AdapterConfig | None) -> bool:
         os.environ.get(name, "false").lower() == "true"
         for name in ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
     )
+
+
+def _langsmith_tracing_var() -> str | None:
+    """The env var that turns LangSmith tracing on, or ``None`` while it is off.
+
+    Read as langsmith 0.14.16 reads it (``utils.tracing_is_enabled``): the first
+    non-blank of ``LANGSMITH_TRACING_V2`` / ``LANGCHAIN_TRACING_V2``, else of
+    ``LANGSMITH_TRACING`` / ``LANGCHAIN_TRACING``, compared to exactly ``"true"`` - so
+    ``True`` or ``1`` leave it off, and a set ``..._V2=false`` shadows the rest.
+    """
+    for names in (
+        ("LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING_V2"),
+        ("LANGSMITH_TRACING", "LANGCHAIN_TRACING"),
+    ):
+        for name in names:
+            value = os.environ.get(name)
+            if value is not None and value.strip() != "":
+                return name if value == "true" else None
+    return None
+
+
+def _langchain_stages(config: "SectumConfig") -> list[str]:
+    """The configured stages Sectum runs through langchain_core, named for a refusal."""
+    stages: list[str] = []
+    rag = config.adapters.get("rag")
+    if rag is not None and rag.kind == "langchain":
+        stages.append("rag ('langchain')")
+    agent = config.adapters.get("agent")
+    if agent is not None and agent.kind == "langgraph":
+        stages.append("agent ('langgraph')")
+    return stages
 
 
 # What the gate reads of a mem0 `vector_store` block, named when it cannot.

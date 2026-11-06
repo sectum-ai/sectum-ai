@@ -65,7 +65,10 @@ class LangSmithEvalSet(EvalSetAdapter):
         """
         from langsmith import Client
 
-        client = Client(api_url=api_url, api_key=api_key)
+        # Pinned, not left to LANGSMITH_TRACING_MODE / *_OTEL_ENABLED / *_OTEL_ONLY:
+        # under otel or hybrid this client installs a process-global OTel exporter
+        # aimed at LANGSMITH_ENDPOINT or api.smith.langchain.com - never `api_url`.
+        client = Client(api_url=api_url, api_key=api_key, tracing_mode="langsmith")
         return cls(client, name=name, prefix=prefix, soft_delete=soft_delete)
 
     def _dataset_name(self, tenant: UUID) -> str:
