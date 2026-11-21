@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A third batch of floors, drained as one PR (#353-#356): `cryptography>=50.0.2`
+  (from `>=43`; the `encryption` and `rekor` extras, and development),
+  `transformers>=5.22.1`, `accelerate>=1.15.0`, and, for development,
+  `pytest>=9.2.0`. cryptography 50 marks nothing backwards-incompatible; its
+  stricter parsing of EC keys and X.509 is what the Rekor and TSA verification
+  read, and the suite verifies both. transformers 5.22.1 would have locked
+  `huggingface_hub` 2.4.0, a new major; it is held at 1.33.0, the newest 1.x
+  that transformers accepts. The `tgi` adapter's no-implicit-token fix was
+  measured again at 1.33.0 against a stub server: no `Authorization` header with
+  `HF_TOKEN` set and no `api_key`, the configured key when one is set.
+
 ### Fixed
 
 - **An older `sectum-ai==X.Y.Z` now installs its own libraries.** The CLI named its
