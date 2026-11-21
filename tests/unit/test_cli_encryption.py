@@ -128,6 +128,8 @@ def test_a_substrate_from_another_schema_line_is_refused_however_it_is_stored(
     result = _runner.invoke(app, probe)
     assert result.exit_code == 3, result.output
     assert "is a schema None record" in result.output, result.output
+    # `probe` reloads this same substrate, so only a re-seed clears it.
+    assert "re-run 'sectum-ai seed'" in result.output, result.output
 
 
 @pytest.mark.parametrize("sealed", [True, False])

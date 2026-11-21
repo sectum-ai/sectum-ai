@@ -24,10 +24,10 @@ dependencies = [
     # config.py and cli/app.py import pydantic directly; declare it rather than
     # relying on the transitive dependency via sectum-ai-spec (§13, mirrors adapters).
     "pydantic>=2.9",
-    "sectum-ai-spec",
-    "sectum-ai-adapters",
-    "sectum-ai-probes",
-    "sectum-ai-evidence",
+    "sectum-ai-spec==0.13.0",
+    "sectum-ai-adapters==0.13.0",
+    "sectum-ai-probes==0.13.0",
+    "sectum-ai-evidence==0.13.0",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +37,7 @@ encryption = ["cryptography>=43"]
 # weasyprint audit-pack PDF engine (sectum-ai report --pdf-engine weasyprint).
 # Optional: the default reportlab renderer is pure Python with no system
 # libraries; weasyprint adds the pango/cairo system libraries.
-weasyprint = ["sectum-ai-evidence[weasyprint]"]
+weasyprint = ["sectum-ai-evidence[weasyprint]==0.13.0"]
 # Real embedding providers for the Class 2 per-model RPR sweep (embedding_models:
 # ["st:all-mpnet-base-v2", ...]). Optional: the default hashing/recall sweep is
 # pure-Python. sentence-transformers runs locally (BYOC-safe); openai is a

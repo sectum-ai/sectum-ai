@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An older `sectum-ai==X.Y.Z` now installs its own libraries.** The CLI named its
+  four sibling packages with no version, so `pip install sectum-ai==0.12.0` (and the
+  GitHub Action's `version` input) resolved them to the newest release: once 0.13.0
+  was out, a 0.12.0 CLI over 0.13.0 libraries, a schema-0.8.0 verifier included,
+  which refuses the 0.7.0 records that 0.12.0 writes. Every sibling is now pinned
+  `==` to the release, from this one on; releases already on PyPI cannot be
+  changed, so to run one of those, pin all five packages.
+- **A substrate from another schema line now says to re-seed.** `probe` refused it
+  with "re-run 'sectum-ai probe'", which reloads the same substrate and is refused
+  again. It now says to re-run `sectum-ai seed`.
+
 - **The `tgi` model no longer sends your Hugging Face token to the server under
   test.** With no `api_key` configured, the `huggingface_hub` client (1.30.0)
   fell back to the operator's own Hugging Face token - `HF_TOKEN` or the cached

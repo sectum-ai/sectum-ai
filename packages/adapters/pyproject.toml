@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "sectum-ai-spec",
+    "sectum-ai-spec==0.13.0",
     # base.py imports pydantic directly (adapter config models); declare it
     # rather than relying on the transitive dependency via sectum-ai-spec (§13).
     "pydantic>=2.9",

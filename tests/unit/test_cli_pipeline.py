@@ -1790,6 +1790,7 @@ def test_probe_refuses_a_substrate_from_another_schema_line(tmp_path: Path) -> N
     result = _runner.invoke(app, ["probe", "--workdir", str(tmp_path)])
     assert result.exit_code == 3, result.output
     assert "schema '0.6.0'" in result.output
+    assert "re-run 'sectum-ai seed'" in result.output, result.output
 
 
 def test_a_kv_probe_with_no_resolution_does_not_cover_class_5(tmp_path: Path) -> None:

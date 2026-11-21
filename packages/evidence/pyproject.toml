@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "sectum-ai-spec",
+    "sectum-ai-spec==0.13.0",
     "reportlab>=5.0.1",
 ]
 

@@ -92,7 +92,10 @@ Edit `[project] version` in each of:
 - `packages/adapters/pyproject.toml`
 - `packages/evidence/pyproject.toml`
 
-All five must be the same string, and `uv lock` must be re-run after editing
+All five must be the same string, and so must every `sectum-ai-*` sibling pin in
+their `dependencies` (and core's `weasyprint` extra): each sibling is pinned `==`, so
+an older `sectum-ai==X.Y.Z` keeps installing its own libraries rather than the newest
+release's. `uv lock` must be re-run after editing
 them (the recipe stages `uv.lock`; all three CI `uv sync` steps are `--locked`, so
 a stale lock fails the build rather than shipping unnoticed). The first release is `0.1.0`. Subsequent
 releases follow [Semantic Versioning](https://semver.org/). For a pre-release the
